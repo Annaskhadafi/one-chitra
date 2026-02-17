@@ -15,3 +15,4 @@ export { quotations, quotationItems, quotationApprovals } from "./quotations";
 export { deliveries, deliveryItems } from "./deliveries";
 export { billingRecords } from "./billing";
 export { auditLogs } from "./audit-logs";
+export { customers } from "./customers";

@@ -49,6 +49,18 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             resource: "inventory",
         },
         {
+            title: "Stocks",
+            url: "/dashboard/stocks",
+            icon: Box,
+            resource: null,
+        },
+        {
+            title: "Customers",
+            url: "/dashboard/customers",
+            icon: Users,
+            resource: null,
+        },
+        {
             title: "Products",
             url: "/dashboard/products",
             icon: Package,

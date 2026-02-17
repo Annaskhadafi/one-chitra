@@ -1,0 +1,157 @@
+"use client"
+
+import { useState } from "react"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { deleteCustomer } from "@/app/actions/customer"
+import { CustomerDialog } from "./customer-dialog"
+import { CustomerCSVUpload } from "./customer-table-csv"
+import { Search, Pencil, Trash2, UserCircle } from "lucide-react"
+import { toast } from "sonner"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
+
+interface CustomerTableProps {
+    data: any[]
+}
+
+export function CustomerTable({ data }: CustomerTableProps) {
+    const [searchTerm, setSearchTerm] = useState("")
+
+    const filteredData = data.filter(item =>
+        item.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.email && item.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+
+    const handleDelete = async (id: number) => {
+        try {
+            const result = await deleteCustomer(id)
+            if (result.success) {
+                toast.success("Customer deleted")
+            } else {
+                toast.error(result.error)
+            }
+        } catch (error) {
+            toast.error("Failed to delete")
+        }
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+                <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search customers..."
+                        className="pl-8"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                    <CustomerCSVUpload />
+                    <CustomerDialog />
+                </div>
+            </div>
+
+            <div className="rounded-md border overflow-hidden">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[120px]">ID (Code)</TableHead>
+                                <TableHead>Customer Name</TableHead>
+                                <TableHead>Contact</TableHead>
+                                <TableHead>Email</TableHead>
+                                <TableHead>Address (Primary)</TableHead>
+                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredData.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        No customers found.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredData.map((item) => (
+                                    <TableRow key={item.id}>
+                                        <TableCell className="font-medium text-blue-600 font-mono">
+                                            {item.customerCode}
+                                        </TableCell>
+                                        <TableCell className="font-medium">
+                                            {item.name}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {item.contactName || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-sm">
+                                            {item.email || "-"}
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
+                                            {item.address1 || "-"}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <CustomerDialog
+                                                    customer={item}
+                                                    trigger={
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    }
+                                                />
+
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Are you sure you want to delete {item.name}? This action cannot be undone.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                Delete
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+        </div>
+    )
+}
