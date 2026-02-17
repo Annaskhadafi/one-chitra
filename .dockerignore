@@ -58,8 +58,8 @@ README.md
 coverage
 .coverage
 
-# Drizzle
-drizzle/
+# Drizzle - DO NOT ignore, needed for db:generate
+# drizzle/
 
 # Reference files
 reference*
