@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockLevels } from "@/db/schema"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
@@ -64,6 +64,28 @@ export async function deleteStock(id: number) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to delete stock" }
+    }
+}
+
+export async function bulkDeleteStocks(ids: number[]) {
+    try {
+        await db.delete(stockLevels).where(inArray(stockLevels.id, ids))
+        revalidatePath("/dashboard/stocks")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to delete stocks" }
+    }
+}
+
+export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
+    try {
+        await db.update(stockLevels)
+            .set({ minStock, updatedAt: new Date() })
+            .where(inArray(stockLevels.id, ids))
+        revalidatePath("/dashboard/stocks")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to update stock min levels" }
     }
 }
 

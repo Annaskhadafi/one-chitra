@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { products } from "@/db/schema"
-import { eq, sql } from "drizzle-orm"
+import { eq, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
@@ -120,5 +120,29 @@ export async function updateProductField(id: number, field: keyof typeof product
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to update product" }
+    }
+}
+
+export async function bulkDeleteProducts(ids: number[]) {
+    try {
+        await db.delete(products).where(inArray(products.id, ids))
+        revalidatePath("/dashboard/products")
+        return { success: true }
+    } catch (_error) {
+        console.error("Bulk delete error:", _error)
+        return { success: false, error: "Failed to delete products" }
+    }
+}
+
+export async function bulkUpdateProductCategory(ids: number[], category: string) {
+    try {
+        await db.update(products)
+            .set({ category, updatedAt: new Date() })
+            .where(inArray(products.id, ids))
+        revalidatePath("/dashboard/products")
+        return { success: true }
+    } catch (_error) {
+        console.error("Bulk update category error:", _error)
+        return { success: false, error: "Failed to update product categories" }
     }
 }

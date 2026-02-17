@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { deleteDelivery } from "@/app/actions/delivery"
+import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus } from "@/app/actions/delivery"
 import {
     Table,
     TableBody,
@@ -13,6 +13,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScoreCard } from "@/components/score-card"
+import { BulkActions } from "@/components/bulk-actions"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,7 +27,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, Truck, CalendarClock, MapPin } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -82,7 +85,13 @@ const statusLabels: Record<string, string> = {
 
 export function DeliveryTable({ data }: DeliveryTableProps) {
     const [search, setSearch] = useState("")
+    const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [deleting, setDeleting] = useState<number | null>(null)
+
+    // Stats calculation
+    const totalDeliveries = data.length
+    const scheduled = data.filter(d => d.status === 'scheduled').length
+    const inTransit = data.filter(d => d.status === 'in_transit').length
 
     const filtered = useMemo(() => {
         if (!search) return data
@@ -96,6 +105,47 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
         )
     }, [data, search])
 
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(filtered.map(d => d.id))
+        } else {
+            setSelectedIds([])
+        }
+    }
+
+    const handleSelectOne = (checked: boolean, deliveryId: number) => {
+        if (checked) {
+            setSelectedIds(prev => [...prev, deliveryId])
+        } else {
+            setSelectedIds(prev => prev.filter(id => id !== deliveryId))
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (confirm("Are you sure you want to delete selected deliveries?")) {
+            const result = await bulkDeleteDeliveries(selectedIds)
+            if (result.success) {
+                toast.success("Deliveries deleted successfully")
+                setSelectedIds([])
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
+
+    const handleBulkUpdateStatus = async () => {
+        const status = prompt("Enter new status for selected deliveries (scheduled/ready/partial/in_transit/delivered/cancelled):")
+        if (status) {
+            const result = await bulkUpdateDeliveryStatus(selectedIds, status)
+            if (result.success) {
+                toast.success("Delivery statuses updated successfully")
+                setSelectedIds([])
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
+
     async function handleDelete(id: number) {
         setDeleting(id)
         const res = await deleteDelivery(id)
@@ -108,7 +158,28 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+                <ScoreCard
+                    title="Total Deliveries"
+                    value={totalDeliveries}
+                    icon={Truck}
+                    description="All delivery records"
+                />
+                <ScoreCard
+                    title="Scheduled"
+                    value={scheduled}
+                    icon={CalendarClock}
+                    description="Upcoming deliveries"
+                />
+                <ScoreCard
+                    title="In Transit"
+                    value={inTransit}
+                    icon={MapPin}
+                    description="Currently on the way"
+                />
+            </div>
+
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -123,6 +194,12 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            <TableHead className="w-[50px]">
+                                <Checkbox
+                                    checked={selectedIds.length === filtered.length && filtered.length > 0}
+                                    onCheckedChange={handleSelectAll}
+                                />
+                            </TableHead>
                             <TableHead>Delivery No</TableHead>
                             <TableHead>SO Number</TableHead>
                             <TableHead>Customer</TableHead>
@@ -139,13 +216,19 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                     <TableBody>
                         {filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                                     No deliveries found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             filtered.map(delivery => (
                                 <TableRow key={delivery.id}>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedIds.includes(delivery.id)}
+                                            onCheckedChange={(checked) => handleSelectOne(!!checked, delivery.id)}
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-mono text-sm">
                                         {delivery.deliveryNumber || "-"}
                                     </TableCell>
@@ -230,6 +313,13 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                     </TableBody>
                 </Table>
             </div>
+
+            <BulkActions
+                selectedCount={selectedIds.length}
+                onDelete={handleBulkDelete}
+                onEdit={handleBulkUpdateStatus}
+                entityName="delivery"
+            />
         </div>
     )
 }

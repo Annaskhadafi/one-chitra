@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesOrders, salesOrderItems } from "@/db/schema"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
@@ -134,5 +134,29 @@ export async function deleteSalesOrder(id: number) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to delete sales order" }
+    }
+}
+
+export async function bulkDeleteSalesOrders(ids: number[]) {
+    try {
+        await db.delete(salesOrders).where(inArray(salesOrders.id, ids))
+        revalidatePath("/dashboard/sales-orders")
+        return { success: true }
+    } catch (_error) {
+        console.error("Bulk delete SO error:", _error)
+        return { success: false, error: "Failed to delete sales orders" }
+    }
+}
+
+export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) {
+    try {
+        await db.update(salesOrders)
+            .set({ status, updatedAt: new Date() })
+            .where(inArray(salesOrders.id, ids))
+        revalidatePath("/dashboard/sales-orders")
+        return { success: true }
+    } catch (_error) {
+        console.error("Bulk update SO status error:", _error)
+        return { success: false, error: "Failed to update sales order status" }
     }
 }

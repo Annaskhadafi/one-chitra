@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { customers } from "@/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
@@ -58,6 +58,16 @@ export async function deleteCustomer(id: number) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to delete customer" }
+    }
+}
+
+export async function bulkDeleteCustomers(ids: number[]) {
+    try {
+        await db.delete(customers).where(inArray(customers.id, ids))
+        revalidatePath("/dashboard/customers")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to delete customers" }
     }
 }
 

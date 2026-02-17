@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, salesOrderItems, stockLevels } from "@/db/schema"
-import { eq, desc, and, sql } from "drizzle-orm"
+import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
@@ -216,5 +216,27 @@ export async function deleteDelivery(id: number) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to delete delivery" }
+    }
+}
+
+export async function bulkDeleteDeliveries(ids: number[]) {
+    try {
+        await db.delete(deliveries).where(inArray(deliveries.id, ids))
+        revalidatePath("/dashboard/deliveries")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to delete deliveries" }
+    }
+}
+
+export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
+    try {
+        await db.update(deliveries)
+            .set({ status, updatedAt: new Date() })
+            .where(inArray(deliveries.id, ids))
+        revalidatePath("/dashboard/deliveries")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to update delivery status" }
     }
 }

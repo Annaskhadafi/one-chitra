@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { deleteSalesOrder } from "@/app/actions/sales-order"
+import { deleteSalesOrder, bulkDeleteSalesOrders, bulkUpdateSalesOrderStatus } from "@/app/actions/sales-order"
 import {
     Table,
     TableBody,
@@ -13,6 +13,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScoreCard } from "@/components/score-card"
+import { BulkActions } from "@/components/bulk-actions"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,7 +27,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
@@ -80,6 +83,12 @@ function calculateGrandTotal(order: SalesOrderWithRelations) {
 
 export function SalesOrderTable({ data }: SalesOrderTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [selectedIds, setSelectedIds] = useState<number[]>([])
+
+    // Stats calculation
+    const totalOrders = data.length
+    const completedOrders = data.filter(o => o.status === 'completed').length
+    const pendingOrders = data.filter(o => o.status === 'draft' || o.status === 'confirmed').length
 
     const filteredData = useMemo(() => {
         if (!searchTerm) return data
@@ -91,6 +100,47 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
             order.status.toLowerCase().includes(term)
         )
     }, [data, searchTerm])
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(filteredData.map(o => o.id))
+        } else {
+            setSelectedIds([])
+        }
+    }
+
+    const handleSelectOne = (checked: boolean, orderId: number) => {
+        if (checked) {
+            setSelectedIds(prev => [...prev, orderId])
+        } else {
+            setSelectedIds(prev => prev.filter(id => id !== orderId))
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (confirm("Are you sure you want to delete selected sales orders?")) {
+            const result = await bulkDeleteSalesOrders(selectedIds)
+            if (result.success) {
+                toast.success("Sales orders deleted successfully")
+                setSelectedIds([])
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
+
+    const handleBulkUpdateStatus = async () => {
+        const status = prompt("Enter new status for selected orders (draft/confirmed/completed/cancelled):")
+        if (status) {
+            const result = await bulkUpdateSalesOrderStatus(selectedIds, status)
+            if (result.success) {
+                toast.success("Sales order statuses updated successfully")
+                setSelectedIds([])
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
 
     const handleDelete = async (id: number) => {
         try {
@@ -106,7 +156,28 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+                <ScoreCard
+                    title="Total Orders"
+                    value={totalOrders}
+                    icon={ShoppingCart}
+                    description="All sales orders"
+                />
+                <ScoreCard
+                    title="Completed"
+                    value={completedOrders}
+                    icon={CheckCircle}
+                    description="Successfully fulfilled"
+                />
+                <ScoreCard
+                    title="Pending"
+                    value={pendingOrders}
+                    icon={Clock}
+                    description="Draft or confirmed orders"
+                />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -124,6 +195,12 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-[50px]">
+                                    <Checkbox
+                                        checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                                        onCheckedChange={handleSelectAll}
+                                    />
+                                </TableHead>
                                 <TableHead className="w-[160px]">Invoice Number</TableHead>
                                 <TableHead>No PO Customer</TableHead>
                                 <TableHead>Customer</TableHead>
@@ -137,13 +214,19 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                         <TableBody>
                             {filteredData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-24 text-center">
+                                    <TableCell colSpan={9} className="h-24 text-center">
                                         No sales orders found.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 filteredData.map((order) => (
                                     <TableRow key={order.id}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedIds.includes(order.id)}
+                                                onCheckedChange={(checked) => handleSelectOne(!!checked, order.id)}
+                                            />
+                                        </TableCell>
                                         <TableCell className="font-mono text-blue-600 font-medium">
                                             {order.invoiceNumber || "-"}
                                         </TableCell>
@@ -209,6 +292,13 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                     </Table>
                 </div>
             </div>
+
+            <BulkActions
+                selectedCount={selectedIds.length}
+                onDelete={handleBulkDelete}
+                onEdit={handleBulkUpdateStatus}
+                entityName="sales order"
+            />
         </div>
     )
 }

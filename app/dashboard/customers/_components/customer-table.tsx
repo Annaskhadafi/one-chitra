@@ -11,10 +11,13 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { deleteCustomer } from "@/app/actions/customer"
+import { deleteCustomer, bulkDeleteCustomers } from "@/app/actions/customer"
 import { CustomerDialog } from "./customer-dialog"
 import { CustomerCSVUpload } from "./customer-table-csv"
-import { Search, Pencil, Trash2 } from "lucide-react"
+import { Search, Pencil, Trash2, Users, UserPlus } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScoreCard } from "@/components/score-card"
+import { BulkActions } from "@/components/bulk-actions"
 import { toast } from "sonner"
 import {
     AlertDialog,
@@ -31,12 +34,49 @@ import { Customer } from "@/lib/types"
 
 export function CustomerTable({ customers: initialCustomers }: { customers: Customer[] }) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [selectedIds, setSelectedIds] = useState<number[]>([])
+
+    // Stats calculation
+    const totalCustomers = initialCustomers.length
+    const newCustomers = initialCustomers.filter(c => {
+        const date = new Date(c.createdAt)
+        const now = new Date()
+        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    }).length
 
     const filteredData = initialCustomers.filter(item =>
         item.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.email && item.email.toLowerCase().includes(searchTerm.toLowerCase()))
     )
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(filteredData.map(item => item.id))
+        } else {
+            setSelectedIds([])
+        }
+    }
+
+    const handleSelectOne = (checked: boolean, id: number) => {
+        if (checked) {
+            setSelectedIds(prev => [...prev, id])
+        } else {
+            setSelectedIds(prev => prev.filter(i => i !== id))
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (confirm("Are you sure you want to delete selected customers?")) {
+            const result = await bulkDeleteCustomers(selectedIds)
+            if (result.success) {
+                toast.success("Customers deleted successfully")
+                setSelectedIds([])
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
 
     const handleDelete = async (id: number) => {
         try {
@@ -52,7 +92,22 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+                <ScoreCard
+                    title="Total Customers"
+                    value={totalCustomers}
+                    icon={Users}
+                    description="All registered customers"
+                />
+                <ScoreCard
+                    title="New This Month"
+                    value={newCustomers}
+                    icon={UserPlus}
+                    description="Added in current month"
+                />
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -74,6 +129,12 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-[50px]">
+                                    <Checkbox
+                                        checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                                        onCheckedChange={handleSelectAll}
+                                    />
+                                </TableHead>
                                 <TableHead className="w-[120px]">ID (Code)</TableHead>
                                 <TableHead>Customer Name</TableHead>
                                 <TableHead>Contact</TableHead>
@@ -85,13 +146,19 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                         <TableBody>
                             {filteredData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center">
+                                    <TableCell colSpan={7} className="h-24 text-center">
                                         No customers found.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 filteredData.map((item) => (
                                     <TableRow key={item.id}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedIds.includes(item.id)}
+                                                onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
+                                            />
+                                        </TableCell>
                                         <TableCell className="font-medium text-blue-600 font-mono">
                                             {item.customerCode}
                                         </TableCell>
@@ -148,6 +215,13 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                     </Table>
                 </div>
             </div>
+
+            <BulkActions
+                selectedCount={selectedIds.length}
+                onDelete={handleBulkDelete}
+                entityName="customer"
+                showEdit={false}
+            />
         </div>
     )
 }

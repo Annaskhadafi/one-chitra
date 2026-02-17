@@ -13,6 +13,7 @@ import {
     CreditCard,
     Shield,
     ShoppingCart,
+    ArrowRightLeft,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -76,6 +77,12 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             url: "/dashboard/warehouse",
             icon: Warehouse,
             resource: null, // Make visible to all
+        },
+        {
+            title: "Stock Transfer",
+            url: "/dashboard/stock-transfers",
+            icon: ArrowRightLeft,
+            resource: null,
         },
         {
             title: "Deliveries",

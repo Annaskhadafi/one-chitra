@@ -8,7 +8,12 @@ export { rolePermissions } from "./role-permissions";
 export { warehouses } from "./warehouses";
 export { products } from "./products";
 export { stockLevels, stockLevelsRelations } from "./stock-levels";
-export { interWarehouseTransfers } from "./transfers";
+export {
+    stockTransfers,
+    stockTransferItems,
+    stockTransfersRelations,
+    stockTransferItemsRelations,
+} from "./transfers";
 export { sapSyncLogs } from "./sap-sync";
 export { rfidScans } from "./rfid-scans";
 export { quotations, quotationItems, quotationApprovals } from "./quotations";

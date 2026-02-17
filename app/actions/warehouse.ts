@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { warehouses } from "@/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
@@ -59,6 +59,16 @@ export async function deleteWarehouse(id: number) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to delete warehouse" }
+    }
+}
+
+export async function bulkDeleteWarehouses(ids: number[]) {
+    try {
+        await db.delete(warehouses).where(inArray(warehouses.id, ids))
+        revalidatePath("/dashboard/warehouse")
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to delete warehouses" }
     }
 }
 

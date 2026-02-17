@@ -1,14 +1,48 @@
-import { pgTable, serial, integer, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, timestamp, text } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
 
-export const interWarehouseTransfers = pgTable("inter_warehouse_transfers", {
+export const stockTransfers = pgTable("stock_transfers", {
     id: serial("id").primaryKey(),
-    fromWarehouse: integer("from_warehouse").references(() => warehouses.id).notNull(),
-    toWarehouse: integer("to_warehouse").references(() => warehouses.id).notNull(),
+    referenceNumber: varchar("reference_number", { length: 50 }).unique(),
+    fromWarehouseId: integer("from_warehouse_id").references(() => warehouses.id).notNull(),
+    toWarehouseId: integer("to_warehouse_id").references(() => warehouses.id).notNull(),
+    status: varchar("status", { length: 20 }).default("pending").notNull(),
+    notes: text("notes"),
+    transferDate: timestamp("transfer_date").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const stockTransferItems = pgTable("stock_transfer_items", {
+    id: serial("id").primaryKey(),
+    transferId: integer("transfer_id").references(() => stockTransfers.id, { onDelete: 'cascade' }).notNull(),
     productId: integer("product_id").references(() => products.id).notNull(),
     quantity: integer("quantity").notNull(),
-    status: varchar("status", { length: 50 }).default("PENDING").notNull(),
-    requestedAt: timestamp("requested_at").defaultNow().notNull(),
-    completedAt: timestamp("completed_at"),
 });
+
+export const stockTransfersRelations = relations(stockTransfers, ({ one, many }) => ({
+    fromWarehouse: one(warehouses, {
+        fields: [stockTransfers.fromWarehouseId],
+        references: [warehouses.id],
+        relationName: "transfersFrom"
+    }),
+    toWarehouse: one(warehouses, {
+        fields: [stockTransfers.toWarehouseId],
+        references: [warehouses.id],
+        relationName: "transfersTo"
+    }),
+    items: many(stockTransferItems),
+}));
+
+export const stockTransferItemsRelations = relations(stockTransferItems, ({ one }) => ({
+    transfer: one(stockTransfers, {
+        fields: [stockTransferItems.transferId],
+        references: [stockTransfers.id],
+    }),
+    product: one(products, {
+        fields: [stockTransferItems.productId],
+        references: [products.id],
+    }),
+}));
