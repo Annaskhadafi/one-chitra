@@ -2,15 +2,24 @@
 
 import * as React from "react"
 import {
+    CheckIcon,
+    ChevronDown,
+    ChevronRight,
+    Search,
+    LayoutDashboard,
+    Warehouse,
+    Package,
+    Database,
+    Users,
     Box,
     FileText,
     Truck,
+    Receipt,
+    History,
+    Settings,
+    Home,
     CreditCard,
     Shield,
-    Home,
-    Users,
-    Package,
-    Warehouse,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -47,6 +56,12 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             url: "/dashboard/inventory",
             icon: Box,
             resource: "inventory",
+        },
+        {
+            title: "Stock SAP",
+            url: "/dashboard/stocks-sap",
+            icon: Database,
+            resource: null,
         },
         {
             title: "Stocks",
