@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products>
@@ -28,3 +28,9 @@ export type Delivery = InferSelectModel<typeof deliveries>
 export type NewDelivery = InferInsertModel<typeof deliveries>
 export type DeliveryItem = InferSelectModel<typeof deliveryItems>
 export type NewDeliveryItem = InferInsertModel<typeof deliveryItems>
+
+export type Quotation = InferSelectModel<typeof quotations>
+export type NewQuotation = InferInsertModel<typeof quotations>
+export type QuotationItem = InferSelectModel<typeof quotationItems>
+export type NewQuotationItem = InferInsertModel<typeof quotationItems>
+

@@ -1,12 +1,14 @@
 import { getCustomers } from "@/app/actions/customer"
 import { getProducts } from "@/app/actions/product"
+import { getWarehouses } from "@/app/actions/warehouse"
 import { SalesOrderForm } from "../_components/sales-order-form"
 
 export default async function CreateSalesOrderPage() {
-    const [customers, products] = await Promise.all([
+    const [customers, products, warehouses] = await Promise.all([
         getCustomers(),
         getProducts(),
+        getWarehouses(),
     ])
 
-    return <SalesOrderForm customers={customers} products={products} />
+    return <SalesOrderForm customers={customers} products={products} warehouses={warehouses} />
 }

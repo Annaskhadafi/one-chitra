@@ -4,6 +4,7 @@ import { getWarehouses } from "@/app/actions/warehouse"
 import { StockTable } from "./_components/stock-table"
 
 export default async function StocksPage() {
+    // Force re-compile to fix module factory error
     const [stocks, products, warehouses] = await Promise.all([
         getStocks(),
         getProducts(),

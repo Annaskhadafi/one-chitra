@@ -14,6 +14,7 @@ import {
     Shield,
     ShoppingCart,
     ArrowRightLeft,
+    ArrowDownToLine,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -67,6 +68,12 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             resource: null,
         },
         {
+            title: "Good Receive",
+            url: "/dashboard/good-receive",
+            icon: ArrowDownToLine,
+            resource: null,
+        },
+        {
             title: "Stocks",
             url: "/dashboard/stocks",
             icon: Box,
@@ -103,7 +110,7 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             title: "Quotations",
             url: "/dashboard/quotations",
             icon: FileText,
-            resource: "quotations",
+            resource: null,
         },
         {
             title: "Sales Order",

@@ -2,6 +2,7 @@ import { pgTable, serial, varchar, integer, numeric, text, timestamp } from "dri
 import { relations } from "drizzle-orm";
 import { user } from "./auth";
 import { customers } from "./customers";
+import { warehouses } from "./warehouses";
 import { products } from "./products";
 
 export const salesOrders = pgTable("sales_orders", {
@@ -9,6 +10,7 @@ export const salesOrders = pgTable("sales_orders", {
     invoiceNumber: varchar("invoice_number", { length: 50 }).unique(),
     customerPo: varchar("customer_po", { length: 100 }),
     customerId: integer("customer_id").references(() => customers.id).notNull(),
+    warehouseId: integer("warehouse_id").references(() => warehouses.id),
     salesDate: timestamp("sales_date").defaultNow().notNull(),
     status: varchar("status", { length: 20 }).default("draft").notNull(),
     termsConditions: text("terms_conditions"),

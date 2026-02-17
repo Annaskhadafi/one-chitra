@@ -131,36 +131,56 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
     try {
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
 
-        const [newDelivery] = await db.insert(deliveries)
-            .values({
-                deliveryNumber,
-                salesOrderId: data.salesOrderId,
-                scheduledDate: new Date(data.scheduledDate),
-                deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
-                status: data.status,
-                deliveryType: data.deliveryType,
-                driverName: data.driverName || null,
-                vehicleNumber: data.vehicleNumber || null,
-                vehicleType: data.vehicleType || null,
-                warehouseId: data.warehouseId,
-                shippingAddress: data.shippingAddress || null,
-                notes: data.notes || null,
-            })
-            .returning()
+        return await db.transaction(async (tx) => {
+            const [newDelivery] = await tx.insert(deliveries)
+                .values({
+                    deliveryNumber,
+                    salesOrderId: data.salesOrderId,
+                    scheduledDate: new Date(data.scheduledDate),
+                    deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
+                    status: data.status,
+                    deliveryType: data.deliveryType,
+                    driverName: data.driverName || null,
+                    vehicleNumber: data.vehicleNumber || null,
+                    vehicleType: data.vehicleType || null,
+                    warehouseId: data.warehouseId,
+                    shippingAddress: data.shippingAddress || null,
+                    notes: data.notes || null,
+                })
+                .returning()
 
-        if (data.items.length > 0) {
-            await db.insert(deliveryItems)
-                .values(data.items.map(item => ({
-                    deliveryId: newDelivery.id,
-                    salesOrderItemId: item.salesOrderItemId || null,
-                    productId: item.productId,
-                    orderedQuantity: item.orderedQuantity,
-                    deliveredQuantity: item.deliveredQuantity,
-                })))
-        }
+            if (data.items.length > 0) {
+                await tx.insert(deliveryItems)
+                    .values(data.items.map(item => ({
+                        deliveryId: newDelivery.id,
+                        salesOrderItemId: item.salesOrderItemId || null,
+                        productId: item.productId,
+                        orderedQuantity: item.orderedQuantity,
+                        deliveredQuantity: item.deliveredQuantity,
+                        serialNumbers: item.serialNumbers || null,
+                    })))
 
-        revalidatePath("/dashboard/deliveries")
-        return { success: true, id: newDelivery.id }
+                // If status is delivered, deduct stock
+                if (data.status === "delivered") {
+                    for (const item of data.items) {
+                        // Deduct total stock AND booked stock
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, data.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+            }
+
+            revalidatePath("/dashboard/deliveries")
+            return { success: true, id: newDelivery.id }
+        })
     } catch (error) {
         console.error("Failed to create delivery:", error)
         return { success: false, error: "Failed to create delivery" }
@@ -169,40 +189,84 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
 export async function updateDelivery(id: number, data: z.infer<typeof deliverySchema>) {
     try {
-        await db.update(deliveries)
-            .set({
-                deliveryNumber: data.deliveryNumber || undefined,
-                salesOrderId: data.salesOrderId,
-                scheduledDate: new Date(data.scheduledDate),
-                deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
-                status: data.status,
-                deliveryType: data.deliveryType,
-                driverName: data.driverName || null,
-                vehicleNumber: data.vehicleNumber || null,
-                vehicleType: data.vehicleType || null,
-                warehouseId: data.warehouseId,
-                shippingAddress: data.shippingAddress || null,
-                notes: data.notes || null,
-                updatedAt: new Date(),
+        return await db.transaction(async (tx) => {
+            const originalDelivery = await tx.query.deliveries.findFirst({
+                where: eq(deliveries.id, id),
+                with: { items: true },
             })
-            .where(eq(deliveries.id, id))
 
-        // Replace items
-        await db.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
+            if (!originalDelivery) {
+                return { success: false, error: "Delivery not found" }
+            }
 
-        if (data.items.length > 0) {
-            await db.insert(deliveryItems)
-                .values(data.items.map(item => ({
-                    deliveryId: id,
-                    salesOrderItemId: item.salesOrderItemId || null,
-                    productId: item.productId,
-                    orderedQuantity: item.orderedQuantity,
-                    deliveredQuantity: item.deliveredQuantity,
-                })))
-        }
+            // Revert stock if it was previously delivered
+            if (originalDelivery.status === "delivered" && originalDelivery.warehouseId) {
+                for (const item of originalDelivery.items) {
+                    await tx.update(stockLevels)
+                        .set({
+                            totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
+                            bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
+                            updatedAt: new Date(),
+                        })
+                        .where(and(
+                            eq(stockLevels.warehouseId, originalDelivery.warehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        ))
+                }
+            }
 
-        revalidatePath("/dashboard/deliveries")
-        return { success: true }
+            await tx.update(deliveries)
+                .set({
+                    deliveryNumber: data.deliveryNumber || undefined,
+                    salesOrderId: data.salesOrderId,
+                    scheduledDate: new Date(data.scheduledDate),
+                    deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
+                    status: data.status,
+                    deliveryType: data.deliveryType,
+                    driverName: data.driverName || null,
+                    vehicleNumber: data.vehicleNumber || null,
+                    vehicleType: data.vehicleType || null,
+                    warehouseId: data.warehouseId,
+                    shippingAddress: data.shippingAddress || null,
+                    notes: data.notes || null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(deliveries.id, id))
+
+            // Replace items
+            await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
+
+            if (data.items.length > 0) {
+                await tx.insert(deliveryItems)
+                    .values(data.items.map(item => ({
+                        deliveryId: id,
+                        salesOrderItemId: item.salesOrderItemId || null,
+                        productId: item.productId,
+                        orderedQuantity: item.orderedQuantity,
+                        deliveredQuantity: item.deliveredQuantity,
+                        serialNumbers: item.serialNumbers || null,
+                    })))
+
+                // Apply new stock deduction if delivered
+                if (data.status === "delivered") {
+                    for (const item of data.items) {
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, data.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+            }
+
+            revalidatePath("/dashboard/deliveries")
+            return { success: true }
+        })
     } catch (error) {
         console.error("Failed to update delivery:", error)
         return { success: false, error: "Failed to update delivery" }

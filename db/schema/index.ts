@@ -16,7 +16,7 @@ export {
 } from "./transfers";
 export { sapSyncLogs } from "./sap-sync";
 export { rfidScans } from "./rfid-scans";
-export { quotations, quotationItems, quotationApprovals } from "./quotations";
+export { quotations, quotationItems, quotationsRelations, quotationItemsRelations } from "./quotations";
 export { deliveries, deliveryItems, deliveriesRelations, deliveryItemsRelations } from "./deliveries";
 export { billingRecords } from "./billing";
 export { auditLogs } from "./audit-logs";

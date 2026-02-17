@@ -31,6 +31,7 @@ export const deliveryItems = pgTable("delivery_items", {
     productId: integer("product_id").references(() => products.id).notNull(),
     orderedQuantity: integer("ordered_quantity").default(0).notNull(),
     deliveredQuantity: integer("delivered_quantity").default(0).notNull(),
+    serialNumbers: text("serial_numbers").array(),
 });
 
 export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({

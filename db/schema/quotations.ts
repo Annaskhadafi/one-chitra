@@ -1,15 +1,35 @@
 import { pgTable, serial, varchar, integer, numeric, text, timestamp } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { user } from "./auth";
+import { customers } from "./customers";
 import { products } from "./products";
+import { salesOrders } from "./sales-orders";
 
 export const quotations = pgTable("quotations", {
     id: serial("id").primaryKey(),
-    customerName: varchar("customer_name", { length: 200 }).notNull(),
+    quotationNumber: varchar("quotation_number", { length: 50 }).unique(),
+    customerId: integer("customer_id").references(() => customers.id).notNull(),
+    quotationDate: timestamp("quotation_date").defaultNow().notNull(),
+    validUntil: timestamp("valid_until"),
+    subject: varchar("subject", { length: 500 }),
     createdBy: varchar("created_by").references(() => user.id).notNull(),
-    status: varchar("status", { length: 50 }).default("DRAFT").notNull(),
+    status: varchar("status", { length: 50 }).default("draft").notNull(),
+    paymentTerms: text("payment_terms"),
+    termsConditions: text("terms_conditions"),
+    notes: text("notes"),
+    discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
+    tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),
+    shipping: numeric("shipping", { precision: 12, scale: 2 }).default("0").notNull(),
+    salesOrderId: integer("sales_order_id").references(() => salesOrders.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
     approvedAt: timestamp("approved_at"),
     approvedBy: varchar("approved_by").references(() => user.id),
+    rejectedAt: timestamp("rejected_at"),
+    rejectedBy: varchar("rejected_by").references(() => user.id),
+    rejectionReason: text("rejection_reason"),
+    salesPersonId: text("sales_person_id").references(() => user.id),
+    attn: varchar("attn", { length: 200 }),
 });
 
 export const quotationItems = pgTable("quotation_items", {
@@ -17,14 +37,39 @@ export const quotationItems = pgTable("quotation_items", {
     quotationId: integer("quotation_id").references(() => quotations.id, { onDelete: "cascade" }).notNull(),
     productId: integer("product_id").references(() => products.id).notNull(),
     quantity: integer("quantity").notNull(),
+    description: text("description"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
+    tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),
 });
 
-export const quotationApprovals = pgTable("quotation_approvals", {
-    id: serial("id").primaryKey(),
-    quotationId: integer("quotation_id").references(() => quotations.id, { onDelete: "cascade" }).notNull(),
-    approverId: varchar("approver_id").references(() => user.id).notNull(),
-    decision: varchar("decision", { length: 20 }), // 'APPROVED' or 'REJECTED'
-    decidedAt: timestamp("decided_at").defaultNow().notNull(),
-    comments: text("comments"),
-});
+export const quotationsRelations = relations(quotations, ({ one, many }) => ({
+    customer: one(customers, {
+        fields: [quotations.customerId],
+        references: [customers.id],
+    }),
+    createdByUser: one(user, {
+        fields: [quotations.createdBy],
+        references: [user.id],
+    }),
+    salesOrder: one(salesOrders, {
+        fields: [quotations.salesOrderId],
+        references: [salesOrders.id],
+    }),
+    salesPerson: one(user, {
+        fields: [quotations.salesPersonId],
+        references: [user.id],
+    }),
+    items: many(quotationItems),
+}));
+
+export const quotationItemsRelations = relations(quotationItems, ({ one }) => ({
+    quotation: one(quotations, {
+        fields: [quotationItems.quotationId],
+        references: [quotations.id],
+    }),
+    product: one(products, {
+        fields: [quotationItems.productId],
+        references: [products.id],
+    }),
+}));

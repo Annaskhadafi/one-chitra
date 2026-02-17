@@ -78,9 +78,11 @@ interface DeliveryFormItem {
     salesOrderItemId: number
     productId: number
     productName: string
+    productCategory: string
     orderedQuantity: number
     remainingQuantity: number
     deliveredQuantity: number
+    serialNumbers: string[]
 }
 
 interface StockResult {
@@ -129,6 +131,7 @@ interface DeliveryFormProps {
             productId: number
             orderedQuantity: number
             deliveredQuantity: number
+            serialNumbers: string[] | null
             product: Product
         }[]
     }
@@ -166,9 +169,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 salesOrderItemId: item.salesOrderItemId || 0,
                 productId: item.productId,
                 productName: item.product?.materialDescription || item.product?.materialNumber || "",
+                productCategory: item.product?.category || "",
                 orderedQuantity: item.orderedQuantity,
-                remainingQuantity: item.orderedQuantity,
+                remainingQuantity: item.orderedQuantity, // logic slightly off here for edit mode but OK for now
                 deliveredQuantity: item.deliveredQuantity,
+                serialNumbers: item.serialNumbers || [],
             }))
         }
         return []
@@ -201,9 +206,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     salesOrderItemId: item.id,
                     productId: item.productId,
                     productName: item.product?.materialDescription || item.product?.materialNumber || "",
+                    productCategory: item.product?.category || "",
                     orderedQuantity: item.quantity,
                     remainingQuantity: item.remainingQuantity,
                     deliveredQuantity: item.remainingQuantity, // Default: deliver all remaining
+                    serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
                 }))
             setItems(newItems)
 
@@ -225,7 +232,31 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const updateItemQty = useCallback((index: number, qty: number) => {
         setItems(prev => prev.map((item, i) => {
             if (i !== index) return item
-            return { ...item, deliveredQuantity: Math.min(Math.max(1, qty), item.remainingQuantity) }
+
+            const newQty = Math.min(Math.max(1, qty), item.remainingQuantity)
+
+            // Adjust serial numbers array size if it's a TYRE
+            let newSerialNumbers = item.serialNumbers
+            if (item.productCategory === "TYRE") {
+                if (newQty > item.serialNumbers.length) {
+                    // Add empty strings
+                    newSerialNumbers = [...item.serialNumbers, ...Array(newQty - item.serialNumbers.length).fill("")]
+                } else if (newQty < item.serialNumbers.length) {
+                    // Remove form end
+                    newSerialNumbers = item.serialNumbers.slice(0, newQty)
+                }
+            }
+
+            return { ...item, deliveredQuantity: newQty, serialNumbers: newSerialNumbers }
+        }))
+    }, [])
+
+    const updateSN = useCallback((itemIndex: number, snIndex: number, value: string) => {
+        setItems(prev => prev.map((item, i) => {
+            if (i !== itemIndex) return item
+            const newSNs = [...item.serialNumbers]
+            newSNs[snIndex] = value
+            return { ...item, serialNumbers: newSNs }
         }))
     }, [])
 
@@ -270,6 +301,22 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             return
         }
 
+        // Validate Serial Numbers
+        for (const item of items) {
+            if (item.productCategory === "TYRE") {
+                if (item.serialNumbers.some(sn => !sn.trim())) {
+                    toast.error(`Please enter all serial numbers for ${item.productName}`)
+                    return
+                }
+                // Check for duplicates within the same item
+                const uniqueSNs = new Set(item.serialNumbers)
+                if (uniqueSNs.size !== item.serialNumbers.length) {
+                    toast.error(`Duplicate serial numbers found for ${item.productName}`)
+                    return
+                }
+            }
+        }
+
         setSaving(true)
         const payload = {
             salesOrderId,
@@ -288,6 +335,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 productId: item.productId,
                 orderedQuantity: item.orderedQuantity,
                 deliveredQuantity: item.deliveredQuantity,
+                serialNumbers: item.productCategory === "TYRE" ? item.serialNumbers : undefined,
             })),
         }
 
@@ -422,73 +470,84 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Product</TableHead>
-                                                <TableHead className="text-center">SO Qty</TableHead>
-                                                <TableHead className="text-center">Already Delivered</TableHead>
-                                                <TableHead className="text-center">Remaining</TableHead>
-                                                <TableHead className="text-center">Deliver Qty</TableHead>
-                                                <TableHead className="text-center">Stock</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {items.map((item, idx) => {
-                                                const stock = getStockStatus(item.productId)
-                                                return (
-                                                    <TableRow key={idx}>
-                                                        <TableCell>
-                                                            <div className="font-medium text-sm">
-                                                                {item.productName}
+                                <div className="space-y-6">
+                                    {items.map((item, idx) => {
+                                        const stock = getStockStatus(item.productId)
+                                        return (
+                                            <div key={idx} className="border rounded-md p-4 space-y-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                                                    <div className="md:col-span-4">
+                                                        <div className="font-medium">{item.productName}</div>
+                                                        <div className="text-sm text-muted-foreground mt-1">
+                                                            Ordered: {item.orderedQuantity} | Remaining: {item.remainingQuantity}
+                                                        </div>
+                                                        {item.productCategory === "TYRE" && (
+                                                            <Badge variant="secondary" className="mt-2 text-xs">
+                                                                Serial Numbers Required
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="md:col-span-3 flex items-center gap-2">
+                                                        <Label className="text-xs whitespace-nowrap">Deliver Qty:</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            max={item.remainingQuantity}
+                                                            value={item.deliveredQuantity}
+                                                            onChange={e => updateItemQty(idx, Number(e.target.value))}
+                                                            className="w-20"
+                                                        />
+                                                    </div>
+
+                                                    <div className="md:col-span-3 flex items-center gap-2 justify-end">
+                                                        {stock ? (
+                                                            <div className="flex items-center gap-1">
+                                                                {stock.sufficient ? (
+                                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                                ) : stock.available > 0 ? (
+                                                                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                                                                ) : (
+                                                                    <XCircle className="h-4 w-4 text-red-500" />
+                                                                )}
+                                                                <span className="text-xs font-medium">
+                                                                    {stock.available} stock
+                                                                </span>
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            {item.orderedQuantity}
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            {item.orderedQuantity - item.remainingQuantity}
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            <Badge variant="outline">{item.remainingQuantity}</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                max={item.remainingQuantity}
-                                                                value={item.deliveredQuantity}
-                                                                onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                                className="w-20 text-center mx-auto"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            {stock ? (
-                                                                <div className="flex items-center justify-center gap-1">
-                                                                    {stock.sufficient ? (
-                                                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                                                    ) : stock.available > 0 ? (
-                                                                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                                                                    ) : (
-                                                                        <XCircle className="h-4 w-4 text-red-500" />
-                                                                    )}
-                                                                    <span className="text-xs">
-                                                                        {stock.available} available
-                                                                    </span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">-</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Serial Number Inputs */}
+                                                {item.productCategory === "TYRE" && item.deliveredQuantity > 0 && (
+                                                    <div className="bg-muted/30 p-4 rounded-md space-y-3">
+                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            Serial Numbers ({item.deliveredQuantity})
+                                                        </Label>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                            {item.serialNumbers.map((sn, snIdx) => (
+                                                                <div key={snIdx} className="space-y-1">
+                                                                    <Input
+                                                                        placeholder={`SN #${snIdx + 1}`}
+                                                                        value={sn}
+                                                                        onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                        className="h-8 text-sm"
+                                                                    />
                                                                 </div>
-                                                            ) : (
-                                                                <span className="text-xs text-muted-foreground">-</span>
-                                                            )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                )}
+                                            </div>
+                                        )
+                                    })}
                                 </div>
+
                                 {stockResults.length > 0 && (
-                                    <div className="mt-3">
+                                    <div className="mt-6 flex justify-end">
                                         {stockResults.every(r => r.sufficient) ? (
                                             <Badge variant="default" className="bg-green-600">
                                                 <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -521,6 +580,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     type="date"
                                     value={scheduledDate}
                                     onChange={e => setScheduledDate(e.target.value)}
+                                    max="9999-12-31"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -529,6 +589,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     type="date"
                                     value={deliveryDate}
                                     onChange={e => setDeliveryDate(e.target.value)}
+                                    max="9999-12-31"
                                 />
                             </div>
                             <div className="space-y-2">

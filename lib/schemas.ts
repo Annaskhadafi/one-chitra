@@ -44,6 +44,7 @@ export const salesOrderSchema = z.object({
     invoiceNumber: z.string().optional(),
     customerPo: z.string().optional(),
     customerId: z.number().min(1, "Customer is required"),
+    warehouseId: z.number().optional(),
     salesDate: z.string().or(z.date()),
     status: z.enum(["draft", "confirmed", "completed", "cancelled"]).default("draft"),
     termsConditions: z.string().optional(),
@@ -58,6 +59,7 @@ export const deliveryItemSchema = z.object({
     productId: z.number().min(1, "Product is required"),
     orderedQuantity: z.number().min(0).default(0),
     deliveredQuantity: z.number().min(1, "Delivered quantity must be at least 1"),
+    serialNumbers: z.array(z.string()).optional(),
 })
 
 export const deliverySchema = z.object({
@@ -74,4 +76,31 @@ export const deliverySchema = z.object({
     shippingAddress: z.string().optional(),
     notes: z.string().optional(),
     items: z.array(deliveryItemSchema).min(1, "At least one item is required"),
+})
+
+export const quotationItemSchema = z.object({
+    productId: z.number().min(1, "Product is required"),
+    description: z.string().optional(),
+    quantity: z.number().min(1, "Quantity must be at least 1"),
+    unitPrice: z.number().min(0, "Unit price must be >= 0"),
+    discount: z.number().min(0).default(0),
+    tax: z.number().min(0).default(0),
+})
+
+export const quotationSchema = z.object({
+    quotationNumber: z.string().optional(),
+    customerId: z.number().min(1, "Customer is required"),
+    quotationDate: z.string().or(z.date()),
+    validUntil: z.string().or(z.date()).optional().nullable(),
+    subject: z.string().optional(),
+    status: z.enum(["draft", "sent", "approved", "rejected", "expired", "converted"]).default("draft"),
+    paymentTerms: z.string().optional(),
+    termsConditions: z.string().optional(),
+    notes: z.string().optional(),
+    salesPersonId: z.string().optional(),
+    attn: z.string().optional(),
+    discount: z.number().min(0).default(0),
+    tax: z.number().min(0).default(0),
+    shipping: z.number().min(0).default(0),
+    items: z.array(quotationItemSchema).min(1, "At least one item is required"),
 })
