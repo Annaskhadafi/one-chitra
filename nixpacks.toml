@@ -9,7 +9,6 @@ cmds = ["npm ci"]
 
 [phases.build]
 cmds = [
-  "npm run db:generate",
   "npm run build",
   # Copy static files to standalone directory
   "cp -r .next/static .next/standalone/.next/static",
