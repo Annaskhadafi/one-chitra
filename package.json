@@ -17,6 +17,7 @@
     "db:dev": "docker compose --profile dev up postgres-dev -d",
     "db:dev-down": "docker compose --profile dev down postgres-dev",
     "db:seed": "npx tsx db/seed.ts",
+    "db:clear": "npx tsx db/clear.ts",
     "db:reset": "drizzle-kit drop && drizzle-kit push",
     "docker:build": "docker build -t codeguide-starter-fullstack .",
     "docker:up": "docker compose up -d",
