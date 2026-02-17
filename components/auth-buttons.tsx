@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { LogIn, LogOut, User, UserPlus } from "lucide-react";
 import { useSession, signOut } from "@/lib/auth-client";
@@ -17,6 +17,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 export function AuthButtons() {
   const { data: session, isPending } = useSession();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -29,7 +34,7 @@ export function AuthButtons() {
     }
   };
 
-  if (isPending) {
+  if (!isClient || isPending) {
     return (
       <div className="flex items-center gap-2">
         <div className="h-8 w-16 animate-pulse rounded bg-muted" />
@@ -42,10 +47,10 @@ export function AuthButtons() {
     const user = session.user;
     const initials = user.name
       ? user.name
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .toUpperCase()
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
       : user.email?.[0]?.toUpperCase() || "U";
 
     return (
@@ -112,8 +117,13 @@ export function AuthButtons() {
 // Simplified version for hero section
 export function HeroAuthButtons() {
   const { data: session, isPending } = useSession();
+  const [isClient, setIsClient] = useState(false);
 
-  if (isPending) {
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient || isPending) {
     return (
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <div className="h-12 w-32 animate-pulse rounded-lg bg-muted" />

@@ -2,10 +2,10 @@ import { pgTable, serial, varchar, text, timestamp } from "drizzle-orm/pg-core";
 
 export const products = pgTable("products", {
     id: serial("id").primaryKey(),
-    sku: varchar("sku", { length: 50 }).unique().notNull(),
-    name: varchar("name", { length: 200 }).notNull(),
-    unit: varchar("unit", { length: 50 }),
-    description: text("description"),
+    category: varchar("category", { length: 50 }).notNull(), // ACC, FLAP, IMT PART, TUBE, TYRE, WHEEL & RIM
+    materialNumber: varchar("material_number", { length: 100 }).unique().notNull(),
+    oldMaterialNo: text("old_material_no"),
+    materialDescription: text("material_description"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
