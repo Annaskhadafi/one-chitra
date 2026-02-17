@@ -347,7 +347,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
             router.push("/dashboard/deliveries")
         } else {
-            toast.error(result.error || "Failed to save delivery")
+            const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
+            toast.error(errorMsg)
         }
         setSaving(false)
     }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router])
