@@ -1,0 +1,104 @@
+
+> codeguide-starter-fullstack@0.1.0 lint
+> eslint
+
+
+D:\[01] PROJECT\one chitra\app\actions\customer.ts
+  49:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+  59:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\actions\product.ts
+   68:14   warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+  110:104  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  121:14   warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\actions\stock-sap.ts
+   5:14  warning  'and' is defined but never used     @typescript-eslint/no-unused-vars
+  45:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\actions\stock.ts
+  55:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+  65:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+  89:14  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\actions\warehouse.ts
+  50:14  warning  '_error' is defined but never used            @typescript-eslint/no-unused-vars
+  60:14  warning  '_error' is defined but never used            @typescript-eslint/no-unused-vars
+  70:15  warning  '_errors' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\admin\roles\page.tsx
+  39:62  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\[01] PROJECT\one chitra\app\dashboard\customers\_components\customer-dialog.tsx
+  73:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\customers\_components\customer-table-csv.tsx
+  92:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\customers\_components\customer-table.tsx
+  49:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-dialog.tsx
+  77:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-table-csv.tsx
+  87:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-table.tsx
+  17:18  warning  'MoreHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+  54:18  warning  '_error' is defined but never used          @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\stocks-sap\_components\stock-sap-table.tsx
+  52:57  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  62:18  warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+  98:18  warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\stocks\_components\stock-csv-upload.tsx
+  100:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\stocks\_components\stock-dialog.tsx
+   6:13  warning  'z' is defined but never used             @typescript-eslint/no-unused-vars
+  38:10  warning  'Product' is defined but never used       @typescript-eslint/no-unused-vars
+  38:19  warning  'Warehouse' is defined but never used     @typescript-eslint/no-unused-vars
+  49:13  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  85:18  warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\stocks\_components\stock-table.tsx
+  38:11  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:15  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  40:17  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  62:18  warning  '_error' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\warehouse\_components\csv-upload.tsx
+  79:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\warehouse\_components\warehouse-dialog.tsx
+  71:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\warehouse\_components\warehouse-table.tsx
+  52:18  warning  '_error' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\sign-in\page.tsx
+  37:18  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\sign-up\page.tsx
+  68:18  warning  '_err' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\components\app-sidebar.tsx
+  12:5  warning  'Receipt' is defined but never used   @typescript-eslint/no-unused-vars
+  13:5  warning  'History' is defined but never used   @typescript-eslint/no-unused-vars
+  14:5  warning  'Settings' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\components\nav-main.tsx
+   7:3   warning  'ChevronRight' is defined but never used  @typescript-eslint/no-unused-vars
+  19:82  error    Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\[01] PROJECT\one chitra\db\seed.ts
+  63:11  warning  'getPermId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\kill-ports.js
+   1:18  error    A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  41:26  warning  'e' is defined but never used            @typescript-eslint/no-unused-vars
+
+Γ£û 47 problems (9 errors, 38 warnings)
+

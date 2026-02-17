@@ -2,11 +2,6 @@
 
 import * as React from "react"
 import {
-    CheckIcon,
-    ChevronDown,
-    ChevronRight,
-    Search,
-    LayoutDashboard,
     Warehouse,
     Package,
     Database,
@@ -14,12 +9,10 @@ import {
     Box,
     FileText,
     Truck,
-    Receipt,
-    History,
-    Settings,
     Home,
     CreditCard,
     Shield,
+    ShoppingCart,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -44,12 +37,21 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps) {
     // Navigation items with resource mapping
-    const mainNavItems = [
+    const dashboardItems = [
         {
             title: "Dashboard",
             url: "/dashboard",
             icon: Home,
             resource: null, // Always visible
+        },
+    ]
+
+    const supplyChainItems = [
+        {
+            title: "Products",
+            url: "/dashboard/products",
+            icon: Package,
+            resource: null,
         },
         {
             title: "Inventory",
@@ -70,15 +72,24 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             resource: null,
         },
         {
+            title: "Warehouse",
+            url: "/dashboard/warehouse",
+            icon: Warehouse,
+            resource: null, // Make visible to all
+        },
+        {
+            title: "Deliveries",
+            url: "/dashboard/deliveries",
+            icon: Truck,
+            resource: null,
+        },
+    ]
+
+    const salesItems = [
+        {
             title: "Customers",
             url: "/dashboard/customers",
             icon: Users,
-            resource: null,
-        },
-        {
-            title: "Products",
-            url: "/dashboard/products",
-            icon: Package,
             resource: null,
         },
         {
@@ -88,10 +99,10 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             resource: "quotations",
         },
         {
-            title: "Deliveries",
-            url: "/dashboard/deliveries",
-            icon: Truck,
-            resource: "deliveries",
+            title: "Sales Order",
+            url: "/dashboard/sales-orders",
+            icon: ShoppingCart,
+            resource: null,
         },
         {
             title: "Billing",
@@ -99,26 +110,20 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
             icon: CreditCard,
             resource: "billing",
         },
-        {
-            title: "Warehouse",
-            url: "/dashboard/warehouse",
-            icon: Warehouse,
-            resource: null, // Make visible to all
-        },
     ]
 
-    const adminNavItems = [
+    const adminItems = [
         {
             title: "User Management",
             url: "/dashboard/admin/users",
             icon: Users,
-            resource: "users",
+            resource: null,
         },
         {
             title: "Role Management",
             url: "/dashboard/admin/roles",
             icon: Shield,
-            resource: "roles",
+            resource: null,
         },
     ]
 
@@ -129,8 +134,10 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
         return permissions.includes(`${resource}:view`) || permissions.includes("admin:view")
     }
 
-    const filteredMain = mainNavItems.filter(item => hasPermission(item.resource))
-    const filteredAdmin = adminNavItems.filter(item => hasPermission(item.resource))
+    const filteredDashboard = dashboardItems.filter(item => hasPermission(item.resource))
+    const filteredSupplyChain = supplyChainItems.filter(item => hasPermission(item.resource))
+    const filteredSales = salesItems.filter(item => hasPermission(item.resource))
+    const filteredAdmin = adminItems.filter(item => hasPermission(item.resource))
 
     // Fallback user if not provided (though layout should provide it)
     const currentUser = user || {
@@ -153,7 +160,27 @@ export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps
                 </div>
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={filteredMain} />
+                <NavMain items={filteredDashboard} />
+
+                {filteredSupplyChain.length > 0 && (
+                    <>
+                        <SidebarSeparator className="mx-2" />
+                        <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Supply Chain
+                        </div>
+                        <NavMain items={filteredSupplyChain} />
+                    </>
+                )}
+
+                {filteredSales.length > 0 && (
+                    <>
+                        <SidebarSeparator className="mx-2" />
+                        <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Sales & Distribution
+                        </div>
+                        <NavMain items={filteredSales} />
+                    </>
+                )}
 
                 {filteredAdmin.length > 0 && (
                     <>

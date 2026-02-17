@@ -1,66 +1,59 @@
 "use server"
 
 import { db } from "@/db"
-import { stockLevels } from "@/db/schema/stock-levels"
-import { products } from "@/db/schema/products"
-import { warehouses } from "@/db/schema/warehouses"
-import { eq, sql } from "drizzle-orm"
+import { stockLevels } from "@/db/schema"
+import { eq, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
+import { stockSchema } from "@/lib/schemas"
+
 export async function getStocks() {
-    return await db.select({
-        id: stockLevels.id,
-        productId: stockLevels.productId,
-        warehouseId: stockLevels.warehouseId,
-        valuationValue: stockLevels.valuationValue,
-        totalStock: stockLevels.totalStock,
-        minStock: stockLevels.minStock,
-        updatedAt: stockLevels.updatedAt,
-        // Product fields
-        item: products.materialNumber,
-        materialDescription: products.materialDescription,
-        oldMaterialNo: products.oldMaterialNo,
-        // Warehouse fields
-        storeLoc: warehouses.sloc,
-        slocDescription: warehouses.description,
+    return await db.query.stockLevels.findMany({
+        with: {
+            product: true,
+            warehouse: true,
+        },
     })
-        .from(stockLevels)
-        .innerJoin(products, eq(stockLevels.productId, products.id))
-        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
-        .orderBy(products.materialNumber)
 }
 
-const stockSchema = z.object({
-    productId: z.number(),
-    warehouseId: z.number(),
-    valuationValue: z.string(),
-    totalStock: z.number(),
-    minStock: z.number(),
-})
-
-export async function upsertStock(data: z.infer<typeof stockSchema>) {
+export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number) {
     try {
-        await db.insert(stockLevels)
-            .values({
-                ...data,
-                updatedAt: new Date()
-            })
-            .onConflictDoUpdate({
-                target: [stockLevels.warehouseId, stockLevels.productId],
-                set: {
-                    valuationValue: data.valuationValue,
-                    totalStock: data.totalStock,
-                    minStock: data.minStock,
-                    updatedAt: new Date()
-                }
-            })
+        if (id) {
+            await db.update(stockLevels)
+                .set({
+                    ...data,
+                    valuationValue: data.valuationValue?.toString(),
+                    updatedAt: new Date(),
+                })
+                .where(eq(stockLevels.id, id))
+        } else {
+            const existing = await db.select().from(stockLevels)
+                .where(and(
+                    eq(stockLevels.productId, data.productId),
+                    eq(stockLevels.warehouseId, data.warehouseId)
+                ))
+                .limit(1)
 
+            if (existing.length > 0) {
+                await db.update(stockLevels)
+                    .set({
+                        ...data,
+                        valuationValue: data.valuationValue?.toString(),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(stockLevels.id, existing[0].id))
+            } else {
+                await db.insert(stockLevels).values({
+                    ...data,
+                    valuationValue: data.valuationValue?.toString(),
+                })
+            }
+        }
         revalidatePath("/dashboard/stocks")
         return { success: true }
-    } catch (error) {
-        console.error("Upsert Stock Error:", error)
-        return { success: false, error: "Failed to save stock level" }
+    } catch (_error) {
+        return { success: false, error: "Failed to update stock" }
     }
 }
 
@@ -69,44 +62,31 @@ export async function deleteStock(id: number) {
         await db.delete(stockLevels).where(eq(stockLevels.id, id))
         revalidatePath("/dashboard/stocks")
         return { success: true }
-    } catch (error) {
-        return { success: false, error: "Failed to delete stock entry" }
+    } catch (_error) {
+        return { success: false, error: "Failed to delete stock" }
     }
 }
 
-export async function importStocks(items: any[]) {
+export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
     try {
-        let successCount = 0
-
-        // Items should already have productId and warehouseId from the CSV parsing logic
-        for (const item of items) {
-            if (!item.productId || !item.warehouseId) continue;
+        for (const item of data) {
+            if (!item.productId || !item.warehouseId) continue
 
             await db.insert(stockLevels)
-                .values({
-                    productId: item.productId,
-                    warehouseId: item.warehouseId,
-                    valuationValue: item.valuationValue?.toString() || "0",
-                    totalStock: parseInt(item.totalStock?.toString() || "0"),
-                    minStock: parseInt(item.minStock?.toString() || "0"),
-                })
+                .values(item)
                 .onConflictDoUpdate({
-                    target: [stockLevels.warehouseId, stockLevels.productId],
+                    target: [stockLevels.productId, stockLevels.warehouseId],
                     set: {
-                        valuationValue: item.valuationValue?.toString() || "0",
-                        totalStock: parseInt(item.totalStock?.toString() || "0"),
-                        minStock: parseInt(item.minStock?.toString() || "0"),
-                        updatedAt: new Date()
-                    }
+                        totalStock: item.totalStock,
+                        valuationValue: item.valuationValue,
+                        minStock: item.minStock,
+                        updatedAt: new Date(),
+                    },
                 })
-
-            successCount++
         }
-
         revalidatePath("/dashboard/stocks")
-        return { success: true, count: successCount }
-    } catch (error) {
-        console.error("Import Stock Error:", error)
-        return { success: false, error: "Stock import failed" }
+        return { success: true }
+    } catch (_error) {
+        return { success: false, error: "Failed to import stocks" }
     }
 }

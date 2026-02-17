@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { exec } = require('child_process');
 
 // Ports to clean
@@ -38,7 +39,7 @@ function killPorts() {
                 try {
                     process.kill(pid, 'SIGKILL');
                     console.log(`✅ Killed PID ${pid}`);
-                } catch (e) {
+                } catch (_e) {
                     // Ignore if already dead
                 }
             });

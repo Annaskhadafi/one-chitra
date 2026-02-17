@@ -11,9 +11,9 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Warehouse } from "@/app/actions/warehouse"
+import { Warehouse } from "@/lib/types"
 import { WarehouseDialog } from "./warehouse-dialog"
-import { CSVUpload } from "./csv-upload"
+import { WarehouseCSVUpload } from "./csv-upload"
 import { Search, Pencil, Trash2 } from "lucide-react"
 import { deleteWarehouse } from "@/app/actions/warehouse"
 import { toast } from "sonner"
@@ -49,8 +49,8 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Failed to delete")
+        } catch (_error) {
+            toast.error("Failed to delete warehouse")
         }
     }
 
@@ -67,7 +67,7 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                     />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <CSVUpload />
+                    <WarehouseCSVUpload onSuccess={() => window.location.reload()} />
                     <WarehouseDialog />
                 </div>
             </div>

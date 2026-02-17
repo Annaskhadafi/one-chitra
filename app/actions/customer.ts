@@ -1,63 +1,53 @@
 "use server"
 
 import { db } from "@/db"
-import { customers } from "@/db/schema/customers"
-import { eq, sql } from "drizzle-orm"
+import { customers } from "@/db/schema"
+import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-export type Customer = typeof customers.$inferSelect
 
-const customerSchema = z.object({
-    customerCode: z.string().min(1, "Customer Code is required"),
-    name: z.string().min(1, "Customer Name is required"),
-    contactName: z.string().optional(),
-    email: z.string().email("Invalid email").optional().or(z.literal("")),
-    address1: z.string().optional(),
-    address2: z.string().optional(),
-    address3: z.string().optional(),
-    address4: z.string().optional(),
-    address5: z.string().optional(),
-})
+
+import { customerSchema } from "@/lib/schemas"
 
 export async function getCustomers() {
     return await db.select().from(customers).orderBy(customers.customerCode)
 }
 
 export async function createCustomer(data: z.infer<typeof customerSchema>) {
-    try {
-        const existing = await db.select().from(customers).where(eq(customers.customerCode, data.customerCode)).limit(1)
-        if (existing.length > 0) {
-            return { success: false, error: "Customer with this code already exists" }
-        }
-
-        await db.insert(customers).values(data)
-        revalidatePath("/dashboard/customers")
-        return { success: true }
-    } catch (error) {
-        console.error("Create Customer Error:", error)
-        return { success: false, error: "Failed to create customer" }
-    }
+    return await upsertCustomer(undefined, data)
 }
 
 export async function updateCustomer(id: number, data: z.infer<typeof customerSchema>) {
-    try {
-        const existing = await db.select().from(customers).where(eq(customers.customerCode, data.customerCode)).limit(1)
-        if (existing.length > 0 && existing[0].id !== id) {
-            return { success: false, error: "Customer code already taken" }
-        }
+    return await upsertCustomer(id, data)
+}
 
-        await db.update(customers)
-            .set({
-                ...data,
-                updatedAt: new Date()
-            })
-            .where(eq(customers.id, id))
+export async function upsertCustomer(id: number | undefined, data: z.infer<typeof customerSchema>) {
+    try {
+        if (id) {
+            const existing = await db.select().from(customers).where(eq(customers.customerCode, data.customerCode)).limit(1)
+            if (existing.length > 0 && existing[0].id !== id) {
+                return { success: false, error: "Customer code already taken" }
+            }
+
+            await db.update(customers)
+                .set({
+                    ...data,
+                    updatedAt: new Date()
+                })
+                .where(eq(customers.id, id))
+        } else {
+            const existing = await db.select().from(customers).where(eq(customers.customerCode, data.customerCode)).limit(1)
+            if (existing.length > 0) {
+                return { success: false, error: "Customer with this code already exists" }
+            }
+            await db.insert(customers).values(data)
+        }
 
         revalidatePath("/dashboard/customers")
         return { success: true }
-    } catch (error) {
-        return { success: false, error: "Failed to update customer" }
+    } catch (_error) {
+        return { success: false, error: "Failed to upsert customer" }
     }
 }
 
@@ -66,16 +56,18 @@ export async function deleteCustomer(id: number) {
         await db.delete(customers).where(eq(customers.id, id))
         revalidatePath("/dashboard/customers")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to delete customer" }
     }
 }
 
-export async function importCustomers(items: any[]) {
+export async function importCustomers(data: (typeof customers.$inferInsert)[]) {
     try {
+        if (data.length === 0) return { success: true }
+
         let successCount = 0
 
-        for (const item of items) {
+        for (const item of data) {
             if (!item.customerCode || !item.name) continue;
 
             await db.insert(customers)
@@ -110,8 +102,8 @@ export async function importCustomers(items: any[]) {
 
         revalidatePath("/dashboard/customers")
         return { success: true, count: successCount }
-    } catch (error) {
-        console.error("Import Customer Error:", error)
+    } catch (_error) {
+        console.error("Import Customer Error:", _error)
         return { success: false, error: "Customer import failed" }
     }
 }

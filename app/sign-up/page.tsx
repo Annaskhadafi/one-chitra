@@ -8,12 +8,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { signUp } from "@/lib/auth-client";
 import { Loader2, Eye, EyeOff } from "lucide-react";
+import { toast } from "sonner"; // Fixed toast import
 
 const signUpSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -60,11 +60,14 @@ export default function SignUpPage() {
 
             if (result.error) {
                 setError(result.error.message || "Sign up failed");
+                toast.error(result.error.message || "Sign up failed");
             } else {
+                toast.success("Account created successfully!");
                 router.push("/dashboard");
             }
-        } catch (err) {
+        } catch (_err) { // Changed 'err' to '_err'
             setError("An unexpected error occurred");
+            toast.error("Registration failed. Please try again."); // Added toast message
         } finally {
             setIsLoading(false);
         }
@@ -87,7 +90,7 @@ export default function SignUpPage() {
                                     <AlertDescription>{error}</AlertDescription>
                                 </Alert>
                             )}
-                            
+
                             <FormField
                                 control={form.control}
                                 name="name"

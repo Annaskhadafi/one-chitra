@@ -1,6 +1,5 @@
 import { getWarehouses } from "@/app/actions/warehouse"
 import { WarehouseTable } from "./_components/warehouse-table"
-import { Separator } from "@/components/ui/separator"
 
 export default async function WarehousePage() {
     const warehouses = await getWarehouses()

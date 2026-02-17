@@ -1,29 +1,32 @@
 "use client"
 
+import * as React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Upload, FileUp, X, Check } from "lucide-react"
+import { toast } from "sonner"
+import Papa from "papaparse"
 import { importStocks } from "@/app/actions/stock"
 import { getProducts } from "@/app/actions/product"
 import { getWarehouses } from "@/app/actions/warehouse"
-import { toast } from "sonner"
-import { Upload, FileSpreadsheet } from "lucide-react"
-import Papa from "papaparse"
+import { NewStock } from "@/lib/types"
 
-export function StockCSVUpload() {
-    const [isOpen, setIsOpen] = useState(false)
+type RawStockData = Record<string, string>
+type StockData = NewStock
+
+export function StockCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
-    const [preview, setPreview] = useState<any[]>([])
     const [isUploading, setIsUploading] = useState(false)
+    const [preview, setPreview] = useState<StockData[]>([])
+    const [isOpen, setIsOpen] = useState(false)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
@@ -34,39 +37,42 @@ export function StockCSVUpload() {
     }
 
     const parseFile = async (file: File) => {
-        // Fetch products and warehouses for mapping
-        const [products, warehouses] = await Promise.all([getProducts(), getWarehouses()])
+        const [products, warehouses] = await Promise.all([
+            getProducts(),
+            getWarehouses()
+        ])
 
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const data = results.data as any[]
-                const normalized = data.map(item => {
-                    const keys = Object.keys(item)
-                    const itemKey = keys.find(k => k.toLowerCase() === "item")
-                    const valKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "valuationvalue")
-                    const storeLocKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "storeloc")
-                    const totalStockKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "totalstock")
-                    const minStockKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "minstock")
+                const data = results.data as RawStockData[]
 
-                    const materialNumber = itemKey ? item[itemKey]?.toString().trim() : ""
-                    const sloc = storeLocKey ? item[storeLocKey]?.toString().trim() : ""
+                const normalized = (data.map(item => {
+                    const keys = Object.keys(item)
+
+                    const matKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "materialnumber" || k.toLowerCase().replace(/[^a-z]/g, "") === "idinv")
+                    const slocKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "sloc" || k.toLowerCase().replace(/[^a-z]/g, "") === "storagelocation")
+                    const qtyKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "totalstock" || k.toLowerCase().replace(/[^a-z]/g, "") === "qtystock" || k.toLowerCase() === "quantity")
+                    const valKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "valuationvalue" || k.toLowerCase().replace(/[^a-z]/g, "") === "valuestock")
+                    const minKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "minstock")
+
+                    const materialNumber = matKey ? item[matKey]?.toString().trim() : ""
+                    const sloc = slocKey ? item[slocKey]?.toString().trim() : ""
 
                     const product = products.find(p => p.materialNumber === materialNumber)
                     const warehouse = warehouses.find(w => w.sloc === sloc)
 
+                    if (!product || !warehouse) return null
+
                     return {
-                        productId: product?.id,
-                        warehouseId: warehouse?.id,
-                        materialNumber,
-                        sloc,
-                        valuationValue: valKey ? item[valKey] : "0",
-                        totalStock: totalStockKey ? item[totalStockKey] : "0",
-                        minStock: minStockKey ? item[minStockKey] : "0",
-                        isValid: !!product && !!warehouse
+                        productId: product.id,
+                        warehouseId: warehouse.id,
+                        totalStock: qtyKey ? Number(item[qtyKey]) || 0 : 0,
+                        valuationValue: valKey ? item[valKey]?.toString() || "0" : "0",
+                        minStock: minKey ? Number(item[minKey]) || 0 : 0,
                     }
-                }).filter(item => item.materialNumber)
+                }).filter(Boolean)) as StockData[]
 
                 setPreview(normalized)
             },
@@ -77,31 +83,26 @@ export function StockCSVUpload() {
     }
 
     const handleUpload = async () => {
-        const validItems = preview.filter(p => p.isValid)
-        if (validItems.length === 0) {
-            toast.error("No valid products/warehouses found in CSV")
-            return
-        }
+        if (preview.length === 0) return
 
         setIsUploading(true)
         try {
-            const result = await importStocks(validItems)
+            const result = await importStocks(preview)
             if (result.success) {
-                toast.success(`Successfully imported ${result.count} stock entries`)
+                toast.success(`Successfully imported stock data`)
                 setIsOpen(false)
                 setFile(null)
                 setPreview([])
+                onSuccess?.()
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Upload failed")
+        } catch (_error) {
+            toast.error("Failed to import stock data")
         } finally {
-            setIsUploading(true)
+            setIsUploading(false)
         }
     }
-
-    const invalidCount = preview.filter(p => !p.isValid).length
 
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -111,56 +112,74 @@ export function StockCSVUpload() {
                     Import CSV
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle>Import Stock Levels</DialogTitle>
                     <DialogDescription>
-                        Upload a CSV with columns: <strong>Item</strong>, <strong>Store Loc</strong>, <strong>Valuation Value</strong>, <strong>Min Stock</strong>, <strong>Total Stock</strong>.
+                        Upload a CSV file containing IDINV (Material #) and SLOC (Warehouse).
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid gap-4 py-4">
-                    <Input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleFileChange}
-                    />
-
-                    {preview.length > 0 && (
-                        <div className="rounded-md bg-muted p-4 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <FileSpreadsheet className="h-4 w-4 text-primary" />
-                                <span className="text-sm font-medium">{preview.filter(p => p.isValid).length} valid rows</span>
-                            </div>
-                            {invalidCount > 0 && (
-                                <div className="text-xs text-destructive font-medium">
-                                    ⚠️ {invalidCount} rows have unknown Items or Store Locs and will be skipped.
+                <div className="space-y-4 py-4">
+                    {!file ? (
+                        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center">
+                            <input
+                                type="file"
+                                accept=".csv"
+                                id="stock-csv-upload-input"
+                                className="hidden"
+                                onChange={handleFileChange}
+                            />
+                            <label
+                                htmlFor="stock-csv-upload-input"
+                                className="flex flex-col items-center cursor-pointer"
+                            >
+                                <FileUp className="h-12 w-12 text-muted-foreground mb-4" />
+                                <span className="text-sm font-medium">Click to upload CSV</span>
+                                <span className="text-xs text-muted-foreground mt-1">
+                                    Must include IDINV and SLOC columns
+                                </span>
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between bg-muted p-2 rounded-lg">
+                                <div className="flex items-center">
+                                    <Check className="h-4 w-4 text-green-500 mr-2" />
+                                    <span className="text-sm font-medium">{file.name}</span>
+                                    <span className="text-xs text-muted-foreground ml-2">
+                                        ({preview.length} valid mappings found)
+                                    </span>
                                 </div>
-                            )}
-                            <div className="text-xs text-muted-foreground max-h-[100px] overflow-y-auto border-t pt-2 mt-2">
-                                {preview.slice(0, 5).map((row, i) => (
-                                    <div key={i} className={`truncate ${!row.isValid ? "text-destructive line-through" : ""}`}>
-                                        [{row.sloc || "?"}] {row.materialNumber || "?"} - Qty: {row.totalStock} (Min: {row.minStock})
-                                    </div>
-                                ))}
-                                {preview.length > 5 && <div>...and {preview.length - 5} more</div>}
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setFile(null)
+                                        setPreview([])
+                                    }}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setFile(null)
+                                        setPreview([])
+                                    }}
+                                >
+                                    Reset
+                                </Button>
+                                <Button onClick={handleUpload} disabled={isUploading || preview.length === 0}>
+                                    {isUploading ? "Importing..." : "Start Import"}
+                                </Button>
                             </div>
                         </div>
                     )}
                 </div>
-
-                <DialogFooter>
-                    <Button onClick={handleUpload} disabled={!file || preview.length === 0 || isUploading} className="w-full">
-                        {isUploading ? (
-                            <>
-                                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                                Importing...
-                            </>
-                        ) : (
-                            "Import Valid Rows"
-                        )}
-                    </Button>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
     )

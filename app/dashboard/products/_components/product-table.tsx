@@ -11,10 +11,11 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Product, deleteProduct } from "@/app/actions/product"
+import { deleteProduct } from "@/app/actions/product"
+import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
 import { ProductCSVUpload } from "./product-table-csv"
-import { Search, Pencil, Trash2, Tag } from "lucide-react"
+import { Search, Trash2, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import {
     AlertDialog,
@@ -51,8 +52,8 @@ export function ProductTable({ data }: ProductTableProps) {
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Failed to delete")
+        } catch (_error) {
+            toast.error("Failed to delete product")
         }
     }
 

@@ -5,6 +5,7 @@ import { RoleList } from "./_components/role-list"
 import { RoleDialog } from "./_components/role-dialog"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import type { RoleWithPermissions } from "@/lib/types"
 
 export default async function RolesPage() {
     const roles = await getRoles()
@@ -36,7 +37,7 @@ export default async function RolesPage() {
 
             <Suspense fallback={<div>Loading roles...</div>}>
                 <RoleList
-                    roles={rolesWithPerms.filter(Boolean) as any}
+                    roles={rolesWithPerms.filter((r): r is RoleWithPermissions => r !== null)}
                     allPermissions={allPermissions}
                 />
             </Suspense>

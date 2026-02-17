@@ -3,16 +3,16 @@
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
+import * as z from "zod"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter,
 } from "@/components/ui/dialog"
 import {
     Form,
@@ -23,31 +23,21 @@ import {
     FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { createCustomer, updateCustomer } from "@/app/actions/customer"
 import { toast } from "sonner"
-import { Plus, Pencil } from "lucide-react"
-
-const customerSchema = z.object({
-    customerCode: z.string().min(1, "Customer Code is required"),
-    name: z.string().min(1, "Customer Name is required"),
-    contactName: z.string().optional(),
-    email: z.string().email("Invalid email").optional().or(z.literal("")),
-    address1: z.string().optional(),
-    address2: z.string().optional(),
-    address3: z.string().optional(),
-    address4: z.string().optional(),
-    address5: z.string().optional(),
-})
+import { upsertCustomer } from "@/app/actions/customer"
+import { Plus } from "lucide-react"
+import { customerSchema } from "@/lib/schemas"
+import { Customer } from "@/lib/types"
 
 type CustomerFormValues = z.infer<typeof customerSchema>
 
 interface CustomerDialogProps {
-    customer?: any
+    customer?: Customer
     trigger?: React.ReactNode
+    onSuccess?: () => void
 }
 
-export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
+export function CustomerDialog({ customer, trigger, onSuccess }: CustomerDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const isEdit = !!customer
@@ -70,19 +60,18 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
     const handleSubmit = async (data: CustomerFormValues) => {
         setIsLoading(true)
         try {
-            const result = isEdit
-                ? await updateCustomer(customer.id, data)
-                : await createCustomer(data)
+            const result = await upsertCustomer(customer?.id, data)
 
             if (result.success) {
                 toast.success(`Customer ${isEdit ? "updated" : "created"} successfully`)
                 setIsOpen(false)
                 if (!isEdit) form.reset()
+                onSuccess?.()
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Something went wrong")
+        } catch (_error) {
+            toast.error("An error occurred")
         } finally {
             setIsLoading(false)
         }
@@ -100,23 +89,23 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>{isEdit ? "Edit Customer" : "Add New Customer"}</DialogTitle>
+                    <DialogTitle>{isEdit ? "Edit Customer" : "Add Customer"}</DialogTitle>
                     <DialogDescription>
-                        Entrust your customer details here. All address fields are optional.
+                        {isEdit ? "Update customer details below." : "Enter customer details to add to the system."}
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4">
                             <FormField
                                 control={form.control}
                                 name="customerCode"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Customer ID (Code)</FormLabel>
+                                        <FormLabel>Customer Code</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="CUST-001" {...field} disabled={isLoading} />
+                                            <Input {...field} placeholder="C001" disabled={isEdit} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -129,7 +118,7 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
                                     <FormItem>
                                         <FormLabel>Customer Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Acme Corp" {...field} disabled={isLoading} />
+                                            <Input {...field} placeholder="Acme Corp" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -142,7 +131,7 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
                                     <FormItem>
                                         <FormLabel>Contact Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="John Doe" {...field} disabled={isLoading} />
+                                            <Input {...field} placeholder="John Doe" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -155,7 +144,7 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
                                     <FormItem>
                                         <FormLabel>Email</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="john@example.com" {...field} disabled={isLoading} />
+                                            <Input {...field} placeholder="john@example.com" type="email" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -163,80 +152,59 @@ export function CustomerDialog({ customer, trigger }: CustomerDialogProps) {
                             />
                         </div>
 
-                        <div className="space-y-4 pt-2 border-t">
-                            <h3 className="text-sm font-medium">Addresses</h3>
-                            <div className="grid grid-cols-1 gap-3">
+                        <div className="space-y-4">
+                            <h3 className="font-medium">Address Information</h3>
+                            <div className="grid grid-cols-1 gap-4">
                                 <FormField
                                     control={form.control}
                                     name="address1"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel className="text-xs">Address 1</FormLabel>
+                                            <FormLabel>Address Line 1</FormLabel>
                                             <FormControl>
-                                                <Input {...field} disabled={isLoading} />
+                                                <Input {...field} placeholder="Street address" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
                                     )}
                                 />
-                                <FormField
-                                    control={form.control}
-                                    name="address2"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs">Address 2</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} disabled={isLoading} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="address3"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs">Address 3</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} disabled={isLoading} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="address4"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs">Address 4</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} disabled={isLoading} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="address5"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs">Address 5</FormLabel>
-                                            <FormControl>
-                                                <Input {...field} disabled={isLoading} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="address2"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Address Line 2 (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="address3"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>City (Optional)</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <DialogFooter className="pt-4">
-                            <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-                                {isLoading ? "Saving..." : "Save Customer"}
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isLoading}>
+                                {isLoading ? "Saving..." : isEdit ? "Update Customer" : "Add Customer"}
                             </Button>
                         </DialogFooter>
                     </form>

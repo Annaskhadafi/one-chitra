@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { roles, permissions, rolePermissions } from './schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 async function seed() {
     const sql = neon(process.env.DATABASE_URL!);
@@ -59,19 +59,11 @@ async function seed() {
         return role[0]?.id;
     }
 
-    // Helper to get permission ID
-    const getPermId = async (resource: string, action: string) => {
+    // Helper to get permission ID (kept for reference)
+    const _getPermId = async (resource: string, action: string) => {
         const perm = await db.select().from(permissions)
-            .where(eq(permissions.resource, resource))
-            .where(eq(permissions.action, action)) // Fixed: chaining where
-            .limit(1); // Removed .filter() because where() handles it
-        // Note: chained .where() is correct in drizzle, filtering in JS is slower but safe if query fails
-        // Actually for drizzle-orm, we chain .where().where() or use and()
-        // Let's rely on chained where for now, or fetch all perms to memory for speed if needed.
-        // For simplicity in seed script, simple query is fine.
-
-        // Correct query:
-        // await db.select().from(permissions).where(and(eq(permissions.resource, resource), eq(permissions.action, action)))
+            .where(and(eq(permissions.resource, resource), eq(permissions.action, action)))
+            .limit(1);
         return perm[0]?.id;
     }
 

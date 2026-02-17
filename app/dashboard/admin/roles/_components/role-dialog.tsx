@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createRole, updateRole, RoleWithPermissions } from "@/app/actions/roles"
+import { createRole, updateRole } from "@/app/actions/roles"
+import { RoleWithPermissions } from "@/lib/types"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 

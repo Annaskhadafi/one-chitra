@@ -14,7 +14,7 @@ export default async function CustomersPage() {
             </div>
 
             <div className="flex-1">
-                <CustomerTable data={data} />
+                <CustomerTable customers={data} />
             </div>
         </div>
     )

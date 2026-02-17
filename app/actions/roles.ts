@@ -5,8 +5,11 @@ import { permissions, rolePermissions, roles } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
-export type RoleWithPermissions = typeof roles.$inferSelect & {
-    permissions: string[] // List of permission IDs
+
+import { InferSelectModel } from "drizzle-orm"
+
+export type RoleWithPermissions = InferSelectModel<typeof roles> & {
+    permissions: number[]
 }
 
 export async function getRoles() {

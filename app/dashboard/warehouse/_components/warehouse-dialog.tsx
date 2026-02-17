@@ -24,14 +24,12 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { createWarehouse, updateWarehouse, Warehouse } from "@/app/actions/warehouse"
+import { createWarehouse, updateWarehouse } from "@/app/actions/warehouse"
+import { Warehouse } from "@/lib/types"
 import { toast } from "sonner"
-import { Plus, Pencil } from "lucide-react"
+import { Plus } from "lucide-react"
 
-const warehouseSchema = z.object({
-    sloc: z.string().min(1, "Sloc is required"),
-    description: z.string().optional(),
-})
+import { warehouseSchema } from "@/lib/schemas"
 
 type WarehouseFormValues = z.infer<typeof warehouseSchema>
 
@@ -70,7 +68,7 @@ export function WarehouseDialog({ warehouse, trigger, open, onOpenChange }: Ware
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Something went wrong")
         } finally {
             setIsLoading(false)

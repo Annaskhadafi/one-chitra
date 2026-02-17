@@ -1,7 +1,6 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Code,
   Database,
@@ -42,7 +41,7 @@ export default function Home() {
         <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto px-4 mb-8">
           A modern full-stack TypeScript starter with authentication, database, and UI components
         </p>
-        
+
         <HeroAuthButtons />
       </div>
 
@@ -52,7 +51,7 @@ export default function Home() {
           <div className="text-4xl sm:text-5xl mb-2">🚀</div>
           <div className="font-bold text-lg sm:text-xl mb-2">Modern Full-Stack Starter</div>
           <div className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
-            This project includes everything you need to build a modern web application with TypeScript, 
+            This project includes everything you need to build a modern web application with TypeScript,
             authentication, database integration, and a beautiful UI component library.
           </div>
         </div>

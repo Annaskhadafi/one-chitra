@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { deleteCustomer } from "@/app/actions/customer"
 import { CustomerDialog } from "./customer-dialog"
 import { CustomerCSVUpload } from "./customer-table-csv"
-import { Search, Pencil, Trash2, UserCircle } from "lucide-react"
+import { Search, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import {
     AlertDialog,
@@ -27,16 +27,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
+import { Customer } from "@/lib/types"
 
-interface CustomerTableProps {
-    data: any[]
-}
-
-export function CustomerTable({ data }: CustomerTableProps) {
+export function CustomerTable({ customers: initialCustomers }: { customers: Customer[] }) {
     const [searchTerm, setSearchTerm] = useState("")
 
-    const filteredData = data.filter(item =>
+    const filteredData = initialCustomers.filter(item =>
         item.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.email && item.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -50,8 +46,8 @@ export function CustomerTable({ data }: CustomerTableProps) {
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Failed to delete")
+        } catch (_error) {
+            toast.error("Failed to delete customer")
         }
     }
 

@@ -1,8 +1,14 @@
 import { getStocks } from "@/app/actions/stock"
+import { getProducts } from "@/app/actions/product"
+import { getWarehouses } from "@/app/actions/warehouse"
 import { StockTable } from "./_components/stock-table"
 
 export default async function StocksPage() {
-    const stocks = await getStocks()
+    const [stocks, products, warehouses] = await Promise.all([
+        getStocks(),
+        getProducts(),
+        getWarehouses()
+    ])
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -14,7 +20,11 @@ export default async function StocksPage() {
             </div>
 
             <div className="flex-1">
-                <StockTable data={stocks} />
+                <StockTable
+                    data={stocks}
+                    products={products}
+                    warehouses={warehouses}
+                />
             </div>
         </div>
     )

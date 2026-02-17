@@ -16,9 +16,6 @@ async function checkUser() {
             console.log('✅ User found:');
             console.log(foundUser[0]);
 
-            if (!foundUser[0].password) {
-                console.warn('⚠️  User has NO PASSWORD set (might be OAuth user?)');
-            }
             if (!foundUser[0].role) {
                 console.warn('⚠️  User has NO ROLE set (null/undefined)');
             }

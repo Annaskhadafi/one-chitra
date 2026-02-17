@@ -1,4 +1,5 @@
 import { pgTable, serial, integer, timestamp, unique, numeric } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
 
@@ -13,3 +14,14 @@ export const stockLevels = pgTable("stock_levels", {
 }, (table) => [
     unique("stock_levels_warehouse_product_unique").on(table.warehouseId, table.productId),
 ]);
+
+export const stockLevelsRelations = relations(stockLevels, ({ one }) => ({
+    product: one(products, {
+        fields: [stockLevels.productId],
+        references: [products.id],
+    }),
+    warehouse: one(warehouses, {
+        fields: [stockLevels.warehouseId],
+        references: [warehouses.id],
+    }),
+}));

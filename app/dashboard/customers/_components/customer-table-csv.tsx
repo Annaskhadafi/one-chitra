@@ -1,27 +1,30 @@
 "use client"
 
+import * as React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { importCustomers } from "@/app/actions/customer"
+import { Upload, FileUp, X, Check } from "lucide-react"
 import { toast } from "sonner"
-import { Upload, FileSpreadsheet } from "lucide-react"
 import Papa from "papaparse"
+import { importCustomers } from "@/app/actions/customer"
+import { NewCustomer } from "@/lib/types"
 
-export function CustomerCSVUpload() {
-    const [isOpen, setIsOpen] = useState(false)
+type RawCustomerData = Record<string, string>
+type CustomerData = NewCustomer
+
+export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
-    const [preview, setPreview] = useState<any[]>([])
     const [isUploading, setIsUploading] = useState(false)
+    const [preview, setPreview] = useState<CustomerData[]>([])
+    const [isOpen, setIsOpen] = useState(false)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
@@ -36,7 +39,7 @@ export function CustomerCSVUpload() {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const data = results.data as any[]
+                const data = results.data as RawCustomerData[]
                 const normalized = data.map(item => {
                     const keys = Object.keys(item)
 
@@ -51,17 +54,17 @@ export function CustomerCSVUpload() {
                     const addr5Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address5")
 
                     return {
-                        customerCode: codeKey ? item[codeKey] : "",
-                        name: nameKey ? item[nameKey] : "",
-                        contactName: contactKey ? item[contactKey] : "",
-                        email: emailKey ? item[emailKey] : "",
-                        address1: addr1Key ? item[addr1Key] : "",
-                        address2: addr2Key ? item[addr2Key] : "",
-                        address3: addr3Key ? item[addr3Key] : "",
-                        address4: addr4Key ? item[addr4Key] : "",
-                        address5: addr5Key ? item[addr5Key] : "",
+                        customerCode: codeKey ? item[codeKey].toString() : "",
+                        name: nameKey ? item[nameKey].toString() : "",
+                        contactName: contactKey ? item[contactKey].toString() : null,
+                        email: emailKey ? item[emailKey].toString() : null,
+                        address1: addr1Key ? item[addr1Key].toString() : null,
+                        address2: addr2Key ? item[addr2Key].toString() : null,
+                        address3: addr3Key ? item[addr3Key].toString() : null,
+                        address4: addr4Key ? item[addr4Key].toString() : null,
+                        address5: addr5Key ? item[addr5Key].toString() : null,
                     }
-                }).filter(item => item.customerCode && item.name)
+                }).filter(item => item.customerCode && item.name) as CustomerData[]
 
                 setPreview(normalized)
             },
@@ -72,7 +75,8 @@ export function CustomerCSVUpload() {
     }
 
     const handleUpload = async () => {
-        if (preview.length === 0) return;
+        if (preview.length === 0) return
+
         setIsUploading(true)
         try {
             const result = await importCustomers(preview)
@@ -81,11 +85,12 @@ export function CustomerCSVUpload() {
                 setIsOpen(false)
                 setFile(null)
                 setPreview([])
+                onSuccess?.()
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Upload failed")
+        } catch (_error) {
+            toast.error("Failed to import customers")
         } finally {
             setIsUploading(false)
         }
@@ -99,44 +104,104 @@ export function CustomerCSVUpload() {
                     Import CSV
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle>Import Customers</DialogTitle>
                     <DialogDescription>
-                        Upload a CSV with columns for Customer ID, Name, Contact, Email, and Address 1-5.
+                        Upload a CSV file containing customer data.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid gap-4 py-4">
-                    <Input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleFileChange}
-                    />
-
-                    {preview.length > 0 && (
-                        <div className="rounded-md bg-muted p-4 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <FileSpreadsheet className="h-4 w-4 text-primary" />
-                                <span className="text-sm font-medium">{preview.length} customers detected</span>
+                <div className="space-y-4 py-4">
+                    {!file ? (
+                        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center">
+                            <input
+                                type="file"
+                                accept=".csv"
+                                id="csv-upload"
+                                className="hidden"
+                                onChange={handleFileChange}
+                            />
+                            <label
+                                htmlFor="csv-upload"
+                                className="flex flex-col items-center cursor-pointer"
+                            >
+                                <FileUp className="h-12 w-12 text-muted-foreground mb-4" />
+                                <span className="text-sm font-medium">Click to upload CSV</span>
+                                <span className="text-xs text-muted-foreground mt-1">
+                                    Must include Customer Code and Name columns
+                                </span>
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between bg-muted p-2 rounded-lg">
+                                <div className="flex items-center">
+                                    <Check className="h-4 w-4 text-green-500 mr-2" />
+                                    <span className="text-sm font-medium">{file.name}</span>
+                                    <span className="text-xs text-muted-foreground ml-2">
+                                        ({preview.length} valid rows)
+                                    </span>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setFile(null)
+                                        setPreview([])
+                                    }}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
                             </div>
-                            <div className="text-xs text-muted-foreground max-h-[100px] overflow-y-auto border-t pt-2 mt-2">
-                                {preview.slice(0, 5).map((row, i) => (
-                                    <div key={i} className="truncate">
-                                        [{row.customerCode}] {row.name}
-                                    </div>
-                                ))}
-                                {preview.length > 5 && <div>...and {preview.length - 5} more</div>}
+
+                            {preview.length > 0 && (
+                                <div className="max-h-[300px] overflow-auto border rounded-lg">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted sticky top-0">
+                                            <tr>
+                                                <th className="p-2 border-b">Code</th>
+                                                <th className="p-2 border-b">Name</th>
+                                                <th className="p-2 border-b">Email</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {preview.slice(0, 10).map((item, i) => (
+                                                <tr key={i}>
+                                                    <td className="p-2 border-b">{item.customerCode}</td>
+                                                    <td className="p-2 border-b">{item.name}</td>
+                                                    <td className="p-2 border-b">{item.email || "-"}</td>
+                                                </tr>
+                                            ))}
+                                            {preview.length > 10 && (
+                                                <tr>
+                                                    <td colSpan={3} className="p-2 text-center text-muted-foreground italic">
+                                                        ... and {preview.length - 10} more rows
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setFile(null)
+                                        setPreview([])
+                                    }}
+                                >
+                                    Reset
+                                </Button>
+                                <Button onClick={handleUpload} disabled={isUploading || preview.length === 0}>
+                                    {isUploading ? "Importing..." : "Start Import"}
+                                </Button>
                             </div>
                         </div>
                     )}
                 </div>
-
-                <DialogFooter>
-                    <Button onClick={handleUpload} disabled={!file || preview.length === 0 || isUploading} className="w-full">
-                        {isUploading ? "Importing..." : "Import Customers"}
-                    </Button>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
     )

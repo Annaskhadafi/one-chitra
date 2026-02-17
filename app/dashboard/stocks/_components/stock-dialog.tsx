@@ -1,18 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter,
 } from "@/components/ui/dialog"
 import {
     Form,
@@ -22,7 +21,6 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import {
     Select,
     SelectContent,
@@ -30,77 +28,67 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { upsertStock } from "@/app/actions/stock"
-import { getProducts } from "@/app/actions/product"
-import { getWarehouses } from "@/app/actions/warehouse"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { Plus, Pencil } from "lucide-react"
+import { upsertStock } from "@/app/actions/stock"
+import { Plus } from "lucide-react"
 
-const stockSchema = z.object({
-    productId: z.string().min(1, "Product is required"),
-    warehouseId: z.string().min(1, "Warehouse is required"),
-    valuationValue: z.string().min(1, "Valuation value is required"),
-    totalStock: z.number().min(0, "Total stock cannot be negative"),
-    minStock: z.number().min(0, "Min stock cannot be negative"),
-})
+import { stockSchema } from "@/lib/schemas"
 
-type StockFormValues = z.infer<typeof stockSchema>
-
-interface StockDialogProps {
-    stock?: any
-    trigger?: React.ReactNode
+type StockFormValues = {
+    productId: number
+    warehouseId: number
+    totalStock: number
+    minStock?: number
+    valuationValue?: number
 }
 
-export function StockDialog({ stock, trigger }: StockDialogProps) {
+interface StockDialogProps {
+    stock?: {
+        id: number
+        productId: number
+        warehouseId: number
+        totalStock: number
+        minStock: number
+        valuationValue: string
+    }
+    products: { id: number; materialNumber: string; materialDescription: string | null }[]
+    warehouses: { id: number; sloc: string; description: string | null }[]
+    trigger?: React.ReactNode
+    onSuccess?: () => void
+}
+
+export function StockDialog({ stock, products, warehouses, trigger, onSuccess }: StockDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [products, setProducts] = useState<any[]>([])
-    const [warehouses, setWarehouses] = useState<any[]>([])
     const isEdit = !!stock
-
-    useEffect(() => {
-        if (isOpen) {
-            loadData()
-        }
-    }, [isOpen])
-
-    async function loadData() {
-        const [p, w] = await Promise.all([getProducts(), getWarehouses()])
-        setProducts(p)
-        setWarehouses(w)
-    }
 
     const form = useForm<StockFormValues>({
         resolver: zodResolver(stockSchema),
         defaultValues: {
-            productId: stock?.productId?.toString() || "",
-            warehouseId: stock?.warehouseId?.toString() || "",
-            valuationValue: stock?.valuationValue?.toString() || "0",
+            productId: stock?.productId || 0,
+            warehouseId: stock?.warehouseId || 0,
             totalStock: stock?.totalStock || 0,
             minStock: stock?.minStock || 0,
+            valuationValue: stock?.valuationValue ? Number(stock.valuationValue) : 0,
         },
     })
 
     const handleSubmit = async (data: StockFormValues) => {
         setIsLoading(true)
         try {
-            const result = await upsertStock({
-                productId: parseInt(data.productId),
-                warehouseId: parseInt(data.warehouseId),
-                valuationValue: data.valuationValue,
-                totalStock: data.totalStock,
-                minStock: data.minStock,
-            })
+            const result = await upsertStock(data, stock?.id)
 
             if (result.success) {
-                toast.success(`Stock level ${isEdit ? "updated" : "saved"}`)
+                toast.success(`Stock level ${isEdit ? "updated" : "saved"} successfully`)
                 setIsOpen(false)
                 if (!isEdit) form.reset()
+                onSuccess?.()
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
-            toast.error("Something went wrong")
+        } catch (_error) {
+            toast.error("An error occurred")
         } finally {
             setIsLoading(false)
         }
@@ -112,15 +100,15 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                 {trigger || (
                     <Button>
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Stock
+                        Adjust Stock
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>{isEdit ? "Edit Stock Level" : "Add Stock Level"}</DialogTitle>
                     <DialogDescription>
-                        {isEdit ? "Update valuation and stock counts" : "Register stock levels for a product in a warehouse"}
+                        {isEdit ? "Update stock quantity and valuation below." : "Manually set stock level for a product/warehouse."}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -131,11 +119,11 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                             name="productId"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Product (Item)</FormLabel>
+                                    <FormLabel>Product</FormLabel>
                                     <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
-                                        disabled={isLoading || isEdit}
+                                        onValueChange={(v) => field.onChange(Number(v))}
+                                        defaultValue={field.value !== 0 ? field.value.toString() : undefined}
+                                        disabled={isEdit || isLoading}
                                     >
                                         <FormControl>
                                             <SelectTrigger>
@@ -145,7 +133,7 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                                         <SelectContent>
                                             {products.map(p => (
                                                 <SelectItem key={p.id} value={p.id.toString()}>
-                                                    [{p.materialNumber}] {p.materialDescription}
+                                                    {p.materialNumber} - {p.materialDescription}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -160,11 +148,11 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                             name="warehouseId"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Warehouse (Store Loc)</FormLabel>
+                                    <FormLabel>Warehouse (Sloc)</FormLabel>
                                     <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
-                                        disabled={isLoading || isEdit}
+                                        onValueChange={(v) => field.onChange(Number(v))}
+                                        defaultValue={field.value !== 0 ? field.value.toString() : undefined}
+                                        disabled={isEdit || isLoading}
                                     >
                                         <FormControl>
                                             <SelectTrigger>
@@ -174,7 +162,7 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                                         <SelectContent>
                                             {warehouses.map(w => (
                                                 <SelectItem key={w.id} value={w.id.toString()}>
-                                                    [{w.sloc}] {w.description}
+                                                    {w.sloc} - {w.description}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -184,57 +172,60 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                             )}
                         />
 
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="totalStock"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Total Stock</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                {...field}
+                                                type="number"
+                                                step="0.01"
+                                                disabled={isLoading}
+                                                onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="minStock"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Min Stock Level</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                {...field}
+                                                type="number"
+                                                step="0.01"
+                                                disabled={isLoading}
+                                                onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
                         <FormField
                             control={form.control}
                             name="valuationValue"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Valuation Value</FormLabel>
+                                    <FormLabel>Valuation Value (Total)</FormLabel>
                                     <FormControl>
                                         <Input
+                                            {...field}
                                             type="number"
                                             step="0.01"
-                                            {...field}
-                                            onChange={(e) => field.onChange(e.target.value)}
                                             disabled={isLoading}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="totalStock"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Total Stock</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                            type="number"
-                                            {...field}
-                                            onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                                            disabled={isLoading}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="minStock"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Min Stock</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                            type="number"
-                                            {...field}
-                                            onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                                            disabled={isLoading}
+                                            onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
                                         />
                                     </FormControl>
                                     <FormMessage />
@@ -243,15 +234,11 @@ export function StockDialog({ stock, trigger }: StockDialogProps) {
                         />
 
                         <DialogFooter>
-                            <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-                                {isLoading ? (
-                                    <>
-                                        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                                        Saving...
-                                    </>
-                                ) : (
-                                    "Save"
-                                )}
+                            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isLoading}>
+                                {isLoading ? "Saving..." : isEdit ? "Update Stock" : "Create Entry"}
                             </Button>
                         </DialogFooter>
                     </form>

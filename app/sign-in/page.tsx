@@ -34,7 +34,7 @@ export default function SignInPage() {
             } else {
                 router.push("/dashboard");
             }
-        } catch (err) {
+        } catch (_err) {
             setError("An unexpected error occurred");
         } finally {
             setIsLoading(false);

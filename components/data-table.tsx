@@ -203,7 +203,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
   },
   {
     accessorKey: "target",
-    header: () => <div className="w-full text-right">Target</div>,
+    header: "Target",
     cell: ({ row }) => (
       <form
         onSubmit={(e) => {
@@ -228,7 +228,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
   },
   {
     accessorKey: "limit",
-    header: () => <div className="w-full text-right">Limit</div>,
+    header: "Limit",
     cell: ({ row }) => (
       <form
         onSubmit={(e) => {
@@ -493,13 +493,18 @@ export function DataTable({
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => {
                       return (
-                        <TableHead key={header.id} colSpan={header.colSpan}>
+                        <TableHead
+                          key={header.id}
+                          colSpan={header.colSpan}
+                          className={header.column.id === "target" || header.column.id === "limit" ? "text-right" : ""}
+                          suppressHydrationWarning
+                        >
                           {header.isPlaceholder
                             ? null
                             : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
                         </TableHead>
                       )
                     })}

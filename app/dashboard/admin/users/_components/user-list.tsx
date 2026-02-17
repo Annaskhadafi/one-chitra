@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { UserRoleDialog } from "./user-role-dialog"
 
-import { user } from "@/db/schema"
+import { User } from "@/lib/types"
 
 interface UserListProps {
-    users: typeof user.$inferSelect[]
+    users: User[]
     roles: { id: number; name: string }[]
 }
 
