@@ -1,0 +1,105 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Project Initialization & Database Schema Design",
+      "status": "pending",
+      "details": "Initialize a monorepo or separate repos for Frontend (Next.js) and Backend (NestJS). Configure Docker Compose for local development including PostgreSQL. Design the ERD (Entity Relationship Diagram) focusing on tables for Users, Roles, Warehouses, Products (SKUs), and InventoryRecords. Ensure the schema supports the distinction between 'SAP Stock' and 'Real Stock'. Configure TypeORM/Sequelize connection settings.",
+      "priority": "high",
+      "description": "Set up the development environment, initialize the Next.js and NestJS repositories, and design the PostgreSQL database schema to support multi-warehouse operations.",
+      "dependencies": [],
+      "testStrategy": "Verify Docker containers spin up correctly. Run migration scripts and verify tables are created in the database with correct foreign keys and constraints using a DB client like DBeaver."
+    },
+    {
+      "id": 2,
+      "title": "Implement Authentication & Role-Based Access Control (RBAC)",
+      "status": "pending",
+      "details": "Implement JWT-based authentication using Passport.js. Create a seeding script for initial Admin users. Develop middleware guards in NestJS to restrict endpoints. Create Frontend context/providers to handle session state and conditionally render UI elements based on roles (e.g., only Managers see 'Approve Quote' buttons).",
+      "priority": "high",
+      "description": "Develop the security layer to manage user login and enforce permissions based on the defined roles (Admin, Manager, Warehouse, Sales, Billing).",
+      "dependencies": [],
+      "testStrategy": "Unit test login endpoints with valid/invalid credentials. Integration test protected routes to ensure a 'Sales' user cannot access 'Admin' routes. Verify JWT token expiration and refresh logic."
+    },
+    {
+      "id": 3,
+      "title": "Develop SAP Data Synchronization Service",
+      "status": "pending",
+      "details": "Implement a scheduled task (Cron job) in Node.js to poll SAP endpoints. Use Axios with retry logic and exponential backoff to handle rate limits or downtime. Create a logic layer that updates the 'SAP Stock' column in the database without overwriting the 'Real Stock' (physical count) column. Implement error logging for failed sync attempts.",
+      "priority": "high",
+      "description": "Create a background service to fetch Stock and Goods Receipt (GR) data from the SAP Read-Only API to keep One Chitra synchronized.",
+      "dependencies": [],
+      "testStrategy": "Mock SAP API responses and verify the database updates correctly. Simulate network failure to test retry logic. Verify that manual changes to 'Real Stock' are not overwritten by the sync process."
+    },
+    {
+      "id": 4,
+      "title": "Build Multi-Warehouse Inventory Management System",
+      "status": "pending",
+      "details": "Create UI views for 'Real Stock' vs 'SAP Stock' comparison. Implement backend logic for Inter-Warehouse Transfer Requests (IWTR). Add functionality to define reorder levels per SKU per warehouse. Ensure the system highlights discrepancies between SAP data and physical stock.",
+      "priority": "high",
+      "description": "Develop the core inventory interface allowing users to view stock levels, manage inter-warehouse transfers, and set reorder points.",
+      "dependencies": [],
+      "testStrategy": "Perform an end-to-end test of a stock transfer: Request -> Approve -> Deduct from Warehouse A -> Add to Warehouse B. Verify inventory counts update atomically."
+    },
+    {
+      "id": 5,
+      "title": "Implement Quotation Management & Approval Workflow",
+      "status": "pending",
+      "details": "Develop a form for selecting customers and adding SKUs (filtered by available stock). Implement a status state machine (Draft -> Pending Approval -> Approved/Rejected). Create the approval interface for Managers. Ensure approved quotes reserve stock temporarily to prevent overselling.",
+      "priority": "medium",
+      "description": "Create the module for Sales Reps to generate quotes for tires/accessories and for Managers to approve them.",
+      "dependencies": [],
+      "testStrategy": "Create a quote as a Sales user, log in as a Manager to approve it, and verify the status updates. Check that stock availability prevents adding out-of-stock items to a quote."
+    },
+    {
+      "id": 6,
+      "title": "Develop RFID Middleware & Scanning Interface",
+      "status": "pending",
+      "details": "Develop a WebSocket gateway or API endpoint to receive tag data from handheld scanners. Implement logic to parse RFID tags and map them to specific SKUs in the database. Create a 'Scan Mode' UI that provides real-time feedback (Success/Error/Duplicate) to the warehouse staff during scanning.",
+      "priority": "medium",
+      "description": "Build the integration layer to handle input from handheld RFID scanners for inbound (GR) and outbound (Delivery) processes.",
+      "dependencies": [],
+      "testStrategy": "Simulate RFID input streams using a script to send mock tag data to the WebSocket. Verify that the system correctly identifies the SKU and counts the quantity. Test handling of duplicate scans."
+    },
+    {
+      "id": 7,
+      "title": "Create Delivery Management & Proof of Delivery (POD) Module",
+      "status": "pending",
+      "details": "Build the workflow to generate a Delivery Order (DO) from an approved Quote. Integrate the RFID outbound scan results to verify the correct items are being loaded. Implement a mobile-responsive view for the driver/delivery staff to capture a digital signature on a touchscreen. Trigger an email notification to the customer upon completion.",
+      "priority": "medium",
+      "description": "Enable the conversion of approved quotes into Delivery Orders, schedule shipments, and capture customer e-signatures.",
+      "dependencies": [],
+      "testStrategy": "End-to-end test: Convert Quote to DO -> Simulate RFID Load -> Capture Dummy Signature -> Verify Email is sent and DO status changes to 'Delivered'."
+    },
+    {
+      "id": 8,
+      "title": "Develop Billing Management & SAP Export Module",
+      "status": "pending",
+      "details": "Develop a grid view of all 'Delivered' orders. Allow Billing Clerks to flag orders as 'Ready for Invoice'. Implement a data transformation service that aggregates selected billing records and generates a CSV/JSON file formatted specifically for SAP import. Ensure no write-back to SAP is attempted directly.",
+      "priority": "medium",
+      "description": "Create the interface for Billing Clerks to review delivered orders and export data for SAP Invoicing.",
+      "dependencies": [],
+      "testStrategy": "Select multiple delivered orders and run the export function. Validate the generated file structure against the required SAP import format specifications."
+    },
+    {
+      "id": 9,
+      "title": "Build Analytical Dashboards & Reporting Engine",
+      "status": "pending",
+      "details": "Create React components for charts/graphs using a library like Recharts or Chart.js. Implement backend aggregation queries to calculate 'Stock Discrepancy' (SAP vs Real), 'Low Stock Alerts', and 'Pending Approvals'. Ensure the dashboard loads efficiently by caching expensive queries.",
+      "priority": "low",
+      "description": "Develop the main dashboard widgets and reporting tools to visualize key metrics like stock discrepancies and pending actions.",
+      "dependencies": [],
+      "testStrategy": "Seed the database with known discrepancy data and verify the dashboard widgets display the correct figures. Test load times with large datasets."
+    },
+    {
+      "id": 10,
+      "title": "Configure CI/CD Pipeline & Production Deployment",
+      "status": "pending",
+      "details": "Write GitHub Actions workflows for linting, testing, and building Docker images. Configure the VPS with NGINX as a reverse proxy (handling SSL/HTTPS). Set up a production `docker-compose.prod.yml`. Implement a rollback strategy in case of deployment failure.",
+      "priority": "medium",
+      "description": "Automate the build and deployment process to the client's VPS using GitHub Actions and Docker.",
+      "dependencies": [],
+      "testStrategy": "Push a commit to the main branch and verify the pipeline runs successfully, the Docker image is updated on the VPS, and the live site reflects the change without downtime."
+    }
+  ],
+  "expanded_tasks": []
+}
