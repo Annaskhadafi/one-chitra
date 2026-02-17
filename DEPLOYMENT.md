@@ -127,3 +127,26 @@ Pastikan `nixpacks.toml` sudah include step copy static:
 - Cek apakah `DATABASE_URL` benar
 - Jika pakai NeonDB, pastikan `?sslmode=require` ada di URL
 - Cek firewall/security group server
+
+---
+
+## 📊 Database Management & Viewing Data
+
+Ada beberapa cara untuk melihat data di PostgreSQL Dokploy:
+
+### 1. Drizzle Studio (Paling Direkomendasikan)
+Kamu bisa menjalankan GUI database di PC lokal kamu tapi tersambung ke database Dokploy:
+1. Di file `.env` lokal kamu, ganti sementara `DATABASE_URL` ke URL **External** PostgreSQL Dokploy (Gunakan IP Server & External Port).
+2. Jalankan: `npm run db:studio`
+3. Buka browser di `localhost:4983`. Kamu bisa edit data seperti Excel.
+
+### 2. External GUI (DBeaver / TablePlus)
+Jika kamu sudah expose **External Port** (misal: 5432) di tab **External Credentials** Dokploy Database:
+1. Pakai aplikasi **DBeaver** atau **TablePlus** di Windows.
+2. Connect menggunakan `IP Server`, Port `5432`, User `satuchitra`, and Password `Wusthochq2018-`.
+
+### 3. CLI (Dokploy Terminal)
+Untuk query cepat lewat terminal database Dokploy (seperti di screenshot kamu):
+- Tabel list: `\dt`
+- Lihat data: `SELECT * FROM "user" LIMIT 10;` (Gunakan tanda kutip untuk nama tabel yang case-sensitive).
+- Keluar dari psql: `\q`
