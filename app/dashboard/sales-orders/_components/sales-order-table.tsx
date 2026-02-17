@@ -17,6 +17,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -27,10 +35,11 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 interface SalesOrderWithRelations {
     id: number
@@ -43,6 +52,7 @@ interface SalesOrderWithRelations {
     shipping: string
     createdAt: Date
     customer: Customer
+    createdByUser: { id: string; name: string; email: string } | null
     items: {
         id: number
         productId: number
@@ -65,6 +75,13 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
     cancelled: "destructive",
 }
 
+const STATUS_COLORS: Record<string, string> = {
+    draft: "hsl(217, 91%, 60%)",
+    confirmed: "hsl(43, 96%, 56%)",
+    completed: "hsl(160, 84%, 39%)",
+    cancelled: "hsl(346, 77%, 49%)",
+}
+
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -83,6 +100,7 @@ function calculateGrandTotal(order: SalesOrderWithRelations) {
 
 export function SalesOrderTable({ data }: SalesOrderTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
     // Stats calculation
@@ -90,16 +108,32 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
     const completedOrders = data.filter(o => o.status === 'completed').length
     const pendingOrders = data.filter(o => o.status === 'draft' || o.status === 'confirmed').length
 
+    // Chart data: status breakdown
+    const chartData = useMemo(() => {
+        const statusCounts: Record<string, number> = {}
+        data.forEach(o => {
+            statusCounts[o.status] = (statusCounts[o.status] || 0) + 1
+        })
+        return Object.entries(statusCounts).map(([status, count]) => ({
+            status: status.charAt(0).toUpperCase() + status.slice(1),
+            count,
+            fill: STATUS_COLORS[status] || "hsl(var(--primary))",
+        }))
+    }, [data])
+
     const filteredData = useMemo(() => {
-        if (!searchTerm) return data
-        const term = searchTerm.toLowerCase()
-        return data.filter(order =>
-            order.invoiceNumber?.toLowerCase().includes(term) ||
-            order.customerPo?.toLowerCase().includes(term) ||
-            order.customer?.name.toLowerCase().includes(term) ||
-            order.status.toLowerCase().includes(term)
-        )
-    }, [data, searchTerm])
+        return data.filter(order => {
+            const term = searchTerm.toLowerCase()
+            const matchesSearch = !searchTerm ||
+                order.invoiceNumber?.toLowerCase().includes(term) ||
+                order.customerPo?.toLowerCase().includes(term) ||
+                order.customer?.name.toLowerCase().includes(term) ||
+                order.createdByUser?.name?.toLowerCase().includes(term) ||
+                order.status.toLowerCase().includes(term)
+            const matchesStatus = statusFilter === "all" || order.status === statusFilter
+            return matchesSearch && matchesStatus
+        })
+    }, [data, searchTerm, statusFilter])
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -178,16 +212,60 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                 />
             </div>
 
+            {/* Status Chart */}
+            {data.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Order Status Overview</CardTitle>
+                        <CardDescription>{data.length} total orders</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={180}>
+                            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                        color: "hsl(var(--foreground))",
+                                    }}
+                                />
+                                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                    {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search invoice, customer, PO..."
+                        placeholder="Search invoice, customer, PO, user..."
                         className="pl-8"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             <div className="rounded-md border overflow-hidden">
@@ -208,13 +286,14 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                 <TableHead>Items</TableHead>
                                 <TableHead>Grand Total</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Created By</TableHead>
                                 <TableHead className="w-[120px] text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filteredData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={9} className="h-24 text-center">
+                                    <TableCell colSpan={10} className="h-24 text-center">
                                         No sales orders found.
                                     </TableCell>
                                 </TableRow>
@@ -251,6 +330,16 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                             <Badge variant={statusVariants[order.status] || "secondary"}>
                                                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {order.createdByUser ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <User className="h-3 w-3 text-muted-foreground" />
+                                                    <span className="text-sm">{order.createdByUser.name}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">

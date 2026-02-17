@@ -11,6 +11,7 @@ export async function getSalesOrders() {
     return await db.query.salesOrders.findMany({
         with: {
             customer: true,
+            createdByUser: true,
             items: {
                 with: {
                     product: true,

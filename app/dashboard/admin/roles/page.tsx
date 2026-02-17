@@ -3,13 +3,14 @@ import { getRoles, getRoleWithPermissions } from "@/app/actions/roles"
 import { getAllPermissions } from "@/app/actions/permissions"
 import { RoleList } from "./_components/role-list"
 import { RoleDialog } from "./_components/role-dialog"
+import { SyncPermissionsButton } from "./_components/sync-button"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import type { RoleWithPermissions } from "@/lib/types"
 
 export default async function RolesPage() {
     const roles = await getRoles()
-    const allPermissions = await getAllPermissions()
+    const allPermissions = await getAllPermissions() // This also auto-syncs now, but button is good for manual trigger
 
     // Fetch detailed permissions for each role
     // In a real app with many roles, this might need optimization
@@ -24,15 +25,18 @@ export default async function RolesPage() {
                     <h1 className="text-2xl font-bold tracking-tight">Roles & Permissions</h1>
                     <p className="text-muted-foreground">Manage roles and their access levels.</p>
                 </div>
-                <RoleDialog
-                    allPermissions={allPermissions}
-                    trigger={
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Role
-                        </Button>
-                    }
-                />
+                <div className="flex items-center gap-2">
+                    <SyncPermissionsButton />
+                    <RoleDialog
+                        allPermissions={allPermissions}
+                        trigger={
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create Role
+                            </Button>
+                        }
+                    />
+                </div>
             </div>
 
             <Suspense fallback={<div>Loading roles...</div>}>
@@ -44,3 +48,4 @@ export default async function RolesPage() {
         </div>
     )
 }
+

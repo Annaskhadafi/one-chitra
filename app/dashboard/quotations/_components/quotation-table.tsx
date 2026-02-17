@@ -21,6 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -32,10 +33,11 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 interface QuotationWithRelations {
     id: number
@@ -51,6 +53,7 @@ interface QuotationWithRelations {
     salesOrderId: number | null
     createdAt: Date
     customer: Customer
+    createdByUser: { id: string; name: string; email: string } | null
     items: {
         id: number
         productId: number
@@ -84,6 +87,15 @@ const statusIcons: Record<string, React.ElementType> = {
     converted: ArrowRightLeft,
 }
 
+const STATUS_COLORS: Record<string, string> = {
+    draft: "hsl(217, 91%, 60%)",
+    sent: "hsl(43, 96%, 56%)",
+    approved: "hsl(160, 84%, 39%)",
+    rejected: "hsl(346, 77%, 49%)",
+    expired: "hsl(220, 9%, 46%)",
+    converted: "hsl(270, 76%, 53%)",
+}
+
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -112,12 +124,26 @@ export function QuotationTable({ data }: QuotationTableProps) {
     const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
+    // Chart data: status breakdown
+    const chartData = useMemo(() => {
+        const statusCounts: Record<string, number> = {}
+        data.forEach(q => {
+            statusCounts[q.status] = (statusCounts[q.status] || 0) + 1
+        })
+        return Object.entries(statusCounts).map(([status, count]) => ({
+            status: status.charAt(0).toUpperCase() + status.slice(1),
+            count,
+            fill: STATUS_COLORS[status] || "hsl(var(--primary))",
+        }))
+    }, [data])
+
     const filtered = useMemo(() => {
         return data.filter(q => {
             const matchesSearch =
                 q.quotationNumber?.toLowerCase().includes(search.toLowerCase()) ||
                 q.customer.name.toLowerCase().includes(search.toLowerCase()) ||
-                q.subject?.toLowerCase().includes(search.toLowerCase())
+                q.subject?.toLowerCase().includes(search.toLowerCase()) ||
+                q.createdByUser?.name?.toLowerCase().includes(search.toLowerCase())
             const matchesStatus = statusFilter === "all" || q.status === statusFilter
             return matchesSearch && matchesStatus
         })
@@ -168,12 +194,43 @@ export function QuotationTable({ data }: QuotationTableProps) {
 
     return (
         <div className="space-y-4">
+            {/* Status Chart */}
+            {data.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Quotation Status Overview</CardTitle>
+                        <CardDescription>{data.length} total quotations</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={180}>
+                            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                        color: "hsl(var(--foreground))",
+                                    }}
+                                />
+                                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                    {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search by QT number, customer, or subject..."
+                        placeholder="Search by QT number, customer, subject, or user..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-9"
@@ -240,13 +297,14 @@ export function QuotationTable({ data }: QuotationTableProps) {
                             <TableHead>Valid Until</TableHead>
                             <TableHead>Grand Total</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Created By</TableHead>
                             <TableHead className="w-[120px]">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-32 text-center">
+                                <TableCell colSpan={10} className="h-32 text-center">
                                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                         <FileText className="h-10 w-10 opacity-30" />
                                         <p>No quotations found</p>
@@ -300,6 +358,16 @@ export function QuotationTable({ data }: QuotationTableProps) {
                                                 <StatusIcon className="h-3 w-3" />
                                                 {quotation.status.charAt(0).toUpperCase() + quotation.status.slice(1)}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {quotation.createdByUser ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <User className="h-3 w-3 text-muted-foreground" />
+                                                    <span className="text-sm">{quotation.createdByUser.name}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

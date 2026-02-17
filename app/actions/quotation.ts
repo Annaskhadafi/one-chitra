@@ -12,6 +12,7 @@ export async function getQuotations() {
         with: {
             customer: true,
             salesPerson: true,
+            createdByUser: true,
             items: {
                 with: {
                     product: true,

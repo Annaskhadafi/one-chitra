@@ -16,6 +16,7 @@ export async function getDeliveries() {
                 },
             },
             warehouse: true,
+            createdByUser: true,
             items: {
                 with: {
                     product: true,

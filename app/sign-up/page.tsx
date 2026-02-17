@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -11,9 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { signUp } from "@/lib/auth-client";
 import { Loader2, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner"; // Fixed toast import
+import { toast } from "sonner";
+import { getRoles } from "@/app/actions/roles";
 
 const signUpSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -23,6 +25,7 @@ const signUpSchema = z.object({
         .min(8, "Password must be at least 8 characters")
         .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one uppercase letter, one lowercase letter, and one number"),
     confirmPassword: z.string(),
+    role: z.string().min(1, "Please select a role"),
 }).refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
@@ -35,6 +38,7 @@ export default function SignUpPage() {
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [roles, setRoles] = useState<{ id: number; name: string }[]>([]);
     const router = useRouter();
 
     const form = useForm<SignUpForm>({
@@ -44,8 +48,21 @@ export default function SignUpPage() {
             email: "",
             password: "",
             confirmPassword: "",
+            role: "",
         },
     });
+
+    useEffect(() => {
+        const fetchRoles = async () => {
+            try {
+                const fetchedRoles = await getRoles();
+                setRoles(fetchedRoles);
+            } catch (error) {
+                console.error("Failed to fetch roles", error);
+            }
+        };
+        fetchRoles();
+    }, []);
 
     const onSubmit = async (data: SignUpForm) => {
         setIsLoading(true);
@@ -56,6 +73,7 @@ export default function SignUpPage() {
                 email: data.email,
                 password: data.password,
                 name: data.name,
+                role: data.role, // Pass the role to the signUp function (better-auth handles this if schema matches)
             });
 
             if (result.error) {
@@ -65,9 +83,9 @@ export default function SignUpPage() {
                 toast.success("Account created successfully!");
                 router.push("/dashboard");
             }
-        } catch (_err) { // Changed 'err' to '_err'
+        } catch (_err) {
             setError("An unexpected error occurred");
-            toast.error("Registration failed. Please try again."); // Added toast message
+            toast.error("Registration failed. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -123,6 +141,31 @@ export default function SignUpPage() {
                                                 disabled={isLoading}
                                             />
                                         </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="role"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Role</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a role" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {roles.map((role) => (
+                                                    <SelectItem key={role.id} value={role.name}>
+                                                        {role.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <FormMessage />
                                     </FormItem>
                                 )}

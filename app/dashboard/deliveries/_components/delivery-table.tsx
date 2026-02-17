@@ -17,6 +17,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -27,10 +35,11 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, Truck, CalendarClock, MapPin } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 interface DeliveryWithRelations {
     id: number
@@ -52,6 +61,7 @@ interface DeliveryWithRelations {
         customer: Customer
     }
     warehouse: Warehouse | null
+    createdByUser: { id: string; name: string; email: string } | null
     items: {
         id: number
         productId: number
@@ -83,8 +93,18 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
+const STATUS_COLORS: Record<string, string> = {
+    scheduled: "hsl(217, 91%, 60%)",
+    ready: "hsl(43, 96%, 56%)",
+    partial: "hsl(270, 76%, 53%)",
+    in_transit: "hsl(199, 89%, 48%)",
+    delivered: "hsl(160, 84%, 39%)",
+    cancelled: "hsl(346, 77%, 49%)",
+}
+
 export function DeliveryTable({ data }: DeliveryTableProps) {
     const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [deleting, setDeleting] = useState<number | null>(null)
 
@@ -93,17 +113,33 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     const scheduled = data.filter(d => d.status === 'scheduled').length
     const inTransit = data.filter(d => d.status === 'in_transit').length
 
+    // Chart data: status breakdown
+    const chartData = useMemo(() => {
+        const statusCounts: Record<string, number> = {}
+        data.forEach(d => {
+            statusCounts[d.status] = (statusCounts[d.status] || 0) + 1
+        })
+        return Object.entries(statusCounts).map(([status, count]) => ({
+            status: statusLabels[status] || status,
+            count,
+            fill: STATUS_COLORS[status] || "hsl(var(--primary))",
+        }))
+    }, [data])
+
     const filtered = useMemo(() => {
-        if (!search) return data
-        const s = search.toLowerCase()
-        return data.filter(d =>
-            d.deliveryNumber?.toLowerCase().includes(s) ||
-            d.salesOrder?.invoiceNumber?.toLowerCase().includes(s) ||
-            d.salesOrder?.customer?.name?.toLowerCase().includes(s) ||
-            d.driverName?.toLowerCase().includes(s) ||
-            d.vehicleNumber?.toLowerCase().includes(s)
-        )
-    }, [data, search])
+        return data.filter(d => {
+            const s = search.toLowerCase()
+            const matchesSearch = !search ||
+                d.deliveryNumber?.toLowerCase().includes(s) ||
+                d.salesOrder?.invoiceNumber?.toLowerCase().includes(s) ||
+                d.salesOrder?.customer?.name?.toLowerCase().includes(s) ||
+                d.driverName?.toLowerCase().includes(s) ||
+                d.vehicleNumber?.toLowerCase().includes(s) ||
+                d.createdByUser?.name?.toLowerCase().includes(s)
+            const matchesStatus = statusFilter === "all" || d.status === statusFilter
+            return matchesSearch && matchesStatus
+        })
+    }, [data, search, statusFilter])
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -180,14 +216,62 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 />
             </div>
 
-            <div className="relative max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder="Search delivery, SO, customer, driver..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="pl-10"
-                />
+            {/* Status Chart */}
+            {data.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Delivery Status Overview</CardTitle>
+                        <CardDescription>{data.length} total deliveries</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={180}>
+                            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                        color: "hsl(var(--foreground))",
+                                    }}
+                                />
+                                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                    {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search delivery, SO, customer, driver, user..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="pl-10"
+                    />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="ready">Ready</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
+                        <SelectItem value="in_transit">In Transit</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             <div className="rounded-md border">
@@ -209,6 +293,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                             <TableHead>Driver</TableHead>
                             <TableHead>Vehicle</TableHead>
                             <TableHead>Warehouse</TableHead>
+                            <TableHead>Created By</TableHead>
                             <TableHead className="text-right">Items</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -216,7 +301,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                     <TableBody>
                         {filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                                     No deliveries found.
                                 </TableCell>
                             </TableRow>
@@ -268,6 +353,16 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                     </TableCell>
                                     <TableCell>
                                         {delivery.warehouse?.sloc || "-"}
+                                    </TableCell>
+                                    <TableCell>
+                                        {delivery.createdByUser ? (
+                                            <div className="flex items-center gap-1.5">
+                                                <User className="h-3 w-3 text-muted-foreground" />
+                                                <span className="text-sm">{delivery.createdByUser.name}</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-sm text-muted-foreground">-</span>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {delivery.items.length}

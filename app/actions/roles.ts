@@ -108,7 +108,7 @@ export async function deleteRole(roleId: number) {
 
 export async function getPermissionsByRoleName(roleName: string) {
     const role = await db.query.roles.findFirst({
-        where: eq(roles.name, roleName),
+        where: (roles, { ilike }) => ilike(roles.name, roleName),
     })
 
     if (!role) return []

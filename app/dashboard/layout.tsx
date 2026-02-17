@@ -1,4 +1,5 @@
 import { cookies } from "next/headers"
+import { db } from "@/db"
 
 import {
   SidebarInset,
@@ -30,9 +31,22 @@ export default async function DashboardLayout({
 
   // Fetch permissions based on role
   let permissions: string[] = []
-  const user = session?.user as { role?: string } | undefined
-  if (user?.role) {
-    permissions = await getPermissionsByRoleName(user.role)
+
+  const user = session?.user as {
+    name: string;
+    email: string;
+    image?: string | null;
+  } | undefined
+
+  if (session?.user?.id) {
+    // Fetch user from DB to get the latest role
+    const dbUser = await db.query.user.findFirst({
+      where: (u, { eq }) => eq(u.id, session.user.id),
+    })
+
+    if (dbUser?.role) {
+      permissions = await getPermissionsByRoleName(dbUser.role)
+    }
   }
 
   return (
@@ -44,7 +58,13 @@ export default async function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <AppSidebar variant="inset" permissions={permissions} />
+      <AppSidebar variant="inset" permissions={permissions} user={
+        user ? {
+          name: user.name,
+          email: user.email,
+          avatar: user.image || "",
+        } : undefined
+      } />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">{children}</div>
