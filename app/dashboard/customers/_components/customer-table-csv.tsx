@@ -40,22 +40,42 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             skipEmptyLines: true,
             complete: (results) => {
                 const data = results.data as RawCustomerData[]
-                const normalized = data.map(item => {
-                    const keys = Object.keys(item)
 
-                    const codeKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "customerid" || k.toLowerCase().replace(/[^a-z]/g, "") === "customercode")
-                    const nameKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "customername" || k.toLowerCase() === "name")
-                    const contactKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "contactname")
-                    const emailKey = keys.find(k => k.toLowerCase() === "email")
-                    const addr1Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address1")
-                    const addr2Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address2")
-                    const addr3Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address3")
-                    const addr4Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address4")
-                    const addr5Key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === "address5")
+                // Helper to find key case-insensitively and ignoring special chars
+                const findKey = (obj: any, candidates: string[]) => {
+                    const keys = Object.keys(obj)
+                    return keys.find(k => {
+                        const normalizedKey = k.toLowerCase().replace(/[^a-z0-9]/g, "")
+                        return candidates.some(c => normalizedKey === c.replace(/[^a-z0-9]/g, ""))
+                    })
+                }
+
+                const normalized = data.map(item => {
+                    // Extended candidate list for flexibility
+                    const codeKey = findKey(item, [
+                        "customercode", "customerid", "code", "id", "kode", "kodepelanggan", "no", "nomor"
+                    ])
+                    const nameKey = findKey(item, [
+                        "customername", "name", "nama", "namapelanggan", "custname"
+                    ])
+                    const contactKey = findKey(item, ["contactname", "contact", "kontak", "cp"])
+                    const emailKey = findKey(item, ["email", "mail", "surel"])
+
+                    // Address fields
+                    const addr1Key = findKey(item, ["address1", "address", "alamat1", "alamat"])
+                    const addr2Key = findKey(item, ["address2", "alamat2"])
+                    const addr3Key = findKey(item, ["address3", "alamat3"])
+                    const addr4Key = findKey(item, ["address4", "alamat4"])
+                    const addr5Key = findKey(item, ["address5", "alamat5"])
+
+                    // Only return if we found at least one meaningful field, 
+                    // relying on loose matching for the import to be useful.
+                    // However, we MUST have at least a Name or Code to create a customer.
+                    if (!codeKey && !nameKey) return null;
 
                     return {
-                        customerCode: codeKey ? item[codeKey].toString() : "",
-                        name: nameKey ? item[nameKey].toString() : "",
+                        customerCode: codeKey ? item[codeKey].toString() : `GEN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, // Fallback if needed, though usually required
+                        name: nameKey ? item[nameKey].toString() : (codeKey ? item[codeKey].toString() : "Unknown"),
                         contactName: contactKey ? item[contactKey].toString() : null,
                         email: emailKey ? item[emailKey].toString() : null,
                         address1: addr1Key ? item[addr1Key].toString() : null,
@@ -64,7 +84,15 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         address4: addr4Key ? item[addr4Key].toString() : null,
                         address5: addr5Key ? item[addr5Key].toString() : null,
                     }
-                }).filter(item => item.customerCode && item.name) as CustomerData[]
+                }).filter(Boolean) as CustomerData[]
+
+                if (normalized.length === 0 && data.length > 0) {
+                    // Diagnostic: Check what headers were actually found
+                    const firstRowHeaders = Object.keys(data[0]).join(", ")
+                    toast.error(`No valid rows found. Detected headers: ${firstRowHeaders}. Expected 'Name' or 'Customer Code'.`)
+                } else if (normalized.length === 0) {
+                    toast.error("File appears to be empty or could not be parsed.")
+                }
 
                 setPreview(normalized)
             },
