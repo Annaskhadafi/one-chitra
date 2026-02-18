@@ -18,13 +18,16 @@ import { toast } from "sonner"
 import { syncIndividualStock } from "@/app/actions/stock-sap"
 
 interface SAPStockItem {
-    materialNumber: string
+    idInv: string
+    plant: string
+    plantName: string
+    material: string
+    oldMaterial: string
+    description: string
     sloc: string
     slocDesc: string
     qtyStock: number
     valueStock: number
-    localProductId?: number
-    localWarehouseId?: number
     isMapped: boolean
 }
 
@@ -38,24 +41,35 @@ export function StockSAPTable() {
         setIsLoading(true);
         try {
             const response = await fetch("https://ics.chitraparatama.co.id/product/api/apiconnect.php?function=get_inventory");
-            const result: { status: string; result: { idinv: string; sloc: string; slocdesc: string; qtystock: string; valuestock: string }[] } = await response.json();
+            const result: {
+                status: string;
+                result: {
+                    idinv: string;
+                    plant: string;
+                    plantname: string;
+                    material: string;
+                    oldmaterial: string;
+                    desc: string;
+                    sloc: string;
+                    slocdesc: string;
+                    qtystock: string;
+                    valuestock: string;
+                }[]
+            } = await response.json();
 
             if (result.status === "OK") {
-                // We need to check mapping markers from the server action if possible,
-                // but for now we'll just fetch raw and let the sync action handle the heavy lifting.
-                // However, the action we wrote earlier DOES the mapping.
-                // Let's use the server action instead of direct fetch if we want the mapping.
-                // For simplicity here, I'll just fetch and the sync button will handle the rest.
-
-                // Correction: I'll call a dedicated fetchData action if I had one, 
-                // but let's stick to the current plan for now since it's already implemented.
                 const mapped = result.result.map((item) => ({
-                    materialNumber: item.idinv?.toString().trim(),
+                    idInv: item.idinv?.toString().trim(),
+                    plant: item.plant?.toString().trim(),
+                    plantName: item.plantname?.toString().trim(),
+                    material: item.material?.toString().trim(),
+                    oldMaterial: item.oldmaterial?.toString().trim(),
+                    description: item.desc?.toString().trim(),
                     sloc: item.sloc?.toString().trim(),
                     slocDesc: item.slocdesc,
                     qtyStock: Number(item.qtystock),
                     valueStock: Number(item.valuestock),
-                    isMapped: true // Assume for UI, sync will check
+                    isMapped: true
                 }));
                 setData(mapped);
             }
@@ -72,24 +86,27 @@ export function StockSAPTable() {
 
     const filteredData = useMemo(() => {
         return data.filter(item =>
-            item.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.idInv.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.material.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.slocDesc.toLowerCase().includes(searchTerm.toLowerCase())
+            item.slocDesc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.plantName.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [data, searchTerm]);
 
     const handleSync = async (item: SAPStockItem) => {
-        setSyncingId(`${item.materialNumber}-${item.sloc}`);
+        setSyncingId(`${item.idInv}-${item.sloc}`);
         try {
             const result = await syncIndividualStock({
-                materialNumber: item.materialNumber,
+                materialNumber: item.idInv, // Keep using idInv as materialNumber for sync
                 sloc: item.sloc,
                 qty: item.qtyStock,
                 value: item.valueStock
             });
 
             if (result.success) {
-                toast.success(`Synced ${item.materialNumber} to ${item.sloc}`, {
+                toast.success(`Synced ${item.idInv} to ${item.sloc}`, {
                     icon: <CheckCircle2 className="h-4 w-4 text-green-500" />
                 });
             } else {
@@ -133,28 +150,43 @@ export function StockSAPTable() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Material #</TableHead>
+                            <TableHead>ID Inv</TableHead>
+                            <TableHead>Plant</TableHead>
+                            <TableHead>Material</TableHead>
+                            <TableHead>Old Material</TableHead>
+                            <TableHead className="min-w-[200px]">Description</TableHead>
                             <TableHead>Sloc</TableHead>
-                            <TableHead>Sloc Description</TableHead>
-                            <TableHead className="text-right">Qty (SAP)</TableHead>
-                            <TableHead className="text-right">Value (SAP)</TableHead>
+                            <TableHead>Sloc Desc</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead className="text-right">Value</TableHead>
                             <TableHead className="w-[100px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
+                                <TableCell colSpan={10} className="h-24 text-center">
                                     No records found in SAP.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             filteredData.map((item) => {
-                                const isSyncing = syncingId === `${item.materialNumber}-${item.sloc}`;
+                                const isSyncing = syncingId === `${item.idInv}-${item.sloc}`;
                                 return (
-                                    <TableRow key={`${item.materialNumber}-${item.sloc}`}>
-                                        <TableCell className="font-medium text-blue-600">
-                                            {item.materialNumber}
+                                    <TableRow key={`${item.idInv}-${item.sloc}`}>
+                                        <TableCell className="font-medium">
+                                            {item.idInv}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span>{item.plant}</span>
+                                                <span className="text-[10px] text-muted-foreground">{item.plantName}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{item.material}</TableCell>
+                                        <TableCell className="text-muted-foreground">{item.oldMaterial}</TableCell>
+                                        <TableCell className="text-xs">
+                                            {item.description}
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{item.sloc}</Badge>
