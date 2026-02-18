@@ -159,6 +159,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [drivers, setDrivers] = useState<{ id: number, name: string }[]>([])
     const [vehicles, setVehicles] = useState<{ id: number, policeNumber: string, type: string }[]>([])
     const [loadingFleet, setLoadingFleet] = useState(false)
+    const [driverSearch, setDriverSearch] = useState("")
+    const [vehicleSearch, setVehicleSearch] = useState("")
 
     // Load fleet data on mount
     useEffect(() => {
@@ -921,7 +923,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-[300px] p-0" align="start">
                                                     <Command>
-                                                        <CommandInput placeholder="Search driver..." />
+                                                        <CommandInput
+                                                            placeholder="Search driver..."
+                                                            value={driverSearch}
+                                                            onValueChange={setDriverSearch}
+                                                        />
                                                         <CommandList>
                                                             <CommandEmpty>
                                                                 <div className="p-2">
@@ -930,10 +936,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         variant="outline"
                                                                         size="sm"
                                                                         className="w-full h-8"
-                                                                        onClick={() => {
-                                                                            const search = document.querySelector('[cmdk-input-wrapper] input') as HTMLInputElement
-                                                                            handleCreateDriver(search?.value || "")
-                                                                        }}
+                                                                        onClick={() => handleCreateDriver(driverSearch)}
                                                                     >
                                                                         <Plus className="mr-2 h-3 w-3" />
                                                                         Add New
@@ -978,7 +981,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                     </PopoverTrigger>
                                                     <PopoverContent className="w-[300px] p-0" align="start">
                                                         <Command>
-                                                            <CommandInput placeholder="Search police number..." />
+                                                            <CommandInput
+                                                                placeholder="Search police number..."
+                                                                value={vehicleSearch}
+                                                                onValueChange={setVehicleSearch}
+                                                            />
                                                             <CommandList>
                                                                 <CommandEmpty>
                                                                     <div className="p-2">
@@ -987,10 +994,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                             variant="outline"
                                                                             size="sm"
                                                                             className="w-full h-8"
-                                                                            onClick={() => {
-                                                                                const search = document.querySelector('[cmdk-input-wrapper] input') as HTMLInputElement
-                                                                                handleCreateVehicle(search?.value || "")
-                                                                            }}
+                                                                            onClick={() => handleCreateVehicle(vehicleSearch)}
                                                                         >
                                                                             <Plus className="mr-2 h-3 w-3" />
                                                                             Add New
