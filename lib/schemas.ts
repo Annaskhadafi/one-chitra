@@ -40,6 +40,7 @@ export const stockSchema = z.object({
 })
 
 export const salesOrderItemSchema = z.object({
+    id: z.number().optional(),
     productId: z.number().min(1, "Product is required"),
     quantity: z.number().min(1, "Quantity must be at least 1"),
     unitPrice: z.number().min(0, "Unit price must be >= 0"),
@@ -76,12 +77,18 @@ export const deliverySchema = z.object({
     deliveryDate: z.string().or(z.date()).optional().nullable(),
     status: z.enum(["scheduled", "ready", "partial", "in_transit", "delivered", "cancelled"]).default("scheduled"),
     deliveryType: z.enum(["full", "partial"]).default("full"),
-    driverName: z.string().optional(),
-    vehicleNumber: z.string().optional(),
-    vehicleType: z.string().optional(),
+    driverName: z.string().optional().nullable(),
+    vehicleNumber: z.string().optional().nullable(),
+    vehicleType: z.string().optional().nullable(),
+    // External
+    isExternal: z.boolean().default(false),
+    vendorName: z.string().optional().nullable(),
+    awbNumber: z.string().optional().nullable(),
+    shippingCost: z.number().min(0).default(0),
+
     warehouseId: z.number().min(1, "Warehouse is required"),
-    shippingAddress: z.string().optional(),
-    notes: z.string().optional(),
+    shippingAddress: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
     items: z.array(deliveryItemSchema).min(1, "At least one item is required"),
 })
 

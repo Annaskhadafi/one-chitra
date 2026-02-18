@@ -157,12 +157,37 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 })
                 .where(eq(salesOrders.id, id))
 
-            // Replace items: delete all existing, insert new
-            await tx.delete(salesOrderItems).where(eq(salesOrderItems.salesOrderId, id))
+            // Handle items: Update, Insert, Delete
+            const existingItems = originalOrder.items
+            const existingItemIds = existingItems.map(i => i.id)
+            const payloadItemIds = data.items.map(i => i.id).filter(Boolean) as number[]
 
-            if (data.items.length > 0) {
+            const itemsToDelete = existingItemIds.filter(id => !payloadItemIds.includes(id))
+            const itemsToInsert = data.items.filter(i => !i.id)
+            const itemsToUpdate = data.items.filter(i => i.id)
+
+            // Delete removed items
+            if (itemsToDelete.length > 0) {
+                await tx.delete(salesOrderItems).where(inArray(salesOrderItems.id, itemsToDelete))
+            }
+
+            // Update existing items
+            for (const item of itemsToUpdate) {
+                await tx.update(salesOrderItems)
+                    .set({
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice.toString(),
+                        discount: item.discount.toString(),
+                        tax: item.tax.toString(),
+                    })
+                    .where(eq(salesOrderItems.id, item.id!))
+            }
+
+            // Insert new items
+            if (itemsToInsert.length > 0) {
                 await tx.insert(salesOrderItems)
-                    .values(data.items.map(item => ({
+                    .values(itemsToInsert.map(item => ({
                         salesOrderId: id,
                         productId: item.productId,
                         quantity: item.quantity,

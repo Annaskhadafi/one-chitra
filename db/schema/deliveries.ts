@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, decimal } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { salesOrders, salesOrderItems } from "./sales-orders";
 import { warehouses } from "./warehouses";
@@ -16,6 +16,11 @@ export const deliveries = pgTable("deliveries", {
     driverName: varchar("driver_name", { length: 255 }),
     vehicleNumber: varchar("vehicle_number", { length: 50 }),
     vehicleType: varchar("vehicle_type", { length: 50 }),
+    // External Delivery Fields
+    isExternal: boolean("is_external").default(false).notNull(),
+    vendorName: varchar("vendor_name", { length: 255 }),
+    awbNumber: varchar("awb_number", { length: 100 }),
+    shippingCost: decimal("shipping_cost", { precision: 15, scale: 2 }).default("0"),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
     shippingAddress: text("shipping_address"),
     notes: text("notes"),

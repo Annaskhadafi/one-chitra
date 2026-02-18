@@ -141,9 +141,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
                     status: data.status,
                     deliveryType: data.deliveryType,
+                    // Internal Fleet
                     driverName: data.driverName || null,
                     vehicleNumber: data.vehicleNumber || null,
                     vehicleType: data.vehicleType || null,
+                    // External Delivery
+                    isExternal: data.isExternal || false,
+                    vendorName: data.vendorName || null,
+                    awbNumber: data.awbNumber || null,
+                    shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
+
                     warehouseId: data.warehouseId,
                     shippingAddress: data.shippingAddress || null,
                     notes: data.notes || null,
@@ -224,9 +231,16 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
                     status: data.status,
                     deliveryType: data.deliveryType,
+                    // Internal
                     driverName: data.driverName || null,
                     vehicleNumber: data.vehicleNumber || null,
                     vehicleType: data.vehicleType || null,
+                    // External
+                    isExternal: data.isExternal || false,
+                    vendorName: data.vendorName || null,
+                    awbNumber: data.awbNumber || null,
+                    shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
+
                     warehouseId: data.warehouseId,
                     shippingAddress: data.shippingAddress || null,
                     notes: data.notes || null,

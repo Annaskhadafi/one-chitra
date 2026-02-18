@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createDelivery, updateDelivery, checkStockAvailability } from "@/app/actions/delivery"
+import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +15,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import {
     Command,
     CommandEmpty,
@@ -45,7 +47,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
+import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -109,6 +111,11 @@ interface DeliveryFormProps {
         warehouseId: number | null
         shippingAddress: string | null
         notes: string | null
+        // External fields
+        isExternal: boolean | null
+        vendorName: string | null
+        awbNumber: string | null
+        shippingCost: string | null
         salesOrder: {
             id: number
             invoiceNumber: string | null
@@ -141,6 +148,23 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const router = useRouter()
     const isEdit = !!initialData
 
+    // Fleet Data State
+    const [drivers, setDrivers] = useState<{ id: number, name: string }[]>([])
+    const [vehicles, setVehicles] = useState<{ id: number, policeNumber: string, type: string }[]>([])
+    const [loadingFleet, setLoadingFleet] = useState(false)
+
+    // Load fleet data on mount
+    useMemo(() => {
+        const loadFleet = async () => {
+            setLoadingFleet(true)
+            const [d, v] = await Promise.all([getDrivers(), getVehicles()])
+            setDrivers(d)
+            setVehicles(v)
+            setLoadingFleet(false)
+        }
+        loadFleet()
+    }, [])
+
     // Form state
     const [salesOrderId, setSalesOrderId] = useState<number>(initialData?.salesOrderId || 0)
     const [scheduledDate, setScheduledDate] = useState(
@@ -161,6 +185,12 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [warehouseId, setWarehouseId] = useState<number>(initialData?.warehouseId || 0)
     const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
     const [notes, setNotes] = useState(initialData?.notes || "")
+
+    // External Delivery State
+    const [isExternal, setIsExternal] = useState(initialData?.isExternal || false)
+    const [vendorName, setVendorName] = useState(initialData?.vendorName || "")
+    const [awbNumber, setAwbNumber] = useState(initialData?.awbNumber || "")
+    const [shippingCost, setShippingCost] = useState(initialData?.shippingCost || "0")
 
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
@@ -186,6 +216,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     // UI
     const [soOpen, setSoOpen] = useState(false)
     const [whOpen, setWhOpen] = useState(false)
+    const [driverOpen, setDriverOpen] = useState(false)
+    const [vehicleOpen, setVehicleOpen] = useState(false)
     const [saving, setSaving] = useState(false)
 
     // Selected SO
@@ -301,6 +333,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             return
         }
 
+        if (isExternal && !vendorName) {
+            toast.error("Vendor Name is required for external delivery")
+            return
+        }
+
         // Validate Serial Numbers
         for (const item of items) {
             if (item.productCategory === "TYRE") {
@@ -324,9 +361,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             deliveryDate: deliveryDate || null,
             status: status as "scheduled" | "ready" | "partial" | "in_transit" | "delivered" | "cancelled",
             deliveryType: deliveryType as "full" | "partial",
-            driverName: driverName || undefined,
-            vehicleNumber: vehicleNumber || undefined,
-            vehicleType: vehicleType || undefined,
+            // Fleet / External
+            isExternal,
+            driverName: !isExternal ? (driverName || undefined) : undefined,
+            vehicleNumber: !isExternal ? (vehicleNumber || undefined) : undefined,
+            vehicleType: !isExternal ? (vehicleType || undefined) : undefined,
+            vendorName: isExternal ? (vendorName || undefined) : undefined,
+            awbNumber: isExternal ? (awbNumber || undefined) : undefined,
+            shippingCost: isExternal ? Number(shippingCost) : 0,
+
             warehouseId,
             shippingAddress: shippingAddress || undefined,
             notes: notes || undefined,
@@ -351,7 +394,34 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             toast.error(errorMsg)
         }
         setSaving(false)
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost])
+
+    const handleCreateDriver = async (name: string) => {
+        if (!name) return
+        const res = await createDriver(name)
+        if (res.success && res.data) {
+            setDrivers(prev => [res.data!, ...prev])
+            setDriverName(res.data!.name)
+            setDriverOpen(false)
+            toast.success("Driver added")
+        } else {
+            toast.error("Failed to add driver")
+        }
+    }
+
+    const handleCreateVehicle = async (policeNumber: string) => {
+        if (!policeNumber) return
+        const res = await createVehicle(policeNumber, "Other") // Default type, can be changed later
+        if (res.success && res.data) {
+            setVehicles(prev => [res.data!, ...prev])
+            setVehicleNumber(res.data!.policeNumber)
+            setVehicleType(res.data!.type)
+            setVehicleOpen(false)
+            toast.success("Vehicle added")
+        } else {
+            toast.error("Failed to add vehicle")
+        }
+    }
 
     const totalQty = items.reduce((sum, item) => sum + item.deliveredQuantity, 0)
     const totalItems = items.length
@@ -796,38 +866,197 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
                             <Separator />
 
-                            <div className="space-y-3">
-                                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Driver & Vehicle</Label>
-                                <div className="space-y-2">
-                                    <Input
-                                        placeholder="Driver Name"
-                                        value={driverName}
-                                        onChange={e => setDriverName(e.target.value)}
-                                        className="h-9"
-                                    />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input
-                                            placeholder="Police No."
-                                            value={vehicleNumber}
-                                            onChange={e => setVehicleNumber(e.target.value)}
-                                            className="h-9"
-                                        />
-                                        <Select value={vehicleType} onValueChange={setVehicleType}>
-                                            <SelectTrigger className="h-9">
-                                                <SelectValue placeholder="Type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Truk">Truk</SelectItem>
-                                                <SelectItem value="Pick-up">Pick-up</SelectItem>
-                                                <SelectItem value="Van">Van</SelectItem>
-                                                <SelectItem value="Container">Container</SelectItem>
-                                                <SelectItem value="Motor">Motor</SelectItem>
-                                                <SelectItem value="Other">Other</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                            <div className="flex items-center justify-between pb-2">
+                                <Label className="text-base font-semibold">Delivery Mode</Label>
+                                <div className="flex items-center gap-2">
+                                    <span className={cn("text-sm", !isExternal && "font-bold")}>Internal Fleet</span>
+                                    <Switch checked={isExternal} onCheckedChange={setIsExternal} />
+                                    <span className={cn("text-sm", isExternal && "font-bold")}>External Vendor</span>
                                 </div>
                             </div>
+
+                            <Separator />
+
+                            {!isExternal ? (
+                                <div className="space-y-3">
+                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                                        Internal Fleet
+                                    </Label>
+                                    <div className="space-y-4">
+                                        {/* Driver Selection */}
+                                        <div className="flex flex-col gap-1.5">
+                                            <Label className="text-xs text-muted-foreground">Driver Name</Label>
+                                            <Popover open={driverOpen} onOpenChange={setDriverOpen}>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        className={cn("w-full justify-between", !driverName && "text-muted-foreground")}
+                                                    >
+                                                        {driverName || "Select Driver..."}
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[300px] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search driver..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>
+                                                                <div className="p-2">
+                                                                    <p className="text-sm text-muted-foreground mb-2">No driver found.</p>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="w-full h-8"
+                                                                        onClick={() => {
+                                                                            const search = document.querySelector('[cmdk-input-wrapper] input') as HTMLInputElement
+                                                                            handleCreateDriver(search?.value || "")
+                                                                        }}
+                                                                    >
+                                                                        <Plus className="mr-2 h-3 w-3" />
+                                                                        Add New
+                                                                    </Button>
+                                                                </div>
+                                                            </CommandEmpty>
+                                                            <CommandGroup>
+                                                                {drivers.map(driver => (
+                                                                    <CommandItem
+                                                                        key={driver.id}
+                                                                        value={driver.name}
+                                                                        onSelect={() => {
+                                                                            setDriverName(driver.name)
+                                                                            setDriverOpen(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-4 w-4", driverName === driver.name ? "opacity-100" : "opacity-0")} />
+                                                                        {driver.name}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+
+                                        {/* Vehicle Selection */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label className="text-xs text-muted-foreground">Vehicle No.</Label>
+                                                <Popover open={vehicleOpen} onOpenChange={setVehicleOpen}>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            role="combobox"
+                                                            className={cn("w-full justify-between", !vehicleNumber && "text-muted-foreground")}
+                                                        >
+                                                            {vehicleNumber || "Select Vehicle..."}
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-[300px] p-0" align="start">
+                                                        <Command>
+                                                            <CommandInput placeholder="Search police number..." />
+                                                            <CommandList>
+                                                                <CommandEmpty>
+                                                                    <div className="p-2">
+                                                                        <p className="text-sm text-muted-foreground mb-2">No vehicle found.</p>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="w-full h-8"
+                                                                            onClick={() => {
+                                                                                const search = document.querySelector('[cmdk-input-wrapper] input') as HTMLInputElement
+                                                                                handleCreateVehicle(search?.value || "")
+                                                                            }}
+                                                                        >
+                                                                            <Plus className="mr-2 h-3 w-3" />
+                                                                            Add New
+                                                                        </Button>
+                                                                    </div>
+                                                                </CommandEmpty>
+                                                                <CommandGroup>
+                                                                    {vehicles.map(vehicle => (
+                                                                        <CommandItem
+                                                                            key={vehicle.id}
+                                                                            value={vehicle.policeNumber}
+                                                                            onSelect={() => {
+                                                                                setVehicleNumber(vehicle.policeNumber)
+                                                                                setVehicleType(vehicle.type)
+                                                                                setVehicleOpen(false)
+                                                                            }}
+                                                                        >
+                                                                            <Check className={cn("mr-2 h-4 w-4", vehicleNumber === vehicle.policeNumber ? "opacity-100" : "opacity-0")} />
+                                                                            <span className="font-mono">{vehicle.policeNumber}</span>
+                                                                            <span className="ml-2 text-muted-foreground text-xs">({vehicle.type})</span>
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label className="text-xs text-muted-foreground">Type</Label>
+                                                <Select value={vehicleType} onValueChange={setVehicleType}>
+                                                    <SelectTrigger className="h-9">
+                                                        <SelectValue placeholder="Type" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Truk">Truk</SelectItem>
+                                                        <SelectItem value="Pick-up">Pick-up</SelectItem>
+                                                        <SelectItem value="Van">Van</SelectItem>
+                                                        <SelectItem value="Container">Container</SelectItem>
+                                                        <SelectItem value="Motor">Motor</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                                        External Vendor
+                                    </Label>
+                                    <div className="space-y-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Vendor Name</Label>
+                                            <Input
+                                                placeholder="e.g. JNE, Dakota, GoBox..."
+                                                value={vendorName}
+                                                onChange={e => setVendorName(e.target.value)}
+                                                className="h-9"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">AWB / Receipt No.</Label>
+                                                <Input
+                                                    placeholder="Tracking Number"
+                                                    value={awbNumber}
+                                                    onChange={e => setAwbNumber(e.target.value)}
+                                                    className="h-9 font-mono"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Shipping Cost</Label>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="Rp 0"
+                                                    value={shippingCost}
+                                                    onChange={e => setShippingCost(e.target.value)}
+                                                    className="h-9 font-mono text-right"
+                                                    min={0}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                         </CardContent>
                     </Card>
 

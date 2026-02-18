@@ -2,6 +2,15 @@
 
 import { useState, useMemo } from "react"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus } from "@/app/actions/delivery"
+import { DeliveryPreview } from "./delivery-preview"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
     Table,
     TableBody,
@@ -35,7 +44,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -107,6 +116,8 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [deleting, setDeleting] = useState<number | null>(null)
+    const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
     // Stats calculation
     const totalDeliveries = data.length
@@ -378,37 +389,61 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
-                                            <Link href={`/dashboard/deliveries/${delivery.id}`}>
-                                                <Button variant="ghost" size="icon" title="View / Edit">
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button variant="ghost" size="icon" title="Delete">
-                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Open menu</span>
+                                                        <MoreHorizontal className="h-4 w-4" />
                                                     </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            This will permanently delete delivery{" "}
-                                                            <strong>{delivery.deliveryNumber}</strong>. This action
-                                                            cannot be undone.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction
-                                                            onClick={() => handleDelete(delivery.id)}
-                                                            disabled={deleting === delivery.id}
-                                                        >
-                                                            {deleting === delivery.id ? "Deleting..." : "Delete"}
-                                                        </AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            setPreviewDelivery(delivery)
+                                                            setIsPreviewOpen(true)
+                                                        }}
+                                                    >
+                                                        <Eye className="mr-2 h-4 w-4" />
+                                                        Preview Detail
+                                                    </DropdownMenuItem>
+                                                    <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                                        <DropdownMenuItem>
+                                                            <Pencil className="mr-2 h-4 w-4" />
+                                                            Edit
+                                                        </DropdownMenuItem>
+                                                    </Link>
+                                                    <DropdownMenuSeparator />
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This will permanently delete delivery{" "}
+                                                                    <strong>{delivery.deliveryNumber}</strong>. This action
+                                                                    cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => handleDelete(delivery.id)}
+                                                                    disabled={deleting === delivery.id}
+                                                                    className="bg-red-600 hover:bg-red-700"
+                                                                >
+                                                                    {deleting === delivery.id ? "Deleting..." : "Delete"}
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -423,6 +458,12 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 onDelete={handleBulkDelete}
                 onEdit={handleBulkUpdateStatus}
                 entityName="delivery"
+            />
+
+            <DeliveryPreview
+                delivery={previewDelivery}
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
             />
         </div>
     )

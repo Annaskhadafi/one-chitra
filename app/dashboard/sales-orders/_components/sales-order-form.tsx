@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse } from "@/lib/types"
 
 interface OrderItem {
+    id?: number
     productId: number
     productName: string
     quantity: number
@@ -69,6 +70,7 @@ interface SalesOrderFormProps {
         discount: string
         shipping: string
         items: {
+            id: number
             productId: number
             quantity: number
             unitPrice: string
@@ -112,6 +114,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     // Items
     const [items, setItems] = useState<OrderItem[]>(
         initialData?.items.map(item => ({
+            id: item.id,
             productId: item.productId,
             productName: item.product?.materialDescription || item.product?.materialNumber || "",
             quantity: item.quantity,
@@ -203,6 +206,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 discount,
                 shipping,
                 items: items.map(item => ({
+                    id: item.id,
                     productId: item.productId,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
