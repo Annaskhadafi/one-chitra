@@ -40,7 +40,7 @@ export const navigationConfig: NavSection[] = [
         ],
     },
     {
-        title: "Supply Chain",
+        title: "SCM Management",
         items: [
             {
                 title: "Products",
@@ -61,6 +61,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "stocks",
             },
             {
+                title: "Stock SAP",
+                url: "/dashboard/stocks-sap",
+                icon: Database,
+                resource: "stocks-sap",
+            },
+            {
                 title: "Warehouse",
                 url: "/dashboard/warehouse",
                 icon: Warehouse,
@@ -73,33 +79,28 @@ export const navigationConfig: NavSection[] = [
                 resource: "good-receive-manual",
             },
             {
+                title: "Good Receive SAP",
+                url: "/dashboard/good-receive",
+                icon: ArrowDownToLine,
+                resource: "good-receive",
+            },
+            {
                 title: "Stock Transfer",
                 url: "/dashboard/stock-transfers",
                 icon: ArrowRightLeft,
                 resource: "stock-transfers",
             },
             {
+                title: "Sales Order",
+                url: "/dashboard/sales-orders",
+                icon: ShoppingCart,
+                resource: "sales-orders",
+            },
+            {
                 title: "Deliveries",
                 url: "/dashboard/deliveries",
                 icon: Truck,
                 resource: "deliveries",
-            },
-        ],
-    },
-    {
-        title: "SAP",
-        items: [
-            {
-                title: "Stock SAP",
-                url: "/dashboard/stocks-sap",
-                icon: Database,
-                resource: "stocks-sap",
-            },
-            {
-                title: "Good Receive SAP",
-                url: "/dashboard/good-receive",
-                icon: ArrowDownToLine,
-                resource: "good-receive",
             },
         ],
     },
@@ -117,12 +118,6 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/quotations",
                 icon: FileText,
                 resource: "quotations",
-            },
-            {
-                title: "Sales Order",
-                url: "/dashboard/sales-orders",
-                icon: ShoppingCart,
-                resource: "sales-orders",
             },
             {
                 title: "Billing",
