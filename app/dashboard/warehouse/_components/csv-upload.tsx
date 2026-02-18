@@ -10,11 +10,12 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogFooter
 } from "@/components/ui/dialog"
-import { Upload, FileUp, X, Check } from "lucide-react"
+import { Upload, FileUp, X, Check, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import Papa from "papaparse"
-import { importWarehouses } from "@/app/actions/warehouse"
+import { importWarehouses, checkWarehouseImport } from "@/app/actions/warehouse"
 import { NewWarehouse } from "@/lib/types"
 
 type RawWarehouseData = Record<string, string>
@@ -26,10 +27,20 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [preview, setPreview] = useState<WarehouseData[]>([])
     const [isOpen, setIsOpen] = useState(false)
 
+    // Import analysis state
+    const [isAnalyzing, setIsAnalyzing] = useState(false)
+    const [analysis, setAnalysis] = useState<{
+        existingCount: number,
+        newCount: number,
+        existingSlocs: string[],
+        newSlocs: string[]
+    } | null>(null)
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
         if (selectedFile) {
             setFile(selectedFile)
+            setAnalysis(null)
             parseFile(selectedFile)
         }
     }
@@ -54,6 +65,7 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                 }).filter(item => item.sloc) as WarehouseData[]
 
                 setPreview(normalized)
+                analyzeImport(normalized)
             },
             error: (error) => {
                 toast.error("Failed to parse CSV: " + error.message)
@@ -61,17 +73,39 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         })
     }
 
-    const handleUpload = async () => {
+    const analyzeImport = async (data: WarehouseData[]) => {
+        setIsAnalyzing(true)
+        try {
+            const slocs = data.map(d => d.sloc)
+            const result = await checkWarehouseImport(slocs)
+
+            if (result.success && result.existingSlocs && result.newSlocs) {
+                setAnalysis({
+                    existingCount: result.existingCount || 0,
+                    newCount: result.newCount || 0,
+                    existingSlocs: result.existingSlocs,
+                    newSlocs: result.newSlocs
+                })
+            }
+        } catch (error) {
+            console.error("Analysis failed", error)
+        } finally {
+            setIsAnalyzing(false)
+        }
+    }
+
+    const handleUpload = async (mode: 'update' | 'skip') => {
         if (preview.length === 0) return
 
         setIsUploading(true)
         try {
-            const result = await importWarehouses(preview)
+            const result = await importWarehouses(preview, mode)
             if (result.success) {
-                toast.success(`Successfully imported ${result.count} warehouses`)
+                toast.success(`Successfully processed ${result.count} warehouses`)
                 setIsOpen(false)
                 setFile(null)
                 setPreview([])
+                setAnalysis(null)
                 onSuccess?.()
             } else {
                 toast.error(result.error)
@@ -83,8 +117,17 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         }
     }
 
+    const reset = () => {
+        setFile(null)
+        setPreview([])
+        setAnalysis(null)
+    }
+
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open)
+            if (!open) reset()
+        }}>
             <DialogTrigger asChild>
                 <Button variant="outline">
                     <Upload className="mr-2 h-4 w-4" />
@@ -133,29 +176,75 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => {
-                                        setFile(null)
-                                        setPreview([])
-                                    }}
+                                    onClick={reset}
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
 
-                            <div className="flex justify-end gap-2">
+                            {isAnalyzing ? (
+                                <div className="py-4 text-center text-sm text-muted-foreground">
+                                    Analyzing import data...
+                                </div>
+                            ) : analysis ? (
+                                <div className="rounded-md border p-4 bg-muted/50">
+                                    <h4 className="font-medium mb-2">Import Summary</h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-muted-foreground">New Records:</span>
+                                            <span className="ml-2 font-mono font-bold text-green-600">{analysis.newCount}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground">Existing Records:</span>
+                                            <span className="ml-2 font-mono font-bold text-amber-600">{analysis.existingCount}</span>
+                                        </div>
+                                    </div>
+
+                                    {analysis.existingCount > 0 && (
+                                        <div className="mt-3 flex items-start gap-2 text-amber-600 bg-amber-50 p-2 rounded text-xs">
+                                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                                            <p>
+                                                {analysis.existingCount} records already exist in the database.
+                                                You can choose to update them with new data or skip them.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : null}
+
+                            <DialogFooter className="gap-2 sm:gap-0">
                                 <Button
                                     variant="outline"
-                                    onClick={() => {
-                                        setFile(null)
-                                        setPreview([])
-                                    }}
+                                    onClick={reset}
                                 >
-                                    Reset
+                                    Cancel
                                 </Button>
-                                <Button onClick={handleUpload} disabled={isUploading || preview.length === 0}>
-                                    {isUploading ? "Importing..." : "Start Import"}
-                                </Button>
-                            </div>
+
+                                {analysis && analysis.existingCount > 0 ? (
+                                    <>
+                                        <Button
+                                            variant="secondary"
+                                            onClick={() => handleUpload('skip')}
+                                            disabled={isUploading}
+                                        >
+                                            {isUploading ? "Importing..." : "Skip Existing"}
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleUpload('update')}
+                                            disabled={isUploading}
+                                        >
+                                            {isUploading ? "Importing..." : "Update & Add"}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button
+                                        onClick={() => handleUpload('update')}
+                                        disabled={isUploading || isAnalyzing || preview.length === 0}
+                                    >
+                                        {isUploading ? "Importing..." : "Import All"}
+                                    </Button>
+                                )}
+                            </DialogFooter>
                         </div>
                     )}
                 </div>
