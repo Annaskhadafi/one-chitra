@@ -21,6 +21,13 @@ export const deliveries = pgTable("deliveries", {
     vendorName: varchar("vendor_name", { length: 255 }),
     awbNumber: varchar("awb_number", { length: 100 }),
     shippingCost: decimal("shipping_cost", { precision: 15, scale: 2 }).default("0"),
+    // Internal Cost Breakdown
+    costGasoline: decimal("cost_gasoline", { precision: 15, scale: 2 }).default("0"),
+    costToll: decimal("cost_toll", { precision: 15, scale: 2 }).default("0"),
+    costParking: decimal("cost_parking", { precision: 15, scale: 2 }).default("0"),
+    costMeals: decimal("cost_meals", { precision: 15, scale: 2 }).default("0"),
+    costMaintenance: decimal("cost_maintenance", { precision: 15, scale: 2 }).default("0"),
+    costOthers: decimal("cost_others", { precision: 15, scale: 2 }).default("0"),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
     shippingAddress: text("shipping_address"),
     notes: text("notes"),

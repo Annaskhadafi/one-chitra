@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createDelivery, updateDelivery, checkStockAvailability } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
@@ -111,6 +111,13 @@ interface DeliveryFormProps {
         warehouseId: number | null
         shippingAddress: string | null
         notes: string | null
+        // Internal Cost Breakdown
+        costGasoline: number | string | null
+        costToll: number | string | null
+        costParking: number | string | null
+        costMeals: number | string | null
+        costMaintenance: number | string | null
+        costOthers: number | string | null
         // External fields
         isExternal: boolean | null
         vendorName: string | null
@@ -154,7 +161,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [loadingFleet, setLoadingFleet] = useState(false)
 
     // Load fleet data on mount
-    useMemo(() => {
+    useEffect(() => {
         const loadFleet = async () => {
             setLoadingFleet(true)
             const [d, v] = await Promise.all([getDrivers(), getVehicles()])
@@ -185,6 +192,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [warehouseId, setWarehouseId] = useState<number>(initialData?.warehouseId || 0)
     const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
     const [notes, setNotes] = useState(initialData?.notes || "")
+
+    // Internal Cost Breakdown State
+    const [costGasoline, setCostGasoline] = useState(initialData?.costGasoline ? String(initialData.costGasoline) : "0")
+    const [costToll, setCostToll] = useState(initialData?.costToll ? String(initialData.costToll) : "0")
+    const [costParking, setCostParking] = useState(initialData?.costParking ? String(initialData.costParking) : "0")
+    const [costMeals, setCostMeals] = useState(initialData?.costMeals ? String(initialData.costMeals) : "0")
+    const [costMaintenance, setCostMaintenance] = useState(initialData?.costMaintenance ? String(initialData.costMaintenance) : "0")
+    const [costOthers, setCostOthers] = useState(initialData?.costOthers ? String(initialData.costOthers) : "0")
 
     // External Delivery State
     const [isExternal, setIsExternal] = useState(initialData?.isExternal || false)
@@ -369,6 +384,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             vendorName: isExternal ? (vendorName || undefined) : undefined,
             awbNumber: isExternal ? (awbNumber || undefined) : undefined,
             shippingCost: isExternal ? Number(shippingCost) : 0,
+            // Internal Cost Breakdown
+            costGasoline: !isExternal ? Number(costGasoline) : 0,
+            costToll: !isExternal ? Number(costToll) : 0,
+            costParking: !isExternal ? Number(costParking) : 0,
+            costMeals: !isExternal ? Number(costMeals) : 0,
+            costMaintenance: !isExternal ? Number(costMaintenance) : 0,
+            costOthers: !isExternal ? Number(costOthers) : 0,
 
             warehouseId,
             shippingAddress: shippingAddress || undefined,
@@ -394,7 +416,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             toast.error(errorMsg)
         }
         setSaving(false)
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -1015,6 +1037,73 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                             </div>
                                         </div>
                                     </div>
+                                    <div className="space-y-3 pt-2">
+                                        <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+                                            Operational Costs
+                                        </Label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Gasoline</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costGasoline}
+                                                    onChange={e => setCostGasoline(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Toll</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costToll}
+                                                    onChange={e => setCostToll(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Parking</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costParking}
+                                                    onChange={e => setCostParking(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Meals</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costMeals}
+                                                    onChange={e => setCostMeals(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Maintenance</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costMaintenance}
+                                                    onChange={e => setCostMaintenance(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Others</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costOthers}
+                                                    onChange={e => setCostOthers(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
@@ -1077,6 +1166,6 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     </Card>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

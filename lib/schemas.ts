@@ -85,6 +85,13 @@ export const deliverySchema = z.object({
     vendorName: z.string().optional().nullable(),
     awbNumber: z.string().optional().nullable(),
     shippingCost: z.number().min(0).default(0),
+    // Internal Cost Breakdown
+    costGasoline: z.number().min(0).default(0),
+    costToll: z.number().min(0).default(0),
+    costParking: z.number().min(0).default(0),
+    costMeals: z.number().min(0).default(0),
+    costMaintenance: z.number().min(0).default(0),
+    costOthers: z.number().min(0).default(0),
 
     warehouseId: z.number().min(1, "Warehouse is required"),
     shippingAddress: z.string().optional().nullable(),

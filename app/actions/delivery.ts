@@ -150,6 +150,13 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     vendorName: data.vendorName || null,
                     awbNumber: data.awbNumber || null,
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
+                    // Internal Cost Breakdown
+                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    costToll: data.costToll ? String(data.costToll) : "0",
+                    costParking: data.costParking ? String(data.costParking) : "0",
+                    costMeals: data.costMeals ? String(data.costMeals) : "0",
+                    costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
+                    costOthers: data.costOthers ? String(data.costOthers) : "0",
 
                     warehouseId: data.warehouseId,
                     shippingAddress: data.shippingAddress || null,
@@ -240,6 +247,13 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     vendorName: data.vendorName || null,
                     awbNumber: data.awbNumber || null,
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
+                    // Internal Cost Breakdown
+                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    costToll: data.costToll ? String(data.costToll) : "0",
+                    costParking: data.costParking ? String(data.costParking) : "0",
+                    costMeals: data.costMeals ? String(data.costMeals) : "0",
+                    costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
+                    costOthers: data.costOthers ? String(data.costOthers) : "0",
 
                     warehouseId: data.warehouseId,
                     shippingAddress: data.shippingAddress || null,
