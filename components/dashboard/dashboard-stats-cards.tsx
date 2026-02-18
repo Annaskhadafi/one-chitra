@@ -6,7 +6,6 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import type { DashboardStats } from "@/app/actions/dashboard"
 
 export function DashboardStatsCards({ stats }: { stats: DashboardStats }) {
@@ -65,7 +64,7 @@ export function DashboardStatsCards({ stats }: { stats: DashboardStats }) {
                         <CardDescription className={`text-sm font-medium ${card.textColor}`}>
                             {card.title}
                         </CardDescription>
-                        <div className={`rounded-lg p-2 ${card.iconBg}`}>
+                        <div className="rounded-lg p-2 bg-white/80 dark:bg-slate-800/80 shadow-sm">
                             <card.icon className={`h-4 w-4 ${card.iconColor}`} />
                         </div>
                     </CardHeader>

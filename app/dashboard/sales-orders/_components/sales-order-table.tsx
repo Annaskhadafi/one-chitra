@@ -40,6 +40,7 @@ import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { SalesOrderDetail } from "./sales-order-detail"
 
 interface SalesOrderWithRelations {
     id: number
@@ -53,6 +54,8 @@ interface SalesOrderWithRelations {
     createdAt: Date
     customer: Customer
     createdByUser: { id: string; name: string; email: string } | null
+    termsConditions: string | null
+    notes: string | null
     items: {
         id: number
         productId: number
@@ -102,6 +105,8 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [viewOrder, setViewOrder] = useState<SalesOrderWithRelations | null>(null)
+    const [isViewOpen, setIsViewOpen] = useState(false)
 
     // Stats calculation
     const totalOrders = data.length
@@ -352,6 +357,17 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                                                    onClick={() => {
+                                                        setViewOrder(order)
+                                                        setIsViewOpen(true)
+                                                    }}
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
                                                 <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8">
                                                         <Pencil className="h-3.5 w-3.5" />
@@ -396,6 +412,12 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                 onDelete={handleBulkDelete}
                 onEdit={handleBulkUpdateStatus}
                 entityName="sales order"
+            />
+
+            <SalesOrderDetail
+                open={isViewOpen}
+                onOpenChange={setIsViewOpen}
+                order={viewOrder}
             />
         </div>
     )
