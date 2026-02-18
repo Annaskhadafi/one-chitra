@@ -59,14 +59,19 @@ export async function processGoodReceive(
         let processedCount = 0
         let errors: string[] = []
 
+        console.log(`Processing ${items.length} items for warehouse ${warehouseId}`);
+
         for (const item of items) {
+            const materialNumber = item.materialNumber.trim();
+
             // Find product by material number
             const product = await db.query.products.findFirst({
-                where: eq(products.materialNumber, item.materialNumber),
+                where: eq(products.materialNumber, materialNumber),
             })
 
             if (!product) {
-                errors.push(`Product not found for material number: ${item.materialNumber}`)
+                console.error(`Product not found for material number: '${materialNumber}' (original: '${item.materialNumber}')`);
+                errors.push(`Product not found for material number: ${materialNumber}`)
                 continue
             }
 

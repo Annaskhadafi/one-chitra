@@ -130,7 +130,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         const itemsToProcess = Array.from(selectedIndices).map(index => {
             const item = data[index]
             return {
-                materialNumber: item.materialnumb!, // Asserted because we checked in logic or UI
+                materialNumber: item.materialnumb!.trim(), // Asserted because we checked in logic or UI
                 quantity: item.togr // Using togr as quantity to add
             }
         })
