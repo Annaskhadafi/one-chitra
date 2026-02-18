@@ -52,8 +52,15 @@ interface StockDialogProps {
         minStock: number
         valuationValue: string
     }
-    products: { id: number; materialNumber: string; materialDescription: string | null }[]
-    warehouses: { id: number; sloc: string; description: string | null }[]
+    products: {
+        id: number;
+        materialNumber: string;
+        materialDescription: string | null;
+        plant: string | null;
+        category: string;
+        oldMaterialNo: string | null;
+    }[]
+    warehouses: { id: number; sloc: string; description: string | null; type: string | null }[]
     trigger?: React.ReactNode
     onSuccess?: () => void
 }
@@ -143,6 +150,29 @@ export function StockDialog({ stock, products, warehouses, trigger, onSuccess }:
                             )}
                         />
 
+                        {form.watch("productId") ? (
+                            <div className="rounded-md bg-muted p-3 text-sm space-y-1">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span className="font-semibold">Plant:</span>{" "}
+                                        {products.find(p => p.id === form.watch("productId"))?.plant || "-"}
+                                    </div>
+                                    <div>
+                                        <span className="font-semibold">Category:</span>{" "}
+                                        {products.find(p => p.id === form.watch("productId"))?.category || "-"}
+                                    </div>
+                                    <div>
+                                        <span className="font-semibold">Old Mat No:</span>{" "}
+                                        {products.find(p => p.id === form.watch("productId"))?.oldMaterialNo || "-"}
+                                    </div>
+                                    <div className="col-span-2">
+                                        <span className="font-semibold">Desc:</span>{" "}
+                                        {products.find(p => p.id === form.watch("productId"))?.materialDescription || "-"}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
+
                         <FormField
                             control={form.control}
                             name="warehouseId"
@@ -171,6 +201,21 @@ export function StockDialog({ stock, products, warehouses, trigger, onSuccess }:
                                 </FormItem>
                             )}
                         />
+
+                        {form.watch("warehouseId") ? (
+                            <div className="rounded-md bg-muted p-3 text-sm space-y-1">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="col-span-2">
+                                        <span className="font-semibold">Description:</span>{" "}
+                                        {warehouses.find(w => w.id === form.watch("warehouseId"))?.description || "-"}
+                                    </div>
+                                    <div>
+                                        <span className="font-semibold">Type:</span>{" "}
+                                        {warehouses.find(w => w.id === form.watch("warehouseId"))?.type || "-"}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
 
                         <div className="grid grid-cols-2 gap-4">
                             <FormField

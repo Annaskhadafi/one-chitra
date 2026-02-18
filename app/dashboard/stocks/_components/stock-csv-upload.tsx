@@ -53,7 +53,7 @@ export function StockCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
 
                     const matKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "materialnumber" || k.toLowerCase().replace(/[^a-z]/g, "") === "idinv")
                     const slocKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "sloc" || k.toLowerCase().replace(/[^a-z]/g, "") === "storagelocation")
-                    const qtyKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "totalstock" || k.toLowerCase().replace(/[^a-z]/g, "") === "qtystock" || k.toLowerCase() === "quantity")
+                    const qtyKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "actstock" || k.toLowerCase().replace(/[^a-z]/g, "") === "totalstock" || k.toLowerCase().replace(/[^a-z]/g, "") === "qtystock")
                     const valKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "valuationvalue" || k.toLowerCase().replace(/[^a-z]/g, "") === "valuestock")
                     const minKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "minstock")
 
@@ -116,7 +116,7 @@ export function StockCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                 <DialogHeader>
                     <DialogTitle>Import Stock Levels</DialogTitle>
                     <DialogDescription>
-                        Upload a CSV file containing IDINV (Material #) and SLOC (Warehouse).
+                        Upload a CSV file containing IDINV, SLOC, Act Stock, and Min Stock.
                     </DialogDescription>
                 </DialogHeader>
 

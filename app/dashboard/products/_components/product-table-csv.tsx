@@ -178,6 +178,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             plant: '',
             slocDescription: '',
             costSap: '',
+            typeWarehouse: '',
             imageUrl: '',
         })
     }
