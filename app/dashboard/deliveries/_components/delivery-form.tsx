@@ -353,349 +353,351 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         setSaving(false)
     }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router])
 
+    const totalQty = items.reduce((sum, item) => sum + item.deliveredQuantity, 0)
+    const totalItems = items.length
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Link href="/dashboard/deliveries">
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft className="h-4 w-4" />
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Link href="/dashboard/deliveries">
+                        <Button variant="outline" size="icon" className="h-9 w-9">
+                            <ArrowLeft className="h-4 w-4" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+                            {isEdit ? `Edit Delivery ${initialData.deliveryNumber || ""}` : "Create New Delivery"}
+                        </h1>
+                        <p className="text-muted-foreground text-sm">
+                            {isEdit ? "Update delivery details and items." : "Schedule a delivery for a confirmed sales order."}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="secondary"
+                        onClick={() => router.push("/dashboard/deliveries")}
+                        disabled={saving}
+                    >
+                        Cancel
                     </Button>
-                </Link>
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">
-                        {isEdit ? `Edit Delivery ${initialData.deliveryNumber || ""}` : "Create Delivery"}
-                    </h1>
-                    <p className="text-muted-foreground text-sm">
-                        {isEdit ? "Update delivery details and items." : "Schedule a new delivery from a Sales Order."}
-                    </p>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={saving || !salesOrderId || !warehouseId || items.length === 0}
+                        className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
+                    >
+                        {saving ? (
+                            <>
+                                <span className="animate-spin mr-2">⏳</span> Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="mr-2 h-4 w-4" />
+                                {isEdit ? "Update" : "Create Delivery"}
+                            </>
+                        )}
+                    </Button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column: Main Info */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Sales Order Selection */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Package className="h-5 w-5" />
-                                Sales Order
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                {/* Left Column: Main Layout */}
+                <div className="xl:col-span-2 space-y-6">
+                    {/* 1. Source Document Selection */}
+                    <Card className="border-l-4 border-l-blue-500 shadow-sm">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <Package className="h-5 w-5 text-blue-500" />
+                                    Source Document
+                                </span>
+                                {selectedSO && (
+                                    <Badge variant="outline" className="font-mono">
+                                        {selectedSO.invoiceNumber}
+                                    </Badge>
+                                )}
                             </CardTitle>
-                            <CardDescription>Select a confirmed Sales Order to create a delivery</CardDescription>
+                            <CardDescription>Select the Sales Order to be delivered.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Sales Order *</Label>
-                                <Popover open={soOpen} onOpenChange={setSoOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            className="w-full justify-between"
-                                            disabled={isEdit}
-                                        >
-                                            {selectedSO
-                                                ? `${selectedSO.invoiceNumber} — ${selectedSO.customer.name}`
-                                                : "Select Sales Order..."}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[500px] p-0" align="start">
-                                        <Command>
-                                            <CommandInput placeholder="Search SO number or customer..." />
-                                            <CommandList>
-                                                <CommandEmpty>No Sales Orders available.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {salesOrders.map(so => (
-                                                        <CommandItem
-                                                            key={so.id}
-                                                            value={`${so.invoiceNumber} ${so.customer.name}`}
-                                                            onSelect={() => {
-                                                                handleSOChange(so.id)
-                                                                setSoOpen(false)
-                                                            }}
-                                                        >
-                                                            <Check
-                                                                className={cn(
-                                                                    "mr-2 h-4 w-4",
-                                                                    salesOrderId === so.id ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            <div className="flex flex-col">
-                                                                <span className="font-medium font-mono">
-                                                                    {so.invoiceNumber}
-                                                                </span>
-                                                                <span className="text-sm text-muted-foreground">
-                                                                    {so.customer.name} — {so.items.length} item(s)
-                                                                </span>
-                                                            </div>
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-
-                            {selectedSO && (
-                                <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-                                    <div><strong>Customer:</strong> {selectedSO.customer.name}</div>
-                                    <div><strong>Customer PO:</strong> {selectedSO.customerPo || "-"}</div>
-                                    <div><strong>SO Date:</strong> {new Date(selectedSO.salesDate).toLocaleDateString("id-ID")}</div>
+                        <CardContent>
+                            <div className="grid gap-6">
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Sales Order Number</Label>
+                                    <Popover open={soOpen} onOpenChange={setSoOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                className={cn(
+                                                    "w-full justify-between h-11 text-base",
+                                                    !salesOrderId && "text-muted-foreground"
+                                                )}
+                                                disabled={isEdit}
+                                            >
+                                                {selectedSO
+                                                    ? `${selectedSO.invoiceNumber} — ${selectedSO.customer.name}`
+                                                    : "Select Sales Order..."}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[600px] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Search SO number, customer name..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No confirmed Sales Orders found.</CommandEmpty>
+                                                    <CommandGroup heading="Available Sales Orders">
+                                                        {salesOrders.map(so => (
+                                                            <CommandItem
+                                                                key={so.id}
+                                                                value={`${so.invoiceNumber} ${so.customer.name}`}
+                                                                onSelect={() => {
+                                                                    handleSOChange(so.id)
+                                                                    setSoOpen(false)
+                                                                }}
+                                                                className="py-3"
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4 text-blue-600",
+                                                                        salesOrderId === so.id ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-semibold font-mono text-base">
+                                                                            {so.invoiceNumber}
+                                                                        </span>
+                                                                        <Badge variant="secondary" className="text-xs">
+                                                                            {new Date(so.salesDate).toLocaleDateString("id-ID")}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <span className="text-sm text-muted-foreground mt-1">
+                                                                        {so.customer.name} • {so.items.length} items
+                                                                    </span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
                                 </div>
-                            )}
+
+                                {selectedSO && (
+                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-md p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm border">
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Customer</span>
+                                            <span className="font-medium text-base">{selectedSO.customer.name}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Reference (PO)</span>
+                                            <span className="font-medium">{selectedSO.customerPo || "-"}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Status</span>
+                                            <Badge className={cn(
+                                                "capitalize",
+                                                selectedSO.status === 'confirmed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800'
+                                            )}>
+                                                {selectedSO.status}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 
-                    {/* Delivery Items */}
+                    {/* 2. Items Table */}
                     {items.length > 0 && (
-                        <Card>
-                            <CardHeader>
+                        <Card className="shadow-sm">
+                            <CardHeader className="pb-2 border-b bg-gray-50/50 dark:bg-gray-900/50">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <CardTitle>Delivery Items</CardTitle>
-                                        <CardDescription>
-                                            Set quantity to deliver for each item. Partial delivery is supported.
-                                        </CardDescription>
+                                        <CardTitle className="text-lg">Items to Deliver</CardTitle>
+                                        <CardDescription>Adjust quantities and enter serial numbers if required.</CardDescription>
                                     </div>
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={handleCheckStock}
                                         disabled={checkingStock || !warehouseId}
+                                        className={cn(
+                                            "gap-2",
+                                            !warehouseId && "opacity-50 cursor-not-allowed"
+                                        )}
                                     >
-                                        {checkingStock ? "Checking..." : "Check Stock"}
+                                        {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
+                                        Check Stock
                                     </Button>
                                 </div>
                             </CardHeader>
-                            <CardContent>
-                                <div className="space-y-6">
-                                    {items.map((item, idx) => {
-                                        const stock = getStockStatus(item.productId)
-                                        return (
-                                            <div key={idx} className="border rounded-md p-4 space-y-4">
-                                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                                                    <div className="md:col-span-4">
-                                                        <div className="font-medium">{item.productName}</div>
-                                                        <div className="text-sm text-muted-foreground mt-1">
-                                                            Ordered: {item.orderedQuantity} | Remaining: {item.remainingQuantity}
-                                                        </div>
-                                                        {item.productCategory === "TYRE" && (
-                                                            <Badge variant="secondary" className="mt-2 text-xs">
-                                                                Serial Numbers Required
-                                                            </Badge>
-                                                        )}
-                                                    </div>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-transparent hover:bg-transparent">
+                                            <TableHead className="w-[40%] pl-6">Product Details</TableHead>
+                                            <TableHead className="w-[15%] text-center">Ordered</TableHead>
+                                            <TableHead className="w-[20%]">Deliver Qty</TableHead>
+                                            <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {items.map((item, idx) => {
+                                            const stock = getStockStatus(item.productId)
+                                            const isTyre = item.productCategory === "TYRE"
 
-                                                    <div className="md:col-span-3 flex items-center gap-2">
-                                                        <Label className="text-xs whitespace-nowrap">Deliver Qty:</Label>
+                                            return (
+                                                <TableRow key={idx} className="group">
+                                                    <TableCell className="pl-6 align-top py-4">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="font-medium text-base text-gray-900 dark:text-gray-100">
+                                                                {item.productName}
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                                                                    {item.productCategory}
+                                                                </Badge>
+                                                                {isTyre && (
+                                                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
+                                                                        Serial No. Required
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Serial Number Input Section for TYRE */}
+                                                        {isTyre && item.deliveredQuantity > 0 && (
+                                                            <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
+                                                                <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
+                                                                    Enter {item.deliveredQuantity} Serial Number(s)
+                                                                </Label>
+                                                                <div className="grid grid-cols-1 gap-2">
+                                                                    {item.serialNumbers.map((sn, snIdx) => (
+                                                                        <Input
+                                                                            key={snIdx}
+                                                                            placeholder={`SN #${snIdx + 1}`}
+                                                                            value={sn}
+                                                                            onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                            className="h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500"
+                                                                        />
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+
+                                                    <TableCell className="text-center align-top py-4">
+                                                        <div className="text-sm">
+                                                            <span className="font-semibold">{item.orderedQuantity}</span>
+                                                            <span className="text-muted-foreground text-xs block">Order</span>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground mt-1">
+                                                            (Rem: {item.remainingQuantity})
+                                                        </div>
+                                                    </TableCell>
+
+                                                    <TableCell className="align-top py-4">
                                                         <Input
                                                             type="number"
-                                                            min={1}
+                                                            min={0}
                                                             max={item.remainingQuantity}
                                                             value={item.deliveredQuantity}
                                                             onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                            className="w-20"
+                                                            className="w-24 font-mono text-center"
                                                         />
-                                                    </div>
+                                                    </TableCell>
 
-                                                    <div className="md:col-span-3 flex items-center gap-2 justify-end">
-                                                        {stock ? (
-                                                            <div className="flex items-center gap-1">
-                                                                {stock.sufficient ? (
-                                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                                                ) : stock.available > 0 ? (
-                                                                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                                                                ) : (
-                                                                    <XCircle className="h-4 w-4 text-red-500" />
-                                                                )}
-                                                                <span className="text-xs font-medium">
-                                                                    {stock.available} stock
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">-</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Serial Number Inputs */}
-                                                {item.productCategory === "TYRE" && item.deliveredQuantity > 0 && (
-                                                    <div className="bg-muted/30 p-4 rounded-md space-y-3">
-                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                                            Serial Numbers ({item.deliveredQuantity})
-                                                        </Label>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                                            {item.serialNumbers.map((sn, snIdx) => (
-                                                                <div key={snIdx} className="space-y-1">
-                                                                    <Input
-                                                                        placeholder={`SN #${snIdx + 1}`}
-                                                                        value={sn}
-                                                                        onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                        className="h-8 text-sm"
-                                                                    />
+                                                    <TableCell className="text-right pr-6 align-top py-4">
+                                                        {warehouseId ? (
+                                                            stock ? (
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <div className={cn(
+                                                                        "flex items-center gap-1.5 font-medium text-sm",
+                                                                        stock.sufficient ? "text-green-600" : "text-red-600"
+                                                                    )}>
+                                                                        {stock.sufficient ? (
+                                                                            <>
+                                                                                <CheckCircle2 className="h-4 w-4" />
+                                                                                <span>Available</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <XCircle className="h-4 w-4" />
+                                                                                <span>Insufficient</span>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {stock.available} in stock
+                                                                    </span>
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-
-                                                )}
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-
-                                {stockResults.length > 0 && (
-                                    <div className="mt-6 flex justify-end">
-                                        {stockResults.every(r => r.sufficient) ? (
-                                            <Badge variant="default" className="bg-green-600">
-                                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                                All items have sufficient stock
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="destructive">
-                                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                                Some items have insufficient stock
-                                            </Badge>
-                                        )}
-                                    </div>
-                                )}
+                                                            ) : (
+                                                                <span className="text-xs text-muted-foreground italic">
+                                                                    Check stock to see availability
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">Select warehouse first</span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
                             </CardContent>
+                            <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
+                                <div className="text-muted-foreground">
+                                    Total Types: <span className="font-medium text-foreground">{totalItems}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-muted-foreground">Total Quantity:</span>
+                                    <span className="text-lg font-bold text-blue-600">{totalQty}</span>
+                                </div>
+                            </div>
                         </Card>
                     )}
                 </div>
 
-                {/* Right Column: Delivery Details */}
+                {/* Right Column: Meta Details */}
                 <div className="space-y-6">
-                    {/* Schedule & Status */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Schedule & Status</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Scheduled Date *</Label>
-                                <Input
-                                    type="date"
-                                    value={scheduledDate}
-                                    onChange={e => setScheduledDate(e.target.value)}
-                                    max="9999-12-31"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Delivery Date</Label>
-                                <Input
-                                    type="date"
-                                    value={deliveryDate}
-                                    onChange={e => setDeliveryDate(e.target.value)}
-                                    max="9999-12-31"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Status</Label>
-                                <Select value={status} onValueChange={setStatus}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                                        <SelectItem value="ready">Ready</SelectItem>
-                                        <SelectItem value="partial">Partial</SelectItem>
-                                        <SelectItem value="in_transit">In Transit</SelectItem>
-                                        <SelectItem value="delivered">Delivered</SelectItem>
-                                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Delivery Type</Label>
-                                <Select value={deliveryType} onValueChange={setDeliveryType}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="full">Full Delivery</SelectItem>
-                                        <SelectItem value="partial">Partial Delivery</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Driver & Vehicle */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Truck className="h-4 w-4" />
-                                Driver & Vehicle
+                    {/* Origin & Destination */}
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <MapPin className="h-4 w-4 text-primary" />
+                                Logistics Route
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-5 pt-5">
                             <div className="space-y-2">
-                                <Label>Driver Name</Label>
-                                <Input
-                                    placeholder="e.g. Budi Santoso"
-                                    value={driverName}
-                                    onChange={e => setDriverName(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Vehicle Number</Label>
-                                <Input
-                                    placeholder="e.g. B 1234 CD"
-                                    value={vehicleNumber}
-                                    onChange={e => setVehicleNumber(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Vehicle Type</Label>
-                                <Select value={vehicleType} onValueChange={setVehicleType}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select vehicle type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Truk">Truk</SelectItem>
-                                        <SelectItem value="Pick-up">Pick-up</SelectItem>
-                                        <SelectItem value="Van">Van</SelectItem>
-                                        <SelectItem value="Container">Container</SelectItem>
-                                        <SelectItem value="Motor">Motor</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Warehouse & Address */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <MapPin className="h-4 w-4" />
-                                Origin & Destination
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Warehouse (Origin) *</Label>
+                                <Label className="flex justify-between">
+                                    <span>Origin Warehouse</span>
+                                </Label>
                                 <Popover open={whOpen} onOpenChange={setWhOpen}>
                                     <PopoverTrigger asChild>
                                         <Button
                                             variant="outline"
                                             role="combobox"
-                                            className="w-full justify-between"
+                                            className={cn(
+                                                "w-full justify-between",
+                                                !warehouseId && "text-muted-foreground"
+                                            )}
                                         >
                                             {warehouseId
                                                 ? warehouses.find(w => w.id === warehouseId)?.sloc +
                                                 (warehouses.find(w => w.id === warehouseId)?.description
                                                     ? ` - ${warehouses.find(w => w.id === warehouseId)?.description}`
                                                     : "")
-                                                : "Select Warehouse..."}
+                                                : "Select Origin..."}
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-full p-0" align="start">
+                                    <PopoverContent className="w-[350px] p-0" align="start">
                                         <Command>
                                             <CommandInput placeholder="Search warehouse..." />
                                             <CommandList>
@@ -717,13 +719,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                     warehouseId === wh.id ? "opacity-100" : "opacity-0"
                                                                 )}
                                                             />
-                                                            <div>
-                                                                <span className="font-mono">{wh.sloc}</span>
-                                                                {wh.description && (
-                                                                    <span className="text-muted-foreground ml-2">
-                                                                        {wh.description}
-                                                                    </span>
-                                                                )}
+                                                            <div className="flex flex-col">
+                                                                <span className="font-mono font-medium">{wh.sloc}</span>
+                                                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                                                    {wh.description}
+                                                                </span>
                                                             </div>
                                                         </CommandItem>
                                                     ))}
@@ -733,47 +733,119 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     </PopoverContent>
                                 </Popover>
                             </div>
-                            <Separator />
+
                             <div className="space-y-2">
-                                <Label>Shipping Address (Destination)</Label>
+                                <Label>Shipping Address</Label>
                                 <Textarea
-                                    placeholder="Customer delivery address"
+                                    placeholder="Destination address..."
                                     value={shippingAddress}
                                     onChange={e => setShippingAddress(e.target.value)}
-                                    rows={3}
+                                    rows={4}
+                                    className="resize-none"
                                 />
-                                <p className="text-xs text-muted-foreground">
-                                    Auto-filled from customer address. You can edit if needed.
-                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Schedule & Status */}
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Truck className="h-4 w-4 text-primary" />
+                                Shipment Details
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-5">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Schedule Date</Label>
+                                    <Input
+                                        type="date"
+                                        value={scheduledDate}
+                                        onChange={e => setScheduledDate(e.target.value)}
+                                        max="9999-12-31"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Delivery Date</Label>
+                                    <Input
+                                        type="date"
+                                        value={deliveryDate}
+                                        onChange={e => setDeliveryDate(e.target.value)}
+                                        max="9999-12-31"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Shipment Status</Label>
+                                <Select value={status} onValueChange={setStatus}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                                        <SelectItem value="ready">Ready to Load</SelectItem>
+                                        <SelectItem value="in_transit">In Transit</SelectItem>
+                                        <SelectItem value="partial">Partially Delivered</SelectItem>
+                                        <SelectItem value="delivered">Delivered</SelectItem>
+                                        <SelectItem value="cancelled" className="text-red-600">Cancelled</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-3">
+                                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Driver & Vehicle</Label>
+                                <div className="space-y-2">
+                                    <Input
+                                        placeholder="Driver Name"
+                                        value={driverName}
+                                        onChange={e => setDriverName(e.target.value)}
+                                        className="h-9"
+                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input
+                                            placeholder="Police No."
+                                            value={vehicleNumber}
+                                            onChange={e => setVehicleNumber(e.target.value)}
+                                            className="h-9"
+                                        />
+                                        <Select value={vehicleType} onValueChange={setVehicleType}>
+                                            <SelectTrigger className="h-9">
+                                                <SelectValue placeholder="Type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Truk">Truk</SelectItem>
+                                                <SelectItem value="Pick-up">Pick-up</SelectItem>
+                                                <SelectItem value="Van">Van</SelectItem>
+                                                <SelectItem value="Container">Container</SelectItem>
+                                                <SelectItem value="Motor">Motor</SelectItem>
+                                                <SelectItem value="Other">Other</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* Notes */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Notes</CardTitle>
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                            <CardTitle className="text-base">Additional Notes</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="pt-4">
                             <Textarea
-                                placeholder="Additional notes..."
+                                placeholder="Any special instructions or notes..."
                                 value={notes}
                                 onChange={e => setNotes(e.target.value)}
                                 rows={3}
+                                className="resize-none"
                             />
                         </CardContent>
                     </Card>
-
-                    {/* Submit */}
-                    <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={handleSubmit}
-                        disabled={saving || !salesOrderId || !warehouseId || items.length === 0}
-                    >
-                        <Save className="mr-2 h-4 w-4" />
-                        {saving ? "Saving..." : isEdit ? "Update Delivery" : "Create Delivery"}
-                    </Button>
                 </div>
             </div>
         </div>

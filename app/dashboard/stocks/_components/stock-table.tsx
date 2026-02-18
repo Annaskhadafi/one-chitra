@@ -222,7 +222,8 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                 </div>
 
                 <TabsContent value={activeTab} className="m-0">
-                    <div className="rounded-md border bg-card">
+                    {/* Desktop View: Table */}
+                    <div className="hidden md:block rounded-md border bg-card">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -343,6 +344,124 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                 )}
                             </TableBody>
                         </Table>
+                    </div>
+
+                    {/* Mobile View: Cards */}
+                    <div className="md:hidden grid grid-cols-1 gap-4">
+                        {filteredData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-8 text-center border rounded-lg bg-muted/20">
+                                <Box className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                                <p className="text-muted-foreground font-medium">No stock items found.</p>
+                                <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters.</p>
+                            </div>
+                        ) : (
+                            filteredData.map((item) => (
+                                <div key={item.id} className="bg-card rounded-lg border shadow-sm overflow-hidden animate-in fade-in transition-all hover:shadow-md">
+                                    <div className="p-4 space-y-3">
+                                        <div className="flex justify-between items-start">
+                                            <div className="space-y-1 flex-1 mr-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                                        {item.product?.materialNumber}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground border px-1.5 py-0.5 rounded">
+                                                        {item.product?.category}
+                                                    </span>
+                                                </div>
+                                                <h3 className="font-semibold text-sm leading-tight text-foreground">
+                                                    {item.product?.materialDescription || "No Description"}
+                                                </h3>
+                                            </div>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <StockDialog
+                                                        stock={item}
+                                                        products={products}
+                                                        warehouses={warehouses}
+                                                        trigger={
+                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                                                <Pencil className="mr-2 h-4 w-4" />
+                                                                Edit
+                                                            </DropdownMenuItem>
+                                                        }
+                                                    />
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <DropdownMenuItem
+                                                                onSelect={(e) => e.preventDefault()}
+                                                                className="text-destructive focus:text-destructive"
+                                                            >
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Stock Item?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Are you sure you want to remove this stock record? This cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => handleDelete(item.id)}
+                                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                >
+                                                                    Delete
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3 text-xs">
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground">Warehouse</p>
+                                                <div className="font-medium flex items-center gap-1.5">
+                                                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                                                    {item.warehouse?.sloc}
+                                                </div>
+                                                <p className="text-muted-foreground/80 truncate">{item.warehouse?.description}</p>
+                                                <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 bg-secondary rounded-sm">
+                                                    {item.warehouse?.type || "Unknown Type"}
+                                                </span>
+                                            </div>
+                                            <div className="space-y-1 text-right">
+                                                <p className="text-muted-foreground">Current Stock</p>
+                                                <div className="text-xl font-bold tracking-tight text-foreground">
+                                                    {item.totalStock.toLocaleString()}
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Min: <span className="text-orange-600 font-medium">{item.minStock?.toLocaleString() || 0}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-muted/30 px-4 py-2 border-t flex justify-between items-center text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                id={`mobile-check-${item.id}`}
+                                                checked={selectedIds.includes(item.id)}
+                                                onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
+                                                className="h-3.5 w-3.5"
+                                            />
+                                            <label htmlFor={`mobile-check-${item.id}`} className="text-muted-foreground select-none">Select</label>
+                                        </div>
+                                        <div className="text-muted-foreground font-mono">
+                                            {item.product?.plant || "N/A"}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </TabsContent>
 
