@@ -76,8 +76,7 @@ interface StockTableProps {
 }
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-// ... imports remain same ...
+import { updateSetting } from "@/app/actions/settings"
 
 export function StockTable({ data, products, warehouses, defaultRate }: StockTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
@@ -259,6 +258,11 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                                 placeholder="Rate..."
                                 value={manualRate}
                                 onChange={(e) => setManualRate(e.target.value)}
+                                onBlur={(e) => {
+                                    if (e.target.value) {
+                                        updateSetting("manual_usd_rate", e.target.value)
+                                    }
+                                }}
                                 className="h-9"
                             />
                         </div>
