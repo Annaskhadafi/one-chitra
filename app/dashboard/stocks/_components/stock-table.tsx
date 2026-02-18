@@ -46,6 +46,7 @@ interface StockTableProps {
             plant: string | null;
             category: string;
             oldMaterialNo: string | null;
+            costSap: string | null;
         } | null
         warehouse: { sloc: string; description: string | null; type: string | null } | null
         totalStock: number
@@ -61,6 +62,7 @@ interface StockTableProps {
         plant: string | null;
         category: string;
         oldMaterialNo: string | null;
+        costSap: string | null;
     }[]
     warehouses: { id: number; sloc: string; description: string | null; type: string | null }[]
 }
@@ -98,6 +100,22 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
             return matchesTab && matchesSearch
         })
     }, [data, searchTerm, activeTab])
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(value)
+    }
+
+    const calculateValuation = (stock: number, costSap: string | null) => {
+        if (!costSap) return 0
+        // Remove any commas if present and parse
+        const cost = parseFloat(costSap.toString().replace(/,/g, "")) || 0
+        return stock * cost
+    }
 
     // Stats calculation based on filtered data (current tab)
     const stats = useMemo(() => {
@@ -242,6 +260,7 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                     <TableHead>Sloc Desc</TableHead>
                                     <TableHead className="text-right">Act Stock</TableHead>
                                     <TableHead className="text-right">Min Stock</TableHead>
+                                    <TableHead className="text-right">Valuation</TableHead>
                                     <TableHead>Type Warehouse</TableHead>
                                     <TableHead className="w-[70px]"></TableHead>
                                 </TableRow>
@@ -249,7 +268,7 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                             <TableBody>
                                 {filteredData.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={12} className="h-24 text-center">
+                                        <TableCell colSpan={13} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center text-muted-foreground">
                                                 <Box className="h-8 w-8 mb-2 opacity-20" />
                                                 <p>No stock levels found for {activeTab === 'all' ? 'any type' : activeTab}</p>
@@ -283,6 +302,9 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                             </TableCell>
                                             <TableCell className="text-right font-mono text-orange-600">
                                                 {item.minStock?.toLocaleString() || 0}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">
+                                                {formatCurrency(calculateValuation(item.totalStock, item.product?.costSap ?? null))}
                                             </TableCell>
                                             <TableCell>
                                                 <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
@@ -441,6 +463,9 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                                 </div>
                                                 <p className="text-[10px] text-muted-foreground">
                                                     Min: <span className="text-orange-600 font-medium">{item.minStock?.toLocaleString() || 0}</span>
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground mt-1">
+                                                    Val: <span className="font-medium text-foreground">{formatCurrency(calculateValuation(item.totalStock, item.product?.costSap ?? null))}</span>
                                                 </p>
                                             </div>
                                         </div>
