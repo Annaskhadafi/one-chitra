@@ -49,6 +49,10 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                     const oldMatKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "oldmaterialno" || k.toLowerCase().replace(/[^a-z]/g, "") === "oldmaterial")
                     const descKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "materialdescription" || k.toLowerCase() === "description")
                     const catKey = keys.find(k => k.toLowerCase() === "category")
+                    const plantKey = keys.find(k => k.toLowerCase() === "plant")
+                    const slocKey = keys.find(k => k.toLowerCase() === "sloc")
+                    const slocDescKey = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, "") === "slocdescription")
+                    const costKey = keys.find(k => k.toLowerCase().includes("cost") && k.toLowerCase().includes("sap"))
 
                     let category = (catKey ? item[catKey] : "TYRE").toUpperCase()
                     if (!categories.includes(category)) category = "TYRE"
@@ -58,6 +62,10 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         oldMaterialNo: oldMatKey ? item[oldMatKey].toString() : null,
                         materialDescription: descKey ? item[descKey].toString() : null,
                         category: category,
+                        plant: plantKey ? item[plantKey].toString() : null,
+                        sloc: slocKey ? item[slocKey].toString() : "",
+                        slocDescription: slocDescKey ? item[slocDescKey].toString() : null,
+                        costSap: costKey ? item[costKey].toString() : null,
                     }
                 }).filter(item => item.materialNumber) as ProductData[]
 
@@ -155,22 +163,32 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     <table className="w-full text-xs text-left">
                                         <thead className="bg-muted sticky top-0">
                                             <tr>
+                                                <th className="p-2 border-b">Plant</th>
                                                 <th className="p-2 border-b">Material #</th>
+                                                <th className="p-2 border-b">Old Mat #</th>
                                                 <th className="p-2 border-b">Category</th>
                                                 <th className="p-2 border-b">Description</th>
+                                                <th className="p-2 border-b">Sloc</th>
+                                                <th className="p-2 border-b">Sloc Desc</th>
+                                                <th className="p-2 border-b">Cost SAP</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {preview.slice(0, 10).map((item, i) => (
                                                 <tr key={i}>
+                                                    <td className="p-2 border-b">{item.plant || "-"}</td>
                                                     <td className="p-2 border-b">{item.materialNumber}</td>
+                                                    <td className="p-2 border-b">{item.oldMaterialNo || "-"}</td>
                                                     <td className="p-2 border-b">{item.category}</td>
-                                                    <td className="p-2 border-b">{item.materialDescription || "-"}</td>
+                                                    <td className="p-2 border-b truncate max-w-[150px]">{item.materialDescription || "-"}</td>
+                                                    <td className="p-2 border-b">{item.sloc || "-"}</td>
+                                                    <td className="p-2 border-b truncate max-w-[100px]">{item.slocDescription || "-"}</td>
+                                                    <td className="p-2 border-b">{item.costSap || "-"}</td>
                                                 </tr>
                                             ))}
                                             {preview.length > 10 && (
                                                 <tr>
-                                                    <td colSpan={3} className="p-2 text-center text-muted-foreground italic">
+                                                    <td colSpan={8} className="p-2 text-center text-muted-foreground italic">
                                                         ... and {preview.length - 10} more rows
                                                     </td>
                                                 </tr>
