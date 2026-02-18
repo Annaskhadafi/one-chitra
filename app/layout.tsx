@@ -19,9 +19,9 @@ const parkinsans = Parkinsans({
 });
 
 export const metadata: Metadata = {
-  title: "Codeguide Starter Fullstack",
+  title: "One Chitra - All In One Apps Chitra Paratama",
   description:
-    "A modern Next.js starter with TypeScript, TailwindCSS, shadcn/ui, Better Auth, and Drizzle ORM",
+    "A modern management system for Chitra Paratama",
 };
 
 export default function RootLayout({
