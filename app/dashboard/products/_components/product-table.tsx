@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
     Table,
     TableBody,
@@ -50,6 +50,47 @@ import { BulkActions } from "@/components/bulk-actions"
 
 interface ProductTableProps {
     data: Product[]
+}
+
+function ImagePreview({ imageUrl, alt }: { imageUrl: string; alt: string }) {
+    const [imageError, setImageError] = useState(false)
+    const [isOpen, setIsOpen] = useState(false)
+
+    const handleError = useCallback(() => {
+        setImageError(true)
+    }, [])
+
+    // Reset error state when imageUrl changes
+    useEffect(() => {
+        setImageError(false)
+    }, [imageUrl])
+
+    // If image failed to load, show fallback
+    if (imageError) {
+        return (
+            <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                <Package className="h-5 w-5" />
+            </div>
+        )
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <div className="w-10 h-10 rounded overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center bg-muted/30">
+                    <img
+                        src={imageUrl}
+                        alt={alt}
+                        className="w-full h-full object-cover"
+                        onError={handleError}
+                    />
+                </div>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl justify-center flex bg-transparent border-none shadow-none p-0">
+                <img src={imageUrl} alt={alt} className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
+            </DialogContent>
+        </Dialog>
+    )
 }
 
 export function ProductTable({ data }: ProductTableProps) {
@@ -280,30 +321,7 @@ export function ProductTable({ data }: ProductTableProps) {
                                         <TableCell className="font-mono text-xs">{item.plant || "-"}</TableCell>
                                         <TableCell>
                                             {item.imageUrl ? (
-                                                <Dialog>
-                                                    <DialogTrigger asChild>
-                                                        <div className="w-10 h-10 rounded overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center bg-muted/30">
-                                                            <img
-                                                                src={item.imageUrl}
-                                                                alt={item.materialNumber}
-                                                                className="w-full h-full object-cover"
-                                                                onError={(e) => {
-                                                                    const target = e.target as HTMLImageElement;
-                                                                    target.style.display = 'none';
-                                                                    if (target.parentElement) {
-                                                                        const icon = document.createElement('div');
-                                                                        icon.className = 'w-10 h-10 flex items-center justify-center text-muted-foreground';
-                                                                        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>';
-                                                                        target.parentElement.appendChild(icon);
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    </DialogTrigger>
-                                                    <DialogContent className="max-w-3xl justify-center flex bg-transparent border-none shadow-none p-0">
-                                                        <img src={item.imageUrl} alt={item.materialNumber} className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
-                                                    </DialogContent>
-                                                </Dialog>
+                                                <ImagePreview imageUrl={item.imageUrl} alt={item.materialNumber} />
                                             ) : (
                                                 <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
                                                     <Package className="h-5 w-5" />
