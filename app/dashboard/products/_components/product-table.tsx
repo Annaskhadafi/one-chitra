@@ -36,6 +36,13 @@ import {
     DialogContent,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
@@ -47,6 +54,7 @@ interface ProductTableProps {
 
 export function ProductTable({ data }: ProductTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [selectedCategory, setSelectedCategory] = useState<string>("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [manualRate, setManualRate] = useState<number>(0)
     const [realtimeRate, setRealtimeRate] = useState<number>(0)
@@ -80,6 +88,8 @@ export function ProductTable({ data }: ProductTableProps) {
     const categories = new Set(data.map(p => p.category)).size
     const uniqueMaterials = new Set(data.map(p => p.materialNumber)).size
 
+    const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
+
     const filteredData = data.filter(item => {
         const matchesSearch = item.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (item.materialDescription && item.materialDescription.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -88,7 +98,10 @@ export function ProductTable({ data }: ProductTableProps) {
             (item.plant && item.plant.toLowerCase().includes(searchTerm.toLowerCase())) ||
             (item.sloc && item.sloc.toLowerCase().includes(searchTerm.toLowerCase())) ||
             (item.slocDescription && item.slocDescription.toLowerCase().includes(searchTerm.toLowerCase()))
-        return matchesSearch
+
+        const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
+
+        return matchesSearch && matchesCategory
     })
 
     const handleSelectAll = (checked: boolean) => {
@@ -185,14 +198,27 @@ export function ProductTable({ data }: ProductTableProps) {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search materials..."
-                        className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search materials..."
+                            className="pl-8"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger className="w-full sm:w-[200px]">
+                            <SelectValue placeholder="All Categories" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {CATEGORIES.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     <ProductCSVUpload />
@@ -248,8 +274,22 @@ export function ProductTable({ data }: ProductTableProps) {
                                             {item.imageUrl ? (
                                                 <Dialog>
                                                     <DialogTrigger asChild>
-                                                        <div className="w-10 h-10 rounded overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity">
-                                                            <img src={item.imageUrl} alt={item.materialNumber} className="w-full h-full object-cover" />
+                                                        <div className="w-10 h-10 rounded overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center bg-muted/30">
+                                                            <img
+                                                                src={item.imageUrl}
+                                                                alt={item.materialNumber}
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    const target = e.target as HTMLImageElement;
+                                                                    target.style.display = 'none';
+                                                                    if (target.parentElement) {
+                                                                        const icon = document.createElement('div');
+                                                                        icon.className = 'w-10 h-10 flex items-center justify-center text-muted-foreground';
+                                                                        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>';
+                                                                        target.parentElement.appendChild(icon);
+                                                                    }
+                                                                }}
+                                                            />
                                                         </div>
                                                     </DialogTrigger>
                                                     <DialogContent className="max-w-3xl justify-center flex bg-transparent border-none shadow-none p-0">

@@ -32,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { upsertProduct } from "@/app/actions/product"
-import { Plus } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { productSchema } from "@/lib/schemas"
 import { Product } from "@/lib/types"
 
@@ -61,6 +61,7 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
             plant: product?.plant || "",
             sloc: product?.sloc || "",
             slocDescription: product?.slocDescription || "",
+            imageUrl: product?.imageUrl || "",
         },
     })
 
@@ -252,8 +253,15 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                                 disabled={isLoading}
                             />
                             {form.watch("imageUrl") && (
-                                <div className="relative w-20 h-20 border rounded overflow-hidden">
+                                <div className="relative w-24 h-24 border rounded overflow-hidden group">
                                     <img src={form.watch("imageUrl")} alt="Preview" className="w-full h-full object-cover" />
+                                    <button
+                                        type="button"
+                                        onClick={() => form.setValue("imageUrl", "")}
+                                        className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X className="h-6 w-6 text-white" />
+                                    </button>
                                 </div>
                             )}
                         </div>
