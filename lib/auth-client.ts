@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import { adminClient } from "better-auth/client/plugins";
 
 function normalizeUrl(url?: string): string {
     if (!url) return "http://localhost:3000";
@@ -8,6 +9,9 @@ function normalizeUrl(url?: string): string {
 
 export const authClient = createAuthClient({
     baseURL: normalizeUrl(process.env.NEXT_PUBLIC_BETTER_AUTH_URL),
+    plugins: [
+        adminClient(),
+    ],
 });
 
 export const {

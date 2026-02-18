@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
 
@@ -15,7 +16,7 @@ const baseURL = normalizeUrl(process.env.BETTER_AUTH_URL);
 export const auth = betterAuth({
     baseURL,
     database: drizzleAdapter(db, {
-        provider: "pg", // or "mysql", "sqlite"
+        provider: "pg",
         schema: {
             user: user,
             account: account,
@@ -26,6 +27,11 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
     },
+    plugins: [
+        admin({
+            defaultRole: "staff",
+        }),
+    ],
     trustedOrigins: [
         "http://localhost:3000",
         "http://localhost:3001",
