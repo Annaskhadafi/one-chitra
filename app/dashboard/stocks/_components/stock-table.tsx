@@ -36,6 +36,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 interface StockTableProps {
     data: {
@@ -76,6 +83,17 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [activeTab, setActiveTab] = useState("all")
 
+    // New states for valuation and additional filters
+    const [manualRate, setManualRate] = useState<string>("1")
+    const [filterSlocDesc, setFilterSlocDesc] = useState("")
+    const [filterCategory, setFilterCategory] = useState("all")
+
+    // Extract unique product categories
+    const productCategories = useMemo(() => {
+        const categories = new Set(products.map(p => p.category).filter(Boolean))
+        return ["all", ...Array.from(categories).sort()]
+    }, [products])
+
     // Extract unique warehouse types
     const warehouseTypes = useMemo(() => {
         const types = new Set(warehouses.map(w => w.type).filter(Boolean))
@@ -83,12 +101,19 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
     }, [warehouses])
 
     // Filter data based on active tab and search term
+    // Filter data based on active tab, search term, and new filters
     const filteredData = useMemo(() => {
         return data.filter(item => {
-            // Tab filter
+            // Tab filter (Warehouse Type)
             const matchesTab = activeTab === "all" || item.warehouse?.type === activeTab
 
-            // Search filter
+            // Category Filter
+            const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
+
+            // Sloc Description Filter
+            const matchSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
+
+            // Search filter (General)
             const matchesSearch =
                 item.product?.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.product?.materialDescription?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -97,9 +122,9 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                 item.warehouse?.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.warehouse?.type?.toLowerCase().includes(searchTerm.toLowerCase())
 
-            return matchesTab && matchesSearch
+            return matchesTab && matchesCategory && matchSlocDesc && matchesSearch
         })
-    }, [data, searchTerm, activeTab])
+    }, [data, searchTerm, activeTab, filterCategory, filterSlocDesc])
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("id-ID", {
@@ -114,7 +139,8 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
         if (!costSap) return 0
         // Remove any commas if present and parse
         const cost = parseFloat(costSap.toString().replace(/,/g, "")) || 0
-        return stock * cost
+        const rate = parseFloat(manualRate) || 0
+        return stock * cost * rate
     }
 
     // Stats calculation based on filtered data (current tab)
@@ -123,11 +149,11 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
             totalItems: filteredData.length,
             lowStock: filteredData.filter(item => item.totalStock <= item.minStock).length,
             totalValuation: filteredData.reduce((sum, item) => {
-                const val = parseFloat(item.valuationValue)
-                return sum + (isNaN(val) ? 0 : val)
+                const val = calculateValuation(item.totalStock, item.product?.costSap ?? null)
+                return sum + val
             }, 0)
         }
-    }, [filteredData])
+    }, [filteredData, manualRate])
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -223,19 +249,57 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                     />
                 </div>
 
-                <div className="flex justify-between items-center gap-4">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search by material or sloc..."
-                            className="pl-8"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="w-full sm:w-[200px]">
+                            <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Manual Rate Exchange</label>
+                            <Input
+                                type="number"
+                                placeholder="Rate..."
+                                value={manualRate}
+                                onChange={(e) => setManualRate(e.target.value)}
+                                className="h-9"
+                            />
+                        </div>
+                        <div className="w-full sm:w-[200px]">
+                            <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Sloc Description</label>
+                            <Input
+                                placeholder="Filter Sloc Desc..."
+                                value={filterSlocDesc}
+                                onChange={(e) => setFilterSlocDesc(e.target.value)}
+                                className="h-9"
+                            />
+                        </div>
+                        <div className="w-full sm:w-[200px]">
+                            <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Product Type</label>
+                            <Select value={filterCategory} onValueChange={setFilterCategory}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Types</SelectItem>
+                                    {productCategories.filter(c => c !== 'all').map(category => (
+                                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <StockCSVUpload />
-                        <StockDialog products={products} warehouses={warehouses} />
+
+                    <div className="flex justify-between items-center gap-4">
+                        <div className="relative flex-1 max-w-sm">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search by material or sloc..."
+                                className="pl-8"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <StockCSVUpload />
+                            <StockDialog products={products} warehouses={warehouses} />
+                        </div>
                     </div>
                 </div>
 
@@ -305,6 +369,11 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                             </TableCell>
                                             <TableCell className="text-right font-mono">
                                                 {formatCurrency(calculateValuation(item.totalStock, item.product?.costSap ?? null))}
+                                                {manualRate !== "1" && manualRate !== "" && (
+                                                    <span className="block text-[10px] text-muted-foreground">
+                                                        x{manualRate}
+                                                    </span>
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
