@@ -1,5 +1,12 @@
 // Auth tables (better-auth)
 export { user, session, account, verification } from "./auth";
+import { relations } from "drizzle-orm";
+import { warehouses } from "./warehouses";
+import { stockLevels } from "./stock-levels";
+
+export const warehousesRelations = relations(warehouses, ({ many }) => ({
+    stocks: many(stockLevels),
+}));
 export { settings } from "./settings";
 
 // Business domain tables

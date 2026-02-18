@@ -9,9 +9,58 @@ import { z } from "zod"
 
 
 import { warehouseSchema } from "@/lib/schemas"
+import { getSetting } from "./settings"
 
 export async function getWarehouses() {
-    return await db.select().from(warehouses).orderBy(warehouses.sloc)
+    const manualRate = await getSetting("manual_usd_rate")
+    const rate = parseFloat(manualRate || "1")
+
+    const data = await db.query.warehouses.findMany({
+        with: {
+            stocks: {
+                with: {
+                    product: true
+                }
+            }
+        }
+    })
+
+    const result = data.map(w => {
+        let totalStock = 0
+        let totalValuation = 0
+
+        w.stocks.forEach(s => {
+            totalStock += s.totalStock
+            const cost = s.product?.costSap
+                ? parseFloat(s.product.costSap.toString().replace(/,/g, ""))
+                : 0
+            totalValuation += s.totalStock * cost * rate
+        })
+
+        // Remove stocks to keep payload clean, we just need the totals
+        const { stocks, ...rest } = w
+        return {
+            ...rest,
+            totalStock,
+            totalValuation
+        }
+    })
+
+    // Sort: Type first (alphabetical), then empty/null Type at bottom
+    return result.sort((a, b) => {
+        const typeA = a.type || ""
+        const typeB = b.type || ""
+
+        if (typeA && !typeB) return -1
+        if (!typeA && typeB) return 1
+
+        if (typeA && typeB) {
+            const cmp = typeA.localeCompare(typeB)
+            if (cmp !== 0) return cmp
+        }
+
+        return a.sloc.localeCompare(b.sloc)
+    })
 }
 
 export async function createWarehouse(data: z.infer<typeof warehouseSchema>) {
