@@ -10,15 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+          "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:shadow-blue-500/20",
         destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-lg shadow-red-500/30 hover:shadow-xl hover:shadow-red-500/40 hover:from-red-700 hover:to-pink-700 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:from-red-500 dark:to-pink-500",
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border bg-gradient-to-r from-background to-accent/20 shadow-xs hover:from-accent hover:to-accent hover:text-accent-foreground dark:from-input/30 dark:to-input/10 dark:border-input dark:hover:from-input/50 dark:hover:to-input/30",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+          "bg-gradient-to-r from-slate-200 to-slate-300 text-slate-900 shadow-xs hover:from-slate-300 hover:to-slate-400 dark:from-slate-700 dark:to-slate-800 dark:text-slate-100",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+          "hover:bg-gradient-to-r hover:from-accent hover:to-accent/80 hover:text-accent-foreground dark:hover:from-accent/50 dark:hover:to-accent/30",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
