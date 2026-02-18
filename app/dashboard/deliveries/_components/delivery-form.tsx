@@ -207,7 +207,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [isExternal, setIsExternal] = useState(initialData?.isExternal || false)
     const [vendorName, setVendorName] = useState(initialData?.vendorName || "")
     const [awbNumber, setAwbNumber] = useState(initialData?.awbNumber || "")
-    const [shippingCost, setShippingCost] = useState(initialData?.shippingCost || "0")
+    const [shippingCost, setShippingCost] = useState(initialData?.shippingCost ? String(initialData.shippingCost) : "0")
+
+    // Calculate Total Internal Cost
+    const totalInternalCost = useMemo(() => {
+        const gasoline = Number(costGasoline) || 0
+        const toll = Number(costToll) || 0
+        const parking = Number(costParking) || 0
+        const meals = Number(costMeals) || 0
+        const maintenance = Number(costMaintenance) || 0
+        const others = Number(costOthers) || 0
+        return gasoline + toll + parking + meals + maintenance + others
+    }, [costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers])
 
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
@@ -385,7 +396,12 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             vehicleType: !isExternal ? (vehicleType || undefined) : undefined,
             vendorName: isExternal ? (vendorName || undefined) : undefined,
             awbNumber: isExternal ? (awbNumber || undefined) : undefined,
-            shippingCost: isExternal ? Number(shippingCost) : 0,
+            vehicleType: !isExternal ? (vehicleType || undefined) : undefined,
+            vendorName: isExternal ? (vendorName || undefined) : undefined,
+            awbNumber: isExternal ? (awbNumber || undefined) : undefined,
+            // For internal, save total calculated cost. For external, save input shippingCost
+            shippingCost: isExternal ? Number(shippingCost) : totalInternalCost,
+            // Internal Cost Breakdown
             // Internal Cost Breakdown
             costGasoline: !isExternal ? Number(costGasoline) : 0,
             costToll: !isExternal ? Number(costToll) : 0,
@@ -936,10 +952,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         variant="outline"
                                                                         size="sm"
                                                                         className="w-full h-8"
+                                                                        onMouseDown={(e) => e.preventDefault()}
                                                                         onClick={() => handleCreateDriver(driverSearch)}
                                                                     >
                                                                         <Plus className="mr-2 h-3 w-3" />
-                                                                        Add New
+                                                                        Add New "{driverSearch}"
                                                                     </Button>
                                                                 </div>
                                                             </CommandEmpty>
@@ -994,10 +1011,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                             variant="outline"
                                                                             size="sm"
                                                                             className="w-full h-8"
+                                                                            onMouseDown={(e) => e.preventDefault()}
                                                                             onClick={() => handleCreateVehicle(vehicleSearch)}
                                                                         >
                                                                             <Plus className="mr-2 h-3 w-3" />
-                                                                            Add New
+                                                                            Add New "{vehicleSearch}"
                                                                         </Button>
                                                                     </div>
                                                                 </CommandEmpty>
@@ -1107,6 +1125,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                 />
                                             </div>
                                         </div>
+                                        <div className="flex justify-end pt-4 border-t">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <Label className="text-sm font-semibold text-muted-foreground">Total Operational Cost</Label>
+                                                <div className="text-xl font-bold">
+                                                    {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(totalInternalCost)}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
@@ -1168,8 +1194,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             />
                         </CardContent>
                     </Card>
-                </div>
-            </div>
+                </div >
+            </div >
         </div >
     )
 }
