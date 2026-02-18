@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     // Allow production builds with pre-existing type errors
     ignoreBuildErrors: true,
   },
+  experimental: {
+    // Optimize CSS loading to reduce unused preloads
+    optimizeCss: true,
+  },
 };
 
 export default nextConfig;
