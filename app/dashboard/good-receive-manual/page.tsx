@@ -20,7 +20,7 @@ export default async function GoodReceiveManualPage() {
     });
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 p-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Good Receive Manual</h1>
@@ -28,12 +28,12 @@ export default async function GoodReceiveManualPage() {
                         Manage manual stock entries from suppliers.
                     </p>
                 </div>
-                <Link href="/dashboard/good-receive-manual/create">
-                    <Button>
+                <Button asChild>
+                    <Link href="/dashboard/good-receive-manual/create">
                         <Plus className="mr-2 h-4 w-4" />
                         Create New
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
 
             <div className="rounded-md border bg-card">
@@ -65,8 +65,8 @@ export default async function GoodReceiveManualPage() {
                                     <TableCell>{item.poNumber}</TableCell>
                                     <TableCell>
                                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${item.deliveryType === 'Complete'
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
                                             }`}>
                                             {item.deliveryType}
                                         </span>

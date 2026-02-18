@@ -20,7 +20,7 @@ export default async function CreateGoodReceiveManualPage() {
     }));
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 p-6">
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">Create Good Receive Manual</h1>
                 <p className="text-muted-foreground">
