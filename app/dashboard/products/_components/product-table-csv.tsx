@@ -40,7 +40,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             skipEmptyLines: true,
             complete: (results) => {
                 const data = results.data as RawProductData[]
-                const categories = ["ACC", "FLAP", "IMT PART", "TUBE", "TYRE", "WHEEL & RIM"]
+                const categories = ["ACC", "FLAP", "IMT PART", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
 
                 const normalized = data.map(item => {
                     const keys = Object.keys(item)

@@ -44,7 +44,7 @@ interface ProductDialogProps {
     onSuccess?: () => void
 }
 
-const CATEGORIES = ["ACC", "FLAP", "IMT PART", "TUBE", "TYRE", "WHEEL & RIM"]
+const CATEGORIES = ["ACC", "FLAP", "IMT PART", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
 
 export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
