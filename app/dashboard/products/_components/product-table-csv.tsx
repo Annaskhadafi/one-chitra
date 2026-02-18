@@ -32,6 +32,7 @@ type Mapping = {
     plant: string
     slocDescription: string
     costSap: string
+    typeWarehouse: string
     imageUrl: string
 }
 
@@ -55,6 +56,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         plant: '',
         slocDescription: '',
         costSap: '',
+        typeWarehouse: '',
         imageUrl: '',
     })
 
@@ -89,6 +91,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         plant: detectMapped(/plant|factory|warehouse/i),
                         slocDescription: detectMapped(/slocdescription|locationdescription|locdesc/i),
                         costSap: detectMapped(/costsap|cost|price/i),
+                        typeWarehouse: detectMapped(/typewarehouse|whroletype|warehouseuser|gudangtype/i),
                         imageUrl: detectMapped(/imageurl|image|picture|photo/i),
                     })
                     setStep('mapping')
@@ -124,6 +127,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         plant: mapping.plant ? item[mapping.plant]?.toString() : null,
                         slocDescription: mapping.slocDescription ? item[mapping.slocDescription]?.toString() : null,
                         costSap: mapping.costSap ? item[mapping.costSap]?.toString() : null,
+                        typeWarehouse: mapping.typeWarehouse ? item[mapping.typeWarehouse]?.toString() : null,
                         imageUrl: mapping.imageUrl ? item[mapping.imageUrl]?.toString() : null,
                     }
                 }).filter(item => item.materialNumber && item.sloc) as ProductData[]
@@ -179,8 +183,8 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     }
 
     const downloadTemplate = () => {
-        const headers = "Material Number,Sloc,Category,Material Description,Old Material No,Plant,Sloc Description,Cost SAP\n"
-        const example = "MAT001,SL01,TYRE,Example Description,OLD001,PL01,Example Sloc Desc,100.50"
+        const headers = "Material Number,Sloc,Category,Material Description,Old Material No,Plant,Sloc Description,Cost SAP,Type Warehouse\n"
+        const example = "MAT001,SL01,TYRE,Example Description,OLD001,PL01,Example Sloc Desc,100.50,MAIN"
         const csvContent = "data:text/csv;charset=utf-8," + headers + example
         const encodedUri = encodeURI(csvContent)
         const link = document.createElement("a")
@@ -271,6 +275,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 { id: 'plant', label: 'Plant', required: false },
                                 { id: 'slocDescription', label: 'Sloc Description', required: false },
                                 { id: 'costSap', label: 'Cost SAP', required: false },
+                                { id: 'typeWarehouse', label: 'Type Warehouse', required: false },
                                 { id: 'imageUrl', label: 'Image URL', required: false },
                             ].map((field) => (
                                 <div key={field.id} className="space-y-2">

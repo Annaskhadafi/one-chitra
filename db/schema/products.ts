@@ -10,6 +10,7 @@ export const products = pgTable("products", {
     plant: varchar("plant", { length: 100 }),
     sloc: varchar("sloc", { length: 100 }),
     slocDescription: text("sloc_description"),
+    typeWarehouse: varchar("type_warehouse", { length: 50 }),
     imageUrl: text("image_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

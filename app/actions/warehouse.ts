@@ -41,6 +41,7 @@ export async function updateWarehouse(id: number, data: z.infer<typeof warehouse
             .set({
                 sloc: data.sloc,
                 description: data.description,
+                type: data.type,
                 updatedAt: new Date()
             })
             .where(eq(warehouses.id, id))
@@ -110,6 +111,7 @@ export async function importWarehouses(data: (typeof warehouses.$inferInsert)[],
                             target: warehouses.sloc,
                             set: {
                                 description: item.description,
+                                type: item.type,
                                 updatedAt: new Date(),
                             }
                         })

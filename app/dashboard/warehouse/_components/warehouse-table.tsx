@@ -45,6 +45,7 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
 
     const filteredData = data.filter(item =>
         item.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.type && item.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
     )
 
@@ -113,8 +114,8 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                 <div className="flex gap-2 w-full sm:w-auto">
                     <Button variant="outline" onClick={() => {
                         const csvContent = "data:text/csv;charset=utf-8,"
-                            + "Sloc,Description,Created At\n"
-                            + data.map(row => `"${row.sloc}","${row.description || ''}","${row.createdAt}"`).join("\n");
+                            + "Sloc,Type,Description,Created At\n"
+                            + data.map(row => `"${row.sloc}","${row.type || ''}","${row.description || ''}","${row.createdAt}"`).join("\n");
                         const encodedUri = encodeURI(csvContent);
                         const link = document.createElement("a");
                         link.setAttribute("href", encodedUri);
@@ -142,6 +143,7 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                                 />
                             </TableHead>
                             <TableHead>Sloc</TableHead>
+                            <TableHead>Type</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead className="w-[100px] text-right">Actions</TableHead>
                         </TableRow>
@@ -163,6 +165,7 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                                         />
                                     </TableCell>
                                     <TableCell className="font-medium">{item.sloc}</TableCell>
+                                    <TableCell>{item.type}</TableCell>
                                     <TableCell>{item.description}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">

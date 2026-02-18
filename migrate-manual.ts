@@ -83,6 +83,34 @@ async function main() {
             await client.query(`ALTER TABLE products ADD CONSTRAINT products_material_number_sloc_unique UNIQUE (material_number, sloc);`);
         }
 
+        // Add type column to warehouses
+        console.log('Checking type column in warehouses...');
+        const warehouseRes = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'warehouses'
+        `);
+        const warehouseColumns = warehouseRes.rows.map(r => r.column_name);
+
+        if (!warehouseColumns.includes('type')) {
+            console.log('Adding type column to warehouses...');
+            await client.query(`ALTER TABLE warehouses ADD COLUMN type VARCHAR(50);`);
+        }
+
+        // Add type_warehouse column to products
+        console.log('Checking type_warehouse column in products...');
+        const productRes = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'products'
+        `);
+        const productColumns = productRes.rows.map(r => r.column_name);
+
+        if (!productColumns.includes('type_warehouse')) {
+            console.log('Adding type_warehouse column to products...');
+            await client.query(`ALTER TABLE products ADD COLUMN type_warehouse VARCHAR(50);`);
+        }
+
         console.log('Migration completed successfully.');
 
     } catch (err) {

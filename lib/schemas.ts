@@ -21,12 +21,14 @@ export const productSchema = z.object({
     plant: z.string().optional(),
     sloc: z.string().optional(),
     slocDescription: z.string().optional(),
+    typeWarehouse: z.string().optional(),
     imageUrl: z.string().optional(),
 })
 
 export const warehouseSchema = z.object({
     sloc: z.string().min(1, "Sloc is required"),
     description: z.string().optional(),
+    type: z.string().optional(),
 })
 
 export const stockSchema = z.object({

@@ -50,6 +50,7 @@ export function WarehouseDialog({ warehouse, trigger, open, onOpenChange }: Ware
         defaultValues: {
             sloc: warehouse?.sloc || "",
             description: warehouse?.description || "",
+            type: warehouse?.type || "",
         },
     })
 

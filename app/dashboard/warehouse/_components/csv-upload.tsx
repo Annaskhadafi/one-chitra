@@ -26,6 +26,7 @@ type WarehouseData = NewWarehouse
 type Mapping = {
     sloc: string
     description: string
+    type: string
 }
 
 type Step = 'upload' | 'mapping' | 'confirm'
@@ -39,7 +40,7 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     // Multi-step state
     const [step, setStep] = useState<Step>('upload')
     const [csvHeaders, setCsvHeaders] = useState<string[]>([])
-    const [mapping, setMapping] = useState<Mapping>({ sloc: '', description: '' })
+    const [mapping, setMapping] = useState<Mapping>({ sloc: '', description: '', type: '' })
     const [rawData, setRawData] = useState<RawWarehouseData[]>([])
 
     // Import analysis state
@@ -72,7 +73,8 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                     // Auto-detect mapping
                     const sloc = results.meta.fields.find(f => /sloc|code|id/i.test(f)) || ''
                     const desc = results.meta.fields.find(f => /desc|name|keterangan/i.test(f)) || ''
-                    setMapping({ sloc, description: desc })
+                    const type = results.meta.fields.find(f => /type|tipe|jenis/i.test(f)) || ''
+                    setMapping({ sloc, description: desc, type })
                     setStep('mapping') // Move to mapping step immediately
                 }
             },
@@ -97,6 +99,7 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                 const normalized = data.map(item => ({
                     sloc: item[mapping.sloc]?.toString().trim() || "",
                     description: mapping.description && mapping.description !== '__none__' ? item[mapping.description]?.toString() : null,
+                    type: mapping.type && mapping.type !== '__none__' ? item[mapping.type]?.toString() : null,
                 })).filter(item => item.sloc) as WarehouseData[]
 
                 setPreview(normalized)
@@ -158,12 +161,12 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         setAnalysis(null)
         setStep('upload')
         setCsvHeaders([])
-        setMapping({ sloc: '', description: '' })
+        setMapping({ sloc: '', description: '', type: '' })
         setRawData([])
     }
 
     const downloadTemplate = () => {
-        const csvContent = "data:text/csv;charset=utf-8,Sloc,Description\nEXAMPLE01,Contoh Gudang 1\nEXAMPLE02,Contoh Gudang 2"
+        const csvContent = "data:text/csv;charset=utf-8,Sloc,Description,Type\nEXAMPLE01,Contoh Gudang 1,MAIN\nEXAMPLE02,Contoh Gudang 2,BRANCH"
         const encodedUri = encodeURI(csvContent)
         const link = document.createElement("a")
         link.setAttribute("href", encodedUri)
@@ -239,7 +242,7 @@ export function WarehouseCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     Download Template
                                 </Button>
                                 <div className="text-xs text-muted-foreground">
-                                    For "Export All", use the table action.
+                                    For &quot;Export All&quot;, use the table action.
                                 </div>
                             </div>
                         </div>

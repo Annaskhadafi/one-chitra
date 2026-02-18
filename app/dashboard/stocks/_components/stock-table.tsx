@@ -41,7 +41,7 @@ interface StockTableProps {
     data: {
         id: number
         product: { materialNumber: string; materialDescription: string | null } | null
-        warehouse: { sloc: string; description: string | null } | null
+        warehouse: { sloc: string; description: string | null; type: string | null } | null
         totalStock: number
         minStock: number
         valuationValue: string // Changed to string as DB returns decimal/numeric as string often, or update based on schema
@@ -68,7 +68,9 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
         return data.filter(item =>
             item.product?.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.product?.materialDescription?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.warehouse?.sloc.toLowerCase().includes(searchTerm.toLowerCase())
+            item.product?.materialDescription?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.warehouse?.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.warehouse?.type?.toLowerCase().includes(searchTerm.toLowerCase())
         )
     }, [data, searchTerm])
 
@@ -183,6 +185,7 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                             <TableHead>Material #</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead>Sloc</TableHead>
+                            <TableHead>Type</TableHead>
                             <TableHead className="text-right">Total Stock</TableHead>
                             <TableHead className="text-right">Min Stock</TableHead>
                             <TableHead className="text-right">Valuation</TableHead>
@@ -215,6 +218,7 @@ export function StockTable({ data, products, warehouses }: StockTableProps) {
                                         {item.product?.materialDescription}
                                     </TableCell>
                                     <TableCell>{item.warehouse?.sloc}</TableCell>
+                                    <TableCell>{item.warehouse?.type}</TableCell>
                                     <TableCell className="text-right font-mono">
                                         {item.totalStock.toLocaleString()}
                                     </TableCell>
