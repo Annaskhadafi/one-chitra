@@ -21,6 +21,10 @@ async function main() {
             );
         `);
 
+        // Increase category length
+        console.log('Increasing category column length...');
+        await client.query(`ALTER TABLE products ALTER COLUMN category TYPE VARCHAR(100);`);
+
         // Check columns in products table
         const res = await client.query(`
             SELECT column_name 

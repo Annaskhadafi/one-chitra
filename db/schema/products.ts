@@ -2,7 +2,7 @@ import { pgTable, serial, varchar, text, timestamp, unique } from "drizzle-orm/p
 
 export const products = pgTable("products", {
     id: serial("id").primaryKey(),
-    category: varchar("category", { length: 50 }).notNull(), // ACC, FLAP, IMT PART, SPM, TUBE, TYRE, WHEEL & RIM
+    category: varchar("category", { length: 100 }).notNull(), // ACC, FLAP, IMT PART, Material Consumable, SPM, TUBE, TYRE, WHEEL & RIM
     materialNumber: varchar("material_number", { length: 100 }).notNull(),
     oldMaterialNo: text("old_material_no"),
     materialDescription: text("material_description"),
