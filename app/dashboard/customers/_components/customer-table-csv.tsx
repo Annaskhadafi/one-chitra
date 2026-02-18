@@ -53,7 +53,7 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                 const normalized = data.map(item => {
                     // Extended candidate list for flexibility
                     const codeKey = findKey(item, [
-                        "customercode", "customerid", "code", "id", "kode", "kodepelanggan", "no", "nomor"
+                        "customercode", "customerid", "code", "id", "kode", "kodepelanggan", "no", "nomor", "customer"
                     ])
                     const nameKey = findKey(item, [
                         "customername", "name", "nama", "namapelanggan", "custname"
