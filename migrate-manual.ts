@@ -39,6 +39,21 @@ async function main() {
             await client.query(`ALTER TABLE products ADD COLUMN image_url TEXT;`);
         }
 
+        if (!columns.includes('plant')) {
+            console.log('Adding plant column to products...');
+            await client.query(`ALTER TABLE products ADD COLUMN plant VARCHAR(100);`);
+        }
+
+        if (!columns.includes('sloc')) {
+            console.log('Adding sloc column to products...');
+            await client.query(`ALTER TABLE products ADD COLUMN sloc VARCHAR(100);`);
+        }
+
+        if (!columns.includes('sloc_description')) {
+            console.log('Adding sloc_description column to products...');
+            await client.query(`ALTER TABLE products ADD COLUMN sloc_description TEXT;`);
+        }
+
         console.log('Migration completed successfully.');
 
     } catch (err) {
