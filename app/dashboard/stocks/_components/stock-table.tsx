@@ -234,18 +234,27 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                         value={stats.totalItems}
                         icon={Box}
                         description={activeTab === 'all' ? "All unique stock units" : `Stock units in ${activeTab}`}
+                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
+                        iconColor="text-blue-600 dark:text-blue-400"
+                        textColor="text-blue-900 dark:text-blue-100"
                     />
                     <ScoreCard
                         title="Low Stock Items"
                         value={stats.lowStock}
                         icon={AlertTriangle}
                         description="Items below minimum level"
+                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
+                        iconColor="text-amber-600 dark:text-amber-400"
+                        textColor="text-amber-900 dark:text-amber-100"
                     />
                     <ScoreCard
                         title="Total Valuation"
                         value={`IDR ${stats.totalValuation.toLocaleString()}`}
                         icon={TrendingUp}
                         description="Total inventory value"
+                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
+                        iconColor="text-emerald-600 dark:text-emerald-400"
+                        textColor="text-emerald-900 dark:text-emerald-100"
                     />
                 </div>
 

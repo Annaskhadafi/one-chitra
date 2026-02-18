@@ -173,14 +173,19 @@ export function ProductTable({ data }: ProductTableProps) {
                     value={totalProducts}
                     icon={Package}
                     description="Total items in catalog"
+                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
+                    iconColor="text-blue-600 dark:text-blue-400"
+                    textColor="text-blue-900 dark:text-blue-100"
                 />
-                <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
+                <div className="rounded-xl border bg-gradient-to-br from-violet-500/10 via-violet-400/5 to-fuchsia-500/10 border-violet-200/50 dark:from-violet-500/20 dark:via-violet-400/10 dark:to-fuchsia-500/20 dark:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/20 transition-all duration-300 text-card-foreground shadow p-6">
                     <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <h3 className="tracking-tight text-sm font-medium">Exchange Rates</h3>
-                        <Tag className="h-4 w-4 text-muted-foreground" />
+                        <h3 className="tracking-tight text-sm font-medium text-violet-900 dark:text-violet-100">Exchange Rates</h3>
+                        <div className="rounded-lg p-2 bg-violet-600/10">
+                            <Tag className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold">
-                        <div className="text-xs text-muted-foreground font-normal mb-1">Realtime: {formatCurrency(realtimeRate, 'IDR')}</div>
+                    <div className="text-2xl font-bold text-violet-900 dark:text-violet-100">
+                        <div className="text-xs text-violet-900/70 dark:text-violet-100/70 font-normal mb-1">Realtime: {formatCurrency(realtimeRate, 'IDR')}</div>
                         <div className="flex items-center gap-2">
                             <span>Manual: {formatCurrency(manualRate, 'IDR')}</span>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleRateChange}>
@@ -194,6 +199,9 @@ export function ProductTable({ data }: ProductTableProps) {
                     value={categories}
                     icon={Layers}
                     description="Unique product categories"
+                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
+                    iconColor="text-emerald-600 dark:text-emerald-400"
+                    textColor="text-emerald-900 dark:text-emerald-100"
                 />
             </div>
 

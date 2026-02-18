@@ -201,18 +201,27 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                     value={totalDeliveries}
                     icon={Truck}
                     description="All delivery records"
+                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
+                    iconColor="text-blue-600 dark:text-blue-400"
+                    textColor="text-blue-900 dark:text-blue-100"
                 />
                 <ScoreCard
                     title="Scheduled"
                     value={scheduled}
                     icon={CalendarClock}
                     description="Upcoming deliveries"
+                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
+                    iconColor="text-amber-600 dark:text-amber-400"
+                    textColor="text-amber-900 dark:text-amber-100"
                 />
                 <ScoreCard
                     title="In Transit"
                     value={inTransit}
                     icon={MapPin}
                     description="Currently on the way"
+                    gradient="from-cyan-500/10 via-cyan-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-cyan-400/10 dark:to-blue-500/20 dark:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20"
+                    iconColor="text-cyan-600 dark:text-cyan-400"
+                    textColor="text-cyan-900 dark:text-cyan-100"
                 />
             </div>
 

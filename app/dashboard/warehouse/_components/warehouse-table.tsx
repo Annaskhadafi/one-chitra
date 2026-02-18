@@ -98,6 +98,9 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                     value={totalWarehouses}
                     icon={WarehouseIcon}
                     description="Active storage locations"
+                    gradient="from-purple-500/10 via-purple-400/5 to-pink-500/10 border-purple-200/50 dark:from-purple-500/20 dark:via-purple-400/10 dark:to-pink-500/20 dark:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/20"
+                    iconColor="text-purple-600 dark:text-purple-400"
+                    textColor="text-purple-900 dark:text-purple-100"
                 />
             </div>
 
