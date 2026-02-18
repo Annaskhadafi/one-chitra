@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Warehouse } from "@/lib/types"
 import { WarehouseDialog } from "./warehouse-dialog"
 import { WarehouseCSVUpload } from "./csv-upload"
-import { Search, Pencil, Trash2, Warehouse as WarehouseIcon } from "lucide-react"
+import { Search, Pencil, Trash2, Warehouse as WarehouseIcon, Download } from "lucide-react"
 import { deleteWarehouse, bulkDeleteWarehouses } from "@/app/actions/warehouse"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
@@ -111,6 +111,21 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                     />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
+                    <Button variant="outline" onClick={() => {
+                        const csvContent = "data:text/csv;charset=utf-8,"
+                            + "Sloc,Description,Created At\n"
+                            + data.map(row => `"${row.sloc}","${row.description || ''}","${row.createdAt}"`).join("\n");
+                        const encodedUri = encodeURI(csvContent);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", encodedUri);
+                        link.setAttribute("download", `warehouses_export_${new Date().toISOString().split('T')[0]}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export All
+                    </Button>
                     <WarehouseCSVUpload onSuccess={() => window.location.reload()} />
                     <WarehouseDialog />
                 </div>
