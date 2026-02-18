@@ -1,14 +1,16 @@
 import { getStocks } from "@/app/actions/stock"
 import { getProducts } from "@/app/actions/product"
 import { getWarehouses } from "@/app/actions/warehouse"
+import { getSetting } from "@/app/actions/settings"
 import { StockTable } from "./_components/stock-table"
 
 export default async function StocksPage() {
     // Force re-compile to fix module factory error
-    const [stocks, products, warehouses] = await Promise.all([
+    const [stocks, products, warehouses, savedRate] = await Promise.all([
         getStocks(),
         getProducts(),
-        getWarehouses()
+        getWarehouses(),
+        getSetting("manual_usd_rate")
     ])
 
     return (
@@ -25,6 +27,7 @@ export default async function StocksPage() {
                     data={stocks}
                     products={products}
                     warehouses={warehouses}
+                    defaultRate={savedRate || "1"}
                 />
             </div>
         </div>

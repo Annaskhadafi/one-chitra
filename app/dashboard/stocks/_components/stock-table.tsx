@@ -72,19 +72,20 @@ interface StockTableProps {
         costSap: string | null;
     }[]
     warehouses: { id: number; sloc: string; description: string | null; type: string | null }[]
+    defaultRate?: string
 }
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // ... imports remain same ...
 
-export function StockTable({ data, products, warehouses }: StockTableProps) {
+export function StockTable({ data, products, warehouses, defaultRate }: StockTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [activeTab, setActiveTab] = useState("all")
 
     // New states for valuation and additional filters
-    const [manualRate, setManualRate] = useState<string>("1")
+    const [manualRate, setManualRate] = useState<string>(defaultRate || "1")
     const [filterSlocDesc, setFilterSlocDesc] = useState("")
     const [filterCategory, setFilterCategory] = useState("all")
 
