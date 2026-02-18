@@ -32,6 +32,7 @@ type Mapping = {
     plant: string
     slocDescription: string
     costSap: string
+    imageUrl: string
 }
 
 type Step = 'upload' | 'mapping' | 'preview'
@@ -54,6 +55,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         plant: '',
         slocDescription: '',
         costSap: '',
+        imageUrl: '',
     })
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,6 +89,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         plant: detectMapped(/plant|factory|warehouse/i),
                         slocDescription: detectMapped(/slocdescription|locationdescription|locdesc/i),
                         costSap: detectMapped(/costsap|cost|price/i),
+                        imageUrl: detectMapped(/imageurl|image|picture|photo/i),
                     })
                     setStep('mapping')
                 }
@@ -121,6 +124,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                         plant: mapping.plant ? item[mapping.plant]?.toString() : null,
                         slocDescription: mapping.slocDescription ? item[mapping.slocDescription]?.toString() : null,
                         costSap: mapping.costSap ? item[mapping.costSap]?.toString() : null,
+                        imageUrl: mapping.imageUrl ? item[mapping.imageUrl]?.toString() : null,
                     }
                 }).filter(item => item.materialNumber && item.sloc) as ProductData[]
 
@@ -170,6 +174,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             plant: '',
             slocDescription: '',
             costSap: '',
+            imageUrl: '',
         })
     }
 
@@ -266,6 +271,7 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 { id: 'plant', label: 'Plant', required: false },
                                 { id: 'slocDescription', label: 'Sloc Description', required: false },
                                 { id: 'costSap', label: 'Cost SAP', required: false },
+                                { id: 'imageUrl', label: 'Image URL', required: false },
                             ].map((field) => (
                                 <div key={field.id} className="space-y-2">
                                     <Label className="text-sm font-medium">
