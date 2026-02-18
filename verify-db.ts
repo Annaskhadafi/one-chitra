@@ -5,32 +5,30 @@ import { eq } from "drizzle-orm"
 
 async function main() {
     try {
-        console.log("Verifying settings table...")
-        await db.insert(settings).values({ key: "test_key", value: "test_value" }).onConflictDoNothing()
-        const setting = await db.select().from(settings).where(eq(settings.key, "test_key"))
+        console.log("Verifying settings table on NEW DB...")
+        await db.insert(settings).values({ key: "test_key_new_db", value: "test_value" }).onConflictDoNothing()
+        const setting = await db.select().from(settings).where(eq(settings.key, "test_key_new_db"))
         console.log("Setting found:", setting)
 
-        console.log("Verifying products schema...")
-        // We can't easily check columns with drizzle query, but if the code compiles and runs, it's a good sign.
-        // Let's try to insert a product with new fields
-        const testMaterial = "TEST-FX-001"
+        console.log("Verifying products schema on NEW DB...")
+        const testMaterial = "TEST-FX-NEW-DB"
         await db.delete(products).where(eq(products.materialNumber, testMaterial))
 
         await db.insert(products).values({
             category: "TYRE",
             materialNumber: testMaterial,
-            costSap: "100.50",
-            imageUrl: "http://example.com/image.jpg"
+            costSap: "200.50",
+            imageUrl: "http://example.com/new-db-image.jpg"
         })
 
         const product = await db.select().from(products).where(eq(products.materialNumber, testMaterial))
-        console.log("Product created with new fields:", product)
+        console.log("Product created:", product)
 
         // Cleanup
-        await db.delete(settings).where(eq(settings.key, "test_key"))
+        await db.delete(settings).where(eq(settings.key, "test_key_new_db"))
         await db.delete(products).where(eq(products.materialNumber, testMaterial))
 
-        console.log("Verification successful!")
+        console.log("Verification successful on NEW DB!")
     } catch (error) {
         console.error("Verification failed:", error)
     }
