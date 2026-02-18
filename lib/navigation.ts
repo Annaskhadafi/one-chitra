@@ -55,18 +55,6 @@ export const navigationConfig: NavSection[] = [
                 resource: "inventory",
             },
             {
-                title: "Stock SAP",
-                url: "/dashboard/stocks-sap",
-                icon: Database,
-                resource: "stocks-sap",
-            },
-            {
-                title: "Good Receive",
-                url: "/dashboard/good-receive",
-                icon: ArrowDownToLine,
-                resource: "good-receive",
-            },
-            {
                 title: "Stocks",
                 url: "/dashboard/stocks",
                 icon: Box,
@@ -79,6 +67,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "warehouses",
             },
             {
+                title: "Good Receive Manual",
+                url: "/dashboard/good-receive-manual",
+                icon: ArrowDownToLine,
+                resource: "good-receive-manual",
+            },
+            {
                 title: "Stock Transfer",
                 url: "/dashboard/stock-transfers",
                 icon: ArrowRightLeft,
@@ -89,6 +83,23 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/deliveries",
                 icon: Truck,
                 resource: "deliveries",
+            },
+        ],
+    },
+    {
+        title: "SAP",
+        items: [
+            {
+                title: "Stock SAP",
+                url: "/dashboard/stocks-sap",
+                icon: Database,
+                resource: "stocks-sap",
+            },
+            {
+                title: "Good Receive SAP",
+                url: "/dashboard/good-receive",
+                icon: ArrowDownToLine,
+                resource: "good-receive",
             },
         ],
     },
