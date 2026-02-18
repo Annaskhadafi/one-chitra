@@ -17,6 +17,8 @@ export const productSchema = z.object({
     materialNumber: z.string().min(1, "Material Number is required"),
     oldMaterialNo: z.string().optional(),
     materialDescription: z.string().optional(),
+    costSap: z.string().optional(), // Input as string, converted later if needed
+    imageUrl: z.string().optional(),
 })
 
 export const warehouseSchema = z.object({

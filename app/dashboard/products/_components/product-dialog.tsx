@@ -167,6 +167,55 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                             )}
                         />
 
+                        <FormField
+                            control={form.control}
+                            name="costSap"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Cost SAP (USD)</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} placeholder="0.00" disabled={isLoading} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <div className="space-y-2">
+                            <FormLabel>Product Image</FormLabel>
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0]
+                                    if (file) {
+                                        const formData = new FormData()
+                                        formData.append("file", file)
+                                        setIsLoading(true)
+                                        try {
+                                            const { uploadImage } = await import("@/app/actions/upload")
+                                            const res = await uploadImage(formData)
+                                            if (res.success && res.url) {
+                                                form.setValue("imageUrl", res.url)
+                                                toast.success("Image uploaded")
+                                            } else {
+                                                toast.error(res.error || "Upload failed")
+                                            }
+                                        } catch (err) {
+                                            toast.error("Upload error")
+                                        } finally {
+                                            setIsLoading(false)
+                                        }
+                                    }
+                                }}
+                                disabled={isLoading}
+                            />
+                            {form.watch("imageUrl") && (
+                                <div className="relative w-20 h-20 border rounded overflow-hidden">
+                                    <img src={form.watch("imageUrl")} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                            )}
+                        </div>
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                                 Cancel

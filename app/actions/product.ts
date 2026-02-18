@@ -36,6 +36,8 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                     materialNumber: data.materialNumber,
                     oldMaterialNo: data.oldMaterialNo,
                     materialDescription: data.materialDescription,
+                    costSap: data.costSap,
+                    imageUrl: data.imageUrl,
                     updatedAt: new Date()
                 })
                 .where(eq(products.id, id))
@@ -49,6 +51,8 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                 materialNumber: data.materialNumber,
                 oldMaterialNo: data.oldMaterialNo,
                 materialDescription: data.materialDescription,
+                costSap: data.costSap,
+                imageUrl: data.imageUrl,
             })
         }
 
@@ -82,6 +86,8 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
                     category: sql`excluded.category`,
                     oldMaterialNo: sql`excluded.old_material_no`,
                     materialDescription: sql`excluded.material_description`,
+                    costSap: sql`excluded.cost_sap`,
+                    imageUrl: sql`excluded.image_url`,
                     updatedAt: new Date()
                 }
             })

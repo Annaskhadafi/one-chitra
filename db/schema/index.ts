@@ -1,5 +1,6 @@
 // Auth tables (better-auth)
 export { user, session, account, verification } from "./auth";
+export { settings } from "./settings";
 
 // Business domain tables
 export { roles } from "./roles";
