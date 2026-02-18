@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(task-manager list-tasks:*)"
+      "Bash(task-manager list-tasks:*)",
+      "Bash(npx tsx:*)"
     ]
   }
 }
