@@ -54,6 +54,31 @@ async function main() {
             await client.query(`ALTER TABLE products ADD COLUMN sloc_description TEXT;`);
         }
 
+        // Handle unique constraint change
+        console.log('Checking unique constraints...');
+        const constraintsRes = await client.query(`
+            SELECT conname
+            FROM pg_constraint
+            JOIN pg_class ON pg_class.oid = pg_constraint.conrelid
+            WHERE pg_class.relname = 'products' AND contype = 'u';
+        `);
+        const constraints = constraintsRes.rows.map(r => r.conname);
+
+        // Find constraint on material_number only
+        // Usually named like products_material_number_unique
+        const oldConstraint = constraints.find(c => c.includes('material_number') && !c.includes('sloc'));
+        if (oldConstraint) {
+            console.log(`Dropping old unique constraint: ${oldConstraint}`);
+            await client.query(`ALTER TABLE products DROP CONSTRAINT "${oldConstraint}";`);
+        }
+
+        // Add new composite constraint if it doesn't exist
+        const compositeConstraint = constraints.find(c => c.includes('material_number') && c.includes('sloc'));
+        if (!compositeConstraint) {
+            console.log('Adding composite unique constraint (material_number, sloc)...');
+            await client.query(`ALTER TABLE products ADD CONSTRAINT products_material_number_sloc_unique UNIQUE (material_number, sloc);`);
+        }
+
         console.log('Migration completed successfully.');
 
     } catch (err) {

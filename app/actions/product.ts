@@ -25,9 +25,11 @@ export async function updateProduct(id: number, data: z.infer<typeof productSche
 export async function upsertProduct(data: z.infer<typeof productSchema>, id?: number) {
     try {
         if (id) {
-            const existing = await db.select().from(products).where(eq(products.materialNumber, data.materialNumber)).limit(1)
+            const existing = await db.select().from(products)
+                .where(sql`${products.materialNumber} = ${data.materialNumber} AND ${products.sloc} = ${data.sloc || ''}`)
+                .limit(1)
             if (existing.length > 0 && existing[0].id !== id) {
-                return { success: false, error: "Material Number already taken by another product" }
+                return { success: false, error: "Product with this Material Number and Sloc already exists" }
             }
 
             await db.update(products)
@@ -37,14 +39,19 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                     oldMaterialNo: data.oldMaterialNo,
                     materialDescription: data.materialDescription,
                     costSap: data.costSap,
+                    plant: data.plant,
+                    sloc: data.sloc,
+                    slocDescription: data.slocDescription,
                     imageUrl: data.imageUrl,
                     updatedAt: new Date()
                 })
                 .where(eq(products.id, id))
         } else {
-            const existing = await db.select().from(products).where(eq(products.materialNumber, data.materialNumber)).limit(1)
+            const existing = await db.select().from(products)
+                .where(sql`${products.materialNumber} = ${data.materialNumber} AND ${products.sloc} = ${data.sloc || ''}`)
+                .limit(1)
             if (existing.length > 0) {
-                return { success: false, error: "Product with this Material Number already exists" }
+                return { success: false, error: "Product with this Material Number and Sloc already exists" }
             }
             await db.insert(products).values({
                 category: data.category,
@@ -52,6 +59,9 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                 oldMaterialNo: data.oldMaterialNo,
                 materialDescription: data.materialDescription,
                 costSap: data.costSap,
+                plant: data.plant,
+                sloc: data.sloc,
+                slocDescription: data.slocDescription,
                 imageUrl: data.imageUrl,
             })
         }
@@ -81,12 +91,14 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
         await db.insert(products)
             .values(data)
             .onConflictDoUpdate({
-                target: products.materialNumber,
+                target: [products.materialNumber, products.sloc],
                 set: {
                     category: sql`excluded.category`,
                     oldMaterialNo: sql`excluded.old_material_no`,
                     materialDescription: sql`excluded.material_description`,
                     costSap: sql`excluded.cost_sap`,
+                    plant: sql`excluded.plant`,
+                    slocDescription: sql`excluded.sloc_description`,
                     imageUrl: sql`excluded.image_url`,
                     updatedAt: new Date()
                 }
