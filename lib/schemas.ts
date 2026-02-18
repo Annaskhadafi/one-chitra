@@ -18,6 +18,9 @@ export const productSchema = z.object({
     oldMaterialNo: z.string().optional(),
     materialDescription: z.string().optional(),
     costSap: z.string().optional(), // Input as string, converted later if needed
+    plant: z.string().optional(),
+    sloc: z.string().optional(),
+    slocDescription: z.string().optional(),
     imageUrl: z.string().optional(),
 })
 

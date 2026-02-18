@@ -58,6 +58,9 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
             materialNumber: product?.materialNumber || "",
             oldMaterialNo: product?.oldMaterialNo || "",
             materialDescription: product?.materialDescription || "",
+            plant: product?.plant || "",
+            sloc: product?.sloc || "",
+            slocDescription: product?.slocDescription || "",
         },
     })
 
@@ -161,6 +164,45 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                                     <FormLabel>Material Description (Optional)</FormLabel>
                                     <FormControl>
                                         <Input {...field} placeholder="Type or size details" disabled={isLoading} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="plant"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Plant</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} placeholder="Plant code" disabled={isLoading} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="sloc"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Sloc</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} placeholder="Sloc code" disabled={isLoading} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="slocDescription"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Sloc Description</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} placeholder="Sloc description" disabled={isLoading} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

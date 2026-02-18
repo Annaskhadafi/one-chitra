@@ -16,6 +16,7 @@ import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory } from "@/
 import { getSetting, updateSetting, getRealtimeExchangeRate } from "@/app/actions/settings"
 import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
+import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
 import { Search, Trash2, Pencil, Package, Layers, Tag, Eye } from "lucide-react"
 import { toast } from "sonner"
@@ -83,7 +84,10 @@ export function ProductTable({ data }: ProductTableProps) {
         const matchesSearch = item.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (item.materialDescription && item.materialDescription.toLowerCase().includes(searchTerm.toLowerCase())) ||
             item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(searchTerm.toLowerCase()))
+            (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.plant && item.plant.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.sloc && item.sloc.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.slocDescription && item.slocDescription.toLowerCase().includes(searchTerm.toLowerCase()))
         return matchesSearch
     })
 
@@ -206,11 +210,14 @@ export function ProductTable({ data }: ProductTableProps) {
                                     onCheckedChange={handleSelectAll}
                                 />
                             </TableHead>
+                            <TableHead>Plant</TableHead>
                             <TableHead className="w-[60px]">Image</TableHead>
                             <TableHead>Category</TableHead>
                             <TableHead>Material Number</TableHead>
                             <TableHead>Old Material No.</TableHead>
                             <TableHead>Description</TableHead>
+                            <TableHead>Sloc</TableHead>
+                            <TableHead>Sloc Description</TableHead>
                             <TableHead>Cost SAP (USD)</TableHead>
                             <TableHead>Cost IDR</TableHead>
                             <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -219,7 +226,7 @@ export function ProductTable({ data }: ProductTableProps) {
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={12} className="h-24 text-center">
                                     No products found.
                                 </TableCell>
                             </TableRow>
@@ -236,6 +243,7 @@ export function ProductTable({ data }: ProductTableProps) {
                                                 onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
                                             />
                                         </TableCell>
+                                        <TableCell className="font-mono text-xs">{item.plant || "-"}</TableCell>
                                         <TableCell>
                                             {item.imageUrl ? (
                                                 <Dialog>
@@ -262,10 +270,13 @@ export function ProductTable({ data }: ProductTableProps) {
                                         <TableCell className="font-medium text-blue-600">{item.materialNumber}</TableCell>
                                         <TableCell className="text-muted-foreground">{item.oldMaterialNo || "-"}</TableCell>
                                         <TableCell className="max-w-xs truncate">{item.materialDescription}</TableCell>
+                                        <TableCell className="text-xs font-mono">{item.sloc || "-"}</TableCell>
+                                        <TableCell className="max-w-[150px] truncate text-xs">{item.slocDescription || "-"}</TableCell>
                                         <TableCell>{formatCurrency(costSap)}</TableCell>
                                         <TableCell>{formatCurrency(costIdr, 'IDR')}</TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
+                                                <ProductDetail product={item} manualRate={manualRate} />
                                                 <ProductDialog
                                                     product={item}
                                                     trigger={

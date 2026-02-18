@@ -7,6 +7,9 @@ export const products = pgTable("products", {
     oldMaterialNo: text("old_material_no"),
     materialDescription: text("material_description"),
     costSap: text("cost_sap"), // Storing as text to avoid precision issues, or can be decimal
+    plant: varchar("plant", { length: 100 }),
+    sloc: varchar("sloc", { length: 100 }),
+    slocDescription: text("sloc_description"),
     imageUrl: text("image_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
