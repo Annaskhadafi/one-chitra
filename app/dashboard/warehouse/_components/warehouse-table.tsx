@@ -32,22 +32,39 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+// ... imports
+
 interface WarehouseTableProps {
-    data: Warehouse[]
+    data: (Warehouse & {
+        totalStock: number
+        totalValuation: number
+    })[]
 }
 
 export function WarehouseTable({ data }: WarehouseTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(value)
+    }
+
     // Stats calculation
     const totalWarehouses = data.length
+    // We can also calculate total val of all warehouses if needed, but not requested.
 
     const filteredData = data.filter(item =>
         item.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.type && item.type.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
     )
+
+    // ... existing handlers ...
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -117,8 +134,8 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                 <div className="flex gap-2 w-full sm:w-auto">
                     <Button variant="outline" onClick={() => {
                         const csvContent = "data:text/csv;charset=utf-8,"
-                            + "Sloc,Type,Description,Created At\n"
-                            + data.map(row => `"${row.sloc}","${row.type || ''}","${row.description || ''}","${row.createdAt}"`).join("\n");
+                            + "Sloc,Type,Description,Total Stock,Valuation,Created At\n"
+                            + data.map(row => `"${row.sloc}","${row.type || ''}","${row.description || ''}","${row.totalStock}","${row.totalValuation}","${row.createdAt}"`).join("\n");
                         const encodedUri = encodeURI(csvContent);
                         const link = document.createElement("a");
                         link.setAttribute("href", encodedUri);
@@ -148,13 +165,15 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                             <TableHead>Sloc</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Total Stock</TableHead>
+                            <TableHead className="text-right">Valuation</TableHead>
                             <TableHead className="w-[100px] text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center">
+                                <TableCell colSpan={7} className="h-24 text-center">
                                     No warehouses found.
                                 </TableCell>
                             </TableRow>
@@ -170,6 +189,8 @@ export function WarehouseTable({ data }: WarehouseTableProps) {
                                     <TableCell className="font-medium">{item.sloc}</TableCell>
                                     <TableCell>{item.type}</TableCell>
                                     <TableCell>{item.description}</TableCell>
+                                    <TableCell className="text-right font-mono">{item.totalStock.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.totalValuation)}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
                                             <WarehouseDialog
