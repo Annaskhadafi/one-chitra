@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { upsertProduct } from "@/app/actions/product"
+import { getWarehouses } from "@/app/actions/warehouse"
 import { Plus, X } from "lucide-react"
 import { productSchema } from "@/lib/schemas"
 import { Product } from "@/lib/types"
@@ -49,7 +50,18 @@ const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TU
 export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
+    const [warehouses, setWarehouses] = useState<{ sloc: string, description: string | null }[]>([])
     const isEdit = !!product
+
+    useEffect(() => {
+        if (isOpen) {
+            const fetchWarehouses = async () => {
+                const data = await getWarehouses()
+                setWarehouses(data)
+            }
+            fetchWarehouses()
+        }
+    }, [isOpen])
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productSchema),
@@ -189,9 +201,30 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Sloc</FormLabel>
-                                    <FormControl>
-                                        <Input {...field} placeholder="Sloc code" disabled={isLoading} />
-                                    </FormControl>
+                                    <Select
+                                        onValueChange={(val) => {
+                                            field.onChange(val)
+                                            const warehouse = warehouses.find(w => w.sloc === val)
+                                            if (warehouse) {
+                                                form.setValue("slocDescription", warehouse.description || "")
+                                            }
+                                        }}
+                                        defaultValue={field.value}
+                                        disabled={isLoading}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select Sloc" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {warehouses.map(w => (
+                                                <SelectItem key={w.sloc} value={w.sloc}>
+                                                    {w.sloc} {w.description ? `- ${w.description}` : ""}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -203,7 +236,7 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                                 <FormItem>
                                     <FormLabel>Sloc Description</FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="Sloc description" disabled={isLoading} />
+                                        <Input {...field} placeholder="Auto-filled from warehouse" disabled={true} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
