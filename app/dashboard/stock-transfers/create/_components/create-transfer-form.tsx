@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2, Plus, Trash } from "lucide-react"
+import { CalendarIcon, Loader2, Plus, Trash, Check, ChevronsUpDown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -25,9 +25,21 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import {
     Table,
@@ -60,14 +72,100 @@ const formSchema = z.object({
 
 interface CreateTransferFormProps {
     warehouses: { id: number; sloc: string; description: string | null }[]
-    products: { id: number; materialNumber: string; materialDescription: string | null }[]
+    products: { id: number; materialNumber: string; materialDescription: string | null; sloc: string | null; slocDescription: string | null }[]
+}
+
+interface ProductSelectorProps {
+    products: { id: number; materialNumber: string; materialDescription: string | null; sloc: string | null; slocDescription: string | null }[]
+    value: string
+    onSelect: (value: string) => void
+}
+
+function ProductSelector({ products, value, onSelect }: ProductSelectorProps) {
+    const [open, setOpen] = useState(false)
+
+    // Group products by materialDescription
+    const groupedProducts = useMemo(() => {
+        const groups: Record<string, typeof products> = {}
+        products.forEach(p => {
+            const key = p.materialDescription || "Other"
+            if (!groups[key]) groups[key] = []
+            groups[key].push(p)
+        })
+        return groups
+    }, [products])
+
+    const selectedProduct = products.find(p => p.id.toString() === value)
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <FormControl>
+                    <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={open}
+                        className={cn(
+                            "w-full justify-between",
+                            !value && "text-muted-foreground"
+                        )}
+                    >
+                        {selectedProduct
+                            ? `${selectedProduct.materialNumber} - ${selectedProduct.materialDescription || ""}`
+                            : "Select product..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </FormControl>
+            </PopoverTrigger>
+            <PopoverContent className="w-[500px] p-0">
+                <Command>
+                    <CommandInput placeholder="Search product..." />
+                    <CommandList>
+                        <CommandEmpty>No product found.</CommandEmpty>
+                        {Object.entries(groupedProducts).map(([groupName, items]) => (
+                            <CommandGroup key={groupName} heading={groupName}>
+                                {items.map((product) => (
+                                    <CommandItem
+                                        key={product.id}
+                                        value={`${product.materialDescription || ""} ${product.materialNumber} ${product.sloc || ""}`}
+                                        onSelect={() => {
+                                            onSelect(product.id.toString())
+                                            setOpen(false)
+                                        }}
+                                    >
+                                        <Check
+                                            className={cn(
+                                                "mr-2 h-4 w-4",
+                                                value === product.id.toString()
+                                                    ? "opacity-100"
+                                                    : "opacity-0"
+                                            )}
+                                        />
+                                        <div className="flex flex-col">
+                                            <span>{product.materialNumber}</span>
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span>{product.materialDescription}</span>
+                                                {product.sloc && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span>{product.sloc}</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        ))}
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    )
 }
 
 export function CreateTransferForm({ warehouses, products }: CreateTransferFormProps) {
     const router = useRouter()
-
-    // Convert products to map for easy lookup
-    const productsMap = new Map(products.map(p => [p.id.toString(), p]))
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -232,21 +330,12 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                                                 control={form.control}
                                                 name={`items.${index}.productId`}
                                                 render={({ field }) => (
-                                                    <FormItem>
-                                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                            <FormControl>
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select Product" />
-                                                                </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                {products.map((p) => (
-                                                                    <SelectItem key={p.id} value={p.id.toString()}>
-                                                                        {p.materialNumber} - {p.materialDescription}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                    <FormItem className="flex flex-col">
+                                                        <ProductSelector
+                                                            products={products}
+                                                            value={field.value}
+                                                            onSelect={field.onChange}
+                                                        />
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}

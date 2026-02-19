@@ -14,6 +14,7 @@ import {
     ArrowDownToLine,
     TrendingUp,
     History,
+    UsersRound,
     type LucideIcon
 } from "lucide-react"
 
@@ -132,6 +133,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/history-order",
                 icon: History,
                 resource: "history-order",
+            },
+            {
+                title: "Segmentasi Customer",
+                url: "/dashboard/customer-segmentation",
+                icon: UsersRound,
+                resource: "customer-segmentation",
             },
             {
                 title: "Customers",
