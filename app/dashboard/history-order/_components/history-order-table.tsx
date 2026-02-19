@@ -2,11 +2,10 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X, DollarSign, Package, ShoppingCart, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, Package, ShoppingCart, Users } from "lucide-react"
 import {
     Table,
     TableBody,
@@ -32,7 +31,6 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-
 
 import { HistoryOrderCharts } from "./history-order-charts"
 
@@ -96,7 +94,6 @@ export function HistoryOrderTable() {
         };
     }, [data]);
 
-
     const filteredData = useMemo(() => {
         setCurrentPage(1);
         return data.filter(item => {
@@ -110,17 +107,40 @@ export function HistoryOrderTable() {
 
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.customer_name);
             const matchesPlant = plantFilter.length === 0 || plantFilter.includes(item.plant);
+            const matchesMatGrp = matGrpFilter.length === 0 || matGrpFilter.includes(item.mat_grp_desc);
 
             let matchesYear = true;
-            if (yearFilter.length > 0) {
+            let matchesMonth = true;
+
+            if (yearFilter.length > 0 || monthFilter.length > 0) {
                 const parts = item.billing_date ? item.billing_date.split('/') : [];
-                const year = parts.length === 3 ? parts[2] : "";
-                matchesYear = yearFilter.includes(year);
+                if (parts.length === 3) {
+                    if (yearFilter.length > 0) matchesYear = yearFilter.includes(parts[2]);
+                    if (monthFilter.length > 0) matchesMonth = monthFilter.includes(parts[0].padStart(2, '0'));
+                } else {
+                    matchesYear = yearFilter.length === 0;
+                    matchesMonth = monthFilter.length === 0;
+                }
             }
 
-            return matchesSearch && matchesCustomer && matchesPlant && matchesYear;
+            return matchesSearch && matchesCustomer && matchesPlant && matchesMatGrp && matchesYear && matchesMonth;
         });
-    }, [data, searchTerm, customerFilter, plantFilter, yearFilter]);
+    }, [data, searchTerm, customerFilter, plantFilter, yearFilter, monthFilter, matGrpFilter]);
+
+    // Scorecards Data
+    const scorecards = useMemo(() => {
+        const totalRevenue = filteredData.reduce((sum, item) => sum + item.revenue, 0);
+        const totalQty = filteredData.reduce((sum, item) => sum + item.qty, 0);
+        const uniqueCust = new Set(filteredData.map(d => d.customer_name)).size;
+        const uniqueOrders = new Set(filteredData.map(d => d.po_number)).size;
+
+        return {
+            totalRevenue,
+            totalQty,
+            uniqueCust,
+            uniqueOrders
+        };
+    }, [filteredData]);
 
     // Pagination logic
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
@@ -308,6 +328,13 @@ export function HistoryOrderTable() {
                         onClear={() => setPlantFilter([])}
                     />
                     <FilterPopover
+                        title="Mat Group"
+                        options={uniqueMatGrps}
+                        selectedValues={matGrpFilter}
+                        onSelect={(val) => toggleFilter(matGrpFilter, setMatGrpFilter, val)}
+                        onClear={() => setMatGrpFilter([])}
+                    />
+                    <FilterPopover
                         title="Year"
                         options={dateOptions.years}
                         selectedValues={yearFilter}
@@ -320,13 +347,6 @@ export function HistoryOrderTable() {
                         selectedValues={monthFilter}
                         onSelect={(val) => toggleFilter(monthFilter, setMonthFilter, val)}
                         onClear={() => setMonthFilter([])}
-                    />
-                    <FilterPopover
-                        title="Mat Group"
-                        options={uniqueMatGrps}
-                        selectedValues={matGrpFilter}
-                        onSelect={(val) => toggleFilter(matGrpFilter, setMatGrpFilter, val)}
-                        onClear={() => setMatGrpFilter([])}
                     />
 
                     <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">

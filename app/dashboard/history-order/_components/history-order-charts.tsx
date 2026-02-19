@@ -65,7 +65,7 @@ export function HistoryOrderCharts({ data }: HistoryOrderChartsProps) {
                     const key = `${year}-${month}`; // YYYY-MM
                     revenueMap[key] = (revenueMap[key] || 0) + item.revenue;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // ignore invalid dates
             }
         });
