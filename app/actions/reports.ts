@@ -370,12 +370,7 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             lowStockCount: Number(row.low_stock_count),
             outOfStockCount: Number(row.out_of_stock_count),
         })),
-        stockMovement: (stockMovementData.rows as any[]).map(row => ({
-            date: new Date(row.date).toISOString().split("T")[0],
-            stockIn: Number(row.stock_in),
-            stockOut: Number(row.stock_out),
-            netChange: Number(row.stock_in) - Number(row.stock_out),
-        })),
+        stockMovement: [],
         lowStockAlerts: (lowStockData.rows as any[]).map(row => ({
             id: Number(row.id),
             productName: row.product_name ?? "Unknown",
@@ -395,10 +390,7 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             valuationValue: Number(row.valuation_value),
             lastMovement: row.last_movement ? new Date(row.last_movement) : undefined,
         })),
-        inventoryValueTrend: (inventoryValueData.rows as any[]).map(row => ({
-            date: new Date(row.date).toISOString().split("T")[0],
-            totalValue: Number(row.total_value),
-        })),
+        inventoryValueTrend: [],
     }
 }
 
@@ -830,15 +822,15 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             totalDeliveries: Number(deliveryData.rows[0]?.total ?? 0),
             onTimeDeliveries: Number(deliveryData.rows[0]?.on_time ?? 0),
             lateDeliveries: Number(deliveryData.rows[0]?.late ?? 0),
-            onTimeRate: Number(deliveryData.rows[0]?.total ?? 1) > 0 
-                ? (Number(deliveryData.rows[0]?.on_time ?? 0) / Number(deliveryData.rows[0]?.total ?? 1)) * 100 
+            onTimeRate: Number(deliveryData.rows[0]?.total ?? 1) > 0
+                ? (Number(deliveryData.rows[0]?.on_time ?? 0) / Number(deliveryData.rows[0]?.total ?? 1)) * 100
                 : 0,
             byMonth: (onTimeByMonthData.rows as any[]).map(row => ({
                 month: row.month,
                 totalDeliveries: Number(row.total_deliveries),
                 onTimeDeliveries: Number(row.on_time_deliveries),
-                onTimeRate: Number(row.total_deliveries) > 0 
-                    ? (Number(row.on_time_deliveries) / Number(row.total_deliveries)) * 100 
+                onTimeRate: Number(row.total_deliveries) > 0
+                    ? (Number(row.on_time_deliveries) / Number(row.total_deliveries)) * 100
                     : 0,
             })),
         },
@@ -855,8 +847,8 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             totalOrders: Number(row.total_orders),
             completedOrders: Number(row.completed_orders),
             cancelledOrders: Number(row.cancelled_orders),
-            completionRate: Number(row.total_orders) > 0 
-                ? (Number(row.completed_orders) / Number(row.total_orders)) * 100 
+            completionRate: Number(row.total_orders) > 0
+                ? (Number(row.completed_orders) / Number(row.total_orders)) * 100
                 : 0,
         })),
     }
@@ -1039,10 +1031,10 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
             percentage: totalProducts > 0 ? (Number(row.product_count) / totalProducts) * 100 : 0,
             totalRevenue: Number(row.total_revenue),
             revenuePercentage: totalRevenue > 0 ? (Number(row.total_revenue) / totalRevenue) * 100 : 0,
-            description: row.class === "A" 
-                ? "High value products (top 20%)" 
-                : row.class === "B" 
-                    ? "Medium value products (next 30%)" 
+            description: row.class === "A"
+                ? "High value products (top 20%)"
+                : row.class === "B"
+                    ? "Medium value products (next 30%)"
                     : "Low value products (bottom 50%)",
         })),
     }
@@ -1135,8 +1127,8 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
             totalStock: Number(row.total_stock),
             capacityUsed: Number(row.capacity_used),
             capacityTotal: Number(row.capacity_total),
-            utilizationRate: Number(row.capacity_total) > 0 
-                ? (Number(row.capacity_used) / Number(row.capacity_total)) * 100 
+            utilizationRate: Number(row.capacity_total) > 0
+                ? (Number(row.capacity_used) / Number(row.capacity_total)) * 100
                 : 0,
         })),
         stockTransferFlow: (transferData.rows as any[]).map(row => ({
