@@ -396,7 +396,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                         <div className="flex gap-2">
                             <Popover open={productOpen} onOpenChange={setProductOpen}>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start font-normal text-muted-foreground">
+                                    <Button variant="outline" className="flex-1 justify-start font-normal text-muted-foreground">
                                         <Search className="mr-2 h-4 w-4" />
                                         Search Product Name / Item Code / Scan bar code
                                     </Button>
