@@ -1,39 +1,58 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels } from "@/db/schema"
+import { salesOrders, salesOrderItems, stockLevels, customers, user, products } from "@/db/schema"
 import { eq, desc, inArray, sql, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 
 export async function getSalesOrders() {
-    return await db.query.salesOrders.findMany({
+    // Fetch orders with customer and createdByUser first
+    const orders = await db.query.salesOrders.findMany({
         with: {
             customer: true,
             createdByUser: true,
-            items: {
-                with: {
-                    product: true,
-                },
-            },
         },
         orderBy: [desc(salesOrders.createdAt)],
     })
-}
 
-export async function getSalesOrder(id: number) {
-    return await db.query.salesOrders.findFirst({
-        where: eq(salesOrders.id, id),
-        with: {
-            customer: true,
-            items: {
+    // Fetch items with products separately to avoid nested lateral join issues
+    const ordersWithItems = await Promise.all(
+        orders.map(async (order) => {
+            const items = await db.query.salesOrderItems.findMany({
+                where: eq(salesOrderItems.salesOrderId, order.id),
                 with: {
                     product: true,
                 },
-            },
+            })
+            return { ...order, items }
+        })
+    )
+
+    return ordersWithItems
+}
+
+export async function getSalesOrder(id: number) {
+    // Fetch order with customer first
+    const order = await db.query.salesOrders.findFirst({
+        where: eq(salesOrders.id, id),
+        with: {
+            customer: true,
         },
     })
+
+    if (!order) return undefined
+
+    // Fetch items with products separately
+    const items = await db.query.salesOrderItems.findMany({
+        where: eq(salesOrderItems.salesOrderId, id),
+        with: {
+            product: true,
+        },
+    })
+
+    return { ...order, items }
 }
 
 export async function generateInvoiceNumber() {
