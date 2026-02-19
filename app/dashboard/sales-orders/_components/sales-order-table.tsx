@@ -48,6 +48,8 @@ interface SalesOrderWithRelations {
     customerPo: string | null
     customerId: number
     salesDate: Date
+    poReceive: Date | null
+    categoryPo: string | null
     status: string
     discount: string
     shipping: string
@@ -296,7 +298,10 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                 <TableHead className="w-[160px]">Invoice Number</TableHead>
                                 <TableHead>No PO Customer</TableHead>
                                 <TableHead>Customer</TableHead>
-                                <TableHead>Date</TableHead>
+                                <TableHead>Customer</TableHead>
+                                <TableHead>Date PO</TableHead>
+                                <TableHead>PO Receive</TableHead>
+                                <TableHead>Category</TableHead>
                                 <TableHead>Items</TableHead>
                                 <TableHead>Grand Total</TableHead>
                                 <TableHead>Status</TableHead>
@@ -333,6 +338,16 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                                 month: "2-digit",
                                                 year: "numeric",
                                             })}
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                            {order.poReceive ? new Date(order.poReceive).toLocaleDateString("id-ID", {
+                                                day: "2-digit",
+                                                month: "2-digit",
+                                                year: "numeric",
+                                            }) : "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{order.categoryPo || "Normal"}</Badge>
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{order.items.length} items</Badge>

@@ -42,6 +42,7 @@ import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package }
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse } from "@/lib/types"
+import { QuickAddProductDialog } from "./quick-add-product-dialog"
 
 interface OrderItem {
     id?: number
@@ -64,6 +65,8 @@ interface SalesOrderFormProps {
         customerId: number
         warehouseId?: number | null
         salesDate: Date
+        poReceive?: Date | null
+        categoryPo?: string | null
         status: string
         termsConditions: string | null
         notes: string | null
@@ -103,6 +106,13 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
             ? new Date(initialData.salesDate).toISOString().split("T")[0]
             : new Date().toISOString().split("T")[0]
     )
+    const [poReceive, setPoReceive] = useState(
+        initialData?.poReceive
+            ? new Date(initialData.poReceive).toISOString().split("T")[0]
+            : ""
+    )
+    const [categoryPo, setCategoryPo] = useState(initialData?.categoryPo || "Normal")
+
     const [status, setStatus] = useState(initialData?.status || "draft")
     const [termsConditions, setTermsConditions] = useState(
         initialData?.termsConditions || "1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to jurisdiction only"
@@ -200,6 +210,8 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 customerId,
                 warehouseId,
                 salesDate,
+                poReceive: poReceive || undefined,
+                categoryPo,
                 status: status as "draft" | "confirmed" | "completed" | "cancelled",
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -373,16 +385,40 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                         </div>
 
 
-                        {/* Sales Date */}
+                        {/* Sales Date / Date PO */}
                         <div className="space-y-2">
                             <Label className="font-semibold">
-                                <span className="text-red-500">*</span> Sales Date
+                                <span className="text-red-500">*</span> Date PO
                             </Label>
                             <Input
                                 type="date"
                                 value={salesDate}
                                 onChange={(e) => setSalesDate(e.target.value)}
                             />
+                        </div>
+
+                        {/* PO Receive */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">PO Receive</Label>
+                            <Input
+                                type="date"
+                                value={poReceive}
+                                onChange={(e) => setPoReceive(e.target.value)}
+                            />
+                        </div>
+
+                        {/* PO Category */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">Category PO</Label>
+                            <Select value={categoryPo} onValueChange={setCategoryPo}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Normal">Normal</SelectItem>
+                                    <SelectItem value="VHS/Consignment">VHS/Consignment</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardContent>
@@ -432,6 +468,13 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                             >
                                 <Plus className="h-4 w-4" />
                             </Button>
+                            <QuickAddProductDialog
+                                warehouses={warehouses}
+                                onProductCreated={(product) => {
+                                    addProduct(product)
+                                    toast.success(`Added ${product.materialNumber} to order`)
+                                }}
+                            />
                         </div>
 
                         {/* Items Table */}
