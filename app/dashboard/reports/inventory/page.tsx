@@ -1,7 +1,7 @@
 import { getInventoryReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPICard, ReportKPIGrid, LowStockAlertRow, ProgressBar } from "@/components/reports/report-components"
-import { SalesTrendChart, ReportBarChart, ReportPieChart, StackedBarChart } from "@/components/reports/report-charts"
+import { SalesTrendChart, ReportBarChart, ReportPieChart, StackedBarChart, StockMovementChart } from "@/components/reports/report-charts"
 import { Package, AlertTriangle, TrendingUp, DollarSign, Warehouse, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
@@ -254,6 +254,3 @@ function formatCurrency(val: number): string {
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
 }
-
-// Stock Movement Chart Component (using report-charts)
-import { StockMovementChart } from "@/components/reports/report-charts"

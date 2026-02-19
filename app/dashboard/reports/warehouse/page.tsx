@@ -1,10 +1,9 @@
 import { getWarehouseLogisticsReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPICard, ReportKPIGrid, ExportButton, ProgressBar } from "@/components/reports/report-components"
-import { ReportPieChart, ReportBarChart, GaugeChart } from "@/components/reports/report-charts"
+import { ReportPieChart, ReportBarChart, GaugeChart, DeliveryPerformanceChart, ShippingCostChart } from "@/components/reports/report-charts"
 import { Warehouse, Truck, Package, DollarSign, ArrowLeft, TrendingUp } from "lucide-react"
 import Link from "next/link"
-import { Line, Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 export default async function WarehouseLogisticsReportPage() {
     const data = await getWarehouseLogisticsReport()
@@ -375,116 +374,4 @@ function formatCurrency(val: number): string {
     if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
-}
-
-// Chart Components
-function DeliveryPerformanceChart({ data }: { data: { name: string; deliveries: number; onTimeRate: number }[] }) {
-    return (
-        <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 60 }}>
-                <defs>
-                    <linearGradient id="deliveriesGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                />
-                <YAxis
-                    yAxisId="left"
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                />
-                <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    domain={[0, 100]}
-                />
-                <Tooltip
-                    contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                    }}
-                />
-                <Legend />
-                <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="deliveries"
-                    stroke="hsl(217, 91%, 60%)"
-                    strokeWidth={2}
-                    fill="url(#deliveriesGradient)"
-                    name="Total Deliveries"
-                />
-                <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="onTimeRate"
-                    stroke="hsl(160, 84%, 39%)"
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(160, 84%, 39%)", r: 4 }}
-                    name="On-Time Rate (%)"
-                />
-            </AreaChart>
-        </ResponsiveContainer>
-    )
-}
-
-function ShippingCostChart({ data }: { data: { name: string; cost: number }[] }) {
-    return (
-        <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                <defs>
-                    <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(47, 93%, 58%)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(47, 93%, 58%)" stopOpacity={0} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                />
-                <YAxis
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => formatCurrency(v)}
-                />
-                <Tooltip
-                    formatter={(value: number) => [formatCurrency(value), "Shipping Cost"]}
-                    contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                    }}
-                />
-                <Area
-                    type="monotone"
-                    dataKey="cost"
-                    stroke="hsl(47, 93%, 58%)"
-                    strokeWidth={2}
-                    fill="url(#costGradient)"
-                />
-            </AreaChart>
-        </ResponsiveContainer>
-    )
 }

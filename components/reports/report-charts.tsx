@@ -597,3 +597,238 @@ export function HeatmapChart({ data, title, description }: HeatmapChartProps) {
         </Card>
     )
 }
+
+// ==================== STOCK MOVEMENT CHART ====================
+interface StockMovementChartProps {
+    data: { date: string; stockIn: number; stockOut: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function StockMovementChart({ data, title, description, height = 300 }: StockMovementChartProps) {
+    const chartData = data.map(d => ({
+        date: d.date,
+        stockIn: d.stockIn,
+        stockOut: d.stockOut,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Stock Movement"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Legend />
+                            <Bar dataKey="stockIn" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Stock In" />
+                            <Bar dataKey="stockOut" fill="hsl(340, 82%, 52%)" radius={[4, 4, 0, 0]} name="Stock Out" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== DELIVERY PERFORMANCE CHART ====================
+interface DeliveryPerformanceChartProps {
+    data: { name: string; deliveries: number; onTimeRate: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function DeliveryPerformanceChart({ data, title, description, height = 300 }: DeliveryPerformanceChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        deliveries: d.deliveries,
+        onTimeRate: d.onTimeRate,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Delivery Performance"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 60 }}>
+                            <defs>
+                                <linearGradient id="deliveriesGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                yAxisId="left"
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <YAxis
+                                yAxisId="right"
+                                orientation="right"
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                domain={[0, 100]}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Legend />
+                            <Area
+                                yAxisId="left"
+                                type="monotone"
+                                dataKey="deliveries"
+                                stroke="hsl(217, 91%, 60%)"
+                                strokeWidth={2}
+                                fill="url(#deliveriesGradient)"
+                                name="Total Deliveries"
+                            />
+                            <Line
+                                yAxisId="right"
+                                type="monotone"
+                                dataKey="onTimeRate"
+                                stroke="hsl(160, 84%, 39%)"
+                                strokeWidth={2}
+                                dot={{ fill: "hsl(160, 84%, 39%)", r: 4 }}
+                                name="On-Time Rate (%)"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== SHIPPING COST CHART ====================
+interface ShippingCostChartProps {
+    data: { name: string; cost: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function ShippingCostChart({ data, title, description, height = 300 }: ShippingCostChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        cost: d.cost,
+    }))
+
+    const formatCurrency = (val: number): string => {
+        if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
+        if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
+        if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
+        return `Rp ${val.toLocaleString()}`
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Shipping Cost"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <defs>
+                                <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(47, 93%, 58%)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="hsl(47, 93%, 58%)" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                tickFormatter={formatCurrency}
+                            />
+                            <Tooltip
+                                formatter={(value: number) => [formatCurrency(value), "Shipping Cost"]}
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="cost"
+                                stroke="hsl(47, 93%, 58%)"
+                                strokeWidth={2}
+                                fill="url(#costGradient)"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
