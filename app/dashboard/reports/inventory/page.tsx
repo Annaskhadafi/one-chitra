@@ -1,10 +1,9 @@
 import { getInventoryReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPICard, ReportKPIGrid, LowStockAlertRow, ProgressBar } from "@/components/reports/report-components"
-import { SalesTrendChart, ReportBarChart, ReportPieChart } from "@/components/reports/report-charts"
+import { SalesTrendChart, ReportBarChart, ReportPieChart, StackedBarChart } from "@/components/reports/report-charts"
 import { Package, AlertTriangle, TrendingUp, DollarSign, Warehouse, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 export default async function InventoryReportPage() {
     const data = await getInventoryReport()
@@ -256,36 +255,5 @@ function formatCurrency(val: number): string {
     return `Rp ${val.toLocaleString()}`
 }
 
-function StockMovementChart({ data }: { data: { date: string; stockIn: number; stockOut: number }[] }) {
-    return (
-        <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                />
-                <YAxis
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                />
-                <Tooltip
-                    contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                    }}
-                />
-                <Legend />
-                <Bar dataKey="stockIn" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Stock In" />
-                <Bar dataKey="stockOut" fill="hsl(340, 82%, 52%)" radius={[4, 4, 0, 0]} name="Stock Out" />
-            </BarChart>
-        </ResponsiveContainer>
-    )
-}
+// Stock Movement Chart Component (using report-charts)
+import { StockMovementChart } from "@/components/reports/report-charts"
