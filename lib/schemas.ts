@@ -17,6 +17,7 @@ export const productSchema = z.object({
     materialNumber: z.string().min(1, "Material Number is required"),
     oldMaterialNo: z.string().optional(),
     materialDescription: z.string().optional(),
+    brand: z.string().optional(),
     costSap: z.string().optional(), // Input as string, converted later if needed
     plant: z.string().optional(),
     sloc: z.string().optional(),
