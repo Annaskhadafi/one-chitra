@@ -105,8 +105,14 @@ export const navigationConfig: NavSection[] = [
         ],
     },
     {
-        title: "Sales & Distribution",
+        title: "Sales & marketing Operation",
         items: [
+            {
+                title: "Fleetlist",
+                url: "/dashboard/fleetlist",
+                icon: Truck,
+                resource: "fleetlist",
+            },
             {
                 title: "Customers",
                 url: "/dashboard/customers",

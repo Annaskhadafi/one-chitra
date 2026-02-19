@@ -42,3 +42,16 @@ export async function createVehicle(policeNumber: string, type: string) {
         return { success: false, error: "Failed to create vehicle" }
     }
 }
+
+export async function getFleetList() {
+    try {
+        const response = await fetch("https://ics.chitraparatama.co.id/product/get_api.php?function=fleetlist", {
+            cache: "no-store"
+        });
+        const result = await response.json();
+        return { success: true, data: result.data || [] };
+    } catch (error) {
+        console.error("Failed to fetch fleet list:", error);
+        return { success: false, error: "Failed to fetch fleet list" };
+    }
+}
