@@ -12,7 +12,8 @@ import {
     ShoppingCart,
     ArrowRightLeft,
     ArrowDownToLine,
-    type LucideIcon
+    type LucideIcon,
+    Target
 } from "lucide-react"
 
 export type NavItem = {
@@ -112,6 +113,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/fleetlist",
                 icon: Truck,
                 resource: "fleetlist",
+            },
+            {
+                title: "Competitor Info",
+                url: "/dashboard/competitor-info",
+                icon: Target,
+                resource: "competitor-info",
             },
             {
                 title: "Customers",
