@@ -50,6 +50,7 @@ interface StockTableProps {
         product: {
             materialNumber: string;
             materialDescription: string | null;
+            brand: string | null;
             plant: string | null;
             category: string;
             oldMaterialNo: string | null;
@@ -331,6 +332,7 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                                     </TableHead>
                                     <TableHead>Plnt</TableHead>
                                     <TableHead>Category</TableHead>
+                                    <TableHead>Brand</TableHead>
                                     <TableHead>Material #</TableHead>
                                     <TableHead>Old Mat. No</TableHead>
                                     <TableHead>Description</TableHead>
@@ -364,6 +366,7 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                                             </TableCell>
                                             <TableCell>{item.product?.plant || "-"}</TableCell>
                                             <TableCell>{item.product?.category || "-"}</TableCell>
+                                            <TableCell>{item.product?.brand || "-"}</TableCell>
                                             <TableCell className="font-medium text-blue-600">
                                                 {item.product?.materialNumber}
                                             </TableCell>

@@ -288,6 +288,7 @@ export function ProductTable({ data }: ProductTableProps) {
                             <TableHead>Plant</TableHead>
                             <TableHead className="w-[60px]">Image</TableHead>
                             <TableHead>Category</TableHead>
+                            <TableHead>Brand</TableHead>
                             <TableHead>Material Number</TableHead>
                             <TableHead>Old Material No.</TableHead>
                             <TableHead>Description</TableHead>
@@ -333,6 +334,7 @@ export function ProductTable({ data }: ProductTableProps) {
                                                 {item.category}
                                             </Badge>
                                         </TableCell>
+                                        <TableCell>{item.brand || "-"}</TableCell>
                                         <TableCell className="font-medium text-blue-600">{item.materialNumber}</TableCell>
                                         <TableCell className="text-muted-foreground">{item.oldMaterialNo || "-"}</TableCell>
                                         <TableCell className="max-w-xs truncate">{item.materialDescription}</TableCell>

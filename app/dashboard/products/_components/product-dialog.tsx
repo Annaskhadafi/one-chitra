@@ -145,6 +145,19 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                         />
                         <FormField
                             control={form.control}
+                            name="brand"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Brand</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} placeholder="Brand Name" disabled={isLoading} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
                             name="materialNumber"
                             render={({ field }) => (
                                 <FormItem>

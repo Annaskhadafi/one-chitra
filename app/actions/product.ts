@@ -98,6 +98,7 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
                     category: sql`excluded.category`,
                     oldMaterialNo: sql`excluded.old_material_no`,
                     materialDescription: sql`excluded.material_description`,
+                    brand: sql`excluded.brand`,
                     costSap: sql`excluded.cost_sap`,
                     plant: sql`excluded.plant`,
                     slocDescription: sql`excluded.sloc_description`,
