@@ -13,6 +13,7 @@ export interface HistoryOrderItem {
     plant: string;
     po_number: string;
     po_date: string;
+    mat_grp_desc: string;
     salesman: string;
 }
 
@@ -35,15 +36,12 @@ export async function getHistoryOrder() {
 
         // Map CSV headers to our interface keys
         const formattedData: HistoryOrderItem[] = data.map((item: any) => {
-            // Parse Revenue: "163.794.218" -> 163794218
-            const revenueStr = item['Revenue in Loc Curr.'] || '0';
-            // Remove dots, modify comma to dot if needed (but here it seems purely number with dots as thousands)
-            // The example "163.794.218" suggests IDR where dots are thousands separators.
-            // If there are decimals like "12.172,57", we need to handle that.
-            // Let's assume standard ID formatting: dot = thousand, comma = decimal
+            // Parse Revenue: "Revenue in Doc Curr." column
+            const revenueStr = item['Revenue in Doc Curr.'] || '0';
 
             let revenue = 0;
             if (revenueStr) {
+                // Remove dots, modify comma to dot if needed (though CSV seems to use dots for thousands)
                 const cleanStr = revenueStr.replace(/\./g, "").replace(/,/g, ".");
                 revenue = parseFloat(cleanStr);
             }
@@ -66,6 +64,7 @@ export async function getHistoryOrder() {
                 plant: item['Plant'] || '',
                 po_number: item['PO No.'] || '',
                 po_date: item['PO Date'] || '',
+                mat_grp_desc: item['Mat Grp Desc.'] || '',
                 salesman: item['Salesman'] || ''
             };
         });
