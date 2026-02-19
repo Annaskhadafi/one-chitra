@@ -31,6 +31,7 @@ export const deliveries = pgTable("deliveries", {
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
     shippingAddress: text("shipping_address"),
     notes: text("notes"),
+    fleetTripId: integer("fleet_trip_id"), // Reference to fleet_trips table (circular dependency avoided by not importing it here directly in definition if possible, or handling carefully)
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -46,6 +47,10 @@ export const deliveryItems = pgTable("delivery_items", {
     serialNumbers: text("serial_numbers").array(),
 });
 
+// Import fleetTrips here to avoid circular dependency issues in table definition if possible, 
+// but for relations it's fine.
+import { fleetTrips } from "./fleet-trips";
+
 export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     salesOrder: one(salesOrders, {
         fields: [deliveries.salesOrderId],
@@ -54,6 +59,10 @@ export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     warehouse: one(warehouses, {
         fields: [deliveries.warehouseId],
         references: [warehouses.id],
+    }),
+    fleetTrip: one(fleetTrips, {
+        fields: [deliveries.fleetTripId],
+        references: [fleetTrips.id],
     }),
     createdByUser: one(user, {
         fields: [deliveries.createdBy],

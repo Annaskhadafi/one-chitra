@@ -129,3 +129,21 @@ export const quotationSchema = z.object({
     shipping: z.number().min(0).default(0),
     items: z.array(quotationItemSchema).min(1, "At least one item is required"),
 })
+
+export const fleetTripSchema = z.object({
+    tripNumber: z.string().optional(),
+    driverId: z.number().min(1, "Driver is required"),
+    vehicleId: z.number().min(1, "Vehicle is required"),
+    status: z.enum(["scheduled", "in_transit", "completed", "cancelled"]).default("scheduled"),
+    date: z.string().or(z.date()),
+    notes: z.string().optional().nullable(),
+    // Costs
+    costGasoline: z.number().min(0).default(0),
+    costToll: z.number().min(0).default(0),
+    costParking: z.number().min(0).default(0),
+    costMeals: z.number().min(0).default(0),
+    costMaintenance: z.number().min(0).default(0),
+    costOthers: z.number().min(0).default(0),
+    // Linked Deliveries (Sales Orders to deliver)
+    salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
+})

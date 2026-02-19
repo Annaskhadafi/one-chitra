@@ -106,6 +106,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "deliveries",
             },
             {
+                title: "Fleet Management",
+                url: "/dashboard/fleet-management",
+                icon: Truck,
+                resource: "fleet-management",
+            },
+            {
                 title: "Billing",
                 url: "/dashboard/billing",
                 icon: CreditCard,
