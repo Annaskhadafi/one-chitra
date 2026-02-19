@@ -4,16 +4,28 @@ import { useMemo } from "react"
 import {
     Bar,
     BarChart,
-    Cell,
+    CartesianGrid,
+    Label,
     Pie,
     PieChart,
-    ResponsiveContainer,
-    Tooltip,
     XAxis,
     YAxis,
-    Legend
 } from "recharts"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card"
+import {
+    ChartConfig,
+    ChartContainer,
+    ChartLegend,
+    ChartLegendContent,
+    ChartTooltip,
+    ChartTooltipContent,
+} from "@/components/ui/chart"
 
 interface FleetItem {
     id_fleet_list: string
@@ -33,8 +45,6 @@ interface FleetChartsProps {
     data: FleetItem[]
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
-
 export function FleetCharts({ data }: FleetChartsProps) {
     // Tire Size Distribution (Top 10)
     const tireSizeData = useMemo(() => {
@@ -45,23 +55,61 @@ export function FleetCharts({ data }: FleetChartsProps) {
         });
 
         return Object.entries(counts)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value)
+            .map(([size, tires]) => ({ size, tires }))
+            .sort((a, b) => b.tires - a.tires)
             .slice(0, 10);
     }, [data]);
 
-    // Manufacturer Share
-    const manufacturerData = useMemo(() => {
+    // Manufacturer Share (Top 5 + Other)
+    const { manufacturerData, manufacturerConfig } = useMemo(() => {
         const counts: Record<string, number> = {};
         data.forEach(item => {
             const manuf = item.unit_manufacture || "Unknown";
             counts[manuf] = (counts[manuf] || 0) + (parseInt(item.unit_qty) || 0);
         });
 
-        return Object.entries(counts)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value);
+        const sorted = Object.entries(counts)
+            .sort(([, a], [, b]) => b - a);
+
+        const top5 = sorted.slice(0, 5);
+        const otherCount = sorted.slice(5).reduce((acc, [, val]) => acc + val, 0);
+
+        const chartData = top5.map(([manufacturer, units], index) => ({
+            manufacturer,
+            units,
+            fill: `var(--chart-${index + 1})`,
+        }));
+
+        if (otherCount > 0) {
+            chartData.push({
+                manufacturer: "Other",
+                units: otherCount,
+                fill: "var(--muted-foreground)", // or a specific neutral color
+            });
+        }
+
+        const config: ChartConfig = {
+            units: {
+                label: "Units",
+            },
+        };
+
+        chartData.forEach((item) => {
+            config[item.manufacturer] = {
+                label: item.manufacturer,
+                color: item.fill,
+            };
+        });
+
+        return { manufacturerData: chartData, manufacturerConfig: config };
     }, [data]);
+
+    const tireConfig = {
+        tires: {
+            label: "Total Tires",
+            color: "hsl(var(--chart-1))",
+        },
+    } satisfies ChartConfig;
 
     if (data.length === 0) {
         return null;
@@ -69,63 +117,101 @@ export function FleetCharts({ data }: FleetChartsProps) {
 
     return (
         <div className="grid gap-4 md:grid-cols-2">
-            <Card>
+            <Card className="flex flex-col">
                 <CardHeader>
-                    <CardTitle>Top 10 Tire Sizes (by Total Tires)</CardTitle>
+                    <CardTitle>Top 10 Tire Sizes</CardTitle>
+                    <CardDescription>By total tire quantity</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={tireSizeData} layout="vertical" margin={{ left: 40 }}>
-                            <XAxis type="number" />
+                <CardContent className="flex-1 pb-0">
+                    <ChartContainer config={tireConfig} className="min-h-[200px] max-h-[350px] w-full">
+                        <BarChart
+                            accessibilityLayer
+                            data={tireSizeData}
+                            layout="vertical"
+                            margin={{
+                                left: 0,
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                            }}
+                        >
+                            <CartesianGrid horizontal={false} />
                             <YAxis
-                                dataKey="name"
+                                dataKey="size"
                                 type="category"
-                                width={100}
-                                tick={{ fontSize: 12 }}
+                                tickLine={false}
+                                tickMargin={10}
+                                axisLine={false}
+                                width={80} // Adjust based on expected text length
+                                className="text-xs"
                             />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-                                itemStyle={{ color: 'var(--foreground)' }}
-                                cursor={{ fill: 'var(--muted)' }}
+                            <XAxis dataKey="tires" type="number" hide />
+                            <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent hideLabel />}
                             />
-                            <Bar dataKey="value" fill="#8884d8" radius={[0, 4, 4, 0]}>
-                                {tireSizeData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Bar>
+                            <Bar dataKey="tires" fill="var(--color-tires)" radius={5} layout="vertical" />
                         </BarChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Vehicle Manufacturer Share (by Unit Qty)</CardTitle>
+            <Card className="flex flex-col">
+                <CardHeader className="items-center pb-0">
+                    <CardTitle>Vehicle Manufacturer Share</CardTitle>
+                    <CardDescription>By unit quantity</CardDescription>
                 </CardHeader>
-                <CardContent className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                <CardContent className="flex-1 pb-0">
+                    <ChartContainer
+                        config={manufacturerConfig}
+                        className="mx-auto aspect-square max-h-[350px]"
+                    >
                         <PieChart>
+                            <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent hideLabel />}
+                            />
                             <Pie
                                 data={manufacturerData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
+                                dataKey="units"
+                                nameKey="manufacturer"
+                                innerRadius={60}
+                                strokeWidth={5}
                             >
-                                {manufacturerData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
+                                <Label
+                                    content={({ viewBox }) => {
+                                        if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                            const total = manufacturerData.reduce((acc, curr) => acc + curr.units, 0);
+                                            return (
+                                                <text
+                                                    x={viewBox.cx}
+                                                    y={viewBox.cy}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="middle"
+                                                >
+                                                    <tspan
+                                                        x={viewBox.cx}
+                                                        y={viewBox.cy}
+                                                        className="fill-foreground text-3xl font-bold"
+                                                    >
+                                                        {total.toLocaleString()}
+                                                    </tspan>
+                                                    <tspan
+                                                        x={viewBox.cx}
+                                                        y={(viewBox.cy || 0) + 24}
+                                                        className="fill-muted-foreground"
+                                                    >
+                                                        Units
+                                                    </tspan>
+                                                </text>
+                                            )
+                                        }
+                                    }}
+                                />
                             </Pie>
-                            <Tooltip
-                                contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-                                itemStyle={{ color: 'var(--foreground)' }}
-                            />
-                            <Legend />
+                            <ChartLegend content={<ChartLegendContent nameKey="manufacturer" />} className="-translate-y-2 flex-wrap gap-2 [&>*]:basis-1/4 [&>*]:justify-center" />
                         </PieChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                 </CardContent>
             </Card>
         </div>
