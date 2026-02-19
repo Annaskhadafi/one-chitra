@@ -171,12 +171,14 @@ export function FleetListTable() {
         title,
         options,
         selectedValues,
-        onSelect
+        onSelect,
+        onClear
     }: {
         title: string,
         options: string[],
         selectedValues: string[],
-        onSelect: (value: string) => void
+        onSelect: (value: string) => void,
+        onClear: () => void
     }) => {
         return (
             <Popover>
@@ -226,9 +228,7 @@ export function FleetListTable() {
                                     <CommandSeparator />
                                     <CommandGroup>
                                         <CommandItem
-                                            onSelect={() => options.forEach(opt => {
-                                                if (selectedValues.includes(opt)) onSelect(opt);
-                                            })}
+                                            onSelect={onClear}
                                             className="justify-center text-center"
                                         >
                                             Clear filters
@@ -297,24 +297,28 @@ export function FleetListTable() {
                         options={uniqueStatuses}
                         selectedValues={statusFilter}
                         onSelect={toggleStatusFilter}
+                        onClear={() => setStatusFilter([])}
                     />
                     <FilterPopover
                         title="Location"
                         options={uniqueLocations}
                         selectedValues={locationFilter}
                         onSelect={toggleLocationFilter}
+                        onClear={() => setLocationFilter([])}
                     />
                     <FilterPopover
                         title="Customer"
                         options={uniqueCustomers}
                         selectedValues={customerFilter}
                         onSelect={toggleCustomerFilter}
+                        onClear={() => setCustomerFilter([])}
                     />
                     <FilterPopover
                         title="Tire Size"
                         options={uniqueTireSizes}
                         selectedValues={tireSizeFilter}
                         onSelect={toggleTireSizeFilter}
+                        onClear={() => setTireSizeFilter([])}
                     />
 
                     <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">
