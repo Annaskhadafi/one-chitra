@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react"
+import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -13,10 +13,10 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+
 import { toast } from "sonner"
-import { getCompetitorData, CompetitorItem } from "@/app/actions/competitor"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getCompetitorInfo, CompetitorItem } from "@/app/actions/competitor"
+
 import {
     Command,
     CommandEmpty,
@@ -31,14 +31,10 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-    Dialog,
-    DialogContent,
-    DialogTrigger,
-} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-import Papa from "papaparse"
+
+import { CompetitorCharts } from "./competitor-charts"
 
 export function CompetitorTable() {
     const [data, setData] = useState<CompetitorItem[]>([])
@@ -46,9 +42,10 @@ export function CompetitorTable() {
     const [searchTerm, setSearchTerm] = useState("")
 
     // Filters
+    const [consultantFilter, setConsultantFilter] = useState<string[]>([])
     const [brandFilter, setBrandFilter] = useState<string[]>([])
+    const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
-    const [salesFilter, setSalesFilter] = useState<string[]>([])
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
@@ -57,17 +54,15 @@ export function CompetitorTable() {
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
         try {
-            const result = await getCompetitorData();
+            const result = await getCompetitorInfo();
             if (result.success && Array.isArray(result.data)) {
-                // Filter out empty rows if any
-                const validData = result.data.filter((item: any) => item.Timestamp);
-                setData(validData);
+                setData(result.data);
             } else {
                 setData([]);
                 toast.error("Failed to load data");
             }
         } catch (_error) {
-            toast.error("Failed to fetch Competitor data");
+            toast.error("Failed to fetch Competitor Info data");
         } finally {
             setIsLoading(false);
         }
@@ -77,34 +72,30 @@ export function CompetitorTable() {
         fetchData();
     }, [fetchData]);
 
-    const uniqueBrands = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.Brand))).filter(Boolean).sort();
-    }, [data]);
-
-    const uniqueCustomers = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.Customer))).filter(Boolean).sort();
-    }, [data]);
-
-    const uniqueSales = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.Sales))).filter(Boolean).sort();
-    }, [data]);
+    // Unique values for filters
+    const uniqueConsultants = useMemo(() => Array.from(new Set(data.map(item => item.business_consultant))).filter(Boolean).sort(), [data]);
+    const uniqueBrands = useMemo(() => Array.from(new Set(data.map(item => item.brand))).filter(Boolean).sort(), [data]);
+    const uniqueCategories = useMemo(() => Array.from(new Set(data.map(item => item.category_tire))).filter(Boolean).sort(), [data]);
+    const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(item => item.customer))).filter(Boolean).sort(), [data]);
 
     const filteredData = useMemo(() => {
         setCurrentPage(1);
         return data.filter(item => {
             const matchesSearch =
-                (item.Customer || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (item.Brand || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (item.Pattern || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (item.Size || "").toLowerCase().includes(searchTerm.toLowerCase());
+                item.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.size_tire.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.remark.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesBrand = brandFilter.length === 0 || brandFilter.includes(item.Brand);
-            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.Customer);
-            const matchesSales = salesFilter.length === 0 || salesFilter.includes(item.Sales);
+            const matchesConsultant = consultantFilter.length === 0 || consultantFilter.includes(item.business_consultant);
+            const matchesBrand = brandFilter.length === 0 || brandFilter.includes(item.brand);
+            const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(item.category_tire);
+            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.customer);
 
-            return matchesSearch && matchesBrand && matchesCustomer && matchesSales;
+            return matchesSearch && matchesConsultant && matchesBrand && matchesCategory && matchesCustomer;
         });
-    }, [data, searchTerm, brandFilter, customerFilter, salesFilter]);
+    }, [data, searchTerm, consultantFilter, brandFilter, categoryFilter, customerFilter]);
 
     // Pagination logic
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
@@ -113,32 +104,21 @@ export function CompetitorTable() {
         return filteredData.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredData, currentPage, itemsPerPage]);
 
-    const toggleBrandFilter = (brand: string) => {
-        setBrandFilter(prev =>
-            prev.includes(brand) ? prev.filter(b => b !== brand) : [...prev, brand]
-        );
-    };
-
-    const toggleCustomerFilter = (customer: string) => {
-        setCustomerFilter(prev =>
-            prev.includes(customer) ? prev.filter(c => c !== customer) : [...prev, customer]
-        );
-    };
-
-    const toggleSalesFilter = (sales: string) => {
-        setSalesFilter(prev =>
-            prev.includes(sales) ? prev.filter(s => s !== sales) : [...prev, sales]
-        );
+    // Filter toggles
+    const toggleFilter = (filter: string[], setFilter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+        setFilter(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
     };
 
     const clearAllFilters = () => {
+        setConsultantFilter([]);
         setBrandFilter([]);
+        setCategoryFilter([]);
         setCustomerFilter([]);
-        setSalesFilter([]);
         setSearchTerm("");
     };
 
-    const hasActiveFilters = brandFilter.length > 0 || customerFilter.length > 0 || salesFilter.length > 0 || searchTerm !== "";
+    const hasActiveFilters = consultantFilter.length > 0 || brandFilter.length > 0 || categoryFilter.length > 0 || customerFilter.length > 0 || searchTerm !== "";
+
 
     const FilterPopover = ({
         title,
@@ -220,18 +200,22 @@ export function CompetitorTable() {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching Competitor Data...</p>
+                <p className="text-sm text-muted-foreground">Fetching Competitor Info...</p>
             </div>
         );
     }
 
     return (
         <div className="space-y-6 relative">
+            {/* Charts */}
+            <CompetitorCharts data={filteredData} />
+
+            {/* Filters and Toolbar */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="relative flex-1 max-w-sm w-full">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search customer, brand, pattern..."
+                        placeholder="Search customer, brand, remark..."
                         className="pl-8"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -239,47 +223,55 @@ export function CompetitorTable() {
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                     <FilterPopover
+                        title="Consultant"
+                        options={uniqueConsultants}
+                        selectedValues={consultantFilter}
+                        onSelect={(val) => toggleFilter(consultantFilter, setConsultantFilter, val)}
+                        onClear={() => setConsultantFilter([])}
+                    />
+                    <FilterPopover
                         title="Brand"
                         options={uniqueBrands}
                         selectedValues={brandFilter}
-                        onSelect={toggleBrandFilter}
+                        onSelect={(val) => toggleFilter(brandFilter, setBrandFilter, val)}
                         onClear={() => setBrandFilter([])}
+                    />
+                    <FilterPopover
+                        title="Category"
+                        options={uniqueCategories}
+                        selectedValues={categoryFilter}
+                        onSelect={(val) => toggleFilter(categoryFilter, setCategoryFilter, val)}
+                        onClear={() => setCategoryFilter([])}
                     />
                     <FilterPopover
                         title="Customer"
                         options={uniqueCustomers}
                         selectedValues={customerFilter}
-                        onSelect={toggleCustomerFilter}
+                        onSelect={(val) => toggleFilter(customerFilter, setCustomerFilter, val)}
                         onClear={() => setCustomerFilter([])}
                     />
-                    <FilterPopover
-                        title="Sales"
-                        options={uniqueSales}
-                        selectedValues={salesFilter}
-                        onSelect={toggleSalesFilter}
-                        onClear={() => setSalesFilter([])}
-                    />
 
-                    <Button variant="outline" size="sm" onClick={fetchData}>
+                    <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
                 </div>
             </div>
 
+            {/* Table */}
             <div className="rounded-md border bg-card">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Timestamp</TableHead>
-                            <TableHead>Sales</TableHead>
+                            <TableHead>Date</TableHead>
                             <TableHead>Customer</TableHead>
-                            <TableHead>Brand</TableHead>
-                            <TableHead>Pattern</TableHead>
                             <TableHead>Size</TableHead>
-                            <TableHead>Price</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Photo</TableHead>
+                            <TableHead>Brand</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Supplier</TableHead>
+                            <TableHead className="text-right">Price</TableHead>
+                            <TableHead>Consultant</TableHead>
+                            <TableHead>Remark</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -291,41 +283,16 @@ export function CompetitorTable() {
                             </TableRow>
                         ) : (
                             paginatedData.map((item, index) => (
-                                <TableRow key={index}>
-                                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                        {item.Timestamp}
-                                    </TableCell>
-                                    <TableCell>{item.Sales}</TableCell>
-                                    <TableCell className="font-medium">{item.Customer}</TableCell>
-                                    <TableCell>{item.Brand}</TableCell>
-                                    <TableCell>{item.Pattern}</TableCell>
-                                    <TableCell>{item.Size}</TableCell>
-                                    <TableCell>{item.Price}</TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline">{item.Status}</Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {item["Foto Kegiatan"] ? (
-                                            <Dialog>
-                                                <DialogTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
-                                                        <ImageIcon className="h-4 w-4" />
-                                                    </Button>
-                                                </DialogTrigger>
-                                                <DialogContent className="max-w-3xl">
-                                                    <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-                                                        <img
-                                                            src={item["Foto Kegiatan"]}
-                                                            alt={`Activity at ${item.Customer}`}
-                                                            className="object-contain w-full h-full"
-                                                        />
-                                                    </div>
-                                                </DialogContent>
-                                            </Dialog>
-                                        ) : (
-                                            <span className="text-muted-foreground">-</span>
-                                        )}
-                                    </TableCell>
+                                <TableRow key={`${item.timestamp}-${index}`}>
+                                    <TableCell className="whitespace-nowrap">{item.tanggal_informasi}</TableCell>
+                                    <TableCell className="font-medium">{item.customer}</TableCell>
+                                    <TableCell>{item.size_tire}</TableCell>
+                                    <TableCell>{item.brand}</TableCell>
+                                    <TableCell>{item.category_tire}</TableCell>
+                                    <TableCell>{item.supplier}</TableCell>
+                                    <TableCell className="text-right whitespace-nowrap">{item.price_formatted}</TableCell>
+                                    <TableCell>{item.business_consultant}</TableCell>
+                                    <TableCell className="max-w-[200px] truncate" title={item.remark}>{item.remark}</TableCell>
                                 </TableRow>
                             ))
                         )}
@@ -333,6 +300,7 @@ export function CompetitorTable() {
                 </Table>
             </div>
 
+            {/* Pagination */}
             <div className="flex items-center justify-between space-x-2 py-4">
                 <div className="text-sm text-muted-foreground">
                     Showing {paginatedData.length} of {filteredData.length} records
@@ -362,6 +330,7 @@ export function CompetitorTable() {
                 </div>
             </div>
 
+            {/* Floating Clear Button */}
             {hasActiveFilters && (
                 <div className="fixed bottom-8 right-8 z-50 animate-in fade-in slide-in-from-bottom-4">
                     <Button
