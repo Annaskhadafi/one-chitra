@@ -35,8 +35,8 @@ export function UserList({ users, roles }: UserListProps) {
 
     // Stats calculation
     const totalUsers = users.length
-    const adminCount = users.filter(u => u.role === 'admin').length
-    const staffCount = users.filter(u => u.role === 'staff').length
+    const adminCount = users.filter(u => u.role?.toLowerCase() === 'admin').length
+    const staffCount = users.filter(u => u.role?.toLowerCase() === 'staff').length
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
