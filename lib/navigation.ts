@@ -15,6 +15,7 @@ import {
     TrendingUp,
     History,
     UsersRound,
+    BarChart3,
     type LucideIcon
 } from "lucide-react"
 
@@ -157,6 +158,17 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/quotations",
                 icon: FileText,
                 resource: "quotations",
+            },
+        ],
+    },
+    {
+        title: "Reports & Analytics",
+        items: [
+            {
+                title: "Reports Hub",
+                url: "/dashboard/reports",
+                icon: BarChart3,
+                resource: "reports",
             },
         ],
     },
