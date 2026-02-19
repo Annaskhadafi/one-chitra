@@ -1,0 +1,166 @@
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { Loader2, Plus } from "lucide-react"
+import { createUser } from "@/app/actions/users"
+
+interface AddUserDialogProps {
+    roles: { id: number; name: string }[]
+}
+
+export function AddUserDialog({ roles }: AddUserDialogProps) {
+    const [open, setOpen] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
+    const router = useRouter()
+
+    // Form state
+    const [name, setName] = useState("")
+    const [email, setEmail] = useState("")
+    const [password, setPassword] = useState("")
+    const [role, setRole] = useState("")
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+
+        if (!name || !email || !password || !role) {
+            toast.error("Please fill in all fields")
+            return
+        }
+
+        setIsLoading(true)
+
+        try {
+            const result = await createUser({
+                name,
+                email,
+                password,
+                role
+            })
+
+            if (result.success) {
+                toast.success("User created successfully")
+                setOpen(false)
+                resetForm()
+                router.refresh()
+            } else {
+                toast.error(result.error || "Failed to create user")
+            }
+        } catch (error) {
+            toast.error("An unexpected error occurred")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    function resetForm() {
+        setName("")
+        setEmail("")
+        setPassword("")
+        setRole("")
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add User
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+                <form onSubmit={handleSubmit}>
+                    <DialogHeader>
+                        <DialogTitle>Add New User</DialogTitle>
+                        <DialogDescription>
+                            Create a new user account manually.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="name" className="text-right">
+                                Name
+                            </Label>
+                            <Input
+                                id="name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="col-span-3"
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="email" className="text-right">
+                                Email
+                            </Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="col-span-3"
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="password" className="text-right">
+                                Password
+                            </Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="col-span-3"
+                                disabled={isLoading}
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="role" className="text-right">
+                                Role
+                            </Label>
+                            <Select value={role} onValueChange={setRole} disabled={isLoading}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {roles.map((r) => (
+                                        <SelectItem key={r.id} value={r.name}>
+                                            {r.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Create User
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}

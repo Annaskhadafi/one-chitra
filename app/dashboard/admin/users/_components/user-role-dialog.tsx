@@ -19,7 +19,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { authClient } from "@/lib/auth-client"
+import { setUserRole } from "@/app/actions/users"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -36,17 +36,14 @@ export function UserRoleDialog({ userId, currentRole, roles, trigger }: UserRole
     const router = useRouter()
 
     async function handleSave() {
-        const { error } = await authClient.admin.setRole({
-            userId,
-            role: role as any
-        })
+        const result = await setUserRole(userId, role)
 
-        if (!error) {
+        if (result.success) {
             toast.success("User role updated")
             setOpen(false)
             router.refresh()
         } else {
-            toast.error(error.message || "Failed to update user role")
+            toast.error(result.error || "Failed to update user role")
         }
     }
 
