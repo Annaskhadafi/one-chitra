@@ -22,12 +22,12 @@ import { Loader2 } from "lucide-react"
 interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    record: Record<string, unknown>
+    record: Record<string, any>
 }
 
 export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
-    const [formData, setFormData] = useState<Record<string, unknown>>({})
+    const [formData, setFormData] = useState<Record<string, any>>({})
 
     useEffect(() => {
         if (record) {
@@ -44,7 +44,7 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
         setIsLoading(true)
         try {
-            const { deliveryItemId: _deliveryItemId, ...data: _data } = formData
+            const { deliveryItemId: _deliveryItemId } = formData
 
             await updateBillingRecord({
                 deliveryItemId: record.deliveryItemId as number,

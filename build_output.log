@@ -1,0 +1,46 @@
+
+> codeguide-starter-fullstack@0.1.0 build
+> next build --turbopack
+
+   Γû▓ Next.js 15.5.0 (Turbopack)
+   - Environments: .env
+
+   Creating an optimized production build ...
+ Γ£ô Finished writing to disk in 183ms
+Turbopack build encountered 1 warnings:
+./
+Failed to find font override values for font `Parkinsans`
+Skipping generating a fallback font.
+
+
+
+> Build error occurred
+Error: Turbopack build failed with 2 errors:
+./app/dashboard/billing/_components/billing-sheet.tsx:47:61
+Parsing ecmascript source code failed
+  45 |         setIsLoading(true)
+  46 |         try {
+> 47 |             const { deliveryItemId: _deliveryItemId, ...data: _data } = formData
+     |                                                             ^
+  48 |
+  49 |             await updateBillingRecord({
+  50 |                 deliveryItemId: record.deliveryItemId as number,
+
+Expected ',', got ':'
+
+
+./app/dashboard/billing/_components/billing-sheet.tsx:47:61
+Parsing ecmascript source code failed
+  45 |         setIsLoading(true)
+  46 |         try {
+> 47 |             const { deliveryItemId: _deliveryItemId, ...data: _data } = formData
+     |                                                             ^
+  48 |
+  49 |             await updateBillingRecord({
+  50 |                 deliveryItemId: record.deliveryItemId as number,
+
+Expected ',', got ':'
+
+
+    at <unknown> (./app/dashboard/billing/_components/billing-sheet.tsx:47:61)
+    at <unknown> (./app/dashboard/billing/_components/billing-sheet.tsx:47:61)

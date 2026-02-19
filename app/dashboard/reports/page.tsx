@@ -1,5 +1,4 @@
 import { getDashboardStats } from "@/app/actions/dashboard"
-import { getInventoryReport, getSalesReport, getCustomerReport, getOrderFulfillmentReport, getProductPerformanceReport, getWarehouseLogisticsReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package, TrendingUp, Users, Truck, ShoppingCart, Warehouse, ArrowRight } from "lucide-react"
 import Link from "next/link"
@@ -56,36 +55,31 @@ const reportCards = [
 ]
 
 export default async function ReportsHubPage() {
-    const [dashboardStats, inventory, sales, customers, orders, products, warehouse] = await Promise.all([
-        getDashboardStats(),
-        getInventoryReport(),
-        getSalesReport(),
-        getCustomerReport(),
-        getOrderFulfillmentReport(),
-        getProductPerformanceReport(),
-        getWarehouseLogisticsReport(),
-    ])
+    const dashboardStats = await getDashboardStats()
+    const latestSales = dashboardStats.monthlySales.length > 0
+        ? dashboardStats.monthlySales[dashboardStats.monthlySales.length - 1].value
+        : 0
 
     const quickStats = [
         {
             label: "Low Stock Items",
-            value: inventory.lowStockAlerts.length,
-            trend: inventory.lowStockAlerts.length > 10 ? "high" : "normal",
+            value: dashboardStats.lowStockItems,
+            trend: dashboardStats.lowStockItems > 10 ? "high" : "normal",
         },
         {
             label: "Monthly Sales",
-            value: `Rp ${(sales.salesTarget.actual / 1_000_000).toFixed(1)}M`,
-            trend: sales.salesTarget.percentage > 80 ? "good" : "warning",
-        },
-        {
-            label: "Active Customers",
-            value: customers.customerActivity.find(a => a.status === "Active")?.count ?? 0,
+            value: `Rp ${(latestSales / 1_000_000).toFixed(1)}M`,
             trend: "normal",
         },
         {
-            label: "On-Time Delivery",
-            value: `${orders.onTimeDelivery.onTimeRate.toFixed(1)}%`,
-            trend: orders.onTimeDelivery.onTimeRate > 80 ? "good" : "warning",
+            label: "Total Customers",
+            value: dashboardStats.totalCustomers,
+            trend: "normal",
+        },
+        {
+            label: "Pending Deliveries",
+            value: dashboardStats.pendingDeliveries,
+            trend: dashboardStats.pendingDeliveries > 5 ? "warning" : "good",
         },
     ]
 
