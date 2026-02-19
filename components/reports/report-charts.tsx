@@ -832,3 +832,363 @@ export function ShippingCostChart({ data, title, description, height = 300 }: Sh
         </Card>
     )
 }
+
+// ==================== ORDER TREND CHART ====================
+interface OrderTrendChartProps {
+    data: { name: string; total: number; completed: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function OrderTrendChart({ data, title, description, height = 300 }: OrderTrendChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        total: d.total,
+        completed: d.completed,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Order Trend"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Legend />
+                            <Bar dataKey="total" fill="hsl(217, 91%, 60%)" radius={[4, 4, 0, 0]} name="Total Orders" />
+                            <Bar dataKey="completed" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Completed" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== FULFILLMENT TIME CHART ====================
+interface FulfillmentTimeChartProps {
+    data: { name: string; days: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function FulfillmentTimeChart({ data, title, description, height = 300 }: FulfillmentTimeChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        days: d.days,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Fulfillment Time"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                label={{ value: "Days", angle: -90, position: "insideLeft" }}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="days"
+                                stroke="hsl(217, 91%, 60%)"
+                                strokeWidth={2}
+                                dot={{ fill: "hsl(217, 91%, 60%)", r: 4 }}
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== ON-TIME DELIVERY CHART ====================
+interface OnTimeDeliveryChartProps {
+    data: { name: string; rate: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function OnTimeDeliveryChart({ data, title, description, height = 300 }: OnTimeDeliveryChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        rate: d.rate,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "On-Time Delivery"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <defs>
+                                <linearGradient id="onTimeGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                domain={[0, 100]}
+                                label={{ value: "Rate (%)", angle: -90, position: "insideLeft" }}
+                            />
+                            <Tooltip
+                                formatter={(value: number) => [`${value.toFixed(1)}%`, "On-Time Rate"]}
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="rate"
+                                stroke="hsl(160, 84%, 39%)"
+                                strokeWidth={2}
+                                fill="url(#onTimeGradient)"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== ORDER COMPLETION CHART ====================
+interface OrderCompletionChartProps {
+    data: { name: string; total: number; completed: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function OrderCompletionChart({ data, title, description, height = 300 }: OrderCompletionChartProps) {
+    const chartData = data.map(d => ({
+        name: d.name,
+        total: d.total,
+        completed: d.completed,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Order Completion"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Legend />
+                            <Line
+                                type="monotone"
+                                dataKey="total"
+                                stroke="hsl(217, 91%, 60%)"
+                                strokeWidth={2}
+                                dot={{ fill: "hsl(217, 91%, 60%)", r: 4 }}
+                                name="Total Orders"
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="completed"
+                                stroke="hsl(160, 84%, 39%)"
+                                strokeWidth={2}
+                                dot={{ fill: "hsl(160, 84%, 39%)", r: 4 }}
+                                name="Completed Orders"
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== CUSTOMER GROWTH CHART ====================
+interface CustomerGrowthChartProps {
+    data: { month: string; newCustomers: number; cumulativeCustomers: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function CustomerGrowthChart({ data, title, description, height = 300 }: CustomerGrowthChartProps) {
+    const chartData = data.map(d => ({
+        name: new Date(d.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        newCustomers: d.newCustomers,
+        cumulative: d.cumulativeCustomers,
+    }))
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title ?? "Customer Growth"}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                {chartData.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                        No data available
+                    </div>
+                ) : (
+                    <ResponsiveContainer width="100%" height={height}>
+                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                            <defs>
+                                <linearGradient id="newCustomersGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <XAxis
+                                dataKey="name"
+                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                            <Legend />
+                            <Area
+                                type="monotone"
+                                dataKey="newCustomers"
+                                stroke="hsl(217, 91%, 60%)"
+                                strokeWidth={2}
+                                fill="url(#newCustomersGradient)"
+                                name="New Customers"
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="cumulative"
+                                stroke="hsl(160, 84%, 39%)"
+                                strokeWidth={2}
+                                fill="none"
+                                name="Cumulative"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                )}
+            </CardContent>
+        </Card>
+    )
+}

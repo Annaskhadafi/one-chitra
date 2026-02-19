@@ -1,10 +1,9 @@
 import { getCustomerReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPICard, ReportKPIGrid, ExportButton, ProgressBar } from "@/components/reports/report-components"
-import { ReportPieChart, ReportBarChart, FunnelChart } from "@/components/reports/report-charts"
+import { ReportPieChart, ReportBarChart, FunnelChart, CustomerGrowthChart } from "@/components/reports/report-charts"
 import { Users, UserPlus, TrendingUp, UserCheck, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
 export default async function CustomerReportPage() {
     const data = await getCustomerReport()
@@ -293,64 +292,4 @@ function formatCurrency(val: number): string {
     if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
-}
-
-function CustomerGrowthChart({ data }: { data: { month: string; newCustomers: number; cumulativeCustomers: number }[] }) {
-    const chartData = data.map(d => ({
-        name: new Date(d.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        newCustomers: d.newCustomers,
-        cumulative: d.cumulativeCustomers,
-    }))
-
-    return (
-        <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                <defs>
-                    <linearGradient id="newCustomersGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                />
-                <YAxis
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={false}
-                    tickLine={false}
-                />
-                <Tooltip
-                    contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                    }}
-                />
-                <Legend />
-                <Area
-                    type="monotone"
-                    dataKey="newCustomers"
-                    stroke="hsl(217, 91%, 60%)"
-                    strokeWidth={2}
-                    fill="url(#newCustomersGradient)"
-                    name="New Customers"
-                />
-                <Area
-                    type="monotone"
-                    dataKey="cumulative"
-                    stroke="hsl(160, 84%, 39%)"
-                    strokeWidth={2}
-                    fill="none"
-                    name="Cumulative"
-                />
-            </AreaChart>
-        </ResponsiveContainer>
-    )
 }
