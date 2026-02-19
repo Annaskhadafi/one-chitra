@@ -5,6 +5,8 @@ import { useState, useMemo } from "react"
 import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DollarSign, Package, ShoppingCart, Users } from "lucide-react"
 import {
     Table,
     TableBody,
@@ -30,8 +32,8 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-// @ts-ignore
-import Papa from "papaparse"
+
+
 import { HistoryOrderCharts } from "./history-order-charts"
 
 export function HistoryOrderTable() {
@@ -43,6 +45,8 @@ export function HistoryOrderTable() {
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [plantFilter, setPlantFilter] = useState<string[]>([])
     const [yearFilter, setYearFilter] = useState<string[]>([])
+    const [monthFilter, setMonthFilter] = useState<string[]>([])
+    const [matGrpFilter, setMatGrpFilter] = useState<string[]>([])
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
@@ -72,15 +76,24 @@ export function HistoryOrderTable() {
     // Unique values for filters
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(item => item.customer_name))).filter(Boolean).sort(), [data]);
     const uniquePlants = useMemo(() => Array.from(new Set(data.map(item => item.plant))).filter(Boolean).sort(), [data]);
-    const uniqueYears = useMemo(() => {
+    const uniqueMatGrps = useMemo(() => Array.from(new Set(data.map(item => item.mat_grp_desc))).filter(Boolean).sort(), [data]);
+
+    const dateOptions = useMemo(() => {
         const years = new Set<string>();
+        const months = new Set<string>();
         data.forEach(item => {
             if (item.billing_date) {
                 const parts = item.billing_date.split('/');
-                if (parts.length === 3) years.add(parts[2]);
+                if (parts.length === 3) {
+                    years.add(parts[2]);
+                    months.add(parts[0].padStart(2, '0'));
+                }
             }
         });
-        return Array.from(years).sort().reverse();
+        return {
+            years: Array.from(years).sort().reverse(),
+            months: Array.from(months).sort()
+        };
     }, [data]);
 
 
@@ -125,10 +138,12 @@ export function HistoryOrderTable() {
         setCustomerFilter([]);
         setPlantFilter([]);
         setYearFilter([]);
+        setMonthFilter([]);
+        setMatGrpFilter([]);
         setSearchTerm("");
     };
 
-    const hasActiveFilters = customerFilter.length > 0 || plantFilter.length > 0 || yearFilter.length > 0 || searchTerm !== "";
+    const hasActiveFilters = customerFilter.length > 0 || plantFilter.length > 0 || yearFilter.length > 0 || monthFilter.length > 0 || matGrpFilter.length > 0 || searchTerm !== "";
 
     const FilterPopover = ({
         title,
@@ -217,6 +232,52 @@ export function HistoryOrderTable() {
 
     return (
         <div className="space-y-6 relative">
+            {/* Scorecards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(scorecards.totalRevenue)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Filtered revenue</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{scorecards.uniqueOrders}</div>
+                        <p className="text-xs text-muted-foreground">Unique POs</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Quantity</CardTitle>
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{scorecards.totalQty.toLocaleString()}</div>
+                        <p className="text-xs text-muted-foreground">Items sold</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{scorecards.uniqueCust}</div>
+                        <p className="text-xs text-muted-foreground">in filtered range</p>
+                    </CardContent>
+                </Card>
+            </div>
+
             {/* Charts */}
             <HistoryOrderCharts data={filteredData} />
 
@@ -248,10 +309,24 @@ export function HistoryOrderTable() {
                     />
                     <FilterPopover
                         title="Year"
-                        options={uniqueYears}
+                        options={dateOptions.years}
                         selectedValues={yearFilter}
                         onSelect={(val) => toggleFilter(yearFilter, setYearFilter, val)}
                         onClear={() => setYearFilter([])}
+                    />
+                    <FilterPopover
+                        title="Month"
+                        options={dateOptions.months}
+                        selectedValues={monthFilter}
+                        onSelect={(val) => toggleFilter(monthFilter, setMonthFilter, val)}
+                        onClear={() => setMonthFilter([])}
+                    />
+                    <FilterPopover
+                        title="Mat Group"
+                        options={uniqueMatGrps}
+                        selectedValues={matGrpFilter}
+                        onSelect={(val) => toggleFilter(matGrpFilter, setMatGrpFilter, val)}
+                        onClear={() => setMatGrpFilter([])}
                     />
 
                     <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">
