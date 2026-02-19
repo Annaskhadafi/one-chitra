@@ -37,7 +37,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-// @ts-ignore
+
 import Papa from "papaparse"
 
 export function CompetitorTable() {

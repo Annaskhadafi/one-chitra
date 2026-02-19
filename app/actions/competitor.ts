@@ -4,14 +4,19 @@ import Papa from "papaparse";
 
 export interface CompetitorItem {
     Timestamp: string;
-    Sales: string;
-    Customer: string;
+    "Nama Customer": string;
+    "Size Tire": string;
     Brand: string;
-    Pattern: string;
-    Size: string;
+    "Category Tire": string;
+    Supplier: string;
+    Currency: string;
     Price: string;
-    "Foto Kegiatan": string;
-    Status: string;
+    "Remark / Delivery Drop Point": string;
+    "Tanggal Informasi": string;
+    "Business Consultant": string;
+    PRICE: string;
+    "Foto Kegiatan"?: string; // Optional as it wasn't in the list but might still be there or useful
+    Status?: string; // Optional
 }
 
 export async function getCompetitorData() {
