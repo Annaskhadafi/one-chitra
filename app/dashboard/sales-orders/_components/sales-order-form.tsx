@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createSalesOrder, updateSalesOrder } from "@/app/actions/sales-order"
+import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -67,6 +67,7 @@ interface SalesOrderFormProps {
         salesDate: Date
         poReceive?: Date | null
         categoryPo?: string | null
+        categoryProduct?: string | null
         status: string
         termsConditions: string | null
         notes: string | null
@@ -112,6 +113,18 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
             : ""
     )
     const [categoryPo, setCategoryPo] = useState(initialData?.categoryPo || "Normal")
+    const [categoryProduct, setCategoryProduct] = useState(initialData?.categoryProduct || "Prime Product")
+    const [categories, setCategories] = useState<string[]>(["Prime Product", "Product Accessories", "Wheel & Rim", "SPM"])
+    const [categoryOpen, setCategoryOpen] = useState(false)
+
+    useEffect(() => {
+        getSalesOrderCategories().then(fetched => {
+            if (fetched && fetched.length > 0) {
+                // Merge with defaults and remove duplicates
+                setCategories(prev => Array.from(new Set([...prev, ...fetched])))
+            }
+        })
+    }, [])
 
     const [status, setStatus] = useState(initialData?.status || "draft")
     const [termsConditions, setTermsConditions] = useState(
@@ -212,6 +225,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 salesDate,
                 poReceive: poReceive || undefined,
                 categoryPo,
+                categoryProduct,
                 status: status as "draft" | "confirmed" | "completed" | "cancelled",
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -235,6 +249,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
                 router.push("/dashboard/sales-orders")
             } else {
+                // @ts-ignore
                 toast.error(result.error || "Something went wrong")
             }
         } catch {
@@ -419,6 +434,68 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     <SelectItem value="VHS/Consignment">VHS/Consignment</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        {/* Category Product */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">Category Product</Label>
+                            <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={categoryOpen}
+                                        className="w-full justify-between font-normal"
+                                    >
+                                        {categoryProduct || "Select Category..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Search category..." />
+                                        <CommandList>
+                                            <CommandEmpty>No category found.</CommandEmpty>
+                                            <CommandGroup heading="Suggestions">
+                                                {categories.map(cat => (
+                                                    <CommandItem
+                                                        key={cat}
+                                                        value={cat}
+                                                        onSelect={(currentValue) => {
+                                                            setCategoryProduct(currentValue)
+                                                            setCategoryOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                categoryProduct === cat ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {cat}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                            <CommandGroup heading="Custom">
+                                                <CommandItem
+                                                    value="create-custom"
+                                                    onSelect={() => {
+                                                        const custom = prompt("Enter new category name:")
+                                                        if (custom) {
+                                                            setCategories(prev => [...prev, custom])
+                                                            setCategoryProduct(custom)
+                                                            setCategoryOpen(false)
+                                                        }
+                                                    }}
+                                                >
+                                                    <Plus className="mr-2 h-4 w-4" />
+                                                    Create New Category
+                                                </CommandItem>
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                 </CardContent>

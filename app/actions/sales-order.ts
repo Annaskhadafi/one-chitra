@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesOrders, salesOrderItems, stockLevels, customers, user, products } from "@/db/schema"
-import { eq, desc, inArray, sql, and } from "drizzle-orm"
+import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
@@ -32,6 +32,17 @@ export async function getSalesOrders() {
 
     return ordersWithItems
 }
+
+export async function getSalesOrderCategories() {
+    const categories = await db
+        .selectDistinct({ category: salesOrders.categoryProduct })
+        .from(salesOrders)
+        .where(isNotNull(salesOrders.categoryProduct))
+        .orderBy(salesOrders.categoryProduct)
+
+    return categories.map(c => c.category).filter(Boolean) as string[]
+}
+
 
 export async function getSalesOrder(id: number) {
     // Fetch order with customer first
@@ -84,6 +95,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
                     categoryPo: data.categoryPo || null,
+                    categoryProduct: data.categoryProduct || null,
                     status: data.status,
                     termsConditions: data.termsConditions || null,
                     notes: data.notes || null,
@@ -171,6 +183,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
                     categoryPo: data.categoryPo || null,
+                    categoryProduct: data.categoryProduct || null,
                     status: data.status,
                     termsConditions: data.termsConditions || null,
                     notes: data.notes || null,

@@ -246,6 +246,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [whOpen, setWhOpen] = useState(false)
     const [driverOpen, setDriverOpen] = useState(false)
     const [vehicleOpen, setVehicleOpen] = useState(false)
+    const [vehicleTypeOpen, setVehicleTypeOpen] = useState(false)
+    const [vehicleTypeSearch, setVehicleTypeSearch] = useState("")
     const [saving, setSaving] = useState(false)
 
     // Selected SO
@@ -1043,19 +1045,66 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                             </div>
                                             <div className="flex flex-col gap-1.5">
                                                 <Label className="text-xs text-muted-foreground">Type</Label>
-                                                <Select value={vehicleType} onValueChange={setVehicleType}>
-                                                    <SelectTrigger className="h-9">
-                                                        <SelectValue placeholder="Type" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Truk">Truk</SelectItem>
-                                                        <SelectItem value="Pick-up">Pick-up</SelectItem>
-                                                        <SelectItem value="Van">Van</SelectItem>
-                                                        <SelectItem value="Container">Container</SelectItem>
-                                                        <SelectItem value="Motor">Motor</SelectItem>
-                                                        <SelectItem value="Other">Other</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                                <Popover open={vehicleTypeOpen} onOpenChange={setVehicleTypeOpen}>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            role="combobox"
+                                                            className={cn("w-full justify-between h-9", !vehicleType && "text-muted-foreground")}
+                                                        >
+                                                            {vehicleType || "Select Type..."}
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-[300px] p-0" align="start">
+                                                        <Command>
+                                                            <CommandInput
+                                                                placeholder="Search or type new..."
+                                                                value={vehicleTypeSearch}
+                                                                onValueChange={setVehicleTypeSearch}
+                                                            />
+                                                            <CommandList>
+                                                                <CommandEmpty>
+                                                                    <div className="p-2">
+                                                                        <p className="text-sm text-muted-foreground mb-2">No type found.</p>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="w-full h-8"
+                                                                            onMouseDown={(e) => e.preventDefault()}
+                                                                            onClick={() => {
+                                                                                if (vehicleTypeSearch.trim()) {
+                                                                                    setVehicleType(vehicleTypeSearch.trim())
+                                                                                    setVehicleTypeOpen(false)
+                                                                                    setVehicleTypeSearch("")
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <Plus className="mr-2 h-3 w-3" />
+                                                                            Create "{vehicleTypeSearch}"
+                                                                        </Button>
+                                                                    </div>
+                                                                </CommandEmpty>
+                                                                <CommandGroup>
+                                                                    {["Truk", "Pick-up", "Van", "Container", "Motor", "Other"].map((type) => (
+                                                                        <CommandItem
+                                                                            key={type}
+                                                                            value={type}
+                                                                            onSelect={() => {
+                                                                                setVehicleType(type)
+                                                                                setVehicleTypeOpen(false)
+                                                                                setVehicleTypeSearch("")
+                                                                            }}
+                                                                        >
+                                                                            <Check className={cn("mr-2 h-4 w-4", vehicleType === type ? "opacity-100" : "opacity-0")} />
+                                                                            {type}
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
                                             </div>
                                         </div>
                                     </div>

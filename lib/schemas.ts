@@ -57,6 +57,7 @@ export const salesOrderSchema = z.object({
     salesDate: z.string().or(z.date()),
     poReceive: z.string().or(z.date()).optional().nullable(),
     categoryPo: z.string().optional().nullable(),
+    categoryProduct: z.string().optional().nullable(),
     status: z.enum(["draft", "confirmed", "completed", "cancelled"]).default("draft"),
     termsConditions: z.string().optional(),
     notes: z.string().optional(),
