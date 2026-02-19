@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, Download, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,6 +32,9 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+
+import Papa from "papaparse"
+import { FleetCharts } from "./fleet-charts"
 
 interface FleetItem {
     id_fleet_list: string
@@ -167,6 +170,28 @@ export function FleetListTable() {
         );
     };
 
+    const clearAllFilters = () => {
+        setStatusFilter([]);
+        setLocationFilter([]);
+        setCustomerFilter([]);
+        setTireSizeFilter([]);
+        setSearchTerm("");
+    };
+
+    const hasActiveFilters = statusFilter.length > 0 || locationFilter.length > 0 || customerFilter.length > 0 || tireSizeFilter.length > 0 || searchTerm !== "";
+
+    const handleExportCSV = () => {
+        const csv = Papa.unparse(filteredData);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "fleet_data_export.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const FilterPopover = ({
         title,
         options,
@@ -253,7 +278,10 @@ export function FleetListTable() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
+            {/* Charts Section */}
+            <FleetCharts data={filteredData} />
+
             <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -321,7 +349,12 @@ export function FleetListTable() {
                         onClear={() => setTireSizeFilter([])}
                     />
 
-                    <Button variant="outline" size="sm" onClick={fetchData} className="ml-auto">
+                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="ml-auto">
+                        <Download className="mr-2 h-4 w-4" />
+                        Export CSV
+                    </Button>
+
+                    <Button variant="outline" size="sm" onClick={fetchData}>
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
@@ -401,6 +434,20 @@ export function FleetListTable() {
                     </Button>
                 </div>
             </div>
+
+            {hasActiveFilters && (
+                <div className="fixed bottom-8 right-8 z-50 animate-in fade-in slide-in-from-bottom-4">
+                    <Button
+                        onClick={clearAllFilters}
+                        size="lg"
+                        className="shadow-xl rounded-full gap-2"
+                        variant="destructive"
+                    >
+                        <X className="h-4 w-4" />
+                        Clear All Filters
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }
