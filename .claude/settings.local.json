@@ -1,8 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(task-manager list-tasks:*)",
-      "Bash(npx tsx:*)"
+      "Bash(task-manager:*)",
+      "Bash(cp:*)",
+      "Bash(cd:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:*)",
+      "Bash(grep:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)"
     ]
   }
 }

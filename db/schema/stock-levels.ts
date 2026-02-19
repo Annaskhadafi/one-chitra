@@ -12,6 +12,7 @@ export const stockLevels = pgTable("stock_levels", {
     totalStock: integer("total_stock").default(0).notNull(),
     minStock: integer("min_stock").default(0).notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
     unique("stock_levels_warehouse_product_unique").on(table.warehouseId, table.productId),
 ]);

@@ -22,12 +22,12 @@ import { Loader2 } from "lucide-react"
 interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    record: any
+    record: Record<string, unknown>
 }
 
 export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
-    const [formData, setFormData] = useState<any>({})
+    const [formData, setFormData] = useState<Record<string, unknown>>({})
 
     useEffect(() => {
         if (record) {
@@ -35,8 +35,8 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
         }
     }, [record])
 
-    const handleChange = (key: string, value: any) => {
-        setFormData((prev: any) => ({ ...prev, [key]: value }))
+    const handleChange = (key: string, value: unknown) => {
+        setFormData((prev) => ({ ...prev, [key]: value }))
     }
 
     const handleSubmit = async () => {
@@ -44,16 +44,16 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
         setIsLoading(true)
         try {
-            const { deliveryItemId, ...data } = formData
+            const { deliveryItemId: _deliveryItemId, ...data: _data } = formData
 
             await updateBillingRecord({
-                deliveryItemId: record.deliveryItemId,
+                deliveryItemId: record.deliveryItemId as number,
                 ...formData
             })
 
             toast.success("Record updated successfully")
             onOpenChange(false)
-        } catch (error) {
+        } catch (_error) {
             toast.error("Failed to update record")
         } finally {
             setIsLoading(false)

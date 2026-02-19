@@ -38,24 +38,24 @@ async function main() {
             await db.execute(sql`
                 ALTER TABLE "good_receive_manual_items" ADD CONSTRAINT "good_receive_manual_items_header_id_good_receive_manual_id_fk" FOREIGN KEY ("header_id") REFERENCES "public"."good_receive_manual"("id") ON DELETE no action ON UPDATE no action;
             `);
-        } catch (e: any) {
-            if (!e.message.includes('already exists')) console.error('Error adding header_id fk:', e);
+        } catch (e: unknown) {
+            if (e instanceof Error && !e.message.includes('already exists')) console.error('Error adding header_id fk:', e);
         }
 
         try {
             await db.execute(sql`
                 ALTER TABLE "good_receive_manual_items" ADD CONSTRAINT "good_receive_manual_items_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;
             `);
-        } catch (e: any) {
-            if (!e.message.includes('already exists')) console.error('Error adding product_id fk:', e);
+        } catch (e: unknown) {
+            if (e instanceof Error && !e.message.includes('already exists')) console.error('Error adding product_id fk:', e);
         }
 
         try {
             await db.execute(sql`
                 ALTER TABLE "good_receive_manual_items" ADD CONSTRAINT "good_receive_manual_items_warehouse_id_warehouses_id_fk" FOREIGN KEY ("warehouse_id") REFERENCES "public"."warehouses"("id") ON DELETE no action ON UPDATE no action;
             `);
-        } catch (e: any) {
-            if (!e.message.includes('already exists')) console.error('Error adding warehouse_id fk:', e);
+        } catch (e: unknown) {
+            if (e instanceof Error && !e.message.includes('already exists')) console.error('Error adding warehouse_id fk:', e);
         }
 
         console.log('Migration completed.');

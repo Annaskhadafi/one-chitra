@@ -153,7 +153,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             category: row.category,
             count: row.count,
         })),
-        recentOrders: (recentOrdersData.rows as any[]).map(row => ({
+        recentOrders: (recentOrdersData.rows as Record<string, unknown>[]).map(row => ({
             id: row.id,
             invoiceNumber: row.invoice_number,
             customerName: row.customer_name ?? "Unknown",
@@ -161,7 +161,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             status: row.status,
             totalValue: Number(row.total_value ?? 0),
         })),
-        stockAlerts: (stockAlertData.rows as any[]).map(row => ({
+        stockAlerts: (stockAlertData.rows as Record<string, unknown>[]).map(row => ({
             productName: row.product_name ?? "Unknown Product",
             materialNumber: row.material_number,
             warehouseName: row.warehouse_name,

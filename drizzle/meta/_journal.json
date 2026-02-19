@@ -15,6 +15,13 @@
       "when": 1771500459930,
       "tag": "0001_magenta_justin_hammer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771503869105,
+      "tag": "0002_fast_doorman",
+      "breakpoints": true
     }
   ]
 }

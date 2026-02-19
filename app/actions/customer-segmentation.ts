@@ -34,7 +34,7 @@ export async function getHistoryOrderForSegmentation() {
             }
         });
 
-        const formattedData: HistoryOrderItem[] = data.map((item: any) => {
+        const formattedData: HistoryOrderItem[] = data.map((item: Record<string, unknown>) => {
             const revenueStr = item['Revenue in Doc Curr.'] || '0';
 
             let revenue = 0;

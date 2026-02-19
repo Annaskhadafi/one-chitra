@@ -57,7 +57,7 @@ export async function processGoodReceive(
 ) {
     try {
         let processedCount = 0
-        let errors: string[] = []
+        const errors: string[] = []
 
         console.log(`Processing ${items.length} items for warehouse ${warehouseId}`);
 

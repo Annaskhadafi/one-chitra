@@ -16,10 +16,12 @@ import {
 
 // Define a type for the action handler prop
 interface ActionProps {
-    row: any
-    onEdit: (record: any) => void
+    row: {
+        original: Record<string, unknown>;
+    }
+    onEdit: (record: Record<string, unknown>) => void
     onDelete: (id: number) => void
-    onView: (record: any) => void
+    onView: (record: Record<string, unknown>) => void
 }
 
 const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
@@ -40,7 +42,7 @@ const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
                     <Pencil className="mr-2 h-4 w-4" /> Edit
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDelete(row.original.deliveryItemId)} className="text-destructive focus:text-destructive">
+                <DropdownMenuItem onClick={() => onDelete(row.original.deliveryItemId as number)} className="text-destructive focus:text-destructive">
                     <Trash2 className="mr-2 h-4 w-4" /> Delete Billing Data
                 </DropdownMenuItem>
             </DropdownMenuContent>
@@ -50,10 +52,10 @@ const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
 
 // We need a factory function to create columns with handlers
 export const getColumns = (
-    onEdit: (record: any) => void,
+    onEdit: (record: Record<string, unknown>) => void,
     onDelete: (id: number) => void,
-    onView: (record: any) => void
-): ColumnDef<any>[] => [
+    onView: (record: Record<string, unknown>) => void
+): ColumnDef<Record<string, unknown>>[] => [
         {
             id: "select",
             header: ({ table }) => (

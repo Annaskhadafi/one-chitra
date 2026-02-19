@@ -10,8 +10,8 @@ async function main() {
             try {
                 await db.execute(sql.raw(`ALTER TABLE "deliveries" ADD COLUMN "${column}" decimal(15, 2) DEFAULT '0'`));
                 console.log(`Added column ${column}`);
-            } catch (e: any) {
-                if (e.message.includes('already exists')) {
+            } catch (e: unknown) {
+                if (e instanceof Error && e.message.includes('already exists')) {
                     console.log(`Column ${column} already exists`);
                 } else {
                     console.error(`Error adding column ${column}:`, e);

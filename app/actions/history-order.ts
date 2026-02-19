@@ -35,7 +35,7 @@ export async function getHistoryOrder() {
         });
 
         // Map CSV headers to our interface keys
-        const formattedData: HistoryOrderItem[] = data.map((item: any) => {
+        const formattedData: HistoryOrderItem[] = data.map((item: Record<string, unknown>) => {
             // Parse Revenue: "Revenue in Doc Curr." column
             const revenueStr = item['Revenue in Doc Curr.'] || '0';
 

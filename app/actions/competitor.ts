@@ -35,7 +35,7 @@ export async function getCompetitorInfo() {
         });
 
         // Map CSV headers to our interface keys
-        const formattedData: CompetitorItem[] = data.map((item: any) => ({
+        const formattedData: CompetitorItem[] = data.map((item: Record<string, unknown>) => ({
             timestamp: item['Timestamp'] || '',
             customer: item['Nama Customer'] || '',
             size_tire: item['Size Tire'] || '',

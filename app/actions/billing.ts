@@ -10,8 +10,42 @@ import {
     customers,
     salesOrderItems
 } from "@/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+type BillingRecordUpdate = {
+    deliveryItemId: number;
+    no?: string | null;
+    year?: number | null;
+    month?: string | null;
+    plant?: string | null;
+    customer?: string | null;
+    poNo?: string | null;
+    datePo?: Date | null;
+    materialNumber?: string | null;
+    materialDescription?: string | null;
+    qty?: string | null;
+    curr?: string | null;
+    pricePerPcsIdr?: string | null;
+    totalPriceIdr?: string | null;
+    ppn?: string | null;
+    price?: string | null;
+    includePpn?: string | null;
+    noInvSap?: string | null;
+    dateInvoice?: Date | null;
+    custId?: string | null;
+    salesName?: string | null;
+    ddpAddress?: string | null;
+    paymentType?: string | null;
+    nomorDoSap?: string | null;
+    actualNoDo?: string | null;
+    tglDoFaktur?: Date | null;
+    remaks?: string | null;
+    dateSendInvoice?: Date | null;
+    receiverDate?: Date | null;
+    recvDateApproved?: Date | null;
+    eFaktur?: string | null;
+};
 
 export async function getBillingRecords() {
     try {
@@ -82,7 +116,7 @@ export async function getBillingRecords() {
     }
 }
 
-export async function updateBillingRecord(data: any) {
+export async function updateBillingRecord(data: BillingRecordUpdate) {
     try {
         const { deliveryItemId, ...updateData } = data;
 
@@ -125,7 +159,7 @@ export async function deleteBillingRecord(deliveryItemId: number) {
 }
 
 // Bulk import function
-export async function importBillingRecords(records: any[]) {
+export async function importBillingRecords(records: Record<string, unknown>[]) {
     try {
         // Implementation for processing CSV data and matching to delivery items
         // This will be complex as we need to match by PO Number / Material etc.

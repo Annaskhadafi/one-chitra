@@ -361,7 +361,7 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
     `)
 
     return {
-        stockOverview: (stockOverviewData.rows as any[]).map(row => ({
+        stockOverview: (stockOverviewData.rows as Record<string, unknown>[]).map(row => ({
             warehouseName: row.warehouse_name ?? "Unknown",
             warehouseType: row.warehouse_type ?? "N/A",
             totalProducts: Number(row.total_products),
@@ -371,7 +371,7 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             outOfStockCount: Number(row.out_of_stock_count),
         })),
         stockMovement: [],
-        lowStockAlerts: (lowStockData.rows as any[]).map(row => ({
+        lowStockAlerts: (lowStockData.rows as Record<string, unknown>[]).map(row => ({
             id: Number(row.id),
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
@@ -381,7 +381,7 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             stockRatio: Number(row.stock_ratio),
             valuationValue: Number(row.valuation_value),
         })),
-        deadStock: (deadStockData.rows as any[]).map(row => ({
+        deadStock: (deadStockData.rows as Record<string, unknown>[]).map(row => ({
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
             category: row.category,
@@ -495,19 +495,19 @@ export async function getSalesReport(
     // Calculate sales target (example: monthly target based on average)
     const avgMonthlySales = totalSales / 6 // Last 6 months average
     const monthlyTarget = avgMonthlySales * 1.1 // 10% growth target
-    const currentMonthSales = Number(salesTrendData.rows.filter((r: any) => {
+    const currentMonthSales = Number(salesTrendData.rows.filter((r: Record<string, unknown>) => {
         const d = new Date(r.date)
         return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear()
-    }).reduce((sum: number, r: any) => sum + Number(r.sales), 0))
+    }).reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.sales), 0))
 
     return {
-        salesTrend: (salesTrendData.rows as any[]).map(row => ({
+        salesTrend: (salesTrendData.rows as Record<string, unknown>[]).map(row => ({
             date: new Date(row.date).toISOString().split("T")[0],
             sales: Number(row.sales),
             orders: Number(row.orders),
             averageOrderValue: Number(row.avg_order_value),
         })),
-        salesByCustomer: (salesByCustomerData.rows as any[]).map(row => ({
+        salesByCustomer: (salesByCustomerData.rows as Record<string, unknown>[]).map(row => ({
             customerId: Number(row.customer_id),
             customerName: row.customer_name ?? "Unknown",
             customerCode: row.customer_code,
@@ -515,13 +515,13 @@ export async function getSalesReport(
             orderCount: Number(row.order_count),
             averageOrderValue: Number(row.avg_order_value),
         })),
-        salesByCategory: (salesByCategoryData.rows as any[]).map(row => ({
+        salesByCategory: (salesByCategoryData.rows as Record<string, unknown>[]).map(row => ({
             category: row.category ?? "Uncategorized",
             totalSales: Number(row.total_sales),
             orderCount: Number(row.order_count),
             percentage: totalSales > 0 ? (Number(row.total_sales) / totalSales) * 100 : 0,
         })),
-        salesByProduct: (salesByProductData.rows as any[]).map(row => ({
+        salesByProduct: (salesByProductData.rows as Record<string, unknown>[]).map(row => ({
             productId: Number(row.product_id),
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
@@ -529,7 +529,7 @@ export async function getSalesReport(
             quantitySold: Number(row.quantity_sold),
             totalRevenue: Number(row.total_revenue),
         })),
-        monthlyComparison: (monthlyComparisonData.rows as any[]).map(row => ({
+        monthlyComparison: (monthlyComparisonData.rows as Record<string, unknown>[]).map(row => ({
             month: row.month,
             currentYear: Number(row.current_year),
             previousYear: Number(row.previous_year),
@@ -571,8 +571,8 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
         ORDER BY total_revenue DESC
     `)
 
-    const totalCustomers = segmentationData.rows.reduce((sum: number, r: any) => sum + Number(r.count), 0)
-    const totalRevenue = segmentationData.rows.reduce((sum: number, r: any) => sum + Number(r.total_revenue), 0)
+    const totalCustomers = segmentationData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
+    const totalRevenue = segmentationData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.total_revenue), 0)
 
     // Top Customers
     const topCustomersData = await db.execute(sql`
@@ -658,16 +658,16 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
         GROUP BY status
     `)
 
-    const totalActivity = activityData.rows.reduce((sum: number, r: any) => sum + Number(r.count), 0)
+    const totalActivity = activityData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
 
     return {
-        customerSegmentation: (segmentationData.rows as any[]).map(row => ({
+        customerSegmentation: (segmentationData.rows as Record<string, unknown>[]).map(row => ({
             segment: row.segment,
             count: Number(row.count),
             percentage: totalCustomers > 0 ? (Number(row.count) / totalCustomers) * 100 : 0,
             totalRevenue: Number(row.total_revenue),
         })),
-        topCustomers: (topCustomersData.rows as any[]).map(row => ({
+        topCustomers: (topCustomersData.rows as Record<string, unknown>[]).map(row => ({
             customerId: Number(row.customer_id),
             customerName: row.customer_name ?? "Unknown",
             customerCode: row.customer_code,
@@ -676,7 +676,7 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
             averageOrderValue: Number(row.avg_order_value),
             lastOrderDate: row.last_order_date ? new Date(row.last_order_date) : undefined,
         })),
-        customerGrowth: (growthData.rows as any[]).map(row => ({
+        customerGrowth: (growthData.rows as Record<string, unknown>[]).map(row => ({
             month: row.month,
             newCustomers: Number(row.new_customers),
             cumulativeCustomers: Number(row.cumulative_customers),
@@ -689,7 +689,7 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
             repeatRate: Number(repeatData.rows[0]?.repeat_customers ?? 0) / Number(repeatData.rows[0]?.total_customers ?? 1) * 100,
             averageOrdersPerCustomer: Number(repeatData.rows[0]?.avg_orders_per_customer ?? 0),
         },
-        customerActivity: (activityData.rows as any[]).map(row => ({
+        customerActivity: (activityData.rows as Record<string, unknown>[]).map(row => ({
             status: row.status,
             count: Number(row.count),
             percentage: totalActivity > 0 ? (Number(row.count) / totalActivity) * 100 : 0,
@@ -719,7 +719,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
         ORDER BY count DESC
     `)
 
-    const totalOrders = statusData.rows.reduce((sum: number, r: any) => sum + Number(r.count), 0)
+    const totalOrders = statusData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
 
     // Fulfillment Time Analysis
     const fulfillmentData = await db.execute(sql`
@@ -730,7 +730,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
         WHERE d.delivery_date IS NOT NULL AND so.sales_date IS NOT NULL
     `)
 
-    const days = fulfillmentData.rows.map((r: any) => Number(r.days)).filter((d: number) => d >= 0).sort((a: number, b: number) => a - b)
+    const days = fulfillmentData.rows.map((r: Record<string, unknown>) => Number(r.days)).filter((d: number) => d >= 0).sort((a: number, b: number) => a - b)
     const avgDays = days.length > 0 ? days.reduce((sum: number, d: number) => sum + d, 0) / days.length : 0
     const medianDays = days.length > 0 ? (days.length % 2 === 0 ? (days[days.length / 2 - 1] + days[days.length / 2]) / 2 : days[Math.floor(days.length / 2)]) : 0
 
@@ -802,7 +802,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
     `)
 
     return {
-        orderStatusDistribution: (statusData.rows as any[]).map(row => ({
+        orderStatusDistribution: (statusData.rows as Record<string, unknown>[]).map(row => ({
             status: row.status,
             count: Number(row.count),
             percentage: totalOrders > 0 ? (Number(row.count) / totalOrders) * 100 : 0,
@@ -813,7 +813,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             medianDays: medianDays,
             minDays: days.length > 0 ? days[0] : 0,
             maxDays: days.length > 0 ? days[days.length - 1] : 0,
-            byMonth: (fulfillmentByMonthData.rows as any[]).map(row => ({
+            byMonth: (fulfillmentByMonthData.rows as Record<string, unknown>[]).map(row => ({
                 month: row.month,
                 averageDays: Number(row.avg_days),
             })),
@@ -825,7 +825,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             onTimeRate: Number(deliveryData.rows[0]?.total ?? 1) > 0
                 ? (Number(deliveryData.rows[0]?.on_time ?? 0) / Number(deliveryData.rows[0]?.total ?? 1)) * 100
                 : 0,
-            byMonth: (onTimeByMonthData.rows as any[]).map(row => ({
+            byMonth: (onTimeByMonthData.rows as Record<string, unknown>[]).map(row => ({
                 month: row.month,
                 totalDeliveries: Number(row.total_deliveries),
                 onTimeDeliveries: Number(row.on_time_deliveries),
@@ -834,7 +834,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
                     : 0,
             })),
         },
-        backorderAnalysis: (backorderData.rows as any[]).map(row => ({
+        backorderAnalysis: (backorderData.rows as Record<string, unknown>[]).map(row => ({
             productId: Number(row.product_id),
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
@@ -842,7 +842,7 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             totalBackorderQuantity: Number(row.total_backorder_quantity),
             averageFulfillmentDays: 0, // Would need additional query
         })),
-        orderTrend: (orderTrendData.rows as any[]).map(row => ({
+        orderTrend: (orderTrendData.rows as Record<string, unknown>[]).map(row => ({
             month: row.month,
             totalOrders: Number(row.total_orders),
             completedOrders: Number(row.completed_orders),
@@ -973,11 +973,11 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
         ORDER BY class
     `)
 
-    const totalProducts = abcData.rows.reduce((sum: number, r: any) => sum + Number(r.product_count), 0)
-    const totalRevenue = abcData.rows.reduce((sum: number, r: any) => sum + Number(r.total_revenue), 0)
+    const totalProducts = abcData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.product_count), 0)
+    const totalRevenue = abcData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.total_revenue), 0)
 
     return {
-        bestSellingProducts: (bestSellingData.rows as any[]).map((row, index) => ({
+        bestSellingProducts: (bestSellingData.rows as Record<string, unknown>[]).map((row, index) => ({
             productId: Number(row.product_id),
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
@@ -986,7 +986,7 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
             totalRevenue: Number(row.total_revenue),
             rank: index + 1,
         })),
-        worstSellingProducts: (worstSellingData.rows as any[]).map((row, index) => ({
+        worstSellingProducts: (worstSellingData.rows as Record<string, unknown>[]).map((row, index) => ({
             productId: Number(row.product_id),
             productName: row.product_name ?? "Unknown",
             materialNumber: row.material_number,
@@ -996,8 +996,8 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
             stockLevel: Number(row.stock_level),
             rank: index + 1,
         })),
-        categoryPerformance: (categoryData.rows as any[]).map(row => {
-            const growthRow = categoryGrowthData.rows.find((r: any) => r.category === row.category)
+        categoryPerformance: (categoryData.rows as Record<string, unknown>[]).map(row => {
+            const growthRow = categoryGrowthData.rows.find((r: Record<string, unknown>) => r.category === row.category)
             const growthRate = growthRow && Number(growthRow.previous_month) > 0
                 ? ((Number(growthRow.current_month) - Number(growthRow.previous_month)) / Number(growthRow.previous_month)) * 100
                 : 0
@@ -1010,7 +1010,7 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
                 growthRate,
             }
         }),
-        productProfitability: (profitabilityData.rows as any[]).map(row => {
+        productProfitability: (profitabilityData.rows as Record<string, unknown>[]).map(row => {
             const revenue = Number(row.total_revenue)
             const estimatedCost = revenue * 0.7 // Assume 70% cost (simplified)
             const profit = revenue - estimatedCost
@@ -1025,7 +1025,7 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
                 volume: Number(row.volume),
             }
         }),
-        abcAnalysis: (abcData.rows as any[]).map(row => ({
+        abcAnalysis: (abcData.rows as Record<string, unknown>[]).map(row => ({
             class: row.class as "A" | "B" | "C",
             productCount: Number(row.product_count),
             percentage: totalProducts > 0 ? (Number(row.product_count) / totalProducts) * 100 : 0,
@@ -1119,7 +1119,7 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
     `)
 
     return {
-        warehouseCapacity: (capacityData.rows as any[]).map(row => ({
+        warehouseCapacity: (capacityData.rows as Record<string, unknown>[]).map(row => ({
             warehouseId: Number(row.warehouse_id),
             warehouseName: row.warehouse_name,
             warehouseType: row.warehouse_type ?? "N/A",
@@ -1131,28 +1131,28 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
                 ? (Number(row.capacity_used) / Number(row.capacity_total)) * 100
                 : 0,
         })),
-        stockTransferFlow: (transferData.rows as any[]).map(row => ({
+        stockTransferFlow: (transferData.rows as Record<string, unknown>[]).map(row => ({
             fromWarehouse: row.from_warehouse,
             toWarehouse: row.to_warehouse,
             transferCount: Number(row.transfer_count),
             totalQuantity: Number(row.total_quantity),
             totalValue: Number(row.total_value),
         })),
-        deliveryPerformance: (deliveryPerformanceData.rows as any[]).map(row => ({
+        deliveryPerformance: (deliveryPerformanceData.rows as Record<string, unknown>[]).map(row => ({
             month: row.month,
             totalDeliveries: Number(row.total_deliveries),
             completedDeliveries: Number(row.completed_deliveries),
             averageDeliveryTime: Number(row.avg_delivery_time),
             onTimeRate: Number(row.on_time_rate),
         })),
-        fleetUtilization: (fleetData.rows as any[]).map(row => ({
+        fleetUtilization: (fleetData.rows as Record<string, unknown>[]).map(row => ({
             vehicleNumber: row.vehicle_number ?? "N/A",
             vehicleType: row.vehicle_type ?? "N/A",
             totalTrips: Number(row.total_trips),
             utilizationRate: 0, // Would need total available days
             totalCost: Number(row.total_cost),
         })),
-        shippingCostAnalysis: (shippingCostData.rows as any[]).map(row => ({
+        shippingCostAnalysis: (shippingCostData.rows as Record<string, unknown>[]).map(row => ({
             month: row.month,
             totalShippingCost: Number(row.total_shipping_cost),
             averageCostPerDelivery: Number(row.avg_cost_per_delivery),

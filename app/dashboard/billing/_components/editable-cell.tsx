@@ -7,7 +7,10 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 interface EditableCellProps {
-    row: any
+    row: {
+        getValue: (column: string) => unknown;
+        original: Record<string, unknown>;
+    }
     column: string
     type?: "text" | "number" | "date"
 }

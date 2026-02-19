@@ -24,9 +24,9 @@ export async function createUser(data: { name: string; email: string; password: 
 
         revalidatePath('/dashboard/admin/users')
         return { success: true, userId: result.user.id }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to create user:", error)
-        return { success: false, error: error?.message || "Failed to create user" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to create user" }
     }
 }
 
@@ -95,9 +95,9 @@ export async function importUsers(formData: FormData) {
 
         revalidatePath('/dashboard/admin/users')
         return { success: true, count }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to import users:", error)
-        return { success: false, error: error.message || "Failed to import users" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to import users" }
     }
 }
 

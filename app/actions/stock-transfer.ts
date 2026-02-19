@@ -122,9 +122,9 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
 
             return { success: true }
         })
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Stock transfer error:", error)
-        return { success: false, error: error.message || "Transaction failed" }
+        return { success: false, error: error instanceof Error ? error.message : "Transaction failed" }
     } finally {
         revalidatePath("/dashboard/stock-transfers")
         revalidatePath("/dashboard/stocks")
