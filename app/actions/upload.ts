@@ -47,8 +47,8 @@ export async function uploadImage(formData: FormData) {
             return { success: false, error: "File verification failed after write" }
         }
 
-        // Return relative URL for web access
-        const url = `/${uploadDirName}/${filename}`
+        // Return relative URL for web access via the custom API route
+        const url = `/api/uploads/${filename}`
         console.log(`[Upload] Success! URL: ${url}`)
 
         return { success: true, url }
