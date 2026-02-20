@@ -1,6 +1,6 @@
 "use client"
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Bar, BarChart, Pie, PieChart, Cell, Line, LineChart } from "recharts"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Bar, BarChart, Pie, PieChart, Cell, Line, LineChart, ComposedChart, Scatter, ScatterChart, ZAxis, Treemap } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
@@ -310,7 +310,7 @@ export function LineComparisonChart({ data, title, description, height = 300 }: 
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
-                        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                             <XAxis
                                 dataKey="name"
@@ -333,6 +333,12 @@ export function LineComparisonChart({ data, title, description, height = 300 }: 
                                 }}
                             />
                             <Legend />
+                            <Bar
+                                dataKey="previous"
+                                fill="hsl(var(--muted))"
+                                radius={[4, 4, 0, 0]}
+                                name="Previous Period"
+                            />
                             <Line
                                 type="monotone"
                                 dataKey="current"
@@ -341,16 +347,7 @@ export function LineComparisonChart({ data, title, description, height = 300 }: 
                                 dot={{ fill: "hsl(217, 91%, 60%)", r: 4 }}
                                 name="Current Period"
                             />
-                            <Line
-                                type="monotone"
-                                dataKey="previous"
-                                stroke="hsl(340, 82%, 52%)"
-                                strokeWidth={2}
-                                strokeDasharray="5 5"
-                                dot={{ fill: "hsl(340, 82%, 52%)", r: 4 }}
-                                name="Previous Period"
-                            />
-                        </LineChart>
+                        </ComposedChart>
                     </ResponsiveContainer>
                 )}
             </CardContent>
@@ -626,7 +623,7 @@ export function StockMovementChart({ data, title, description, height = 300 }: S
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
-                        <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis
                                 dataKey="date"
@@ -650,9 +647,9 @@ export function StockMovementChart({ data, title, description, height = 300 }: S
                                 }}
                             />
                             <Legend />
-                            <Bar dataKey="stockIn" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Stock In" />
-                            <Bar dataKey="stockOut" fill="hsl(340, 82%, 52%)" radius={[4, 4, 0, 0]} name="Stock Out" />
-                        </BarChart>
+                            <Line type="monotone" dataKey="stockIn" stroke="hsl(160, 84%, 39%)" strokeWidth={2} dot={false} name="Stock In" />
+                            <Line type="monotone" dataKey="stockOut" stroke="hsl(340, 82%, 52%)" strokeWidth={2} dot={false} name="Stock Out" />
+                        </LineChart>
                     </ResponsiveContainer>
                 )}
             </CardContent>

@@ -1,65 +1,58 @@
 import { getOrderFulfillmentReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ReportKPICard, ReportKPIGrid, ExportButton, ProgressBar } from "@/components/reports/report-components"
-import { ReportPieChart, ReportBarChart, GaugeChart, OrderTrendChart, FulfillmentTimeChart, OnTimeDeliveryChart, OrderCompletionChart } from "@/components/reports/report-charts"
-import { Truck, Clock, CheckCircle, AlertTriangle, ArrowLeft, Package } from "lucide-react"
+import { ReportKPIGrid, ExportButton } from "@/components/reports/report-components"
+import { ReportBarChart, ReportPieChart, GaugeChart } from "@/components/reports/report-charts"
+import { PackageCheck, Clock, CheckCircle2, AlertOctagon, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default async function OrderFulfillmentReportPage() {
     const data = await getOrderFulfillmentReport()
 
-    const kpis = [
+    const totalOrdersAll = data.orderTrend.reduce((sum, m) => sum + m.totalOrders, 0)
+    const completedOrdersAll = data.orderTrend.reduce((sum, m) => sum + m.completedOrders, 0)
+    const overallCompletionRate = totalOrdersAll > 0 ? (completedOrdersAll / totalOrdersAll) * 100 : 0
+
+    const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
-            title: "Total Orders",
-            value: data.orderStatusDistribution.reduce((sum, s) => sum + s.count, 0).toLocaleString(),
-            change: 5.2,
-            changeLabel: "vs last month",
-            icon: Package,
-            variant: "default" as const,
+            title: "Overall Completion Rate",
+            value: `${overallCompletionRate.toFixed(1)}%`,
+            icon: CheckCircle2,
+            variant: overallCompletionRate >= 90 ? "success" : "warning",
         },
         {
-            title: "Avg Fulfillment Time",
-            value: `${data.fulfillmentTime.averageDays.toFixed(1)} days`,
-            change: data.fulfillmentTime.averageDays < 3 ? 10 : -5,
-            changeLabel: data.fulfillmentTime.averageDays < 3 ? "excellent" : "needs improvement",
+            title: "Average Fulfillment Time",
+            value: `${data.fulfillmentTime.averageDays.toFixed(1)} Days`,
             icon: Clock,
-            variant: data.fulfillmentTime.averageDays < 3 ? "success" : "warning" as const,
+            variant: "default",
         },
         {
-            title: "On-Time Delivery",
+            title: "On-Time Delivery Rate",
             value: `${data.onTimeDelivery.onTimeRate.toFixed(1)}%`,
-            change: data.onTimeDelivery.onTimeRate - 80,
-            changeLabel: "vs 80% target",
-            icon: CheckCircle,
-            variant: data.onTimeDelivery.onTimeRate >= 80 ? "success" : data.onTimeDelivery.onTimeRate >= 60 ? "warning" : "danger" as const,
+            icon: PackageCheck,
+            variant: data.onTimeDelivery.onTimeRate >= 95 ? "success" : data.onTimeDelivery.onTimeRate >= 80 ? "warning" : "danger",
         },
         {
-            title: "Backorders",
-            value: data.backorderAnalysis.reduce((sum, b) => sum + b.backorderCount, 0).toLocaleString(),
-            icon: AlertTriangle,
-            variant: data.backorderAnalysis.length > 5 ? "danger" : "warning" as const,
+            title: "Items on Backorder",
+            value: data.backorderAnalysis.reduce((sum, b) => sum + b.totalBackorderQuantity, 0).toLocaleString(),
+            icon: AlertOctagon,
+            variant: data.backorderAnalysis.length > 0 ? "danger" : "success",
         },
     ]
 
-    const orderStatusData = data.orderStatusDistribution.map(s => ({
-        name: s.status.charAt(0).toUpperCase() + s.slice(1),
+    const statusData = data.orderStatusDistribution.map(s => ({
+        name: s.status,
         value: s.count,
     }))
 
-    const orderTrendData = data.orderTrend.map(o => ({
-        name: new Date(o.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        total: o.totalOrders,
-        completed: o.completedOrders,
+    const trendData = data.orderTrend.map(t => ({
+        name: new Date(t.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        value: t.totalOrders,
+        secondary: t.completedOrders,
     }))
 
-    const fulfillmentByMonthData = data.fulfillmentTime.byMonth.map(m => ({
-        name: new Date(m.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        days: m.averageDays,
-    }))
-
-    const onTimeByMonthData = data.onTimeDelivery.byMonth.map(m => ({
-        name: new Date(m.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        rate: m.onTimeRate,
+    const fulfillmentTimeByMonthData = data.fulfillmentTime.byMonth.map(f => ({
+        name: new Date(f.month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        value: Number(f.averageDays.toFixed(1)),
     }))
 
     return (
@@ -77,139 +70,69 @@ export default async function OrderFulfillmentReportPage() {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Order Fulfillment Report</h1>
                         <p className="text-muted-foreground">
-                            Order status, delivery performance, and fulfillment metrics
+                            Order processing, delivery performance, and backorders
                         </p>
                     </div>
-                    <ExportButton data={data.orderStatusDistribution} filename="order-status" format="csv" />
                 </div>
 
                 {/* KPI Cards */}
                 <ReportKPIGrid kpis={kpis} />
 
-                {/* Order Status & On-Time Rate */}
-                <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-3 lg:px-6">
-                    <div className="lg:col-span-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Order Trend (Last 12 Months)</CardTitle>
-                                <CardDescription>Total orders over time</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {orderTrendData.length === 0 ? (
-                                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                        No order data available
-                                    </div>
-                                ) : (
-                                    <div className="h-[300px]">
-                                        <OrderTrendChart data={orderTrendData} />
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                    <div>
-                        <GaugeChart
-                            value={data.onTimeDelivery.onTimeDeliveries}
-                            max={data.onTimeDelivery.totalDeliveries}
-                            title="On-Time Delivery Rate"
-                            description={`${data.onTimeDelivery.onTimeDeliveries} of ${data.onTimeDelivery.totalDeliveries} deliveries`}
-                            label={`${data.onTimeDelivery.onTimeRate.toFixed(1)}% on-time`}
-                        />
-                    </div>
+                {/* Charts Row 1 */}
+                <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
+                    <ReportPieChart
+                        data={statusData}
+                        title="Order Status Distribution"
+                        description="Current state of all orders"
+                        height={350}
+                        variant="donut"
+                    />
+                    <GaugeChart
+                        value={data.onTimeDelivery.onTimeDeliveries}
+                        max={data.onTimeDelivery.totalDeliveries}
+                        title="On-Time Delivery Performance"
+                        description={`Based on ${data.onTimeDelivery.totalDeliveries} total deliveries`}
+                        label={`${data.onTimeDelivery.onTimeRate.toFixed(1)}% On-Time`}
+                    />
                 </div>
 
-                {/* Order Status Distribution & Fulfillment Time */}
+                {/* Trend & Fulfillment Time */}
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <ReportBarChart
-                        data={orderStatusData}
-                        title="Order Status Distribution"
-                        description="Orders by current status"
+                        data={trendData}
+                        title="Order Trend"
+                        description="Total vs Completed orders per month"
                         height={350}
-                        colors={["hsl(217, 91%, 60%)"]}
+                        colors={["hsl(217, 91%, 60%)", "hsl(142, 71%, 45%)"]}
+                        showLegend
                     />
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Fulfillment Time Trend</CardTitle>
-                            <CardDescription>
-                                Average days to fulfill orders (by month)
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {fulfillmentByMonthData.length === 0 ? (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    No fulfillment data available
-                                </div>
-                            ) : (
-                                <div className="h-[300px]">
-                                    <FulfillmentTimeChart data={fulfillmentByMonthData} />
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <ReportBarChart
+                        data={fulfillmentTimeByMonthData}
+                        title="Average Fulfillment Time"
+                        description="Days from order to delivery by month"
+                        height={350}
+                        colors={["hsl(340, 82%, 52%)"]}
+                    />
                 </div>
 
-                {/* On-Time Delivery Performance */}
-                <div className="px-4 lg:px-6">
+                {/* Backorder Analysis Table */}
+                <div className="px-4 lg:px-6 mb-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>On-Time Delivery Performance</CardTitle>
-                            <CardDescription>
-                                Monthly on-time delivery rate
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {onTimeByMonthData.length === 0 ? (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    No delivery data available
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Backorder Analysis</CardTitle>
+                                    <CardDescription>Products currently awaiting fulfillment</CardDescription>
                                 </div>
-                            ) : (
-                                <div className="h-[300px]">
-                                    <OnTimeDeliveryChart data={onTimeByMonthData} />
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Order Completion Trend */}
-                <div className="px-4 lg:px-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Order Completion Analysis</CardTitle>
-                            <CardDescription>
-                                Completed vs Cancelled orders over time
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {orderTrendData.length === 0 ? (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    No order data available
-                                </div>
-                            ) : (
-                                <div className="h-[300px]">
-                                    <OrderCompletionChart data={orderTrendData} />
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Backorders Table */}
-                <div className="px-4 lg:px-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Backorder Analysis</CardTitle>
-                            <CardDescription>
-                                Products with pending orders exceeding stock
-                                {data.backorderAnalysis.length > 0 && ` (${data.backorderAnalysis.length} products)`}
-                            </CardDescription>
+                                <ExportButton data={data.backorderAnalysis} filename="backorders" format="csv" />
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {data.backorderAnalysis.length === 0 ? (
                                 <div className="flex h-[200px] items-center justify-center text-muted-foreground">
                                     <div className="text-center">
-                                        <CheckCircle className="h-12 w-12 mx-auto mb-2 opacity-50 text-emerald-600" />
-                                        <p>No backorders pending!</p>
+                                        <PackageCheck className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                        <p>No backordered items! All orders are fulfilled.</p>
                                     </div>
                                 </div>
                             ) : (
@@ -218,22 +141,20 @@ export default async function OrderFulfillmentReportPage() {
                                         <thead>
                                             <tr className="border-b bg-muted/50">
                                                 <th className="text-left py-3 px-4 font-medium">Product</th>
-                                                <th className="text-left py-3 px-4 font-medium">Material Number</th>
-                                                <th className="text-right py-3 px-4 font-medium">Backorders</th>
-                                                <th className="text-right py-3 px-4 font-medium">Quantity</th>
+                                                <th className="text-left py-3 px-4 font-medium">Material Code</th>
+                                                <th className="text-right py-3 px-4 font-medium">Affected Orders</th>
+                                                <th className="text-right py-3 px-4 font-medium">Total Quantity Pending</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {data.backorderAnalysis.slice(0, 20).map((item) => (
+                                            {data.backorderAnalysis.map((item) => (
                                                 <tr key={item.productId} className="border-b hover:bg-muted/30">
                                                     <td className="py-3 px-4 font-medium">{item.productName}</td>
                                                     <td className="py-3 px-4 text-muted-foreground">{item.materialNumber}</td>
-                                                    <td className="py-3 px-4 text-right tabular-nums">
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-500/10 text-rose-600">
-                                                            {item.backorderCount.toLocaleString()}
-                                                        </span>
+                                                    <td className="py-3 px-4 text-right tabular-nums">{item.backorderCount}</td>
+                                                    <td className="py-3 px-4 text-right tabular-nums font-bold text-rose-600">
+                                                        {item.totalBackorderQuantity.toLocaleString()}
                                                     </td>
-                                                    <td className="py-3 px-4 text-right tabular-nums">{item.totalBackorderQuantity.toLocaleString()}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -243,54 +164,7 @@ export default async function OrderFulfillmentReportPage() {
                         </CardContent>
                     </Card>
                 </div>
-
-                {/* Fulfillment Time Stats */}
-                <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-4 lg:px-6">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardDescription>Average Fulfillment</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold">{data.fulfillmentTime.averageDays.toFixed(1)}</p>
-                            <p className="text-sm text-muted-foreground">days</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardDescription>Median Fulfillment</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold">{data.fulfillmentTime.medianDays.toFixed(1)}</p>
-                            <p className="text-sm text-muted-foreground">days</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardDescription>Fastest</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold text-emerald-600">{data.fulfillmentTime.minDays.toFixed(1)}</p>
-                            <p className="text-sm text-muted-foreground">days</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardDescription>Slowest</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold text-amber-600">{data.fulfillmentTime.maxDays.toFixed(1)}</p>
-                            <p className="text-sm text-muted-foreground">days</p>
-                        </CardContent>
-                    </Card>
-                </div>
             </div>
         </div>
     )
-}
-
-function formatCurrency(val: number): string {
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
-    if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
-    return `Rp ${val.toLocaleString()}`
 }

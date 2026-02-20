@@ -1,23 +1,56 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LoginForm } from "@/components/login-form";
+import { signIn } from "@/lib/auth-client";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Home() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (session?.user && !isPending) {
       router.push("/dashboard");
     }
   }, [session, isPending, router]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const result = await signIn.email({
+        email,
+        password,
+      });
+
+      if (result.error) {
+        setError(result.error.message || "Sign in failed");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (_err) {
+      setError("An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (isPending) {
     return (
@@ -28,70 +61,106 @@ export default function Home() {
   }
 
   if (session?.user) {
-    return null; // or a loading state while redirect happens, though useEffect should cover it
+    return null;
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left Side - Visuals */}
-      <div className="relative hidden lg:flex flex-col justify-center items-center bg-zinc-900 text-white p-10 overflow-hidden">
-        {/* Background Gradients */}
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/40 via-purple-900/40 to-cyan-900/40 z-0" />
-        <div className="absolute top-0 -left-1/4 w-1/2 h-1/2 bg-blue-600/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-purple-600/20 rounded-full blur-[120px]" />
-
-        {/* Content */}
-        <div className="relative z-10 max-w-lg text-center space-y-6">
-          <div className="flex justify-center mb-8">
-            <Image
-              src="/codeguide-logo.png"
-              alt="One Chitra Logo"
-              width={120}
-              height={120}
-              className="rounded-2xl shadow-2xl shadow-blue-500/20"
-              priority
-            />
-          </div>
-          <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-wb from-white to-white/70 bg-clip-text text-transparent font-parkinsans leading-tight">
-            Welcome to One Chitra
-          </h1>
-          <p className="text-lg text-zinc-300 leading-relaxed">
-            Manage your inventory, sales, and logistics with a powerful, modern, and intuitive dashboard.
-          </p>
-
-          {/* Feature pills */}
-          <div className="flex flex-wrap justify-center gap-3 pt-4">
-            {["Inventory", "Sales", "Deliveries", "Analytics"].map((item) => (
-              <span key={item} className="px-4 py-1.5 rounded-full bg-white/10 border border-white/10 text-sm backdrop-blur-sm">
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer on left side */}
-        <div className="absolute bottom-8 text-zinc-500 text-sm">
-          &copy; {new Date().getFullYear()} One Chitra System. All rights reserved.
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
       </div>
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] overflow-hidden flex flex-col md:flex-row min-h-[640px] border border-gray-100/50">
+        {/* Left Pane - Gradient */}
+        <div className="w-full md:w-[45%] lg:w-[48%] bg-gradient-to-br from-[#1A4BFF] via-[#5C24FF] to-[#D6B4FF] p-10 md:p-14 flex flex-col justify-between relative overflow-hidden text-white rounded-l-3xl md:rounded-r-none md:rounded-3xl m-2 md:m-3">
+          {/* Abstract glows for visual interest */}
+          <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-400 opacity-30 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
+          <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-fuchsia-300 opacity-30 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex flex-col justify-center items-center p-6 sm:p-10 lg:p-20 bg-background relative">
-        <div className="absolute top-4 right-4">
-          <ThemeToggle />
+          <div className="relative z-10 w-40 h-auto">
+            {/* Logo used as icon/branding */}
+            <img src="/uploads/Chitra-Paratama.png" alt="One Chitra" className="w-full h-auto brightness-0 invert drop-shadow-md" />
+          </div>
+
+          <div className="relative z-10 mt-auto pb-4 pt-16">
+            <h1 className="text-3xl md:text-[2.25rem] lg:text-[2.75rem] font-bold leading-[1.2] tracking-tight text-white mb-2">
+              Empowering Chitra Paratama’s Growth Through Digital Synergy.
+            </h1>
+          </div>
         </div>
 
-        <div className="w-full max-w-sm space-y-8">
-          <div className="text-center lg:text-left space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">Sign in to your account</h2>
-            <p className="text-muted-foreground">
-              Enter your credentials below to access the dashboard
+        {/* Right Pane - Form */}
+        <div className="w-full md:w-[55%] lg:w-[52%] px-8 py-10 md:py-16 md:px-14 lg:px-20 flex flex-col justify-center bg-white relative">
+
+          <div className="mb-10 lg:mb-12">
+            <h1 className="text-3xl md:text-3xl lg:text-4xl font-extrabold tracking-tight text-gray-900 mb-6">
+              One Chitra
+            </h1>
+            <h2 className="text-2xl lg:text-[1.75rem] font-bold mb-3 tracking-tight text-[#5233FF]">All In one Platform</h2>
+            <p className="text-gray-500 text-sm leading-relaxed max-w-sm mt-3">
+              Manage inventory, track sales leads, and monitor supply chain performance from a single dashboard.
             </p>
           </div>
 
-          <LoginForm />
+          <form onSubmit={handleSubmit} className="space-y-5 lg:space-y-6">
+            {error && (
+              <Alert variant="destructive" className="rounded-xl">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
+            <div className="space-y-2">
+              <Label htmlFor="email" className="font-semibold text-gray-800 text-sm">Your email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="farazhaidet786@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                className="h-12 rounded-xl bg-white border-gray-200 focus-visible:ring-1 focus-visible:ring-[#5C24FF] focus-visible:border-[#5C24FF] transition-all shadow-sm placeholder:text-gray-400"
+              />
+            </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="password" className="font-semibold text-gray-800 text-sm">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-12 rounded-xl bg-white border-gray-200 focus-visible:ring-1 focus-visible:ring-[#5C24FF] focus-visible:border-[#5C24FF] pr-10 transition-all shadow-sm placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-xl bg-[#5233FF] hover:bg-[#4326db] text-white font-medium text-[15px] shadow-[0_4px_14px_0_rgba(82,51,255,0.39)] transition-all duration-200 mt-2"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Please wait...
+                </>
+              ) : (
+                "Get Started"
+              )}
+            </Button>
+          </form>
         </div>
       </div>
     </div>

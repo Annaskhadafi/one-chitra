@@ -1,14 +1,14 @@
 import { getInventoryReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPICard, ReportKPIGrid, LowStockAlertRow, ProgressBar } from "@/components/reports/report-components"
-import { SalesTrendChart, ReportBarChart, ReportPieChart, StackedBarChart, StockMovementChart } from "@/components/reports/report-charts"
+import { SalesTrendChart, ReportBarChart, ReportPieChart, StackedBarChart, StockMovementChart, HeatmapChart } from "@/components/reports/report-charts"
 import { Package, AlertTriangle, TrendingUp, DollarSign, Warehouse, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default async function InventoryReportPage() {
     const data = await getInventoryReport()
 
-    const kpis = [
+    const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
             title: "Total Products",
             value: data.stockOverview.reduce((sum, w) => sum + w.totalProducts, 0),
@@ -31,7 +31,7 @@ export default async function InventoryReportPage() {
             change: -12.5,
             changeLabel: "vs last week",
             icon: AlertTriangle,
-            variant: data.lowStockAlerts.length > 10 ? "danger" : "warning" as const,
+            variant: data.lowStockAlerts.length > 10 ? "danger" : ("warning" as "danger" | "warning"),
         },
         {
             title: "Warehouses",
@@ -54,7 +54,9 @@ export default async function InventoryReportPage() {
 
     const warehouseDistribution = data.stockOverview.map(w => ({
         name: w.warehouseName,
-        value: w.totalStock,
+        stock: Math.max(0, w.totalProducts - w.lowStockCount - w.outOfStockCount),
+        lowStock: w.lowStockCount,
+        outOfStock: w.outOfStockCount,
     }))
 
     return (
@@ -86,12 +88,11 @@ export default async function InventoryReportPage() {
                         description="Inventory valuation over the last 12 months"
                         height={300}
                     />
-                    <ReportPieChart
+                    <StackedBarChart
                         data={warehouseDistribution}
-                        title="Stock Distribution by Warehouse"
-                        description="Current stock allocation across warehouses"
+                        title="Stock Level by Status"
+                        description="Product status across warehouses"
                         height={300}
-                        variant="donut"
                     />
                 </div>
 
@@ -208,39 +209,17 @@ export default async function InventoryReportPage() {
 
                 {/* Dead Stock Section */}
                 {data.deadStock.length > 0 && (
-                    <div className="px-4 lg:px-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Dead Stock Analysis</CardTitle>
-                                <CardDescription>
-                                    Products with no movement in 90+ days ({data.deadStock.length} items)
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3">
-                                    {data.deadStock.slice(0, 10).map((item, index) => {
-                                        const days = item.lastMovement
-                                            ? Math.floor((Date.now() - item.lastMovement.getTime()) / (1000 * 60 * 60 * 24))
-                                            : 0
-                                        return (
-                                            <div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-2 h-2 rounded-full ${days > 180 ? "bg-rose-500" : days > 120 ? "bg-orange-500" : "bg-amber-500"}`} />
-                                                    <div>
-                                                        <p className="font-medium text-sm">{item.productName}</p>
-                                                        <p className="text-xs text-muted-foreground">{item.materialNumber} · {item.category}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-medium">{item.totalStock.toLocaleString()} units</p>
-                                                    <p className="text-xs text-muted-foreground">{formatCurrency(item.valuationValue)}</p>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </CardContent>
-                        </Card>
+                    <div className="px-4 lg:px-6 mb-6">
+                        <HeatmapChart
+                            data={data.deadStock.map(d => ({
+                                category: d.category,
+                                name: d.productName,
+                                value: d.valuationValue,
+                                days: d.lastMovement ? Math.floor((Date.now() - d.lastMovement.getTime()) / (1000 * 60 * 60 * 24)) : 0,
+                            }))}
+                            title="Dead Stock Analysis"
+                            description={`Products with no movement in 90+ days (${data.deadStock.length} items)`}
+                        />
                     </div>
                 )}
             </div>
