@@ -309,6 +309,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                             <TableHead>No. PO Customer</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead>Scheduled</TableHead>
+                            <TableHead>Delivery Date</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Driver</TableHead>
@@ -350,6 +351,13 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                             month: "short",
                                             year: "numeric",
                                         })}
+                                    </TableCell>
+                                    <TableCell>
+                                        {delivery.deliveryDate ? new Date(delivery.deliveryDate).toLocaleDateString("id-ID", {
+                                            day: "2-digit",
+                                            month: "short",
+                                            year: "numeric",
+                                        }) : "-"}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={statusVariants[delivery.status] || "secondary"}>
