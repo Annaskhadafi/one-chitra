@@ -232,8 +232,9 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         serialNumbers: item.serialNumbers || null,
                     })))
 
-                // If status is delivered, deduct stock
-                if (data.status === "delivered") {
+                // If status is a "committed" status, deduct stock
+                const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
+                if (committedStatuses.includes(data.status)) {
                     for (const item of data.items) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
@@ -271,8 +272,9 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 return { success: false, error: "Delivery not found" }
             }
 
-            // Revert stock if it was previously delivered
-            if (originalDelivery.status === "delivered" && originalDelivery.warehouseId) {
+            // Revert stock if it was previously in a committed status
+            const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
+            if (committedStatuses.includes(originalDelivery.status) && originalDelivery.warehouseId) {
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
                         .set({
@@ -333,8 +335,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         serialNumbers: item.serialNumbers || null,
                     })))
 
-                // Apply new stock deduction if delivered
-                if (data.status === "delivered") {
+                // Apply new stock deduction if in a committed status
+                if (committedStatuses.includes(data.status)) {
                     for (const item of data.items) {
                         await tx.update(stockLevels)
                             .set({
