@@ -31,6 +31,7 @@ interface DeliveryPdfData {
         customer: Customer
     }
     warehouse: Warehouse | null
+    createdByUser: { id: string; name: string; email: string } | null
     items: {
         id: number
         productId: number
@@ -380,7 +381,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                     </div>
                                                 </td>
                                                 <td className="col-qty">
-                                                    {item.deliveredQuantity} Assy
+                                                    {item.deliveredQuantity}
                                                 </td>
                                                 <td className="col-part">
                                                     {item.product.materialNumber}
@@ -403,7 +404,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                                             const sn = item.serialNumbers?.[snIdx]
                                                                             return (
                                                                                 <td key={colIdx}>
-                                                                                    {sn || ""}
+                                                                                    {sn || item.product.materialNumber}
                                                                                 </td>
                                                                             )
                                                                         })}
@@ -437,11 +438,13 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             <div className="sig-box">
                                 <div className="sig-label">Delivery by,</div>
                                 <div className="sig-name">PT.Chitra Paratama</div>
-                                <div style={{ marginTop: "20px" }}>( {delivery.driverName || "          "} )</div>
+                                <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
                             </div>
                             <div className="sig-box">
-                                <div className="sig-label">Forwarder by,</div>
-                                <div className="sig-name" style={{ textAlign: "center" }}>CP</div>
+                                <div className="sig-label">Forwarder / Driver,</div>
+                                <div className="sig-name" style={{ textAlign: "center" }}>
+                                    {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+                                </div>
                                 <div style={{ marginTop: "20px", textAlign: "center" }}>( Name, Sign & stamp )</div>
                             </div>
                             <div className="sig-box" style={{ textAlign: "right" }}>
