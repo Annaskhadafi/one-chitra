@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { permissions, rolePermissions, roles } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+import { checkPermission } from "@/lib/rbac"
 
 
 import { InferSelectModel } from "drizzle-orm"
@@ -43,6 +44,7 @@ export async function getRoleWithPermissions(roleId: number) {
 
 export async function createRole(data: { name: string, description: string, permissionIds: number[] }) {
     try {
+        await checkPermission('roles', 'create')
         const [newRole] = await db.insert(roles)
             .values({
                 name: data.name,
@@ -68,6 +70,7 @@ export async function createRole(data: { name: string, description: string, perm
 
 export async function updateRole(roleId: number, data: { name: string, description: string, permissionIds: number[] }) {
     try {
+        await checkPermission('roles', 'edit')
         await db.update(roles)
             .set({
                 name: data.name,
@@ -97,6 +100,7 @@ export async function updateRole(roleId: number, data: { name: string, descripti
 
 export async function deleteRole(roleId: number) {
     try {
+        await checkPermission('roles', 'delete')
         await db.delete(roles).where(eq(roles.id, roleId))
         revalidatePath('/dashboard/admin/roles')
         return { success: true }
