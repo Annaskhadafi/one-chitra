@@ -383,3 +383,29 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
         return { success: false, error: "Failed to update delivery status" }
     }
 }
+
+export async function updateDoMonitoringFields(id: number, data: {
+    returnDoDate: Date | null,
+    invoiceNumber: string | null,
+    invoiceDate: Date | null,
+    doStatus: string,
+}) {
+    try {
+        await db.update(deliveries)
+            .set({
+                returnDoDate: data.returnDoDate,
+                invoiceNumber: data.invoiceNumber || null,
+                invoiceDate: data.invoiceDate,
+                doStatus: data.doStatus,
+                updatedAt: new Date(),
+            })
+            .where(eq(deliveries.id, id))
+
+        revalidatePath("/dashboard/deliveries")
+        revalidatePath("/dashboard/do-monitoring")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update DO Monitoring fields:", error)
+        return { success: false, error: "Failed to update DO Monitoring fields" }
+    }
+}

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createDelivery, updateDelivery, checkStockAvailability } from "@/app/actions/delivery"
+import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -162,6 +162,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [loadingFleet, setLoadingFleet] = useState(false)
     const [driverSearch, setDriverSearch] = useState("")
     const [vehicleSearch, setVehicleSearch] = useState("")
+
+    // Delivery Number
+    const [generatedDeliveryNumber, setGeneratedDeliveryNumber] = useState(initialData?.deliveryNumber || "")
+
+    useEffect(() => {
+        if (!isEdit) {
+            generateDeliveryNumber().then(num => setGeneratedDeliveryNumber(num))
+        }
+    }, [isEdit])
 
     // Load fleet data on mount
     useEffect(() => {
@@ -387,6 +396,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
         setSaving(true)
         const payload = {
+            deliveryNumber: generatedDeliveryNumber || undefined,
             salesOrderId,
             scheduledDate,
             deliveryDate: deliveryDate || null,
@@ -532,6 +542,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                         </CardHeader>
                         <CardContent>
                             <div className="grid gap-6">
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Delivery Order Number</Label>
+                                    <Input
+                                        value={generatedDeliveryNumber}
+                                        readOnly
+                                        className="h-11 bg-slate-50 dark:bg-slate-900 border-dashed font-mono font-medium text-blue-700 dark:text-blue-400"
+                                        placeholder="Generating..."
+                                    />
+                                </div>
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">Sales Order Number</Label>
                                     <Popover open={soOpen} onOpenChange={setSoOpen}>
