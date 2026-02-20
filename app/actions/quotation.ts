@@ -6,6 +6,8 @@ import { eq, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { quotationSchema } from "@/lib/schemas"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
 export async function getQuotations() {
     return await db.query.quotations.findMany({
@@ -51,6 +53,10 @@ export async function generateQuotationNumber() {
 
 export async function createQuotation(data: z.infer<typeof quotationSchema>) {
     try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+        const userId = session?.user?.id || "system"
         const quotationNumber = data.quotationNumber || await generateQuotationNumber()
 
         return await db.transaction(async (tx) => {
@@ -63,7 +69,7 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
                     subject: data.subject || null,
                     salesPersonId: data.salesPersonId || null,
                     attn: data.attn || null,
-                    createdBy: "system", // TODO: get from session
+                    createdBy: userId,
                     status: data.status,
                     paymentTerms: data.paymentTerms || null,
                     termsConditions: data.termsConditions || null,
@@ -175,11 +181,15 @@ export async function bulkDeleteQuotations(ids: number[]) {
 
 export async function approveQuotation(id: number) {
     try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
         await db.update(quotations)
             .set({
                 status: "approved",
                 approvedAt: new Date(),
-                approvedBy: "system", // TODO: get from session
+                approvedBy: session?.user?.id || null,
                 updatedAt: new Date(),
             })
             .where(eq(quotations.id, id))
@@ -195,11 +205,15 @@ export async function approveQuotation(id: number) {
 
 export async function rejectQuotation(id: number, reason: string) {
     try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
         await db.update(quotations)
             .set({
                 status: "rejected",
                 rejectedAt: new Date(),
-                rejectedBy: "system", // TODO: get from session
+                rejectedBy: session?.user?.id || null,
                 rejectionReason: reason,
                 updatedAt: new Date(),
             })

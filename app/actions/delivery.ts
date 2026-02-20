@@ -6,6 +6,8 @@ import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
 export async function getDeliveries() {
     return await db.query.deliveries.findMany({
@@ -180,6 +182,10 @@ export async function generateDeliveryNumber() {
 
 export async function createDelivery(data: z.infer<typeof deliverySchema>) {
     try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+        const userId = session?.user?.id || "system"
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
 
         return await db.transaction(async (tx) => {
@@ -187,6 +193,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 .values({
                     deliveryNumber,
                     salesOrderId: data.salesOrderId,
+                    createdBy: userId,
                     scheduledDate: new Date(data.scheduledDate),
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
                     status: data.status,

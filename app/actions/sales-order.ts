@@ -6,6 +6,8 @@ import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
 export async function getSalesOrders() {
     // Fetch orders with customer and createdByUser first
@@ -82,6 +84,10 @@ export async function generateInvoiceNumber() {
 
 export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+        const userId = session?.user?.id || "system"
         const invoiceNumber = data.invoiceNumber || await generateInvoiceNumber()
 
         // Start transaction
@@ -90,6 +96,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                 .values({
                     invoiceNumber,
                     customerPo: data.customerPo || null,
+                    createdBy: userId,
                     customerId: data.customerId,
                     warehouseId: data.warehouseId,
                     salesDate: new Date(data.salesDate),
