@@ -12,7 +12,7 @@ export default async function CustomerReportPage() {
         {
             title: "Total Customers",
             value: data.repeatPurchaseRate.totalCustomers.toLocaleString(),
-            icon: Users,
+            icon: "users" as const,
             variant: "default" as const,
         },
         {
@@ -26,19 +26,19 @@ export default async function CustomerReportPage() {
                 })()
                 : 0,
             changeLabel: "vs prev month",
-            icon: TrendingUp,
+            icon: "trendingUp" as const,
             variant: "success" as const,
         },
         {
             title: "Repeat Purchase Rate",
             value: `${data.repeatPurchaseRate.repeatRate.toFixed(1)}%`,
-            icon: RefreshCw,
+            icon: "repeat" as const,
             variant: data.repeatPurchaseRate.repeatRate > 20 ? "success" : ("warning" as "success" | "warning"),
         },
         {
             title: "Average Orders per Customer",
             value: data.repeatPurchaseRate.averageOrdersPerCustomer.toFixed(1),
-            icon: Star,
+            icon: "star" as const,
             variant: "default" as const,
         },
     ]

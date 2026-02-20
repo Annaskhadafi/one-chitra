@@ -82,6 +82,7 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
     const [openVehicle, setOpenVehicle] = useState(false)
 
     const form = useForm<z.infer<typeof fleetTripSchema>>({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(fleetTripSchema) as any,
         defaultValues: {
             driverId: 0,

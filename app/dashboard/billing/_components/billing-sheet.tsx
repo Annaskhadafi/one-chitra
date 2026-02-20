@@ -22,11 +22,13 @@ import { Loader2 } from "lucide-react"
 interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     record: Record<string, any>
 }
 
 export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [formData, setFormData] = useState<Record<string, any>>({})
 
     useEffect(() => {

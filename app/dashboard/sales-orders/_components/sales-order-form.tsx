@@ -249,7 +249,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
                 router.push("/dashboard/sales-orders")
             } else {
-                // @ts-ignore
+                // @ts-expect-error - result type union doesn't always have error
                 toast.error(result.error || "Something went wrong")
             }
         } catch {

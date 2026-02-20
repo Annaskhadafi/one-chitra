@@ -19,8 +19,8 @@ async function main() {
                 END $$;
             `);
             console.log("FK added.");
-        } catch (e: any) {
-            console.log("FK error/exists:", e.message);
+        } catch (e: unknown) {
+            console.log("FK error/exists:", e instanceof Error ? e.message : String(e));
         }
 
     } catch (error) {

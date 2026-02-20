@@ -398,12 +398,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             vehicleType: !isExternal ? (vehicleType || undefined) : undefined,
             vendorName: isExternal ? (vendorName || undefined) : undefined,
             awbNumber: isExternal ? (awbNumber || undefined) : undefined,
-            vehicleType: !isExternal ? (vehicleType || undefined) : undefined,
-            vendorName: isExternal ? (vendorName || undefined) : undefined,
-            awbNumber: isExternal ? (awbNumber || undefined) : undefined,
             // For internal, save total calculated cost. For external, save input shippingCost
             shippingCost: isExternal ? Number(shippingCost) : totalInternalCost,
-            // Internal Cost Breakdown
             // Internal Cost Breakdown
             costGasoline: !isExternal ? Number(costGasoline) : 0,
             costToll: !isExternal ? Number(costToll) : 0,
@@ -958,7 +954,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         onClick={() => handleCreateDriver(driverSearch)}
                                                                     >
                                                                         <Plus className="mr-2 h-3 w-3" />
-                                                                        Add New "{driverSearch}"
+                                                                        Add New &quot;{driverSearch}&quot;
                                                                     </Button>
                                                                 </div>
                                                             </CommandEmpty>
@@ -1017,7 +1013,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                             onClick={() => handleCreateVehicle(vehicleSearch)}
                                                                         >
                                                                             <Plus className="mr-2 h-3 w-3" />
-                                                                            Add New "{vehicleSearch}"
+                                                                            Add New &quot;{vehicleSearch}&quot;
                                                                         </Button>
                                                                     </div>
                                                                 </CommandEmpty>
@@ -1081,7 +1077,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                             }}
                                                                         >
                                                                             <Plus className="mr-2 h-3 w-3" />
-                                                                            Create "{vehicleTypeSearch}"
+                                                                            Create &quot;{vehicleTypeSearch}&quot;
                                                                         </Button>
                                                                     </div>
                                                                 </CommandEmpty>

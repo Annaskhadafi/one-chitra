@@ -3,37 +3,68 @@
 > eslint
 
 
+D:\[01] PROJECT\one chitra\app\actions\billing.ts
+  162:44  warning  'records' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
 D:\[01] PROJECT\one chitra\app\actions\dashboard.ts
-   10:10  warning  'warehouses' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-   11:32  warning  'lte' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
-   11:37  warning  'sum' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
-  156:49  error    Unexpected any. Specify a different type                                      @typescript-eslint/no-explicit-any
-  164:46  error    Unexpected any. Specify a different type                                      @typescript-eslint/no-explicit-any
+  10:10  warning  'warehouses' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  11:32  warning  'lte' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  11:37  warning  'sum' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\actions\delivery.ts
   4:50  warning  'salesOrderItems' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
+D:\[01] PROJECT\one chitra\app\actions\fleet-trips.ts
+    4:79  warning  'stockLevels' is defined but never used. Allowed unused vars must match /^_/u             @typescript-eslint/no-unused-vars
+    5:20  warning  'and' is defined but never used. Allowed unused vars must match /^_/u                     @typescript-eslint/no-unused-vars
+    9:10  warning  'generateDeliveryNumber' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  261:14  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u          @typescript-eslint/no-unused-vars
+
 D:\[01] PROJECT\one chitra\app\actions\good-receive.ts
-   9:7   warning  'goodReceiveItemSchema' is assigned a value but only used as a type. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  60:13  error    'errors' is never reassigned. Use 'const' instead                                                          prefer-const
+  9:7  warning  'goodReceiveItemSchema' is assigned a value but only used as a type. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\actions\sales-order.ts
+  4:53  warning  'customers' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  4:64  warning  'user' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+  4:70  warning  'products' is defined but never used. Allowed unused vars must match /^_/u   @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\actions\stock-transfer.ts
-    4:59  warning  'products' is defined but never used. Allowed unused vars must match /^_/u                               @typescript-eslint/no-unused-vars
-    4:69  warning  'warehouses' is defined but never used. Allowed unused vars must match /^_/u                             @typescript-eslint/no-unused-vars
-    5:25  warning  'inArray' is defined but never used. Allowed unused vars must match /^_/u                                @typescript-eslint/no-unused-vars
-   14:7   warning  'stockTransferSchema' is assigned a value but only used as a type. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  125:21  error    Unexpected any. Specify a different type                                                                 @typescript-eslint/no-explicit-any
+   4:59  warning  'products' is defined but never used. Allowed unused vars must match /^_/u                               @typescript-eslint/no-unused-vars
+   4:69  warning  'warehouses' is defined but never used. Allowed unused vars must match /^_/u                             @typescript-eslint/no-unused-vars
+   5:25  warning  'inArray' is defined but never used. Allowed unused vars must match /^_/u                                @typescript-eslint/no-unused-vars
+  14:7   warning  'stockTransferSchema' is assigned a value but only used as a type. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
-D:\[01] PROJECT\one chitra\app\dashboard\customers\_components\customer-table-csv.tsx
-  45:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+D:\[01] PROJECT\one chitra\app\actions\warehouse.ts
+  41:17  warning  'stocks' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\admin\users\_components\add-user-dialog.tsx
+  69:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\admin\users\_components\import-users-dialog.tsx
+  51:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\admin\users\_components\user-list.tsx
+  19:44  warning  'Plus' is defined but never used. Allowed unused vars must match /^_/u             @typescript-eslint/no-unused-vars
+  19:50  warning  'Download' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  72:11  warning  'router' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\billing\_components\billing-import-dialog.tsx
+  16:10  warning  'Upload' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\customer-segmentation\_components\customer-segmentation-client.tsx
+  75:7  warning  'COLORS' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\dashboard\deliveries\_components\delivery-form.tsx
-  38:5  warning  'Table' is defined but never used. Allowed unused vars must match /^_/u        @typescript-eslint/no-unused-vars
-  39:5  warning  'TableBody' is defined but never used. Allowed unused vars must match /^_/u    @typescript-eslint/no-unused-vars
-  40:5  warning  'TableCell' is defined but never used. Allowed unused vars must match /^_/u    @typescript-eslint/no-unused-vars
-  41:5  warning  'TableHead' is defined but never used. Allowed unused vars must match /^_/u    @typescript-eslint/no-unused-vars
-  42:5  warning  'TableHeader' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  43:5  warning  'TableRow' is defined but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars
+   50:88  warning  'AlertTriangle' is defined but never used. Allowed unused vars must match /^_/u                                         @typescript-eslint/no-unused-vars
+  161:12  warning  'loadingFleet' is assigned a value but never used. Allowed unused vars must match /^_/u                                 @typescript-eslint/no-unused-vars
+  439:8   warning  React Hook useCallback has a missing dependency: 'totalInternalCost'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+D:\[01] PROJECT\one chitra\app\dashboard\deliveries\_components\delivery-preview.tsx
+  13:10  warning  'Separator' is defined but never used. Allowed unused vars must match /^_/u   @typescript-eslint/no-unused-vars
+  30:5   warning  'CreditCard' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\fleet-management\_components\fleet-trip-table.tsx
+  34:10  warning  'Search' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\dashboard\good-receive\client-page.tsx
     4:10  warning  'format' is defined but never used. Allowed unused vars must match /^_/u          @typescript-eslint/no-unused-vars
@@ -46,49 +77,110 @@ D:\[01] PROJECT\one chitra\app\dashboard\good-receive\client-page.tsx
    78:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
   151:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
 
+D:\[01] PROJECT\one chitra\app\dashboard\inventory\_components\stock-comparison.tsx
+  25:21  warning  'ChartTooltip' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  25:35  warning  'ChartTooltipContent' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  82:7   warning  'PIE_COLORS' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
 D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-detail.tsx
   49:33  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
 
 D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-dialog.tsx
-  279:50  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
-  290:37  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  292:50  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
+  303:37  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
 
 D:\[01] PROJECT\one chitra\app\dashboard\products\_components\product-table.tsx
    21:56  warning  'Eye' is defined but never used. Allowed unused vars must match /^_/u                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
-   89:11  warning  'uniqueMaterials' is assigned a value but never used. Allowed unused vars must match /^_/u                                                                                                                                                                                               @typescript-eslint/no-unused-vars
-  278:61  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
-  296:57  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+   81:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+   90:17  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  130:11  warning  'uniqueMaterials' is assigned a value but never used. Allowed unused vars must match /^_/u                                                                                                                                                                                               @typescript-eslint/no-unused-vars
 
-D:\[01] PROJECT\one chitra\app\dashboard\quotations\_components\quotation-form.tsx
-  241:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+D:\[01] PROJECT\one chitra\app\dashboard\reports\customers\page.tsx
+  3:10  warning  'ReportKPICard' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
-D:\[01] PROJECT\one chitra\app\dashboard\sales-orders\_components\sales-order-table.tsx
-  38:34  warning  'Eye' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+D:\[01] PROJECT\one chitra\app\dashboard\reports\inventory\page.tsx
+  3:10  warning  'ReportKPICard' is defined but never used. Allowed unused vars must match /^_/u   @typescript-eslint/no-unused-vars
+  4:27  warning  'ReportBarChart' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  4:43  warning  'ReportPieChart' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  5:34  warning  'TrendingUp' is defined but never used. Allowed unused vars must match /^_/u      @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\reports\sales\page.tsx
+  3:10  warning  'ReportKPICard' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\reports\warehouse\page.tsx
+  2:10  warning  'Card' is defined but never used. Allowed unused vars must match /^_/u             @typescript-eslint/no-unused-vars
+  2:16  warning  'CardContent' is defined but never used. Allowed unused vars must match /^_/u      @typescript-eslint/no-unused-vars
+  2:29  warning  'CardDescription' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  2:46  warning  'CardHeader' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+  2:58  warning  'CardTitle' is defined but never used. Allowed unused vars must match /^_/u        @typescript-eslint/no-unused-vars
+  3:25  warning  'ExportButton' is defined but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\sales-orders\_components\quick-add-product-dialog.tsx
+  3:20  warning  'useMemo' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\sales-orders\_components\sales-order-detail.tsx
+  25:27  warning  'Download' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  25:51  warning  'Phone' is defined but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\dashboard\stock-transfers\_components\transfer-dialog.tsx
   87:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\app\dashboard\stock-transfers\create\_components\create-transfer-form.tsx
-    3:10  warning  'useState' is defined but never used. Allowed unused vars must match /^_/u              @typescript-eslint/no-unused-vars
-   70:11  warning  'productsMap' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  109:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u        @typescript-eslint/no-unused-vars
+  209:18  warning  'error' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\dashboard\stocks\_components\stock-table.tsx
+  157:8  warning  React Hook useMemo has a missing dependency: 'calculateValuation'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
 D:\[01] PROJECT\one chitra\app\dashboard\warehouse\_components\csv-upload.tsx
-   15:29  warning  'Check' is defined but never used. Allowed unused vars must match /^_/u             @typescript-eslint/no-unused-vars
-   44:12  warning  'rawData' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-  245:41  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                     react/no-unescaped-entities
-  245:52  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                     react/no-unescaped-entities
+  15:29  warning  'Check' is defined but never used. Allowed unused vars must match /^_/u             @typescript-eslint/no-unused-vars
+  44:12  warning  'rawData' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\app\page.tsx
+   8:8   warning  'Image' is defined but never used. Allowed unused vars must match /^_/u                                                                                                                                                                                                                  @typescript-eslint/no-unused-vars
+   9:8   warning  'Link' is defined but never used. Allowed unused vars must match /^_/u                                                                                                                                                                                                                   @typescript-eslint/no-unused-vars
+  81:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\[01] PROJECT\one chitra\app\sign-in\page.tsx
+  55:25  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  70:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+D:\[01] PROJECT\one chitra\auto-push.ts
+  13:18  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\check-migrations.ts
+  23:18  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u   @typescript-eslint/no-unused-vars
+  27:22  warning  'e2' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\components\dashboard\dashboard-category-chart.tsx
   3:61  warning  'Legend' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
-
-D:\[01] PROJECT\one chitra\components\dashboard\dashboard-stats-cards.tsx
-  9:10  warning  'Badge' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\components\nav-main.tsx
   6:10  warning  'IconCirclePlusFilled' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
   6:32  warning  'IconMail' is defined but never used. Allowed unused vars must match /^_/u              @typescript-eslint/no-unused-vars
   8:10  warning  'Button' is defined but never used. Allowed unused vars must match /^_/u                @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\components\reports\report-charts.tsx
+  3:162  warning  'Scatter' is defined but never used. Allowed unused vars must match /^_/u              @typescript-eslint/no-unused-vars
+  3:171  warning  'ScatterChart' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  3:185  warning  'ZAxis' is defined but never used. Allowed unused vars must match /^_/u                @typescript-eslint/no-unused-vars
+  3:192  warning  'Treemap' is defined but never used. Allowed unused vars must match /^_/u              @typescript-eslint/no-unused-vars
+  6:10   warning  'ChartContainer' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+  6:26   warning  'ChartTooltip' is defined but never used. Allowed unused vars must match /^_/u         @typescript-eslint/no-unused-vars
+  6:40   warning  'ChartTooltipContent' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  6:61   warning  'ChartConfig' is defined but never used. Allowed unused vars must match /^_/u          @typescript-eslint/no-unused-vars
+  6:74   warning  'ChartLegend' is defined but never used. Allowed unused vars must match /^_/u          @typescript-eslint/no-unused-vars
+  6:87   warning  'ChartLegendContent' is defined but never used. Allowed unused vars must match /^_/u   @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\components\reports\report-components.tsx
+    5:58  warning  'Package' is defined but never used. Allowed unused vars must match /^_/u           @typescript-eslint/no-unused-vars
+    5:67  warning  'DollarSign' is defined but never used. Allowed unused vars must match /^_/u        @typescript-eslint/no-unused-vars
+  180:68  warning  'variant' is assigned a value but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\db\schema\billing.ts
+  1:36  warning  'varchar' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\db\schema\fleet.ts
+  1:36  warning  'text' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
 D:\[01] PROJECT\one chitra\debug-permissions.ts
   3:10  warning  'users' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
@@ -96,6 +188,15 @@ D:\[01] PROJECT\one chitra\debug-permissions.ts
 D:\[01] PROJECT\one chitra\fix-user-role.ts
   4:10  warning  'eq' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
 
-Γ£û 53 problems (8 errors, 45 warnings)
-  1 error and 0 warnings potentially fixable with the `--fix` option.
+D:\[01] PROJECT\one chitra\scripts\db-check-targets.ts
+  9:15  warning  'placeholders' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\scripts\test-delivery-costs.ts
+  5:14  warning  'desc' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+D:\[01] PROJECT\one chitra\test-query.ts
+  2:23  warning  'customers' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+  2:34  warning  'user' is defined but never used. Allowed unused vars must match /^_/u       @typescript-eslint/no-unused-vars
+
+Γ£û 103 problems (0 errors, 103 warnings)
 

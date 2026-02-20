@@ -12,16 +12,13 @@ import {
     getSortedRowModel,
     useReactTable,
 } from "@tanstack/react-table"
-import { ChevronDown, MoreHorizontal, ListFilter } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -40,6 +37,7 @@ import { deleteBillingRecord } from "@/app/actions/billing"
 import { toast } from "sonner"
 // import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog" 
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function BillingTable({ data }: { data: any[] }) {
     const [sorting, setSorting] = React.useState<SortingState>([])
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -48,13 +46,16 @@ export function BillingTable({ data }: { data: any[] }) {
 
     // Sheet State
     const [sheetOpen, setSheetOpen] = React.useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [selectedRecord, setSelectedRecord] = React.useState<any>(null)
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleEdit = (record: any) => {
         setSelectedRecord(record)
         setSheetOpen(true)
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleView = (record: any) => {
         setSelectedRecord(record)
         setSheetOpen(true)
@@ -65,7 +66,7 @@ export function BillingTable({ data }: { data: any[] }) {
             try {
                 await deleteBillingRecord(id)
                 toast.success("Billing data deleted")
-            } catch (error) {
+            } catch (_error) {
                 toast.error("Failed to delete billing data")
             }
         }

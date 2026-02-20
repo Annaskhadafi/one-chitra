@@ -15,25 +15,25 @@ export default async function SAPIntegrationReportPage() {
         {
             title: "Systems Status",
             value: errorsCount === 0 ? "Connected" : "Issues Detected",
-            icon: Database,
+            icon: "database",
             variant: errorsCount === 0 ? "success" : "danger",
         },
         {
             title: "Recent Sync Errors",
             value: errorsCount.toString(),
-            icon: AlertTriangle,
+            icon: "alert",
             variant: errorsCount > 0 ? "danger" : "default",
         },
         {
             title: "Data Discrepancies",
             value: discrepanciesCount.toString(),
-            icon: RefreshCw,
+            icon: "repeat",
             variant: discrepanciesCount > 0 ? "warning" : "success",
         },
         {
             title: "Last Successful Sync",
             value: data.syncStatus.find(s => s.status === 'success')?.lastSync?.toLocaleTimeString() || "N/A",
-            icon: CheckCircle,
+            icon: "check",
             variant: "default",
         },
     ]

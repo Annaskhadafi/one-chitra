@@ -17,36 +17,36 @@ export default async function SalesReportPage() {
     const previousSales = data.salesTrend.slice(-14, -7).reduce((sum, d) => sum + d.sales, 0)
     const growthRate = previousSales > 0 ? ((recentSales - previousSales) / previousSales) * 100 : 0
 
-    const kpis = [
+    const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
             title: "Total Revenue",
             value: formatCurrency(totalSales),
             change: growthRate,
             changeLabel: "vs previous period",
-            icon: DollarSign,
-            variant: "success" as const,
+            icon: "dollar",
+            variant: "success",
         },
         {
             title: "Total Orders",
             value: totalOrders.toLocaleString(),
             change: 8.5,
             changeLabel: "vs previous period",
-            icon: Users,
-            variant: "default" as const,
+            icon: "users",
+            variant: "default",
         },
         {
             title: "Avg Order Value",
             value: formatCurrency(avgOrderValue),
             change: 3.2,
             changeLabel: "vs previous period",
-            icon: TrendingUp,
-            variant: "default" as const,
+            icon: "trendingUp",
+            variant: "default",
         },
         {
             title: "Monthly Target",
             value: `${data.salesTarget.percentage.toFixed(1)}%`,
-            icon: Target,
-            variant: data.salesTarget.percentage >= 80 ? "success" : data.salesTarget.percentage >= 50 ? "warning" : "danger",
+            icon: "target",
+            variant: (data.salesTarget.percentage >= 80 ? "success" : data.salesTarget.percentage >= 50 ? "warning" : "danger") as any,
         },
     ]
 

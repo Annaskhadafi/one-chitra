@@ -9,11 +9,12 @@ export default async function WarehouseLogisticsReportPage() {
     const data = await getWarehouseLogisticsReport()
 
     const totalWarehouses = data.warehouseCapacity.length
-    const activeVehicles = data.fleetUtilization.filter(f => f.tripsCompleted > 0).length
+    const activeVehicles = data.fleetUtilization.filter(f => f.totalTrips > 0).length
 
-    const onTimeDeliveryData = data.deliveryPerformance.find(d => d.status.toLowerCase() === 'delivered' || d.status.toLowerCase() === 'completed')
-    const totalDeliveries = data.deliveryPerformance.reduce((sum, d) => sum + d.count, 0)
-    const onTimeRate = totalDeliveries > 0 && onTimeDeliveryData ? (onTimeDeliveryData.count / totalDeliveries) * 100 : 0
+    const totalDeliveries = data.deliveryPerformance.reduce((sum, d) => sum + d.totalDeliveries, 0)
+    const onTimeRate = totalDeliveries > 0
+        ? (data.deliveryPerformance.reduce((sum, d) => sum + d.completedDeliveries, 0) / totalDeliveries) * 100
+        : 0
 
     const totalShippingCost = data.shippingCostAnalysis.reduce((sum, s) => sum + s.totalShippingCost, 0)
 
@@ -21,25 +22,25 @@ export default async function WarehouseLogisticsReportPage() {
         {
             title: "Total Facilities",
             value: totalWarehouses.toString(),
-            icon: Warehouse,
+            icon: "warehouse",
             variant: "default",
         },
         {
             title: "Active Fleet Vehicles",
             value: activeVehicles.toString(),
-            icon: Truck,
+            icon: "truck",
             variant: "success",
         },
         {
             title: "Delivery Success Rate",
             value: `${onTimeRate.toFixed(1)}%`,
-            icon: MapPin,
+            icon: "activity",
             variant: onTimeRate >= 90 ? "success" : onTimeRate >= 80 ? "warning" : "danger",
         },
         {
             title: "Total Shipping Costs",
             value: formatCurrency(totalShippingCost),
-            icon: DollarSign,
+            icon: "dollar",
             variant: "default",
         },
     ]
@@ -50,19 +51,19 @@ export default async function WarehouseLogisticsReportPage() {
     }))
 
     const transferFlowData = data.stockTransferFlow.map(t => ({
-        name: `${t.sourceWarehouse} \u2192 ${t.destinationWarehouse}`,
+        name: `${t.fromWarehouse} \u2192 ${t.toWarehouse}`,
         value: t.totalQuantity
     }))
 
     const fleetData = data.fleetUtilization.map(f => ({
-        name: f.licensePlate || "Unknown",
+        name: f.vehicleNumber || "Unknown",
         value: f.utilizationRate,
-        secondary: f.tripsCompleted
+        secondary: f.totalTrips
     }))
 
     const deliveryDistData = data.deliveryPerformance.map(d => ({
-        name: d.status,
-        value: d.count
+        name: d.month,
+        value: d.totalDeliveries
     }))
 
     return (
@@ -95,8 +96,8 @@ export default async function WarehouseLogisticsReportPage() {
                         {data.warehouseCapacity.slice(0, 4).map((w, i) => (
                             <GaugeChart
                                 key={i}
-                                value={w.usedCapacity}
-                                max={w.totalCapacity}
+                                value={w.capacityUsed}
+                                max={w.capacityTotal}
                                 title={w.warehouseName}
                                 description="Current Utilization"
                                 label={`${w.utilizationRate.toFixed(1)}% Used`}
@@ -138,7 +139,6 @@ export default async function WarehouseLogisticsReportPage() {
                         title="Fleet Utilization (%)"
                         description="Vehicle operating efficiency"
                         height={350}
-                        horizontal={true}
                         colors={["hsl(217, 91%, 60%)"]}
                     />
                 </div>

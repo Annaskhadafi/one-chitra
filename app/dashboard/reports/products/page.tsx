@@ -8,53 +8,53 @@ import Link from "next/link"
 export default async function ProductPerformanceReportPage() {
     const data = await getProductPerformanceReport()
 
-    const totalSold = data.productPerformance.reduce((sum, p) => sum + p.quantitySold, 0)
-    const totalRev = data.productPerformance.reduce((sum, p) => sum + p.totalRevenue, 0)
+    const totalSold = data.bestSellingProducts.reduce((sum: number, p: any) => sum + p.quantitySold, 0)
+    const totalRev = data.bestSellingProducts.reduce((sum: number, p: any) => sum + p.totalRevenue, 0)
 
     // Calculate total profit from performance data (totalRevenue * profitMargin / 100)
-    const totalProfit = data.productPerformance.reduce((sum, p) => sum + (p.profitMargin ? (p.profitMargin / 100) * p.totalRevenue : 0), 0)
+    const totalProfit = data.bestSellingProducts.reduce((sum: number, p: any) => sum + (p.profitMargin ? (p.profitMargin / 100) * p.totalRevenue : 0), 0)
     const avgMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0
 
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
             title: "Total Units Sold",
             value: totalSold.toLocaleString(),
-            icon: PackageOpen,
+            icon: "packageOpen",
             variant: "default",
         },
         {
             title: "Total Product Revenue",
             value: formatCurrency(totalRev),
-            icon: DollarSign,
+            icon: "dollar",
             variant: "success",
         },
         {
             title: "Estimated Profit Margin",
             value: `${avgMargin.toFixed(1)}%`,
-            icon: TrendingUp,
+            icon: "trendingUp",
             variant: avgMargin >= 20 ? "success" : avgMargin >= 10 ? "warning" : "danger",
         },
         {
             title: "Low Performing Products",
-            value: data.lowPerformers.length.toString(),
-            icon: AlertCircle,
-            variant: data.lowPerformers.length > 5 ? "danger" : "warning",
+            value: data.worstSellingProducts.length.toString(),
+            icon: "alertCircle",
+            variant: data.worstSellingProducts.length > 5 ? "danger" : "warning",
         },
     ]
 
-    const scatterData = data.productPerformance.map(p => ({
+    const scatterData = data.bestSellingProducts.map((p: any) => ({
         name: p.productName || "Unknown",
         revenue: Number(p.totalRevenue) || 0,
         margin: Number(p.profitMargin || 0),
         sold: Number(p.quantitySold) || 0
     }))
 
-    const treemapData = data.categoryPerformance.map(c => ({
+    const treemapData = data.categoryPerformance.map((c: any) => ({
         name: (c.category as string) || "Unknown",
         size: Number(c.totalRevenue) || 0
     }))
 
-    const topProductsBarData = data.productPerformance.slice(0, 10).map(p => ({
+    const topProductsBarData = data.bestSellingProducts.slice(0, 10).map((p: any) => ({
         name: (p.productName as string)?.substring(0, 20) + "..." || "Unknown",
         value: Number(p.totalRevenue) || 0,
     }))
@@ -122,7 +122,7 @@ export default async function ProductPerformanceReportPage() {
                                     <CardTitle>Low Performing Products</CardTitle>
                                     <CardDescription>Items with high stock and low recent sales movement</CardDescription>
                                 </div>
-                                <ExportButton data={data.lowPerformers} filename="low-performers" format="csv" />
+                                <ExportButton data={data.worstSellingProducts} filename="low-performers" format="csv" />
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -138,7 +138,7 @@ export default async function ProductPerformanceReportPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {data.lowPerformers.slice(0, 10).map((prod, i) => (
+                                        {data.worstSellingProducts.map((prod: any, i: number) => (
                                             <tr key={i} className="border-b hover:bg-muted/30">
                                                 <td className="py-3 px-4 text-sm font-medium">{prod.productName as string || "Unknown"}</td>
                                                 <td className="py-3 px-4 text-sm text-muted-foreground">{prod.category as string || "Unknown"}</td>
@@ -147,7 +147,7 @@ export default async function ProductPerformanceReportPage() {
                                                 <td className="py-3 px-4 text-sm text-right tabular-nums font-medium text-rose-600">{formatCurrency(Number(prod.totalRevenue || 0))}</td>
                                             </tr>
                                         ))}
-                                        {data.lowPerformers.length === 0 && (
+                                        {data.worstSellingProducts.length === 0 && (
                                             <tr>
                                                 <td colSpan={5} className="py-8 text-center text-muted-foreground text-sm">
                                                     No low performing products found.

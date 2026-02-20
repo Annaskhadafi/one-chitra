@@ -282,6 +282,98 @@ export function ReportPieChart({ data, title, description, height = 300, showLeg
     )
 }
 
+// ==================== SCATTER CHART ====================
+export interface ScatterChartProps {
+    data: { name: string; revenue: number; margin: number; sold: number }[]
+    title?: string
+    description?: string
+    height?: number
+    xAxisKey?: string
+    yAxisKey?: string
+    zAxisKey?: string
+    nameKey?: string
+}
+
+export function ReportScatterChart({
+    data,
+    title,
+    description,
+    height = 300,
+    xAxisKey = "revenue",
+    yAxisKey = "margin",
+    zAxisKey = "sold",
+    nameKey = "name"
+}: ScatterChartProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div style={{ width: "100%", height }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                            <CartesianGrid />
+                            <XAxis type="number" dataKey={xAxisKey} name="Revenue" unit="Rp" />
+                            <YAxis type="number" dataKey={yAxisKey} name="Margin" unit="%" />
+                            <ZAxis type="number" dataKey={zAxisKey} range={[60, 400]} name="Sold" />
+                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                            <Legend />
+                            <Scatter name="Products" data={data} fill="hsl(var(--primary))" />
+                        </ScatterChart>
+                    </ResponsiveContainer>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+// ==================== TREEMAP CHART ====================
+export interface TreemapChartProps {
+    data: { name: string; size: number }[]
+    title?: string
+    description?: string
+    height?: number
+}
+
+export function ReportTreemapChart({ data, title, description, height = 300 }: TreemapChartProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div style={{ width: "100%", height }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <Treemap
+                            data={data}
+                            dataKey="size"
+                            aspectRatio={4 / 3}
+                            stroke="#fff"
+                            fill="hsl(var(--primary))"
+                        >
+                            <Tooltip content={(props: any) => {
+                                if (props.active && props.payload && props.payload.length) {
+                                    const { name, size } = props.payload[0].payload
+                                    return (
+                                        <div className="bg-background border rounded p-2 shadow-md text-xs">
+                                            <p className="font-bold">{name}</p>
+                                            <p>Value: {formatCurrency(size)}</p>
+                                        </div>
+                                    )
+                                }
+                                return null
+                            }} />
+                        </Treemap>
+                    </ResponsiveContainer>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 // ==================== LINE CHART (Comparison) ====================
 interface LineComparisonChartProps {
     data: { name: string; current: number; previous: number }[]
@@ -436,7 +528,10 @@ interface GaugeChartProps {
 }
 
 export function GaugeChart({ value, max, title, description, label }: GaugeChartProps) {
-    const percentage = Math.min((value / max) * 100, 100)
+    const safeValue = Number(value) || 0
+    const safeMax = Number(max) || 0
+    const percentage = safeMax > 0 ? Math.min((safeValue / safeMax) * 100, 100) : 0
+
     const circumference = 2 * Math.PI * 80 // radius 80
     const strokeDashoffset = circumference - (percentage / 100) * circumference
 

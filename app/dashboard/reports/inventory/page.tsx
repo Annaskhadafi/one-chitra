@@ -14,7 +14,7 @@ export default async function InventoryReportPage() {
             value: data.stockOverview.reduce((sum, w) => sum + w.totalProducts, 0),
             change: 5.2,
             changeLabel: "vs last month",
-            icon: Package,
+            icon: "package",
             variant: "default" as const,
         },
         {
@@ -22,7 +22,7 @@ export default async function InventoryReportPage() {
             value: formatCurrency(data.stockOverview.reduce((sum, w) => sum + w.totalValue, 0)),
             change: 3.8,
             changeLabel: "vs last month",
-            icon: DollarSign,
+            icon: "dollar",
             variant: "success" as const,
         },
         {
@@ -30,13 +30,13 @@ export default async function InventoryReportPage() {
             value: data.lowStockAlerts.length,
             change: -12.5,
             changeLabel: "vs last week",
-            icon: AlertTriangle,
+            icon: "alert",
             variant: data.lowStockAlerts.length > 10 ? "danger" : ("warning" as "danger" | "warning"),
         },
         {
             title: "Warehouses",
             value: data.stockOverview.length,
-            icon: Warehouse,
+            icon: "warehouse",
             variant: "default" as const,
         },
     ]

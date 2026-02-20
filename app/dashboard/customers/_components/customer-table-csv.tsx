@@ -42,7 +42,7 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                 const data = results.data as RawCustomerData[]
 
                 // Helper to find key case-insensitively and ignoring special chars
-                const findKey = (obj: any, candidates: string[]) => {
+                const findKey = (obj: Record<string, string>, candidates: string[]) => {
                     const keys = Object.keys(obj)
                     return keys.find(k => {
                         const normalizedKey = k.toLowerCase().replace(/[^a-z0-9]/g, "")

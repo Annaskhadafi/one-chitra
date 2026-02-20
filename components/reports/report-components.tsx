@@ -2,19 +2,77 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Package, DollarSign } from "lucide-react"
+import {
+    TrendingUp,
+    TrendingDown,
+    Minus,
+    AlertTriangle,
+    AlertCircle,
+    AlertOctagon,
+    Package,
+    PackageOpen,
+    PackageCheck,
+    DollarSign,
+    Warehouse,
+    Truck,
+    ArrowLeftRight,
+    Clock,
+    CreditCard,
+    ShoppingBag,
+    Target,
+    Users,
+    UserPlus,
+    Repeat,
+    BarChart3,
+    CheckCircle,
+    Activity,
+    Database,
+    Star,
+    FileText
+} from "lucide-react"
+
+const ICON_MAP = {
+    trendingUp: TrendingUp,
+    trendingDown: TrendingDown,
+    minus: Minus,
+    alert: AlertTriangle,
+    alertCircle: AlertCircle,
+    alertOctagon: AlertOctagon,
+    package: Package,
+    packageOpen: PackageOpen,
+    packageCheck: PackageCheck,
+    dollar: DollarSign,
+    warehouse: Warehouse,
+    truck: Truck,
+    transfer: ArrowLeftRight,
+    clock: Clock,
+    payment: CreditCard,
+    sales: ShoppingBag,
+    target: Target,
+    users: Users,
+    userPlus: UserPlus,
+    repeat: Repeat,
+    chart: BarChart3,
+    check: CheckCircle,
+    activity: Activity,
+    database: Database,
+    star: Star,
+    file: FileText,
+} as const
+
+type IconName = keyof typeof ICON_MAP
 
 interface KPI {
     title: string
     value: string | number
     change?: number
     changeLabel?: string
-    icon?: React.ComponentType<{ className?: string }>
+    icon?: IconName
     variant?: "default" | "success" | "warning" | "danger"
 }
 
 export function ReportKPICard({ kpi }: { kpi: KPI }) {
-    const Icon = kpi.icon
+    const Icon = kpi.icon ? ICON_MAP[kpi.icon] : null
     const isPositive = (kpi.change ?? 0) >= 0
     const TrendIcon = kpi.change ? (isPositive ? TrendingUp : TrendingDown) : Minus
 
@@ -92,12 +150,13 @@ interface StatCardProps {
     title: string
     value: string | number
     description?: string
-    icon?: React.ComponentType<{ className?: string }>
+    icon?: IconName
     trend?: "up" | "down" | "neutral"
     trendValue?: number
 }
 
-export function StatCard({ title, value, description, icon: Icon, trend, trendValue }: StatCardProps) {
+export function StatCard({ title, value, description, icon, trend, trendValue }: StatCardProps) {
+    const Icon = icon ? ICON_MAP[icon] : null
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -157,7 +216,7 @@ export function LowStockAlertRow({ productName, materialNumber, warehouseName, c
             <td className="py-3 px-4 tabular-nums">{currentStock.toLocaleString()}</td>
             <td className="py-3 px-4 tabular-nums">{minStock.toLocaleString()}</td>
             <td className="py-3 px-4">
-                <Badge variant={getSeverity()}>
+                <Badge variant={getSeverity() as any}>
                     {getSeverityLabel()}
                 </Badge>
             </td>
@@ -211,11 +270,12 @@ export function ProgressBar({ value, max, label, showValue = true, variant = "de
 interface EmptyStateProps {
     title: string
     description?: string
-    icon?: React.ComponentType<{ className?: string }>
+    icon?: IconName
     action?: React.ReactNode
 }
 
-export function ReportEmptyState({ title, description, icon: Icon, action }: EmptyStateProps) {
+export function ReportEmptyState({ title, description, icon, action }: EmptyStateProps) {
+    const Icon = icon ? ICON_MAP[icon] : null
     return (
         <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -265,6 +325,7 @@ export function DateRangeFilter({ value, onChange, presets }: DateRangeFilterPro
 }
 
 interface ExportButtonProps {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any[]
     filename: string
     format?: "csv" | "json"

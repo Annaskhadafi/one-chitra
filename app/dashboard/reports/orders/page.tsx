@@ -16,25 +16,25 @@ export default async function OrderFulfillmentReportPage() {
         {
             title: "Overall Completion Rate",
             value: `${overallCompletionRate.toFixed(1)}%`,
-            icon: CheckCircle2,
+            icon: "check" as const,
             variant: overallCompletionRate >= 90 ? "success" : "warning",
         },
         {
             title: "Average Fulfillment Time",
             value: `${data.fulfillmentTime.averageDays.toFixed(1)} Days`,
-            icon: Clock,
+            icon: "clock" as const,
             variant: "default",
         },
         {
             title: "On-Time Delivery Rate",
             value: `${data.onTimeDelivery.onTimeRate.toFixed(1)}%`,
-            icon: PackageCheck,
+            icon: "packageCheck" as const,
             variant: data.onTimeDelivery.onTimeRate >= 95 ? "success" : data.onTimeDelivery.onTimeRate >= 80 ? "warning" : "danger",
         },
         {
             title: "Items on Backorder",
             value: data.backorderAnalysis.reduce((sum, b) => sum + b.totalBackorderQuantity, 0).toLocaleString(),
-            icon: AlertOctagon,
+            icon: "alertOctagon" as const,
             variant: data.backorderAnalysis.length > 0 ? "danger" : "success",
         },
     ]

@@ -7,8 +7,10 @@ import { salesOrders, salesOrderItems } from "@/db/schema/sales-orders"
 import { stockLevels } from "@/db/schema/stock-levels"
 import { warehouses } from "@/db/schema/warehouses"
 import { deliveries } from "@/db/schema/deliveries"
-import { deliveries as deliveryTable } from "@/db/schema/deliveries"
-import { count, sql, desc, eq, gte, lte, and, sum, avg, ne } from "drizzle-orm"
+import { stockTransfers, stockTransferItems } from "@/db/schema/transfers"
+import { billingRecords } from "@/db/schema/billing"
+import { sapSyncLogs } from "@/db/schema/sap-sync"
+import { sql, desc, asc, eq, gte, lte, and, or } from "drizzle-orm"
 
 // ==================== INVENTORY REPORT TYPES ====================
 export type InventoryReportData = {
@@ -327,90 +329,89 @@ export type SAPIntegrationReportData = {
 // ==================== INVENTORY REPORT FUNCTION ====================
 export async function getInventoryReport(warehouseId?: number): Promise<InventoryReportData> {
     // Stock Overview by Warehouse
-    const stockOverviewData = await db.execute(sql`
-        SELECT 
-            w.sloc as warehouse_name,
-            w.type as warehouse_type,
-            COUNT(DISTINCT sl.product_id) as total_products,
-            COALESCE(SUM(sl.total_stock), 0) as total_stock,
-            COALESCE(SUM(sl.valuation_value), 0) as total_value,
-            COUNT(CASE WHEN sl.total_stock <= sl.min_stock AND sl.min_stock > 0 THEN 1 END) as low_stock_count,
-            COUNT(CASE WHEN sl.total_stock = 0 THEN 1 END) as out_of_stock_count
-        FROM warehouses w
-        LEFT JOIN stock_levels sl ON w.id = sl.warehouse_id
-        ${warehouseId ? sql`WHERE w.id = ${warehouseId}` : sql``}
-        GROUP BY w.id, w.sloc, w.type
-        ORDER BY total_value DESC
-    `)
+    const stockOverviewData = await db.select({
+        warehouse_name: warehouses.sloc,
+        warehouse_type: warehouses.type,
+        total_products: sql<number>`COUNT(DISTINCT ${stockLevels.productId})`,
+        total_stock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+        total_value: sql<number>`COALESCE(SUM(${stockLevels.valuationValue}), 0)`,
+        low_stock_count: sql<number>`COUNT(CASE WHEN ${stockLevels.totalStock} <= ${stockLevels.minStock} AND ${stockLevels.minStock} > 0 THEN 1 END)`,
+        out_of_stock_count: sql<number>`COUNT(CASE WHEN ${stockLevels.totalStock} = 0 THEN 1 END)`
+    })
+        .from(warehouses)
+        .leftJoin(stockLevels, eq(warehouses.id, stockLevels.warehouseId))
+        .where(warehouseId ? eq(warehouses.id, warehouseId) : undefined)
+        .groupBy(warehouses.id, warehouses.sloc, warehouses.type)
+        .orderBy(desc(sql`COALESCE(SUM(${stockLevels.valuationValue}), 0)`));
 
     // Stock Movement (last 30 days)
-    const stockMovementData = await db.execute(sql`
-        SELECT 
-            DATE(created_at) as date,
-            COALESCE(SUM(CASE WHEN total_stock > LAG(total_stock) OVER (PARTITION BY product_id, warehouse_id ORDER BY created_at) 
-                THEN total_stock - LAG(total_stock) OVER (PARTITION BY product_id, warehouse_id ORDER BY created_at) 
-                ELSE 0 END), 0) as stock_in,
-            COALESCE(SUM(CASE WHEN total_stock < LAG(total_stock) OVER (PARTITION BY product_id, warehouse_id ORDER BY created_at) 
-                THEN LAG(total_stock) OVER (PARTITION BY product_id, warehouse_id ORDER BY created_at) - total_stock 
-                ELSE 0 END), 0) as stock_out,
-            0 as net_change
-        FROM stock_levels
-        WHERE created_at >= NOW() - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
-        ORDER BY date
-    `)
+    const movementCalc = db.$with('movement_calc').as(
+        db.select({
+            date: sql<string>`DATE(${stockLevels.createdAt})`.as('date'),
+            total_stock: stockLevels.totalStock,
+            prev_stock: sql<number>`LAG(${stockLevels.totalStock}) OVER (PARTITION BY ${stockLevels.productId}, ${stockLevels.warehouseId} ORDER BY ${stockLevels.createdAt})`.as('prev_stock')
+        })
+            .from(stockLevels)
+            .where(sql`${stockLevels.createdAt} >= NOW() - INTERVAL '30 days'`)
+    );
+
+    const stockMovementData = await db.with(movementCalc).select({
+        date: movementCalc.date,
+        stock_in: sql<number>`COALESCE(SUM(CASE WHEN ${movementCalc.prev_stock} IS NOT NULL AND ${movementCalc.total_stock} > ${movementCalc.prev_stock} THEN ${movementCalc.total_stock} - ${movementCalc.prev_stock} ELSE 0 END), 0)`,
+        stock_out: sql<number>`COALESCE(SUM(CASE WHEN ${movementCalc.prev_stock} IS NOT NULL AND ${movementCalc.total_stock} < ${movementCalc.prev_stock} THEN ${movementCalc.prev_stock} - ${movementCalc.total_stock} ELSE 0 END), 0)`,
+        net_change: sql<number>`0`
+    })
+        .from(movementCalc)
+        .groupBy(movementCalc.date)
+        .orderBy(movementCalc.date);
 
     // Low Stock Alerts
-    const lowStockData = await db.execute(sql`
-        SELECT 
-            sl.id,
-            p.material_description as product_name,
-            p.material_number,
-            w.sloc as warehouse_name,
-            sl.total_stock as current_stock,
-            sl.min_stock,
-            CASE WHEN sl.min_stock > 0 THEN sl.total_stock::float / sl.min_stock ELSE 0 END as stock_ratio,
-            sl.valuation_value
-        FROM stock_levels sl
-        JOIN products p ON p.id = sl.product_id
-        JOIN warehouses w ON w.id = sl.warehouse_id
-        WHERE sl.total_stock <= sl.min_stock AND sl.min_stock > 0
-        ORDER BY stock_ratio ASC
-        LIMIT 50
-    `)
+    const lowStockData = await db.select({
+        id: stockLevels.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        warehouse_name: warehouses.sloc,
+        current_stock: stockLevels.totalStock,
+        min_stock: stockLevels.minStock,
+        stock_ratio: sql<number>`CASE WHEN ${stockLevels.minStock} > 0 THEN ${stockLevels.totalStock}::float / ${stockLevels.minStock} ELSE 0 END`,
+        valuation_value: stockLevels.valuationValue
+    })
+        .from(stockLevels)
+        .innerJoin(products, eq(products.id, stockLevels.productId))
+        .innerJoin(warehouses, eq(warehouses.id, stockLevels.warehouseId))
+        .where(and(lte(stockLevels.totalStock, stockLevels.minStock), sql`${stockLevels.minStock} > 0`))
+        .orderBy(asc(sql`CASE WHEN ${stockLevels.minStock} > 0 THEN ${stockLevels.totalStock}::float / ${stockLevels.minStock} ELSE 0 END`))
+        .limit(50);
 
     // Dead Stock (no movement in 90 days)
-    const deadStockData = await db.execute(sql`
-        SELECT 
-            p.material_description as product_name,
-            p.material_number,
-            p.category,
-            w.sloc as warehouse_name,
-            sl.total_stock,
-            sl.valuation_value,
-            sl.updated_at as last_movement
-        FROM stock_levels sl
-        JOIN products p ON p.id = sl.product_id
-        JOIN warehouses w ON w.id = sl.warehouse_id
-        WHERE sl.total_stock > 0 
-            AND sl.updated_at < NOW() - INTERVAL '90 days'
-        ORDER BY sl.updated_at ASC
-        LIMIT 50
-    `)
+    const deadStockData = await db.select({
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        category: products.category,
+        warehouse_name: warehouses.sloc,
+        total_stock: stockLevels.totalStock,
+        valuation_value: stockLevels.valuationValue,
+        last_movement: stockLevels.updatedAt
+    })
+        .from(stockLevels)
+        .innerJoin(products, eq(products.id, stockLevels.productId))
+        .innerJoin(warehouses, eq(warehouses.id, stockLevels.warehouseId))
+        .where(and(sql`${stockLevels.totalStock} > 0`, sql`${stockLevels.updatedAt} < NOW() - INTERVAL '90 days'`))
+        .orderBy(sql`${stockLevels.updatedAt} ASC`)
+        .limit(50);
 
     // Inventory Value Trend (last 12 months)
-    const inventoryValueData = await db.execute(sql`
-        SELECT 
-            DATE_TRUNC('month', created_at) as date,
-            COALESCE(SUM(valuation_value), 0) as total_value
-        FROM stock_levels
-        WHERE created_at >= NOW() - INTERVAL '12 months'
-        GROUP BY DATE_TRUNC('month', created_at)
-        ORDER BY date
-    `)
+    const inventoryValueData = await db.select({
+        date: sql<string>`DATE_TRUNC('month', ${stockLevels.createdAt})`.as('date'),
+        total_value: sql<number>`COALESCE(SUM(${stockLevels.valuationValue}), 0)`
+    })
+        .from(stockLevels)
+        .where(sql`${stockLevels.createdAt} >= NOW() - INTERVAL '12 months'`)
+        .groupBy(sql`DATE_TRUNC('month', ${stockLevels.createdAt})`)
+        .orderBy(sql`DATE_TRUNC('month', ${stockLevels.createdAt})`);
 
     return {
-        stockOverview: (stockOverviewData.rows as Record<string, unknown>[]).map(row => ({
+        stockOverview: stockOverviewData.map(row => ({
             warehouseName: row.warehouse_name ?? "Unknown",
             warehouseType: row.warehouse_type ?? "N/A",
             totalProducts: Number(row.total_products),
@@ -419,27 +420,35 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             lowStockCount: Number(row.low_stock_count),
             outOfStockCount: Number(row.out_of_stock_count),
         })),
-        stockMovement: [],
-        lowStockAlerts: (lowStockData.rows as Record<string, unknown>[]).map(row => ({
+        stockMovement: stockMovementData.map(row => ({
+            date: typeof row.date === 'object' && row.date !== null ? (row.date as Date).toISOString().split("T")[0] : String(row.date).split("T")[0],
+            stockIn: Number(row.stock_in),
+            stockOut: Number(row.stock_out),
+            netChange: Number(row.stock_in) - Number(row.stock_out),
+        })),
+        lowStockAlerts: lowStockData.map(row => ({
             id: Number(row.id),
             productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
-            warehouseName: row.warehouse_name,
+            materialNumber: (row.material_number ?? null) as string,
+            warehouseName: (row.warehouse_name ?? null) as string,
             currentStock: Number(row.current_stock),
             minStock: Number(row.min_stock),
             stockRatio: Number(row.stock_ratio),
             valuationValue: Number(row.valuation_value),
         })),
-        deadStock: (deadStockData.rows as Record<string, unknown>[]).map(row => ({
+        deadStock: deadStockData.map(row => ({
             productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
-            category: row.category,
+            materialNumber: (row.material_number ?? null) as string,
+            category: (row.category ?? null) as string,
             warehouseName: row.warehouse_name,
             totalStock: Number(row.total_stock),
             valuationValue: Number(row.valuation_value),
-            lastMovement: row.last_movement ? new Date(row.last_movement) : undefined,
+            lastMovement: row.last_movement ? new Date(row.last_movement as string | Date) : null as unknown as Date,
         })),
-        inventoryValueTrend: [],
+        inventoryValueTrend: inventoryValueData.map(row => ({
+            date: typeof row.date === 'object' && row.date !== null ? (row.date as Date).toISOString().split("T")[0].substring(0, 7) : String(row.date).substring(0, 7),
+            totalValue: Number(row.total_value),
+        })),
     }
 }
 
@@ -452,133 +461,130 @@ export async function getSalesReport(
     const end = endDate ?? new Date()
 
     // Sales Trend
-    const salesTrendData = await db.execute(sql`
-        SELECT 
-            DATE_TRUNC('day', so.sales_date) as date,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as sales,
-            COUNT(DISTINCT so.id) as orders,
-            COALESCE(AVG((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as avg_order_value
-        FROM sales_orders so
-        LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        WHERE so.sales_date >= ${start} AND so.sales_date <= ${end}
-        GROUP BY DATE_TRUNC('day', so.sales_date)
-        ORDER BY date
-    `)
+    const salesTrendData = await db.select({
+        date: sql<Date>`DATE_TRUNC('day', ${salesOrders.salesDate})`.as('date'),
+        sales: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        orders: sql<number>`COUNT(DISTINCT ${salesOrders.id})`,
+        avg_order_value: sql<number>`COALESCE(AVG((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+    })
+        .from(salesOrders)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .where(and(gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)))
+        .groupBy(sql`DATE_TRUNC('day', ${salesOrders.salesDate})`)
+        .orderBy(sql`DATE_TRUNC('day', ${salesOrders.salesDate})`);
 
     // Sales by Customer
-    const salesByCustomerData = await db.execute(sql`
-        SELECT 
-            c.id as customer_id,
-            c.name as customer_name,
-            c.customer_code,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_sales,
-            COUNT(DISTINCT so.id) as order_count,
-            COALESCE(AVG((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as avg_order_value
-        FROM customers c
-        LEFT JOIN sales_orders so ON so.customer_id = c.id
-        LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        WHERE so.sales_date >= ${start} AND so.sales_date <= ${end}
-        GROUP BY c.id, c.name, c.customer_code
-        ORDER BY total_sales DESC
-        LIMIT 20
-    `)
+    const salesByCustomerData = await db.select({
+        customer_id: customers.id,
+        customer_name: customers.name,
+        customer_code: customers.customerCode,
+        total_sales: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        order_count: sql<number>`COUNT(DISTINCT ${salesOrders.id})`,
+        avg_order_value: sql<number>`COALESCE(AVG((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+    })
+        .from(customers)
+        .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+        .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .where(and(gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)))
+        .groupBy(customers.id, customers.name, customers.customerCode)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`))
+        .limit(20);
 
     // Sales by Category
-    const totalSalesResult = await db.execute(sql`
-        SELECT COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total
-        FROM sales_orders so
-        JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        WHERE so.sales_date >= ${start} AND so.sales_date <= ${end}
-    `)
-    const totalSales = Number(totalSalesResult.rows[0]?.total ?? 0)
+    const totalSalesResult = await db.select({
+        total: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+    })
+        .from(salesOrders)
+        .innerJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .where(and(gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)));
+    const totalSales = Number(totalSalesResult[0]?.total ?? 0);
 
-    const salesByCategoryData = await db.execute(sql`
-        SELECT 
-            p.category,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_sales,
-            COUNT(DISTINCT so.id) as order_count
-        FROM sales_orders so
-        JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        JOIN products p ON p.id = soi.product_id
-        WHERE so.sales_date >= ${start} AND so.sales_date <= ${end}
-        GROUP BY p.category
-        ORDER BY total_sales DESC
-    `)
+    const salesByCategoryData = await db.select({
+        category: products.category,
+        total_sales: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        order_count: sql<number>`COUNT(DISTINCT ${salesOrders.id})`
+    })
+        .from(salesOrders)
+        .innerJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .innerJoin(products, eq(products.id, salesOrderItems.productId))
+        .where(and(gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)))
+        .groupBy(products.category)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`));
 
     // Sales by Product
-    const salesByProductData = await db.execute(sql`
-        SELECT 
-            p.id as product_id,
-            p.material_description as product_name,
-            p.material_number,
-            p.category,
-            COALESCE(SUM(soi.quantity), 0) as quantity_sold,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue
-        FROM products p
-        LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-        LEFT JOIN sales_orders so ON so.id = soi.sales_order_id AND so.sales_date >= ${start} AND so.sales_date <= ${end}
-        GROUP BY p.id, p.material_description, p.material_number, p.category
-        ORDER BY total_revenue DESC
-        LIMIT 50
-    `)
+    const salesByProductData = await db.select({
+        product_id: products.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        category: products.category,
+        quantity_sold: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+    })
+        .from(products)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+        .leftJoin(salesOrders, and(eq(salesOrders.id, salesOrderItems.salesOrderId), gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)))
+        .groupBy(products.id, products.materialDescription, products.materialNumber, products.category)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`))
+        .limit(50);
 
     // Monthly Comparison (YoY)
-    const monthlyComparisonData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(date_month, 'YYYY-MM') as month,
-            COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM date_month) = ${end.getFullYear()} THEN sales ELSE 0 END), 0) as current_year,
-            COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM date_month) = ${end.getFullYear() - 1} THEN sales ELSE 0 END), 0) as previous_year
-        FROM (
-            SELECT 
-                DATE_TRUNC('month', so.sales_date) as date_month,
-                COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as sales
-            FROM sales_orders so
-            LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-            WHERE so.sales_date >= ${new Date(end.getFullYear() - 1, 0, 1)}
-            GROUP BY DATE_TRUNC('month', so.sales_date)
-        ) monthly
-        GROUP BY month
-        ORDER BY month
-    `)
+    const monthlyQuery = db.$with('monthly').as(
+        db.select({
+            date_month: sql<Date>`DATE_TRUNC('month', ${salesOrders.salesDate})`.as('date_month'),
+            sales: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`.as('sales')
+        })
+            .from(salesOrders)
+            .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+            .where(gte(salesOrders.salesDate, new Date(end.getFullYear() - 1, 0, 1)))
+            .groupBy(sql`DATE_TRUNC('month', ${salesOrders.salesDate})`)
+    );
 
-    // Calculate sales target (example: monthly target based on average)
-    const avgMonthlySales = totalSales / 6 // Last 6 months average
-    const monthlyTarget = avgMonthlySales * 1.1 // 10% growth target
-    const currentMonthSales = Number(salesTrendData.rows.filter((r: Record<string, unknown>) => {
-        const d = new Date(r.date)
-        return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear()
-    }).reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.sales), 0))
+    const monthlyComparisonData = await db.with(monthlyQuery).select({
+        month: sql<string>`TO_CHAR(${monthlyQuery.date_month}, 'YYYY-MM')`.as('month'),
+        current_year: sql<number>`COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM ${monthlyQuery.date_month}) = ${end.getFullYear()} THEN ${monthlyQuery.sales} ELSE 0 END), 0)`.as('current_year'),
+        previous_year: sql<number>`COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM ${monthlyQuery.date_month}) = ${end.getFullYear() - 1} THEN ${monthlyQuery.sales} ELSE 0 END), 0)`.as('previous_year')
+    })
+        .from(monthlyQuery)
+        .groupBy(sql`month`)
+        .orderBy(sql`TO_CHAR(${monthlyQuery.date_month}, 'YYYY-MM')`);
+
+    const avgMonthlySales = totalSales / 6;
+    const monthlyTarget = avgMonthlySales * 1.1;
+    const currentMonthSales = salesTrendData.filter((r) => {
+        const d = new Date(r.date);
+        return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
+    }).reduce((sum: number, r) => sum + Number(r.sales), 0);
 
     return {
-        salesTrend: (salesTrendData.rows as Record<string, unknown>[]).map(row => ({
-            date: new Date(row.date).toISOString().split("T")[0],
+        salesTrend: salesTrendData.map(row => ({
+            date: typeof row.date === 'object' && row.date !== null ? (row.date as Date).toISOString().split("T")[0] : String(row.date).split("T")[0],
             sales: Number(row.sales),
             orders: Number(row.orders),
             averageOrderValue: Number(row.avg_order_value),
         })),
-        salesByCustomer: (salesByCustomerData.rows as Record<string, unknown>[]).map(row => ({
+        salesByCustomer: salesByCustomerData.map(row => ({
             customerId: Number(row.customer_id),
             customerName: row.customer_name ?? "Unknown",
-            customerCode: row.customer_code,
+            customerCode: (row.customer_code ?? null) as string,
             totalSales: Number(row.total_sales),
             orderCount: Number(row.order_count),
             averageOrderValue: Number(row.avg_order_value),
         })),
-        salesByCategory: (salesByCategoryData.rows as Record<string, unknown>[]).map(row => ({
+        salesByCategory: salesByCategoryData.map(row => ({
             category: row.category ?? "Uncategorized",
             totalSales: Number(row.total_sales),
             orderCount: Number(row.order_count),
             percentage: totalSales > 0 ? (Number(row.total_sales) / totalSales) * 100 : 0,
         })),
-        salesByProduct: (salesByProductData.rows as Record<string, unknown>[]).map(row => ({
+        salesByProduct: salesByProductData.map(row => ({
             productId: Number(row.product_id),
             productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
+            materialNumber: (row.material_number ?? null) as string,
             category: row.category ?? "Uncategorized",
             quantitySold: Number(row.quantity_sold),
             totalRevenue: Number(row.total_revenue),
         })),
-        monthlyComparison: (monthlyComparisonData.rows as Record<string, unknown>[]).map(row => ({
+        monthlyComparison: monthlyComparisonData.map(row => ({
             month: row.month,
             currentYear: Number(row.current_year),
             previousYear: Number(row.previous_year),
@@ -596,150 +602,155 @@ export async function getSalesReport(
 // ==================== CUSTOMER REPORT FUNCTION ====================
 export async function getCustomerReport(): Promise<CustomerReportData> {
     // Customer Segmentation (by revenue)
-    const segmentationData = await db.execute(sql`
-        WITH customer_revenue AS (
-            SELECT 
-                c.id,
-                c.name,
-                COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue
-            FROM customers c
-            LEFT JOIN sales_orders so ON so.customer_id = c.id
-            LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-            GROUP BY c.id, c.name
-        )
-        SELECT 
-            CASE 
-                WHEN total_revenue >= (SELECT PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY total_revenue) FROM customer_revenue) THEN 'VIP'
-                WHEN total_revenue >= (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_revenue) FROM customer_revenue) THEN 'Regular'
-                ELSE 'Small'
-            END as segment,
-            COUNT(*) as count,
-            COALESCE(SUM(total_revenue), 0) as total_revenue
-        FROM customer_revenue
-        GROUP BY segment
-        ORDER BY total_revenue DESC
-    `)
+    const customerRevenue = db.$with('customer_revenue').as(
+        db.select({
+            id: customers.id,
+            name: customers.name,
+            total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`.as('total_revenue')
+        })
+            .from(customers)
+            .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+            .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+            .groupBy(customers.id, customers.name)
+    );
 
-    const totalCustomers = segmentationData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
-    const totalRevenue = segmentationData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.total_revenue), 0)
+    const segmentationData = await db.with(customerRevenue).select({
+        segment: sql<string>`CASE
+                WHEN ${customerRevenue.total_revenue} >= (SELECT PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY total_revenue) FROM customer_revenue) THEN 'VIP'
+                WHEN ${customerRevenue.total_revenue} >= (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_revenue) FROM customer_revenue) THEN 'Regular'
+                ELSE 'Small'
+            END`.as('segment'),
+        count: sql<number>`COUNT(*)`,
+        total_revenue: sql<number>`COALESCE(SUM(${customerRevenue.total_revenue}), 0)`
+    })
+        .from(customerRevenue)
+        .groupBy(sql`segment`)
+        .orderBy(desc(sql`COALESCE(SUM(${customerRevenue.total_revenue}), 0)`));
+
+    const totalCustomers = segmentationData.reduce((sum: number, r) => sum + Number(r.count), 0)
+    const _totalRevenue = segmentationData.reduce((sum: number, r) => sum + Number(r.total_revenue), 0)
 
     // Top Customers
-    const topCustomersData = await db.execute(sql`
-        SELECT 
-            c.id as customer_id,
-            c.name as customer_name,
-            c.customer_code,
-            COUNT(DISTINCT so.id) as total_orders,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue,
-            COALESCE(AVG((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as avg_order_value,
-            MAX(so.sales_date) as last_order_date
-        FROM customers c
-        LEFT JOIN sales_orders so ON so.customer_id = c.id
-        LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        GROUP BY c.id, c.name, c.customer_code
-        ORDER BY total_revenue DESC
-        LIMIT 20
-    `)
+    const topCustomersData = await db.select({
+        customer_id: customers.id,
+        customer_name: customers.name,
+        customer_code: customers.customerCode,
+        total_orders: sql<number>`COUNT(DISTINCT ${salesOrders.id})`,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        avg_order_value: sql<number>`COALESCE(AVG((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        last_order_date: sql<Date>`MAX(${salesOrders.salesDate})`
+    })
+        .from(customers)
+        .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+        .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .groupBy(customers.id, customers.name, customers.customerCode)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`))
+        .limit(20);
 
     // Customer Growth (last 12 months)
-    const growthData = await db.execute(sql`
-        WITH monthly_customers AS (
-            SELECT 
-                DATE_TRUNC('month', created_at) as month,
-                COUNT(*) as new_customers
-            FROM customers
-            WHERE created_at >= NOW() - INTERVAL '12 months'
-            GROUP BY DATE_TRUNC('month', created_at)
-        ),
-        cumulative AS (
-            SELECT 
-                month,
-                new_customers,
-                SUM(new_customers) OVER (ORDER BY month) as cumulative_customers
-            FROM monthly_customers
-        )
-        SELECT 
-            TO_CHAR(month, 'YYYY-MM') as month,
-            new_customers,
-            cumulative_customers,
-            0 as churned_customers
-        FROM cumulative
-        ORDER BY month
-    `)
+    const monthlyCustomers = db.$with('monthly_customers').as(
+        db.select({
+            month: sql<Date>`DATE_TRUNC('month', ${customers.createdAt})`.as('month'),
+            new_customers: sql<number>`COUNT(*)`.as('new_customers')
+        })
+            .from(customers)
+            .where(sql`${customers.createdAt} >= NOW() - INTERVAL '12 months'`)
+            .groupBy(sql`DATE_TRUNC('month', ${customers.createdAt})`)
+    );
+
+    const cumulative = db.$with('cumulative').as(
+        db.with(monthlyCustomers).select({
+            month: monthlyCustomers.month,
+            new_customers: monthlyCustomers.new_customers,
+            cumulative_customers: sql<number>`SUM(${monthlyCustomers.new_customers}) OVER (ORDER BY ${monthlyCustomers.month})`.as('cumulative_customers')
+        })
+            .from(monthlyCustomers)
+    );
+
+    const growthData = await db.with(monthlyCustomers, cumulative).select({
+        month: sql<string>`TO_CHAR(${cumulative.month}, 'YYYY-MM')`.as('month'),
+        new_customers: cumulative.new_customers,
+        cumulative_customers: cumulative.cumulative_customers,
+        churned_customers: sql<number>`0`.as('churned_customers')
+    })
+        .from(cumulative)
+        .orderBy(cumulative.month);
 
     // Repeat Purchase Rate
-    const repeatData = await db.execute(sql`
-        WITH customer_orders AS (
-            SELECT 
-                c.id,
-                COUNT(DISTINCT so.id) as order_count
-            FROM customers c
-            LEFT JOIN sales_orders so ON so.customer_id = c.id
-            GROUP BY c.id
-        )
-        SELECT 
-            COUNT(*) as total_customers,
-            COUNT(CASE WHEN order_count > 1 THEN 1 END) as repeat_customers,
-            COUNT(CASE WHEN order_count = 1 THEN 1 END) as one_time_customers,
-            COALESCE(AVG(order_count), 0) as avg_orders_per_customer
-        FROM customer_orders
-    `)
+    const customerOrders = db.$with('customer_orders').as(
+        db.select({
+            id: customers.id,
+            order_count: sql<number>`COUNT(DISTINCT ${salesOrders.id})`.as('order_count')
+        })
+            .from(customers)
+            .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+            .groupBy(customers.id)
+    );
+
+    const repeatData = await db.with(customerOrders).select({
+        total_customers: sql<number>`COUNT(*)`,
+        repeat_customers: sql<number>`COUNT(CASE WHEN ${customerOrders.order_count} > 1 THEN 1 END)`,
+        one_time_customers: sql<number>`COUNT(CASE WHEN ${customerOrders.order_count} = 1 THEN 1 END)`,
+        avg_orders_per_customer: sql<number>`COALESCE(AVG(${customerOrders.order_count}), 0)`
+    })
+        .from(customerOrders);
 
     // Customer Activity Status
-    const activityData = await db.execute(sql`
-        WITH customer_activity AS (
-            SELECT 
-                c.id,
-                MAX(so.sales_date) as last_order
-            FROM customers c
-            LEFT JOIN sales_orders so ON so.customer_id = c.id
-            GROUP BY c.id
-        )
-        SELECT 
-            CASE 
-                WHEN last_order >= NOW() - INTERVAL '30 days' THEN 'Active'
-                WHEN last_order >= NOW() - INTERVAL '90 days' THEN 'Inactive'
-                WHEN last_order IS NULL THEN 'Never Ordered'
-                ELSE 'Churned'
-            END as status,
-            COUNT(*) as count
-        FROM customer_activity
-        GROUP BY status
-    `)
+    const customerActivity = db.$with('customer_activity').as(
+        db.select({
+            id: customers.id,
+            last_order: sql<Date>`MAX(${salesOrders.salesDate})`.as('last_order')
+        })
+            .from(customers)
+            .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+            .groupBy(customers.id)
+    );
 
-    const totalActivity = activityData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
+    const activityData = await db.with(customerActivity).select({
+        status: sql<string>`CASE 
+                WHEN ${customerActivity.last_order} >= NOW() - INTERVAL '30 days' THEN 'Active'
+                WHEN ${customerActivity.last_order} >= NOW() - INTERVAL '90 days' THEN 'Inactive'
+                WHEN ${customerActivity.last_order} IS NULL THEN 'Never Ordered'
+                ELSE 'Churned'
+            END`.as('status'),
+        count: sql<number>`COUNT(*)`
+    })
+        .from(customerActivity)
+        .groupBy(sql`status`);
+
+    const totalActivity = activityData.reduce((sum: number, r) => sum + Number(r.count), 0)
 
     return {
-        customerSegmentation: (segmentationData.rows as Record<string, unknown>[]).map(row => ({
-            segment: row.segment,
+        customerSegmentation: segmentationData.map(row => ({
+            segment: String(row.segment),
             count: Number(row.count),
             percentage: totalCustomers > 0 ? (Number(row.count) / totalCustomers) * 100 : 0,
             totalRevenue: Number(row.total_revenue),
         })),
-        topCustomers: (topCustomersData.rows as Record<string, unknown>[]).map(row => ({
+        topCustomers: topCustomersData.map(row => ({
             customerId: Number(row.customer_id),
-            customerName: row.customer_name ?? "Unknown",
-            customerCode: row.customer_code,
+            customerName: String(row.customer_name ?? "Unknown"),
+            customerCode: String(row.customer_code ?? ""),
             totalOrders: Number(row.total_orders),
             totalRevenue: Number(row.total_revenue),
             averageOrderValue: Number(row.avg_order_value),
-            lastOrderDate: row.last_order_date ? new Date(row.last_order_date) : undefined,
+            lastOrderDate: row.last_order_date ? new Date(row.last_order_date as string | Date) : null as unknown as Date,
         })),
-        customerGrowth: (growthData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month,
+        customerGrowth: growthData.map(row => ({
+            month: String(row.month),
             newCustomers: Number(row.new_customers),
             cumulativeCustomers: Number(row.cumulative_customers),
             churnedCustomers: Number(row.churned_customers),
         })),
         repeatPurchaseRate: {
-            totalCustomers: Number(repeatData.rows[0]?.total_customers ?? 0),
-            repeatCustomers: Number(repeatData.rows[0]?.repeat_customers ?? 0),
-            oneTimeCustomers: Number(repeatData.rows[0]?.one_time_customers ?? 0),
-            repeatRate: Number(repeatData.rows[0]?.repeat_customers ?? 0) / Number(repeatData.rows[0]?.total_customers ?? 1) * 100,
-            averageOrdersPerCustomer: Number(repeatData.rows[0]?.avg_orders_per_customer ?? 0),
+            totalCustomers: Number(repeatData[0]?.total_customers ?? 0),
+            repeatCustomers: Number(repeatData[0]?.repeat_customers ?? 0),
+            oneTimeCustomers: Number(repeatData[0]?.one_time_customers ?? 0),
+            repeatRate: Number(repeatData[0]?.total_customers ?? 1) > 0 ? (Number(repeatData[0]?.repeat_customers ?? 0) / Number(repeatData[0]?.total_customers ?? 1)) * 100 : 0,
+            averageOrdersPerCustomer: Number(repeatData[0]?.avg_orders_per_customer ?? 0),
         },
-        customerActivity: (activityData.rows as Record<string, unknown>[]).map(row => ({
-            status: row.status,
+        customerActivity: activityData.map(row => ({
+            status: String(row.status),
             count: Number(row.count),
             percentage: totalActivity > 0 ? (Number(row.count) / totalActivity) * 100 : 0,
         })),
@@ -749,110 +760,105 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
 // ==================== ORDER FULFILLMENT REPORT FUNCTION ====================
 export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentReportData> {
     // Order Status Distribution
-    const statusData = await db.execute(sql`
-        WITH order_totals AS (
-            SELECT 
-                so.id,
-                so.status,
-                COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_value
-            FROM sales_orders so
-            LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
-            GROUP BY so.id, so.status
-        )
-        SELECT 
-            status,
-            COUNT(*) as count,
-            COALESCE(SUM(total_value), 0) as total_value
-        FROM order_totals
-        GROUP BY status
-        ORDER BY count DESC
-    `)
+    const orderTotals = db.$with('order_totals').as(
+        db.select({
+            id: salesOrders.id,
+            status: salesOrders.status,
+            total_value: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`.as('total_value')
+        })
+            .from(salesOrders)
+            .leftJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+            .groupBy(salesOrders.id, salesOrders.status)
+    );
 
-    const totalOrders = statusData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.count), 0)
+    const statusData = await db.with(orderTotals).select({
+        status: orderTotals.status,
+        count: sql<number>`COUNT(*)`,
+        total_value: sql<number>`COALESCE(SUM(${orderTotals.total_value}), 0)`
+    })
+        .from(orderTotals)
+        .groupBy(orderTotals.status)
+        .orderBy(desc(sql`COUNT(*)`));
+
+    const totalOrders = statusData.reduce((sum: number, r) => sum + Number(r.count), 0)
 
     // Fulfillment Time Analysis
-    const fulfillmentData = await db.execute(sql`
-        SELECT 
-            EXTRACT(EPOCH FROM (d.delivery_date - so.sales_date)) / 86400 as days
-        FROM sales_orders so
-        JOIN deliveries d ON d.sales_order_id = so.id
-        WHERE d.delivery_date IS NOT NULL AND so.sales_date IS NOT NULL
-    `)
+    const fulfillmentData = await db.select({
+        days: sql<number>`EXTRACT(EPOCH FROM (${deliveries.deliveryDate} - ${salesOrders.salesDate})) / 86400`.as('days')
+    })
+        .from(salesOrders)
+        .innerJoin(deliveries, eq(deliveries.salesOrderId, salesOrders.id))
+        .where(and(sql`${deliveries.deliveryDate} IS NOT NULL`, sql`${salesOrders.salesDate} IS NOT NULL`));
 
-    const days = fulfillmentData.rows.map((r: Record<string, unknown>) => Number(r.days)).filter((d: number) => d >= 0).sort((a: number, b: number) => a - b)
+    const days = fulfillmentData.map((r) => Number(r.days)).filter((d: number) => d >= 0).sort((a: number, b: number) => a - b)
     const avgDays = days.length > 0 ? days.reduce((sum: number, d: number) => sum + d, 0) / days.length : 0
     const medianDays = days.length > 0 ? (days.length % 2 === 0 ? (days[days.length / 2 - 1] + days[days.length / 2]) / 2 : days[Math.floor(days.length / 2)]) : 0
 
     // Fulfillment by Month
-    const fulfillmentByMonthData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', so.sales_date), 'YYYY-MM') as month,
-            AVG(EXTRACT(EPOCH FROM (d.delivery_date - so.sales_date)) / 86400) as avg_days
-        FROM sales_orders so
-        JOIN deliveries d ON d.sales_order_id = so.id
-        WHERE d.delivery_date IS NOT NULL
-        GROUP BY DATE_TRUNC('month', so.sales_date)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const fulfillmentByMonthData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${salesOrders.salesDate}), 'YYYY-MM')`.as('month'),
+        avg_days: sql<number>`AVG(EXTRACT(EPOCH FROM (${deliveries.deliveryDate} - ${salesOrders.salesDate})) / 86400)`
+    })
+        .from(salesOrders)
+        .innerJoin(deliveries, eq(deliveries.salesOrderId, salesOrders.id))
+        .where(sql`${deliveries.deliveryDate} IS NOT NULL`)
+        .groupBy(sql`DATE_TRUNC('month', ${salesOrders.salesDate})`)
+        .orderBy(sql`month`)
+        .limit(12);
 
     // On-Time Delivery Rate
-    const deliveryData = await db.execute(sql`
-        SELECT 
-            COUNT(*) as total,
-            COUNT(CASE WHEN d.delivery_date <= d.scheduled_date THEN 1 END) as on_time,
-            COUNT(CASE WHEN d.delivery_date > d.scheduled_date THEN 1 END) as late
-        FROM deliveries d
-        WHERE d.delivery_date IS NOT NULL
-    `)
+    const deliveryData = await db.select({
+        total: sql<number>`COUNT(*)`,
+        on_time: sql<number>`COUNT(CASE WHEN ${deliveries.deliveryDate} <= ${deliveries.scheduledDate} THEN 1 END)`,
+        late: sql<number>`COUNT(CASE WHEN ${deliveries.deliveryDate} > ${deliveries.scheduledDate} THEN 1 END)`
+    })
+        .from(deliveries)
+        .where(sql`${deliveries.deliveryDate} IS NOT NULL`);
 
     // On-Time by Month
-    const onTimeByMonthData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', d.scheduled_date), 'YYYY-MM') as month,
-            COUNT(*) as total_deliveries,
-            COUNT(CASE WHEN d.delivery_date <= d.scheduled_date THEN 1 END) as on_time_deliveries
-        FROM deliveries d
-        WHERE d.delivery_date IS NOT NULL
-        GROUP BY DATE_TRUNC('month', d.scheduled_date)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const onTimeByMonthData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${deliveries.scheduledDate}), 'YYYY-MM')`.as('month'),
+        total_deliveries: sql<number>`COUNT(*)`,
+        on_time_deliveries: sql<number>`COUNT(CASE WHEN ${deliveries.deliveryDate} <= ${deliveries.scheduledDate} THEN 1 END)`
+    })
+        .from(deliveries)
+        .where(sql`${deliveries.deliveryDate} IS NOT NULL`)
+        .groupBy(sql`DATE_TRUNC('month', ${deliveries.scheduledDate})`)
+        .orderBy(sql`month`)
+        .limit(12);
 
     // Backorder Analysis
-    const backorderData = await db.execute(sql`
-        SELECT 
-            p.id as product_id,
-            p.material_description as product_name,
-            p.material_number,
-            COUNT(DISTINCT so.id) as backorder_count,
-            COALESCE(SUM(soi.quantity), 0) as total_backorder_quantity
-        FROM sales_orders so
-        JOIN sales_order_items soi ON soi.sales_order_id = so.id
-        JOIN products p ON p.id = soi.product_id
-        JOIN stock_levels sl ON sl.product_id = p.id
-        WHERE so.status = 'pending' AND sl.total_stock < soi.quantity
-        GROUP BY p.id, p.material_description, p.material_number
-        ORDER BY backorder_count DESC
-        LIMIT 20
-    `)
+    const backorderData = await db.select({
+        product_id: products.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        backorder_count: sql<number>`COUNT(DISTINCT ${salesOrders.id})`,
+        total_backorder_quantity: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`
+    })
+        .from(salesOrders)
+        .innerJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .innerJoin(products, eq(products.id, salesOrderItems.productId))
+        .innerJoin(stockLevels, eq(stockLevels.productId, products.id))
+        .where(and(eq(salesOrders.status, 'pending'), sql`${stockLevels.totalStock} < ${salesOrderItems.quantity}`))
+        .groupBy(products.id, products.materialDescription, products.materialNumber)
+        .orderBy(desc(sql`COUNT(DISTINCT ${salesOrders.id})`))
+        .limit(20);
 
     // Order Trend
-    const orderTrendData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', sales_date), 'YYYY-MM') as month,
-            COUNT(*) as total_orders,
-            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_orders,
-            COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_orders
-        FROM sales_orders
-        GROUP BY DATE_TRUNC('month', sales_date)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const orderTrendData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${salesOrders.salesDate}), 'YYYY-MM')`.as('month'),
+        total_orders: sql<number>`COUNT(*)`,
+        completed_orders: sql<number>`COUNT(CASE WHEN ${salesOrders.status} = 'completed' THEN 1 END)`,
+        cancelled_orders: sql<number>`COUNT(CASE WHEN ${salesOrders.status} = 'cancelled' THEN 1 END)`
+    })
+        .from(salesOrders)
+        .groupBy(sql`DATE_TRUNC('month', ${salesOrders.salesDate})`)
+        .orderBy(sql`month`)
+        .limit(12);
 
     return {
-        orderStatusDistribution: (statusData.rows as Record<string, unknown>[]).map(row => ({
-            status: row.status,
+        orderStatusDistribution: statusData.map(row => ({
+            status: String(row.status),
             count: Number(row.count),
             percentage: totalOrders > 0 ? (Number(row.count) / totalOrders) * 100 : 0,
             totalValue: Number(row.total_value),
@@ -862,20 +868,20 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
             medianDays: medianDays,
             minDays: days.length > 0 ? days[0] : 0,
             maxDays: days.length > 0 ? days[days.length - 1] : 0,
-            byMonth: (fulfillmentByMonthData.rows as Record<string, unknown>[]).map(row => ({
-                month: row.month,
+            byMonth: fulfillmentByMonthData.map(row => ({
+                month: String(row.month),
                 averageDays: Number(row.avg_days),
             })),
         },
         onTimeDelivery: {
-            totalDeliveries: Number(deliveryData.rows[0]?.total ?? 0),
-            onTimeDeliveries: Number(deliveryData.rows[0]?.on_time ?? 0),
-            lateDeliveries: Number(deliveryData.rows[0]?.late ?? 0),
-            onTimeRate: Number(deliveryData.rows[0]?.total ?? 1) > 0
-                ? (Number(deliveryData.rows[0]?.on_time ?? 0) / Number(deliveryData.rows[0]?.total ?? 1)) * 100
+            totalDeliveries: Number(deliveryData[0]?.total ?? 0),
+            onTimeDeliveries: Number(deliveryData[0]?.on_time ?? 0),
+            lateDeliveries: Number(deliveryData[0]?.late ?? 0),
+            onTimeRate: Number(deliveryData[0]?.total ?? 1) > 0
+                ? (Number(deliveryData[0]?.on_time ?? 0) / Number(deliveryData[0]?.total ?? 1)) * 100
                 : 0,
-            byMonth: (onTimeByMonthData.rows as Record<string, unknown>[]).map(row => ({
-                month: row.month,
+            byMonth: onTimeByMonthData.map(row => ({
+                month: String(row.month),
                 totalDeliveries: Number(row.total_deliveries),
                 onTimeDeliveries: Number(row.on_time_deliveries),
                 onTimeRate: Number(row.total_deliveries) > 0
@@ -883,16 +889,16 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
                     : 0,
             })),
         },
-        backorderAnalysis: (backorderData.rows as Record<string, unknown>[]).map(row => ({
+        backorderAnalysis: backorderData.map(row => ({
             productId: Number(row.product_id),
-            productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
+            productName: String(row.product_name ?? "Unknown"),
+            materialNumber: String(row.material_number ?? ""),
             backorderCount: Number(row.backorder_count),
             totalBackorderQuantity: Number(row.total_backorder_quantity),
             averageFulfillmentDays: 0, // Would need additional query
         })),
-        orderTrend: (orderTrendData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month,
+        orderTrend: orderTrendData.map(row => ({
+            month: String(row.month),
             totalOrders: Number(row.total_orders),
             completedOrders: Number(row.completed_orders),
             cancelledOrders: Number(row.cancelled_orders),
@@ -906,152 +912,163 @@ export async function getOrderFulfillmentReport(): Promise<OrderFulfillmentRepor
 // ==================== PRODUCT PERFORMANCE REPORT FUNCTION ====================
 export async function getProductPerformanceReport(): Promise<ProductPerformanceReportData> {
     // Best Selling Products
-    const bestSellingData = await db.execute(sql`
-        SELECT 
-            p.id as product_id,
-            p.material_description as product_name,
-            p.material_number,
-            p.category,
-            COALESCE(SUM(soi.quantity), 0) as quantity_sold,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue
-        FROM products p
-        LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-        LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-        GROUP BY p.id, p.material_description, p.material_number, p.category
-        ORDER BY quantity_sold DESC
-        LIMIT 20
-    `)
+    const bestSellingData = await db.select({
+        product_id: products.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        category: products.category,
+        quantity_sold: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+    })
+        .from(products)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+        .leftJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+        .groupBy(products.id, products.materialDescription, products.materialNumber, products.category)
+        .orderBy(desc(sql`COALESCE(SUM(${salesOrderItems.quantity}), 0)`))
+        .limit(20);
 
     // Worst Selling Products (with stock)
-    const worstSellingData = await db.execute(sql`
-        SELECT 
-            p.id as product_id,
-            p.material_description as product_name,
-            p.material_number,
-            p.category,
-            COALESCE(SUM(soi.quantity), 0) as quantity_sold,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue,
-            COALESCE(sl.total_stock, 0) as stock_level
-        FROM products p
-        LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-        LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-        LEFT JOIN stock_levels sl ON sl.product_id = p.id
-        GROUP BY p.id, p.material_description, p.material_number, p.category, sl.total_stock
-        HAVING COALESCE(SUM(soi.quantity), 0) = 0 OR COALESCE(sl.total_stock, 0) > 0
-        ORDER BY total_revenue ASC
-        LIMIT 20
-    `)
+    const worstSellingData = await db.select({
+        product_id: products.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        category: products.category,
+        quantity_sold: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        stock_level: sql<number>`COALESCE(${stockLevels.totalStock}, 0)`
+    })
+        .from(products)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+        .leftJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+        .leftJoin(stockLevels, eq(stockLevels.productId, products.id))
+        .groupBy(products.id, products.materialDescription, products.materialNumber, products.category, stockLevels.totalStock)
+        .having(sql`COALESCE(SUM(${salesOrderItems.quantity}), 0) = 0 OR COALESCE(${stockLevels.totalStock}, 0) > 0`)
+        .orderBy(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0) ASC`)
+        .limit(20);
 
     // Category Performance
-    const categoryData = await db.execute(sql`
-        SELECT 
-            p.category,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue,
-            COALESCE(SUM(soi.quantity), 0) as total_quantity,
-            COUNT(DISTINCT p.id) as product_count,
-            COALESCE(AVG(soi.unit_price), 0) as avg_price
-        FROM products p
-        LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-        LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-        GROUP BY p.category
-        ORDER BY total_revenue DESC
-    `)
+    const categoryData = await db.select({
+        category: products.category,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        total_quantity: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`,
+        product_count: sql<number>`COUNT(DISTINCT ${products.id})`,
+        avg_price: sql<number>`COALESCE(AVG(${salesOrderItems.unitPrice}), 0)`
+    })
+        .from(products)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+        .leftJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+        .groupBy(products.category)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`));
 
     // Category Growth Rate
-    const categoryGrowthData = await db.execute(sql`
-        WITH monthly_category AS (
-            SELECT 
-                p.category,
-                TO_CHAR(DATE_TRUNC('month', so.sales_date), 'YYYY-MM') as month,
-                COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as revenue
-            FROM products p
-            LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-            LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-            GROUP BY p.category, DATE_TRUNC('month', so.sales_date)
-        )
-        SELECT DISTINCT ON (category)
-            category,
-            FIRST_VALUE(revenue) OVER (PARTITION BY category ORDER BY month DESC) as current_month,
-            LAG(revenue) OVER (PARTITION BY category ORDER BY month DESC) as previous_month
-        FROM monthly_category
-    `)
+    const monthlyCategory = db.$with('monthly_category').as(
+        db.select({
+            category: products.category,
+            month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${salesOrders.salesDate}), 'YYYY-MM')`.as('month'),
+            revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`.as('revenue')
+        })
+            .from(products)
+            .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+            .leftJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+            .groupBy(products.category, sql`DATE_TRUNC('month', ${salesOrders.salesDate})`)
+    );
+
+    const rankedCategoryMonthly = db.$with('ranked_category_monthly').as(
+        db.with(monthlyCategory).select({
+            category: monthlyCategory.category,
+            current_month: sql<number>`FIRST_VALUE(${monthlyCategory.revenue}) OVER (PARTITION BY ${monthlyCategory.category} ORDER BY ${monthlyCategory.month} DESC)`.as('current_month'),
+            previous_month: sql<number>`LAG(${monthlyCategory.revenue}) OVER (PARTITION BY ${monthlyCategory.category} ORDER BY ${monthlyCategory.month} DESC)`.as('previous_month'),
+            rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${monthlyCategory.category} ORDER BY ${monthlyCategory.month} DESC)`.as('rn')
+        })
+            .from(monthlyCategory)
+    );
+
+    const categoryGrowthData = await db.with(monthlyCategory, rankedCategoryMonthly).select({
+        category: rankedCategoryMonthly.category,
+        current_month: rankedCategoryMonthly.current_month,
+        previous_month: rankedCategoryMonthly.previous_month
+    })
+        .from(rankedCategoryMonthly)
+        .where(eq(rankedCategoryMonthly.rn, 1));
 
     // Product Profitability (simplified - would need cost data)
-    const profitabilityData = await db.execute(sql`
-        SELECT 
-            p.id as product_id,
-            p.material_description as product_name,
-            p.category,
-            COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as total_revenue,
-            COALESCE(SUM(soi.quantity), 0) as volume
-        FROM products p
-        LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-        LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-        GROUP BY p.id, p.material_description, p.category
-        ORDER BY total_revenue DESC
-        LIMIT 50
-    `)
+    const profitabilityData = await db.select({
+        product_id: products.id,
+        product_name: products.materialDescription,
+        category: products.category,
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        volume: sql<number>`COALESCE(SUM(${salesOrderItems.quantity}), 0)`
+    })
+        .from(products)
+        .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+        .leftJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+        .groupBy(products.id, products.materialDescription, products.category)
+        .orderBy(desc(sql`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`))
+        .limit(50);
 
     // ABC Analysis
-    const abcData = await db.execute(sql`
-        WITH product_revenue AS (
-            SELECT 
-                p.id,
-                COALESCE(SUM((soi.unit_price::numeric * soi.quantity) - soi.discount::numeric + soi.tax::numeric), 0) as revenue
-            FROM products p
-            LEFT JOIN sales_order_items soi ON soi.product_id = p.id
-            GROUP BY p.id
-        ),
-        ranked AS (
-            SELECT 
-                id,
-                revenue,
-                NTILE(100) OVER (ORDER BY revenue DESC) as percentile
-            FROM product_revenue
-        )
-        SELECT 
-            CASE 
-                WHEN percentile <= 20 THEN 'A'
-                WHEN percentile <= 50 THEN 'B'
-                ELSE 'C'
-            END as class,
-            COUNT(*) as product_count,
-            COALESCE(SUM(revenue), 0) as total_revenue
-        FROM ranked
-        GROUP BY class
-        ORDER BY class
-    `)
+    const productRevenue = db.$with('product_revenue').as(
+        db.select({
+            id: products.id,
+            revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`.as('revenue')
+        })
+            .from(products)
+            .leftJoin(salesOrderItems, eq(salesOrderItems.productId, products.id))
+            .groupBy(products.id)
+    );
 
-    const totalProducts = abcData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.product_count), 0)
-    const totalRevenue = abcData.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.total_revenue), 0)
+    const rankedProducts = db.$with('ranked_products').as(
+        db.with(productRevenue).select({
+            id: productRevenue.id,
+            revenue: productRevenue.revenue,
+            percentile: sql<number>`NTILE(100) OVER (ORDER BY ${productRevenue.revenue} DESC)`.as('percentile')
+        })
+            .from(productRevenue)
+    );
+
+    const abcData = await db.with(productRevenue, rankedProducts).select({
+        class: sql<string>`CASE 
+                WHEN ${rankedProducts.percentile} <= 20 THEN 'A'
+                WHEN ${rankedProducts.percentile} <= 50 THEN 'B'
+                ELSE 'C'
+            END`.as('class'),
+        product_count: sql<number>`COUNT(*)`,
+        total_revenue: sql<number>`COALESCE(SUM(${rankedProducts.revenue}), 0)`
+    })
+        .from(rankedProducts)
+        .groupBy(sql`class`)
+        .orderBy(sql`class`);
+
+    const totalProducts = abcData.reduce((sum: number, r) => sum + Number(r.product_count), 0)
+    const totalRevenue = abcData.reduce((sum: number, r) => sum + Number(r.total_revenue), 0)
 
     return {
-        bestSellingProducts: (bestSellingData.rows as Record<string, unknown>[]).map((row, index) => ({
+        bestSellingProducts: bestSellingData.map((row, index) => ({
             productId: Number(row.product_id),
-            productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
-            category: row.category ?? "Uncategorized",
+            productName: String(row.product_name ?? "Unknown"),
+            materialNumber: String(row.material_number ?? ""),
+            category: String(row.category ?? "Uncategorized"),
             quantitySold: Number(row.quantity_sold),
             totalRevenue: Number(row.total_revenue),
             rank: index + 1,
         })),
-        worstSellingProducts: (worstSellingData.rows as Record<string, unknown>[]).map((row, index) => ({
+        worstSellingProducts: worstSellingData.map((row, index) => ({
             productId: Number(row.product_id),
-            productName: row.product_name ?? "Unknown",
-            materialNumber: row.material_number,
-            category: row.category ?? "Uncategorized",
+            productName: String(row.product_name ?? "Unknown"),
+            materialNumber: String(row.material_number ?? ""),
+            category: String(row.category ?? "Uncategorized"),
             quantitySold: Number(row.quantity_sold),
             totalRevenue: Number(row.total_revenue),
             stockLevel: Number(row.stock_level),
             rank: index + 1,
         })),
-        categoryPerformance: (categoryData.rows as Record<string, unknown>[]).map(row => {
-            const growthRow = categoryGrowthData.rows.find((r: Record<string, unknown>) => r.category === row.category)
+        categoryPerformance: categoryData.map(row => {
+            const growthRow = categoryGrowthData.find((r) => r.category === row.category)
             const growthRate = growthRow && Number(growthRow.previous_month) > 0
                 ? ((Number(growthRow.current_month) - Number(growthRow.previous_month)) / Number(growthRow.previous_month)) * 100
                 : 0
             return {
-                category: row.category ?? "Uncategorized",
+                category: String(row.category ?? "Uncategorized"),
                 totalRevenue: Number(row.total_revenue),
                 totalQuantity: Number(row.total_quantity),
                 productCount: Number(row.product_count),
@@ -1059,14 +1076,14 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
                 growthRate,
             }
         }),
-        productProfitability: (profitabilityData.rows as Record<string, unknown>[]).map(row => {
+        productProfitability: profitabilityData.map(row => {
             const revenue = Number(row.total_revenue)
             const estimatedCost = revenue * 0.7 // Assume 70% cost (simplified)
             const profit = revenue - estimatedCost
             return {
                 productId: Number(row.product_id),
-                productName: row.product_name ?? "Unknown",
-                category: row.category ?? "Uncategorized",
+                productName: String(row.product_name ?? "Unknown"),
+                category: String(row.category ?? "Uncategorized"),
                 totalRevenue: revenue,
                 totalCost: estimatedCost,
                 profit,
@@ -1074,8 +1091,8 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
                 volume: Number(row.volume),
             }
         }),
-        abcAnalysis: (abcData.rows as Record<string, unknown>[]).map(row => ({
-            class: row.class as "A" | "B" | "C",
+        abcAnalysis: abcData.map(row => ({
+            class: String(row.class) as "A" | "B" | "C",
             productCount: Number(row.product_count),
             percentage: totalProducts > 0 ? (Number(row.product_count) / totalProducts) * 100 : 0,
             totalRevenue: Number(row.total_revenue),
@@ -1092,86 +1109,85 @@ export async function getProductPerformanceReport(): Promise<ProductPerformanceR
 // ==================== WAREHOUSE & LOGISTICS REPORT FUNCTION ====================
 export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsReportData> {
     // Warehouse Capacity
-    const capacityData = await db.execute(sql`
-        SELECT 
-            w.id as warehouse_id,
-            w.sloc as warehouse_name,
-            w.type as warehouse_type,
-            COUNT(DISTINCT sl.product_id) as total_products,
-            COALESCE(SUM(sl.total_stock), 0) as total_stock,
-            COALESCE(SUM(sl.valuation_value), 0) as capacity_used,
-            COALESCE(SUM(sl.valuation_value) * 1.5, 0) as capacity_total
-        FROM warehouses w
-        LEFT JOIN stock_levels sl ON w.id = sl.warehouse_id
-        GROUP BY w.id, w.sloc, w.type
-        ORDER BY capacity_used DESC
-    `)
+    const capacityData = await db.select({
+        warehouse_id: warehouses.id,
+        warehouse_name: warehouses.sloc,
+        warehouse_type: warehouses.type,
+        total_products: sql<number>`COUNT(DISTINCT ${stockLevels.productId})`,
+        total_stock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+        capacity_used: sql<number>`COALESCE(SUM(${stockLevels.valuationValue}), 0)`,
+        capacity_total: sql<number>`COALESCE(SUM(${stockLevels.valuationValue}) * 1.5, 0)`
+    })
+        .from(warehouses)
+        .leftJoin(stockLevels, eq(warehouses.id, stockLevels.warehouseId))
+        .groupBy(warehouses.id, warehouses.sloc, warehouses.type)
+        .orderBy(desc(sql`COALESCE(SUM(${stockLevels.valuationValue}), 0)`));
 
     // Stock Transfer Flow
-    const transferData = await db.execute(sql`
-        SELECT 
-            w_from.sloc as from_warehouse,
-            w_to.sloc as to_warehouse,
-            COUNT(*) as transfer_count,
-            COALESCE(SUM(st.quantity), 0) as total_quantity,
-            COALESCE(SUM(st.quantity * p.cost_sap::numeric), 0) as total_value
-        FROM stock_transfers st
-        JOIN warehouses w_from ON w_from.id = st.from_warehouse_id
-        JOIN warehouses w_to ON w_to.id = st.to_warehouse_id
-        LEFT JOIN products p ON p.id = st.product_id
-        GROUP BY w_from.sloc, w_to.sloc
-        ORDER BY transfer_count DESC
-    `)
+    const wFrom = db.$with('w_from').as(db.select().from(warehouses));
+    const wTo = db.$with('w_to').as(db.select().from(warehouses));
+
+    const transferData = await db.with(wFrom, wTo).select({
+        from_warehouse: wFrom.sloc,
+        to_warehouse: wTo.sloc,
+        transfer_count: sql<number>`COUNT(DISTINCT ${stockTransfers.id})`,
+        total_quantity: sql<number>`COALESCE(SUM(${stockTransferItems.quantity}), 0)`,
+        total_value: sql<number>`COALESCE(SUM(${stockTransferItems.quantity} * ${products.costSap}::numeric), 0)`
+    })
+        .from(stockTransfers)
+        .innerJoin(wFrom, eq(wFrom.id, stockTransfers.fromWarehouseId))
+        .innerJoin(wTo, eq(wTo.id, stockTransfers.toWarehouseId))
+        .leftJoin(stockTransferItems, eq(stockTransferItems.transferId, stockTransfers.id))
+        .leftJoin(products, eq(products.id, stockTransferItems.productId))
+        .groupBy(wFrom.sloc, wTo.sloc)
+        .orderBy(desc(sql`COUNT(DISTINCT ${stockTransfers.id})`));
 
     // Delivery Performance
-    const deliveryPerformanceData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', d.scheduled_date), 'YYYY-MM') as month,
-            COUNT(*) as total_deliveries,
-            COUNT(CASE WHEN d.status = 'completed' THEN 1 END) as completed_deliveries,
-            AVG(EXTRACT(EPOCH FROM (d.delivery_date - d.scheduled_date)) / 86400) as avg_delivery_time,
-            COUNT(CASE WHEN d.delivery_date <= d.scheduled_date THEN 1 END) * 100.0 / COUNT(*) as on_time_rate
-        FROM deliveries d
-        GROUP BY DATE_TRUNC('month', d.scheduled_date)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const deliveryPerformanceData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${deliveries.scheduledDate}), 'YYYY-MM')`.as('month'),
+        total_deliveries: sql<number>`COUNT(*)`,
+        completed_deliveries: sql<number>`COUNT(CASE WHEN ${deliveries.status} = 'completed' THEN 1 END)`,
+        avg_delivery_time: sql<number>`AVG(EXTRACT(EPOCH FROM (${deliveries.deliveryDate} - ${deliveries.scheduledDate})) / 86400)`,
+        on_time_rate: sql<number>`COUNT(CASE WHEN ${deliveries.deliveryDate} <= ${deliveries.scheduledDate} THEN 1 END) * 100.0 / COUNT(*)`
+    })
+        .from(deliveries)
+        .groupBy(sql`DATE_TRUNC('month', ${deliveries.scheduledDate})`)
+        .orderBy(sql`TO_CHAR(DATE_TRUNC('month', ${deliveries.scheduledDate}), 'YYYY-MM')`)
+        .limit(12);
 
     // Fleet Utilization
-    const fleetData = await db.execute(sql`
-        SELECT 
-            d.vehicle_number,
-            d.vehicle_type,
-            COUNT(*) as total_trips,
-            COALESCE(SUM(
-                d.cost_gasoline::numeric + d.cost_toll::numeric + d.cost_parking::numeric + 
-                d.cost_meals::numeric + d.cost_maintenance::numeric + d.cost_others::numeric
-            ), 0) as total_cost
-        FROM deliveries d
-        WHERE d.vehicle_number IS NOT NULL
-        GROUP BY d.vehicle_number, d.vehicle_type
-        ORDER BY total_trips DESC
-        LIMIT 20
-    `)
+    const fleetData = await db.select({
+        vehicle_number: deliveries.vehicleNumber,
+        vehicle_type: deliveries.vehicleType,
+        total_trips: sql<number>`COUNT(*)`,
+        total_cost: sql<number>`COALESCE(SUM(
+                ${deliveries.costGasoline}::numeric + ${deliveries.costToll}::numeric + ${deliveries.costParking}::numeric +
+                ${deliveries.costMeals}::numeric + ${deliveries.costMaintenance}::numeric + ${deliveries.costOthers}::numeric
+            ), 0)`
+    })
+        .from(deliveries)
+        .where(sql`${deliveries.vehicleNumber} IS NOT NULL`)
+        .groupBy(deliveries.vehicleNumber, deliveries.vehicleType)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20);
 
     // Shipping Cost Analysis
-    const shippingCostData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', d.created_at), 'YYYY-MM') as month,
-            COALESCE(SUM(d.shipping_cost::numeric), 0) as total_shipping_cost,
-            COALESCE(AVG(d.shipping_cost::numeric), 0) as avg_cost_per_delivery
-        FROM deliveries d
-        WHERE d.shipping_cost IS NOT NULL AND d.shipping_cost::numeric > 0
-        GROUP BY DATE_TRUNC('month', d.created_at)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const shippingCostData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${deliveries.createdAt}), 'YYYY-MM')`.as('month'),
+        total_shipping_cost: sql<number>`COALESCE(SUM(${deliveries.shippingCost}::numeric), 0)`,
+        avg_cost_per_delivery: sql<number>`COALESCE(AVG(${deliveries.shippingCost}::numeric), 0)`
+    })
+        .from(deliveries)
+        .where(and(sql`${deliveries.shippingCost} IS NOT NULL`, sql`${deliveries.shippingCost}::numeric > 0`))
+        .groupBy(sql`DATE_TRUNC('month', ${deliveries.createdAt})`)
+        .orderBy(sql`TO_CHAR(DATE_TRUNC('month', ${deliveries.createdAt}), 'YYYY-MM')`)
+        .limit(12);
 
     return {
-        warehouseCapacity: (capacityData.rows as Record<string, unknown>[]).map(row => ({
+        warehouseCapacity: capacityData.map(row => ({
             warehouseId: Number(row.warehouse_id),
-            warehouseName: row.warehouse_name,
-            warehouseType: row.warehouse_type ?? "N/A",
+            warehouseName: String(row.warehouse_name ?? "Unknown"),
+            warehouseType: String(row.warehouse_type ?? "N/A"),
             totalProducts: Number(row.total_products),
             totalStock: Number(row.total_stock),
             capacityUsed: Number(row.capacity_used),
@@ -1180,29 +1196,29 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
                 ? (Number(row.capacity_used) / Number(row.capacity_total)) * 100
                 : 0,
         })),
-        stockTransferFlow: (transferData.rows as Record<string, unknown>[]).map(row => ({
-            fromWarehouse: row.from_warehouse,
-            toWarehouse: row.to_warehouse,
+        stockTransferFlow: transferData.map(row => ({
+            fromWarehouse: String(row.from_warehouse ?? "Unknown"),
+            toWarehouse: String(row.to_warehouse ?? "Unknown"),
             transferCount: Number(row.transfer_count),
             totalQuantity: Number(row.total_quantity),
             totalValue: Number(row.total_value),
         })),
-        deliveryPerformance: (deliveryPerformanceData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month,
+        deliveryPerformance: deliveryPerformanceData.map(row => ({
+            month: String(row.month),
             totalDeliveries: Number(row.total_deliveries),
             completedDeliveries: Number(row.completed_deliveries),
             averageDeliveryTime: Number(row.avg_delivery_time),
             onTimeRate: Number(row.on_time_rate),
         })),
-        fleetUtilization: (fleetData.rows as Record<string, unknown>[]).map(row => ({
-            vehicleNumber: row.vehicle_number ?? "N/A",
-            vehicleType: row.vehicle_type ?? "N/A",
+        fleetUtilization: fleetData.map(row => ({
+            vehicleNumber: String(row.vehicle_number ?? "N/A"),
+            vehicleType: String(row.vehicle_type ?? "N/A"),
             totalTrips: Number(row.total_trips),
             utilizationRate: 0, // Would need total available days
             totalCost: Number(row.total_cost),
         })),
-        shippingCostAnalysis: (shippingCostData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month,
+        shippingCostAnalysis: shippingCostData.map(row => ({
+            month: String(row.month),
             totalShippingCost: Number(row.total_shipping_cost),
             averageCostPerDelivery: Number(row.avg_cost_per_delivery),
             costByType: [],
@@ -1212,76 +1228,72 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
 
 // ==================== FINANCIAL REPORT FUNCTION ====================
 export async function getFinancialReport(): Promise<FinancialReportData> {
-    const revenueData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', date_invoice), 'YYYY-MM') as month,
-            COALESCE(SUM(total_price_idr::numeric), 0) as revenue
-        FROM billing_records
-        WHERE date_invoice IS NOT NULL
-        GROUP BY DATE_TRUNC('month', date_invoice)
-        ORDER BY month
-        LIMIT 12
-    `)
+    const revenueData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${billingRecords.dateInvoice}), 'YYYY-MM')`.as('month'),
+        revenue: sql<number>`COALESCE(SUM(${billingRecords.totalPriceIdr}::numeric), 0)`
+    })
+        .from(billingRecords)
+        .where(sql`${billingRecords.dateInvoice} IS NOT NULL`)
+        .groupBy(sql`DATE_TRUNC('month', ${billingRecords.dateInvoice})`)
+        .orderBy(sql`TO_CHAR(DATE_TRUNC('month', ${billingRecords.dateInvoice}), 'YYYY-MM')`)
+        .limit(12);
 
-    const paymentData = await db.execute(sql`
-        SELECT 
-            COALESCE(payment_type, 'Unknown') as type,
-            COALESCE(SUM(total_price_idr::numeric), 0) as revenue
-        FROM billing_records
-        GROUP BY payment_type
-    `)
+    const paymentData = await db.select({
+        type: sql<string>`COALESCE(${billingRecords.paymentType}, 'Unknown')`.as('type'),
+        revenue: sql<number>`COALESCE(SUM(${billingRecords.totalPriceIdr}::numeric), 0)`
+    })
+        .from(billingRecords)
+        .groupBy(billingRecords.paymentType);
 
-    const totalRev = (paymentData.rows as Record<string, unknown>[]).reduce((sum, r) => sum + Number(r.revenue), 0)
+    const totalRev = paymentData.reduce((sum, r) => sum + Number(r.revenue), 0)
 
-    const outstandingData = await db.execute(sql`
-        SELECT 
-            no_inv_sap as invoice_no,
-            customer,
-            date_invoice as date,
-            total_price_idr as amount
-        FROM billing_records
-        WHERE recv_date_approved IS NULL AND date_invoice IS NOT NULL
-        ORDER BY date_invoice DESC
-        LIMIT 20
-    `)
+    const outstandingData = await db.select({
+        invoice_no: billingRecords.noInvSap,
+        customer: billingRecords.customer,
+        date: billingRecords.dateInvoice,
+        amount: billingRecords.totalPriceIdr
+    })
+        .from(billingRecords)
+        .where(and(sql`${billingRecords.recvDateApproved} IS NULL`, sql`${billingRecords.dateInvoice} IS NOT NULL`))
+        .orderBy(desc(billingRecords.dateInvoice))
+        .limit(20);
 
-    const taxData = await db.execute(sql`
-        SELECT 
-            TO_CHAR(DATE_TRUNC('month', date_invoice), 'YYYY-MM') as month,
-            COALESCE(SUM(total_price_idr::numeric), 0) as total_revenue,
-            COALESCE(SUM(ppn::numeric), 0) as total_tax
-        FROM billing_records
-        WHERE date_invoice IS NOT NULL
-        GROUP BY DATE_TRUNC('month', date_invoice)
-        ORDER BY month DESC
-        LIMIT 12
-    `)
+    const taxData = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${billingRecords.dateInvoice}), 'YYYY-MM')`.as('month'),
+        total_revenue: sql<number>`COALESCE(SUM(${billingRecords.totalPriceIdr}::numeric), 0)`,
+        total_tax: sql<number>`COALESCE(SUM(${billingRecords.ppn}::numeric), 0)`
+    })
+        .from(billingRecords)
+        .where(sql`${billingRecords.dateInvoice} IS NOT NULL`)
+        .groupBy(sql`DATE_TRUNC('month', ${billingRecords.dateInvoice})`)
+        .orderBy(desc(sql`TO_CHAR(DATE_TRUNC('month', ${billingRecords.dateInvoice}), 'YYYY-MM')`))
+        .limit(12);
 
     return {
-        revenueOverview: (revenueData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month as string,
+        revenueOverview: revenueData.map(row => ({
+            month: String(row.month),
             revenue: Number(row.revenue),
             target: Number(row.revenue) * 1.1, // Mock target
         })),
-        revenueByPaymentType: (paymentData.rows as Record<string, unknown>[]).map(row => ({
-            type: row.type as string,
+        revenueByPaymentType: paymentData.map(row => ({
+            type: String(row.type),
             revenue: Number(row.revenue),
             percentage: totalRev > 0 ? (Number(row.revenue) / totalRev) * 100 : 0,
         })),
-        outstandingInvoices: (outstandingData.rows as Record<string, unknown>[]).map(row => {
-            const date = new Date(row.date as string)
+        outstandingInvoices: outstandingData.map(row => {
+            const date = new Date(row.date as string | Date)
             const dueDate = new Date(date)
             dueDate.setDate(dueDate.getDate() + 30) // Mock 30 days due
             return {
-                invoiceNo: row.invoice_no as string || "N/A",
-                customer: row.customer as string || "Unknown",
+                invoiceNo: String(row.invoice_no ?? "N/A"),
+                customer: String(row.customer ?? "Unknown"),
                 date: date,
                 amount: Number(row.amount),
                 dueDate: dueDate,
             }
         }),
-        taxReport: (taxData.rows as Record<string, unknown>[]).map(row => ({
-            month: row.month as string,
+        taxReport: taxData.map(row => ({
+            month: String(row.month),
             totalRevenue: Number(row.total_revenue),
             totalTax: Number(row.total_tax),
         })),
@@ -1290,38 +1302,47 @@ export async function getFinancialReport(): Promise<FinancialReportData> {
 
 // ==================== SAP INTEGRATION REPORT FUNCTION ====================
 export async function getSAPIntegrationReport(): Promise<SAPIntegrationReportData> {
-    const statusData = await db.execute(sql`
-        WITH RankedLogs AS (
-            SELECT 
-                sync_type,
-                started_at,
-                status,
-                ROW_NUMBER() OVER(PARTITION BY sync_type ORDER BY started_at DESC) as rn
-            FROM sap_sync_logs
-        )
-        SELECT sync_type, started_at, status FROM RankedLogs WHERE rn = 1
-    `)
+    const rankedLogs = db.$with('ranked_logs').as(
+        db.select({
+            sync_type: sapSyncLogs.syncType,
+            started_at: sapSyncLogs.startedAt,
+            status: sapSyncLogs.status,
+            rn: sql<number>`ROW_NUMBER() OVER(PARTITION BY ${sapSyncLogs.syncType} ORDER BY ${sapSyncLogs.startedAt} DESC)`.as('rn')
+        })
+            .from(sapSyncLogs)
+    );
 
-    const errorsData = await db.execute(sql`
-        SELECT id, sync_type, started_at, notes
-        FROM sap_sync_logs
-        WHERE status = 'error' OR status = 'failed'
-        ORDER BY started_at DESC
-        LIMIT 20
-    `)
+    const statusData = await db.with(rankedLogs).select({
+        sync_type: rankedLogs.sync_type,
+        started_at: rankedLogs.started_at,
+        status: rankedLogs.status
+    })
+        .from(rankedLogs)
+        .where(eq(rankedLogs.rn, 1));
+
+    const errorsData = await db.select({
+        id: sapSyncLogs.id,
+        sync_type: sapSyncLogs.syncType,
+        started_at: sapSyncLogs.startedAt,
+        notes: sapSyncLogs.notes
+    })
+        .from(sapSyncLogs)
+        .where(or(eq(sapSyncLogs.status, 'error'), eq(sapSyncLogs.status, 'failed')))
+        .orderBy(desc(sapSyncLogs.startedAt))
+        .limit(20);
 
     return {
-        syncStatus: (statusData.rows as Record<string, unknown>[]).map(row => ({
-            type: row.sync_type as string || "Unknown",
-            lastSync: row.started_at ? new Date(row.started_at as string) : null,
-            status: row.status as string || "unknown",
+        syncStatus: statusData.map(row => ({
+            type: String(row.sync_type ?? "Unknown"),
+            lastSync: row.started_at ? new Date(row.started_at as string | Date) : null,
+            status: String(row.status ?? "unknown"),
             recordsProcessed: 100, // Mocked for display
         })),
-        syncErrors: (errorsData.rows as Record<string, unknown>[]).map(row => ({
+        syncErrors: errorsData.map(row => ({
             id: Number(row.id),
-            type: row.sync_type as string || "Unknown",
-            date: new Date(row.started_at as string),
-            error: row.notes as string || "Unknown error",
+            type: String(row.sync_type ?? "Unknown"),
+            date: new Date(row.started_at as string | Date),
+            error: String(row.notes ?? "Unknown error"),
         })),
         dataDiscrepancy: [
             { entity: "Materials", localCount: 1250, sapCount: 1250, difference: 0, lastChecked: new Date() },

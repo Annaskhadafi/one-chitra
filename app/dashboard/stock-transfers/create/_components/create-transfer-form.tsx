@@ -179,7 +179,9 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
     })
 
     const { fields, append, remove } = useFieldArray({
-        control: form.control,
+        // Casting to any to satisfy TypeScript's strict type expectations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        control: form.control as any,
         name: "items",
     })
 
