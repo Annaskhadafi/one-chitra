@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X, DollarSign, Package, ShoppingCart, Users } from "lucide-react"
+import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, X, DollarSign, Package, ShoppingCart, Users, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +30,14 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 import { HistoryOrderCharts } from "./history-order-charts"
@@ -45,6 +53,25 @@ export function HistoryOrderTable() {
     const [yearFilter, setYearFilter] = useState<string[]>([])
     const [monthFilter, setMonthFilter] = useState<string[]>([])
     const [matGrpFilter, setMatGrpFilter] = useState<string[]>([])
+
+    // Columns
+    const AVAILABLE_COLUMNS = useMemo(() => [
+        { id: "billing_date", label: "Billing Date" },
+        { id: "customer_name", label: "Customer" },
+        { id: "po_number", label: "PO Number" },
+        { id: "material_no", label: "Material No" },
+        { id: "description", label: "Description" },
+        { id: "qty", label: "Qty" },
+        { id: "revenue", label: "Revenue (IDR)" },
+        { id: "salesman", label: "Salesman" },
+        { id: "plant", label: "Plant" },
+        { id: "po_date", label: "PO Date" },
+        { id: "mat_grp_desc", label: "Mat Grp Desc" }
+    ], []);
+
+    const [visibleColumns, setVisibleColumns] = useState<string[]>([
+        "billing_date", "customer_name", "po_number", "material_no", "description", "qty", "revenue", "salesman"
+    ]);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
@@ -353,44 +380,75 @@ export function HistoryOrderTable() {
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="hidden sm:flex ml-2">
+                                <Settings2 className="mr-2 h-4 w-4" />
+                                View
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-[200px]">
+                            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {AVAILABLE_COLUMNS.map((col) => (
+                                <DropdownMenuCheckboxItem
+                                    key={col.id}
+                                    checked={visibleColumns.includes(col.id)}
+                                    onSelect={(e) => e.preventDefault()}
+                                    onCheckedChange={(val) => {
+                                        setVisibleColumns(prev =>
+                                            val ? [...prev, col.id] : prev.filter(id => id !== col.id)
+                                        )
+                                    }}
+                                >
+                                    {col.label}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 
             {/* Table */}
             <div className="rounded-md border bg-card">
-                <Table>
+                <Table className="whitespace-nowrap">
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Billing Date</TableHead>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>PO Number</TableHead>
-                            <TableHead>Material No</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead className="text-right">Qty</TableHead>
-                            <TableHead className="text-right">Revenue</TableHead>
-                            <TableHead>Salesman</TableHead>
-                            <TableHead>Plant</TableHead>
+                            {visibleColumns.includes("billing_date") && <TableHead>Billing Date</TableHead>}
+                            {visibleColumns.includes("customer_name") && <TableHead>Customer</TableHead>}
+                            {visibleColumns.includes("po_number") && <TableHead>PO Number</TableHead>}
+                            {visibleColumns.includes("material_no") && <TableHead>Material No</TableHead>}
+                            {visibleColumns.includes("description") && <TableHead>Description</TableHead>}
+                            {visibleColumns.includes("qty") && <TableHead className="text-right">Qty</TableHead>}
+                            {visibleColumns.includes("revenue") && <TableHead className="text-right">Revenue (IDR)</TableHead>}
+                            {visibleColumns.includes("salesman") && <TableHead>Salesman</TableHead>}
+                            {visibleColumns.includes("plant") && <TableHead>Plant</TableHead>}
+                            {visibleColumns.includes("po_date") && <TableHead>PO Date</TableHead>}
+                            {visibleColumns.includes("mat_grp_desc") && <TableHead>Mat Grp Desc</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {paginatedData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={visibleColumns.length} className="h-24 text-center">
                                     No records found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             paginatedData.map((item, index) => (
                                 <TableRow key={`${item.po_number}-${index}`}>
-                                    <TableCell className="whitespace-nowrap">{item.billing_date}</TableCell>
-                                    <TableCell className="font-medium max-w-[200px] truncate" title={item.customer_name}>{item.customer_name}</TableCell>
-                                    <TableCell>{item.po_number}</TableCell>
-                                    <TableCell>{item.material_no}</TableCell>
-                                    <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>
-                                    <TableCell className="text-right">{item.qty}</TableCell>
-                                    <TableCell className="text-right whitespace-nowrap">{item.revenue_formatted}</TableCell>
-                                    <TableCell className="max-w-[150px] truncate" title={item.salesman}>{item.salesman}</TableCell>
-                                    <TableCell>{item.plant}</TableCell>
+                                    {visibleColumns.includes("billing_date") && <TableCell>{item.billing_date}</TableCell>}
+                                    {visibleColumns.includes("customer_name") && <TableCell className="font-medium max-w-[200px] truncate" title={item.customer_name}>{item.customer_name}</TableCell>}
+                                    {visibleColumns.includes("po_number") && <TableCell>{item.po_number}</TableCell>}
+                                    {visibleColumns.includes("material_no") && <TableCell>{item.material_no}</TableCell>}
+                                    {visibleColumns.includes("description") && <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>}
+                                    {visibleColumns.includes("qty") && <TableCell className="text-right">{item.qty}</TableCell>}
+                                    {visibleColumns.includes("revenue") && <TableCell className="text-right">{item.revenue_formatted}</TableCell>}
+                                    {visibleColumns.includes("salesman") && <TableCell className="max-w-[150px] truncate" title={item.salesman}>{item.salesman}</TableCell>}
+                                    {visibleColumns.includes("plant") && <TableCell>{item.plant}</TableCell>}
+                                    {visibleColumns.includes("po_date") && <TableCell>{item.po_date}</TableCell>}
+                                    {visibleColumns.includes("mat_grp_desc") && <TableCell>{item.mat_grp_desc}</TableCell>}
                                 </TableRow>
                             ))
                         )}

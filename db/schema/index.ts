@@ -33,3 +33,4 @@ export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRela
 export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, goodReceiveManualItemsRelations } from "./good-receive-manual";
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
+export { historyOrders } from "./history-orders";
