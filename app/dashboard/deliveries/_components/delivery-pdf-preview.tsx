@@ -72,205 +72,11 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
             <html>
             <head>
                 <title>Delivery Order ${delivery.deliveryNumber || ""}</title>
-                <style>
-                    @page { size: A4; margin: 10mm; }
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { 
-                        font-family: Arial, sans-serif; 
-                        font-size: 10pt; 
-                        color: #000; 
-                        line-height: 1.2;
-                    }
-                    .container { max-width: 210mm; margin: 0 auto; padding: 10mm; }
-                    
-                    .internal-info {
-                        color: #facc15;
-                        font-size: 8pt;
-                        text-align: center;
-                        margin-bottom: 40px;
-                    }
-                    
-                    .header-section {
-                        display: flex;
-                        justify-content: space-between;
-                        margin-bottom: 20px;
-                    }
-                    
-                    .ship-to {
-                        width: 55%;
-                    }
-                    
-                    .ship-to-label {
-                        font-weight: bold;
-                        text-decoration: underline;
-                        margin-bottom: 10px;
-                        display: block;
-                    }
-                    
-                    .customer-name {
-                        font-weight: bold;
-                        font-size: 11pt;
-                        text-transform: uppercase;
-                        margin-bottom: 2px;
-                    }
-                    
-                    .site-info {
-                        font-weight: bold;
-                        margin-bottom: 5px;
-                    }
-                    
-                    .address-box {
-                        margin-bottom: 10px;
-                        font-size: 9pt;
-                    }
-                    
-                    .contact-info {
-                        font-size: 9pt;
-                    }
-                    
-                    .do-box {
-                        width: 42%;
-                        border: 1px solid #000;
-                    }
-                    
-                    .do-header {
-                        background-color: #d1d5db;
-                        border-bottom: 1px solid #000;
-                        padding: 5px 10px;
-                        font-weight: bold;
-                        letter-spacing: 1px;
-                    }
-                    
-                    .do-details {
-                        padding: 10px;
-                        font-size: 9pt;
-                    }
-                    
-                    .do-row {
-                        display: flex;
-                        margin-bottom: 3px;
-                    }
-                    
-                    .do-label {
-                        width: 120px;
-                    }
-                    
-                    .do-separator {
-                        margin-right: 5px;
-                    }
-                    
-                    .do-value {
-                        font-weight: bold;
-                    }
-                    
-                    .items-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 20px;
-                        border-top: 2px solid #000;
-                        border-bottom: 2px solid #000;
-                    }
-                    
-                    .items-table th {
-                        text-align: left;
-                        padding: 8px 5px;
-                        font-size: 9pt;
-                        border-bottom: 1px solid #000;
-                    }
-                    
-                    .items-table td {
-                        padding: 10px 5px;
-                        font-size: 9pt;
-                        vertical-align: top;
-                    }
-                    
-                    .col-item { width: 40px; }
-                    .col-qty { width: 80px; text-align: center; }
-                    .col-part { width: 120px; }
-
-                    .serial-grid {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 10px;
-                        margin-bottom: 20px;
-                        border: 1px solid #000;
-                    }
-                    .serial-grid th {
-                        background-color: #f3f4f6;
-                        border: 1px solid #000;
-                        padding: 4px;
-                        font-size: 8pt;
-                        text-align: center;
-                    }
-                    .serial-grid td {
-                        border: 1px solid #000;
-                        padding: 4px;
-                        font-size: 8pt;
-                        height: 25px;
-                        text-align: center;
-                        vertical-align: middle;
-                    }
-                    
-                    .note-section {
-                        margin-top: 60px;
-                        font-size: 9pt;
-                    }
-                    
-                    .note-label {
-                        font-weight: bold;
-                        margin-bottom: 5px;
-                    }
-                    
-                    .received-condition {
-                        margin-top: 40px;
-                        font-size: 9pt;
-                        border-bottom: 1px solid #000;
-                        padding-bottom: 5px;
-                        margin-bottom: 20px;
-                    }
-                    
-                    .signature-grid {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr 1fr;
-                        margin-top: 10px;
-                        font-size: 9pt;
-                    }
-                    
-                    .sig-box {
-                        display: flex;
-                        flex-direction: column;
-                        height: 120px;
-                        justify-content: space-between;
-                        text-align: center;
-                    }
-                    
-                    .sig-label {
-                        margin-bottom: 10px;
-                    }
-                    
-                    .sig-name {
-                        margin-top: auto;
-                    }
-                    
-                    .internal-info-footer {
-                        color: #facc15;
-                        font-size: 8pt;
-                        text-align: center;
-                        position: fixed;
-                        bottom: 10mm;
-                        width: 100%;
-                        left: 0;
-                    }
-
-                    @media print {
-                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                        .no-print { display: none !important; }
-                    }
-                </style>
             </head>
-            <body>
-                ${printContent.innerHTML}
-                <div class="internal-info-footer">Internal information - Yellow - Mahadasha Group.</div>
+            <body style="margin:0; padding:0; background-color: white;">
+                <div class="pdf-wrapper">
+                    ${printContent.innerHTML}
+                </div>
             </body>
             </html>
         `)
@@ -308,153 +114,218 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     </div>
                 </DialogHeader>
 
-                <div className="p-8 bg-white text-black" ref={printRef}>
-                    <div className="container" style={{ padding: "0" }}>
-                        <div className="internal-info">Internal information - Yellow - Mahadasha Group.</div>
+                <div className="p-4 sm:p-8 bg-zinc-100 dark:bg-zinc-800 text-black flex justify-center w-full min-h-full">
+                    <div className="pdf-wrapper bg-white shadow-xl max-w-[210mm] w-full min-h-[297mm] relative shrink-0" ref={printRef}>
+                        <style dangerouslySetInnerHTML={{
+                            __html: `
+                            .pdf-wrapper { 
+                                font-family: Arial, sans-serif; 
+                                font-size: 10pt; 
+                                color: #000; 
+                                line-height: 1.2;
+                                padding-bottom: 20mm;
+                                box-sizing: border-box;
+                            }
+                            .pdf-wrapper * { box-sizing: border-box; }
+                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; }
+                            
+                            .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 40px; }
+                            .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                            .pdf-wrapper .ship-to { width: 55%; }
+                            .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
+                            .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
+                            .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; }
+                            .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
+                            .pdf-wrapper .contact-info { font-size: 9pt; }
+                            .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
+                            .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; letter-spacing: 1px; }
+                            .pdf-wrapper .do-details { padding: 10px; font-size: 9pt; }
+                            .pdf-wrapper .do-row { display: flex; margin-bottom: 3px; }
+                            .pdf-wrapper .do-label { width: 120px; }
+                            .pdf-wrapper .do-separator { margin-right: 5px; }
+                            .pdf-wrapper .do-value { font-weight: bold; }
+                            
+                            .pdf-wrapper .items-table { width: 100%; border-collapse: collapse; margin-top: 20px; border-top: 2px solid #000; border-bottom: 2px solid #000; }
+                            .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 9pt; border-bottom: 1px solid #000; }
+                            .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 9pt; vertical-align: top; }
+                            .pdf-wrapper .col-item { width: 40px; }
+                            .pdf-wrapper .col-qty { width: 80px; text-align: center; }
+                            .pdf-wrapper .col-part { width: 120px; }
 
-                        <div className="header-section">
-                            <div className="ship-to">
-                                <span className="ship-to-label">Ship To:</span>
-                                <div className="customer-name">{customer?.name}</div>
-                                <div className="site-info" style={{ fontWeight: "normal" }}>
-                                    Site : {address || delivery.shippingAddress || "-"}
+                            .pdf-wrapper .serial-grid { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; border: 1px solid #000; }
+                            .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 4px; font-size: 8pt; text-align: center; }
+                            .pdf-wrapper .serial-grid td { border: 1px solid #000; padding: 4px; font-size: 8pt; height: 25px; text-align: center; vertical-align: middle; }
+                            
+                            .pdf-wrapper .note-section { margin-top: 60px; font-size: 9pt; }
+                            .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 5px; }
+                            .pdf-wrapper .received-condition { margin-top: 40px; font-size: 9pt; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 20px; }
+                            
+                            .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-top: 10px; font-size: 9pt; }
+                            .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 120px; justify-content: space-between; text-align: center; }
+                            .pdf-wrapper .sig-label { margin-bottom: 10px; }
+                            .pdf-wrapper .sig-name { margin-top: auto; }
+                            
+                            .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; position: absolute; bottom: 10mm; width: 100%; left: 0; }
+
+                            @media print {
+                                @page { size: A4; margin: 10mm; }
+                                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; background-color: transparent !important; }
+                                .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: auto !important; padding-bottom: 25mm !important; }
+                                .pdf-wrapper .container { padding: 0 !important; }
+                                .pdf-wrapper .internal-info-footer { position: fixed; bottom: 0; }
+                                .no-print { display: none !important; }
+                            }
+                        ` }} />
+
+                        <div className="container">
+                            <div className="internal-info">Internal information - Yellow - Mahadasha Group.</div>
+
+                            <div className="header-section">
+                                <div className="ship-to">
+                                    <span className="ship-to-label">Ship To:</span>
+                                    <div className="customer-name">{customer?.name}</div>
+                                    <div className="site-info" style={{ fontWeight: "normal" }}>
+                                        Site : {address || delivery.shippingAddress || "-"}
+                                    </div>
+                                    <div className="contact-info" style={{ marginTop: "10px" }}>
+                                        <div>PIC: {customer?.contactName || "-"}</div>
+                                        <div>Email : {customer?.email || "-"}</div>
+                                        <div>HP : -</div>
+                                    </div>
                                 </div>
-                                <div className="contact-info" style={{ marginTop: "10px" }}>
-                                    <div>PIC: {customer?.contactName || "-"}</div>
-                                    <div>Email : {customer?.email || "-"}</div>
-                                    <div>HP : -</div>
+
+                                <div className="do-box">
+                                    <div className="do-header">DELIVERY ORDER</div>
+                                    <div className="do-details">
+                                        <div className="do-row">
+                                            <div className="do-label">Page</div>
+                                            <div className="do-separator">:</div>
+                                            <div className="do-value">1/1</div>
+                                        </div>
+                                        <div className="do-row">
+                                            <div className="do-label">Delivery No</div>
+                                            <div className="do-separator">:</div>
+                                            <div className="do-value">{delivery.deliveryNumber}</div>
+                                        </div>
+                                        <div className="do-row">
+                                            <div className="do-label">Delivery Date</div>
+                                            <div className="do-separator">:</div>
+                                            <div className="do-value">{formatDate(delivery.deliveryDate || delivery.scheduledDate)}</div>
+                                        </div>
+                                        <div className="do-row">
+                                            <div className="do-label">Customer PO No</div>
+                                            <div className="do-separator">:</div>
+                                            <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
+                                        </div>
+                                        <div className="do-row">
+                                            <div className="do-label">Customer PO Date</div>
+                                            <div className="do-separator">:</div>
+                                            <div className="do-value">{formatDate(delivery.salesOrder?.poReceive)}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="do-box">
-                                <div className="do-header">DELIVERY ORDER</div>
-                                <div className="do-details">
-                                    <div className="do-row">
-                                        <div className="do-label">Page</div>
-                                        <div className="do-separator">:</div>
-                                        <div className="do-value">1/1</div>
-                                    </div>
-                                    <div className="do-row">
-                                        <div className="do-label">Delivery No</div>
-                                        <div className="do-separator">:</div>
-                                        <div className="do-value">{delivery.deliveryNumber}</div>
-                                    </div>
-                                    <div className="do-row">
-                                        <div className="do-label">Delivery Date</div>
-                                        <div className="do-separator">:</div>
-                                        <div className="do-value">{formatDate(delivery.deliveryDate || delivery.scheduledDate)}</div>
-                                    </div>
-                                    <div className="do-row">
-                                        <div className="do-label">Customer PO No</div>
-                                        <div className="do-separator">:</div>
-                                        <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
-                                    </div>
-                                    <div className="do-row">
-                                        <div className="do-label">Customer PO Date</div>
-                                        <div className="do-separator">:</div>
-                                        <div className="do-value">{formatDate(delivery.salesOrder?.poReceive)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            <table className="items-table">
+                                <thead>
+                                    <tr>
+                                        <th className="col-item">Item</th>
+                                        <th>Description</th>
+                                        <th className="col-qty">Qty</th>
+                                        <th className="col-part">Parts Number</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {delivery.items.map((item, idx) => {
+                                        const isTyre = item.product.category?.toUpperCase() === "TYRE"
 
-                        <table className="items-table">
-                            <thead>
-                                <tr>
-                                    <th className="col-item">Item</th>
-                                    <th>Description</th>
-                                    <th className="col-qty">Qty</th>
-                                    <th className="col-part">Parts Number</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {delivery.items.map((item, idx) => {
-                                    const isTyre = item.product.category?.toUpperCase() === "TYRE"
-
-                                    return (
-                                        <React.Fragment key={idx}>
-                                            <tr>
-                                                <td>{(idx + 1).toString().padStart(2, '0')}</td>
-                                                <td>
-                                                    <div style={{ textTransform: "uppercase" }}>
-                                                        {item.product.materialDescription}
-                                                    </div>
-                                                </td>
-                                                <td className="col-qty">
-                                                    {item.deliveredQuantity}
-                                                </td>
-                                                <td className="col-part">
-                                                    {item.product.materialNumber}
-                                                </td>
-                                            </tr>
-                                            {isTyre && (
+                                        return (
+                                            <React.Fragment key={idx}>
                                                 <tr>
-                                                    <td colSpan={4} style={{ padding: "0 5px 15px 45px" }}>
-                                                        <table className="serial-grid">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th colSpan={5}>SERIAL NUMBER</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {Array.from({ length: Math.ceil(item.deliveredQuantity / 5) }).map((_, rowIdx) => (
-                                                                    <tr key={rowIdx}>
-                                                                        {Array.from({ length: 5 }).map((_, colIdx) => {
-                                                                            const snIdx = rowIdx * 5 + colIdx
-                                                                            const sn = item.serialNumbers?.[snIdx]
-                                                                            const isVisible = snIdx < item.deliveredQuantity
-
-                                                                            return (
-                                                                                <td key={colIdx} style={{ border: isVisible ? "1px solid #000" : "none" }}>
-                                                                                    {isVisible ? (sn || item.product.materialNumber) : ""}
-                                                                                </td>
-                                                                            )
-                                                                        })}
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
+                                                    <td>{(idx + 1).toString().padStart(2, '0')}</td>
+                                                    <td>
+                                                        <div style={{ textTransform: "uppercase" }}>
+                                                            {item.product.materialDescription}
+                                                        </div>
+                                                    </td>
+                                                    <td className="col-qty">
+                                                        {item.deliveredQuantity}
+                                                    </td>
+                                                    <td className="col-part">
+                                                        {item.product.materialNumber}
                                                     </td>
                                                 </tr>
-                                            )}
-                                        </React.Fragment>
-                                    )
-                                })}
-                            </tbody>
-                        </table>
+                                                {isTyre && (
+                                                    <tr>
+                                                        <td colSpan={4} style={{ padding: "0 5px 15px 45px" }}>
+                                                            <table className="serial-grid">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th colSpan={5}>SERIAL NUMBER</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {Array.from({ length: Math.ceil(item.deliveredQuantity / 5) }).map((_, rowIdx) => (
+                                                                        <tr key={rowIdx}>
+                                                                            {Array.from({ length: 5 }).map((_, colIdx) => {
+                                                                                const snIdx = rowIdx * 5 + colIdx
+                                                                                const sn = item.serialNumbers?.[snIdx]
+                                                                                const isVisible = snIdx < item.deliveredQuantity
 
-                        <div className="note-section">
-                            <div className="note-label">NOTE:</div>
-                            {delivery.notes ? (
-                                <div style={{ whiteSpace: "pre-line" }}>{delivery.notes}</div>
-                            ) : (
-                                <div>-</div>
-                            )}
-                        </div>
+                                                                                return (
+                                                                                    <td key={colIdx} style={{ border: isVisible ? "1px solid #000" : "none" }}>
+                                                                                        {isVisible ? (sn || item.product.materialNumber) : ""}
+                                                                                    </td>
+                                                                                )
+                                                                            })}
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
 
-                        <div className="received-condition">
-                            Received in good Condition ( Materials in 100% New Condition )
-                        </div>
-
-                        <div className="signature-grid">
-                            <div className="sig-box">
-                                <div className="sig-label">Delivery by,</div>
-                                <div className="sig-name">PT.Chitra Paratama</div>
-                                <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
+                            <div className="note-section">
+                                <div className="note-label">NOTE:</div>
+                                {delivery.notes ? (
+                                    <div style={{ whiteSpace: "pre-line" }}>{delivery.notes}</div>
+                                ) : (
+                                    <div>-</div>
+                                )}
                             </div>
-                            <div className="sig-box">
-                                <div className="sig-label">Forwarder / Driver,</div>
-                                <div className="sig-name">
-                                    {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+
+                            <div className="received-condition">
+                                Received in good Condition ( Materials in 100% New Condition )
+                            </div>
+
+                            <div className="signature-grid">
+                                <div className="sig-box">
+                                    <div className="sig-label">Delivery by,</div>
+                                    <div className="sig-name">PT.Chitra Paratama</div>
+                                    <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
                                 </div>
-                                <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
-                            </div>
-                            <div className="sig-box" style={{ textAlign: "right" }}>
-                                <div className="sig-label">Received by,</div>
-                                <div className="sig-name">{customer?.name}</div>
-                                <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                <div className="sig-box">
+                                    <div className="sig-label">Forwarder / Driver,</div>
+                                    <div className="sig-name">
+                                        {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+                                    </div>
+                                    <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                </div>
+                                <div className="sig-box" style={{ textAlign: "right" }}>
+                                    <div className="sig-label">Received by,</div>
+                                    <div className="sig-name">{customer?.name}</div>
+                                    <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                </div>
                             </div>
                         </div>
+
+                        <div className="internal-info-footer">Internal information - Yellow - Mahadasha Group.</div>
                     </div>
                 </div>
             </DialogContent>
