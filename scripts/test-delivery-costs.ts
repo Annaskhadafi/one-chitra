@@ -44,9 +44,9 @@ async function main() {
             }))
         };
 
-        const result = await createDelivery(deliveryData);
+        const result = await createDelivery(deliveryData as any);
 
-        if (result.success && result.id) {
+        if (result.success && 'id' in result) {
             console.log(`Delivery created with ID: ${result.id}`);
 
             // Verify costs in DB
@@ -68,7 +68,7 @@ async function main() {
                 console.error('FAILURE: Cost gasoline mismatch.');
             }
 
-        } else {
+        } else if (!result.success && 'error' in result) {
             console.error('Failed to create delivery:', result.error);
         }
 

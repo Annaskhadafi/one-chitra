@@ -75,13 +75,13 @@ export function TransferDialog({ warehouses, products }: TransferDialogProps) {
                 productId: parseInt(values.productId),
                 quantity: parseInt(values.quantity),
                 notes: values.notes,
-            })
+            } as any)
 
             if (result.success) {
                 toast.success("Stock transferred successfully")
                 setOpen(false)
                 form.reset()
-            } else {
+            } else if (!result.success && 'error' in result) {
                 toast.error(result.error)
             }
         } catch (error) {
