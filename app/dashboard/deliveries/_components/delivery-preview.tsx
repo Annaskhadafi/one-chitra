@@ -64,6 +64,7 @@ interface DeliveryWithRelations {
         productId: number
         orderedQuantity: number
         deliveredQuantity: number
+        serialNumbers: string[] | null
         product: Product
     }[]
 }

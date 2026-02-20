@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import React, { useRef } from "react"
 import {
     Dialog,
     DialogContent,
@@ -36,6 +36,7 @@ interface DeliveryPdfData {
         productId: number
         orderedQuantity: number
         deliveredQuantity: number
+        serialNumbers: string[] | null
         product: Product
     }[]
 }
@@ -185,6 +186,29 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .col-item { width: 40px; }
                     .col-qty { width: 80px; text-align: center; }
                     .col-part { width: 120px; }
+
+                    .serial-grid {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                        margin-bottom: 20px;
+                        border: 1px solid #000;
+                    }
+                    .serial-grid th {
+                        background-color: #f3f4f6;
+                        border: 1px solid #000;
+                        padding: 4px;
+                        font-size: 8pt;
+                        text-align: center;
+                    }
+                    .serial-grid td {
+                        border: 1px solid #000;
+                        padding: 4px;
+                        font-size: 8pt;
+                        height: 25px;
+                        text-align: center;
+                        vertical-align: middle;
+                    }
                     
                     .note-section {
                         margin-top: 60px;
@@ -343,22 +367,56 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 </tr>
                             </thead>
                             <tbody>
-                                {delivery.items.map((item, idx) => (
-                                    <tr key={idx}>
-                                        <td>{(idx + 1).toString().padStart(2, '0')}</td>
-                                        <td>
-                                            <div style={{ textTransform: "uppercase" }}>
-                                                {item.product.materialDescription}
-                                            </div>
-                                        </td>
-                                        <td className="col-qty">
-                                            {item.deliveredQuantity} Assy
-                                        </td>
-                                        <td className="col-part">
-                                            {item.product.materialNumber}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {delivery.items.map((item, idx) => {
+                                    const isTyre = item.product.category?.toUpperCase() === "TYRE"
+
+                                    return (
+                                        <React.Fragment key={idx}>
+                                            <tr>
+                                                <td>{(idx + 1).toString().padStart(2, '0')}</td>
+                                                <td>
+                                                    <div style={{ textTransform: "uppercase" }}>
+                                                        {item.product.materialDescription}
+                                                    </div>
+                                                </td>
+                                                <td className="col-qty">
+                                                    {item.deliveredQuantity} Assy
+                                                </td>
+                                                <td className="col-part">
+                                                    {item.product.materialNumber}
+                                                </td>
+                                            </tr>
+                                            {isTyre && (
+                                                <tr>
+                                                    <td colSpan={4} style={{ padding: "0 5px 15px 45px" }}>
+                                                        <table className="serial-grid">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th colSpan={5}>SERIAL NUMBER</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {Array.from({ length: Math.ceil((item.serialNumbers?.length || item.deliveredQuantity) / 5) }).map((_, rowIdx) => (
+                                                                    <tr key={rowIdx}>
+                                                                        {Array.from({ length: 5 }).map((_, colIdx) => {
+                                                                            const snIdx = rowIdx * 5 + colIdx
+                                                                            const sn = item.serialNumbers?.[snIdx]
+                                                                            return (
+                                                                                <td key={colIdx}>
+                                                                                    {sn || ""}
+                                                                                </td>
+                                                                            )
+                                                                        })}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    )
+                                })}
                             </tbody>
                         </table>
 
