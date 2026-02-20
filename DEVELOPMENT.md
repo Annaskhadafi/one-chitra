@@ -119,7 +119,7 @@ If a table has a **Status** column:
 
 ## 📄 PDF & Print Preview Standards
 
-When creating features that require document printing (Invoice, DO, Reports):
+When creating features that require document printing (Invoice, DO, Reports, Quotation, Sticker, etc):
 
 ### 1. Unified CSS Styling (WYSIWYG)
 Always share the same CSS structure between the **Screen Preview** and the **Print Output** to ensure "What You See Is What You Get".
