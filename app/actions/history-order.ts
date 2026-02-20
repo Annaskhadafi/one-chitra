@@ -21,9 +21,6 @@ export interface HistoryOrderItem {
 
 export async function getHistoryOrder() {
     try {
-        // Fetch data ordered by newest first (descending). Use limit if necessary, 
-        // initially without limit or with a reasonable limit to prevent front-end crash 
-        // since the DB has ~120k+ rows! 
         // Exclude Singapore Branch per request
         const data = await db.select()
             .from(historyOrders)
@@ -33,8 +30,7 @@ export async function getHistoryOrder() {
                     notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
                 )
             )
-            .orderBy(desc(historyOrders.billingDate))
-            .limit(10000);
+            .orderBy(desc(historyOrders.billingDate));
 
         // Map database records to our interface keys
         const formattedData: HistoryOrderItem[] = data.map((item) => {
