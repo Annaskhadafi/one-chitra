@@ -25,6 +25,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { toast } from "sonner"
 import {
     PieChart,
     Pie,
@@ -486,8 +487,8 @@ export function CustomerSegmentationClient() {
 const ScoreBadge = ({ label, score }: { label: string; score: number }) => {
     const getBgColor = (s: number) =>
         s >= 4 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-        s >= 3 ? 'bg-blue-50 text-blue-700 border-blue-200' :
-        'bg-rose-50 text-rose-700 border-rose-200';
+            s >= 3 ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                'bg-rose-50 text-rose-700 border-rose-200';
 
     return (
         <div className={`flex flex-col items-center border rounded-md px-2 py-1 min-w-[32px] ${getBgColor(score)}`}>

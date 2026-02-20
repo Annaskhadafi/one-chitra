@@ -1,6 +1,8 @@
 "use server"
 
-import Papa from "papaparse"
+import { db } from "@/db"
+import { historyOrders } from "@/db/schema/history-orders"
+import { desc, notIlike, isNull, or } from "drizzle-orm"
 
 export interface HistoryOrderItem {
     customer_name: string;
@@ -19,29 +21,20 @@ export interface HistoryOrderItem {
 
 export async function getHistoryOrderForSegmentation() {
     try {
-        const response = await fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vT2fjeoEPzqBSU8PCBKLqaBDoxkeDqvKUQSfm0LY0tSkZUECvRePwBVlGZS-z7akbWpO_ipZDCJIj_r/pub?gid=327655631&single=true&output=csv", {
-            cache: "no-store",
-            next: { revalidate: 300 }
-        });
+        // Exclude Singapore Branch per request
+        const data = await db.select()
+            .from(historyOrders)
+            .where(
+                or(
+                    isNull(historyOrders.customerName),
+                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                )
+            )
+            .orderBy(desc(historyOrders.billingDate));
 
-        const csvText = await response.text();
-
-        const { data } = Papa.parse(csvText, {
-            header: true,
-            skipEmptyLines: true,
-            transformHeader: (header: string) => {
-                return header.trim();
-            }
-        });
-
-        const formattedData: HistoryOrderItem[] = data.map((item: Record<string, unknown>) => {
-            const revenueStr = item['Revenue in Doc Curr.'] || '0';
-
-            let revenue = 0;
-            if (revenueStr) {
-                const cleanStr = revenueStr.replace(/\./g, "").replace(/,/g, ".");
-                revenue = parseFloat(cleanStr);
-            }
+        // Map database records to our interface keys
+        const formattedData: HistoryOrderItem[] = data.map((item) => {
+            const revenue = item.revenueInDocCurr || 0;
 
             const revenueFormatted = new Intl.NumberFormat("id-ID", {
                 style: "currency",
@@ -51,24 +44,36 @@ export async function getHistoryOrderForSegmentation() {
             }).format(revenue);
 
             return {
-                customer_name: item['Customer Name'] || '',
-                material_no: item['Material No'] || '',
-                description: item['Material Description'] || '',
-                qty: parseInt(item['Qty'] || '0'),
+                customer_name: item.customerName || '',
+                material_no: item.materialNo || '',
+                description: item.materialDescription || '',
+                qty: item.qty || 0,
                 revenue: revenue,
                 revenue_formatted: revenueFormatted,
-                billing_date: item['BillingDate'] || '',
-                plant: item['Plant'] || '',
-                po_number: item['PO No.'] || '',
-                po_date: item['PO Date'] || '',
-                mat_grp_desc: item['Mat Grp Desc.'] || '',
-                salesman: item['Salesman'] || ''
+                billing_date: item.billingDate || '',
+                plant: item.plant || '',
+                po_number: item.poNo || '',
+                po_date: item.poDate || '',
+                mat_grp_desc: item.matGrpDesc || '',
+                salesman: item.salesman || ''
             };
+        });
+
+        // Sort the data chronologically descending (newest first)
+        formattedData.sort((a, b) => {
+            const dateA = new Date(a.billing_date).getTime();
+            const dateB = new Date(b.billing_date).getTime();
+
+            if (isNaN(dateA) && isNaN(dateB)) return 0;
+            if (isNaN(dateA)) return 1;
+            if (isNaN(dateB)) return -1;
+
+            return dateB - dateA;
         });
 
         return { success: true, data: formattedData };
     } catch (error) {
-        console.error("Failed to fetch history order:", error);
+        console.error("Failed to fetch history order for segmentation:", error);
         return { success: false, error: "Failed to fetch history order" };
     }
 }
