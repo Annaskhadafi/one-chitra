@@ -94,7 +94,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto p-0">
+            <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto p-0">
                 <DialogHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4">
                     <div className="flex items-center justify-between">
                         <DialogTitle className="text-lg">Delivery Order Preview — {delivery.deliveryNumber}</DialogTitle>
