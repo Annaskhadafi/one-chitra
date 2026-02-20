@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
     Sheet,
     SheetContent,
@@ -11,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import {
     Table,
     TableBody,
@@ -27,7 +29,8 @@ import {
     Package,
     FileText,
     Pencil,
-    CreditCard
+    CreditCard,
+    FileDown
 } from "lucide-react"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -45,11 +48,13 @@ interface DeliveryWithRelations {
     vehicleType: string | null
     warehouseId: number | null
     shippingAddress: string | null
+    notes: string | null
     createdAt: Date
     salesOrder: {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
+        poReceive: Date | null
         customer: Customer
     }
     warehouse: Warehouse | null
@@ -88,6 +93,8 @@ const statusLabels: Record<string, string> = {
 }
 
 export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPreviewProps) {
+    const [isPdfOpen, setIsPdfOpen] = useState(false)
+
     if (!delivery) return null
 
     return (
@@ -108,12 +115,18 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                                 <span className="text-xs text-muted-foreground capitalize">{delivery.deliveryType} Delivery</span>
                             </SheetDescription>
                         </div>
-                        <Link href={`/dashboard/deliveries/${delivery.id}`} onClick={() => onOpenChange(false)}>
-                            <Button size="sm" variant="outline" className="h-8 gap-1.5 hidden sm:flex">
-                                <Pencil className="h-3.5 w-3.5" />
-                                Edit
+                        <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setIsPdfOpen(true)}>
+                                <FileDown className="h-3.5 w-3.5" />
+                                Cetak PDF
                             </Button>
-                        </Link>
+                            <Link href={`/dashboard/deliveries/${delivery.id}`} onClick={() => onOpenChange(false)}>
+                                <Button size="sm" variant="outline" className="h-8 gap-1.5 hidden sm:flex">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </SheetHeader>
 
@@ -252,6 +265,14 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                     </Link>
                 </div>
             </SheetContent>
+
+            {delivery && (
+                <DeliveryPdfPreview
+                    delivery={delivery}
+                    open={isPdfOpen}
+                    onClose={() => setIsPdfOpen(false)}
+                />
+            )}
         </Sheet>
     )
 }

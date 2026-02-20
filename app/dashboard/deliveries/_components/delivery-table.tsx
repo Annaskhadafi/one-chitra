@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus } from "@/app/actions/delivery"
 import { DeliveryPreview } from "./delivery-preview"
+import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -44,7 +45,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -63,11 +64,13 @@ interface DeliveryWithRelations {
     vehicleType: string | null
     warehouseId: number | null
     shippingAddress: string | null
+    notes: string | null
     createdAt: Date
     salesOrder: {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
+        poReceive: Date | null
         customer: Customer
     }
     warehouse: Warehouse | null
@@ -119,6 +122,8 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     const [deleting, setDeleting] = useState<number | null>(null)
     const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const [pdfDelivery, setPdfDelivery] = useState<DeliveryWithRelations | null>(null)
+    const [isPdfOpen, setIsPdfOpen] = useState(false)
 
     // Stats calculation
     const totalDeliveries = data.length
@@ -416,6 +421,15 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                                         <Eye className="mr-2 h-4 w-4" />
                                                         Preview Detail
                                                     </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            setPdfDelivery(delivery)
+                                                            setIsPdfOpen(true)
+                                                        }}
+                                                    >
+                                                        <FileDown className="mr-2 h-4 w-4" />
+                                                        Cetak PDF
+                                                    </DropdownMenuItem>
                                                     <Link href={`/dashboard/deliveries/${delivery.id}`}>
                                                         <DropdownMenuItem>
                                                             <Pencil className="mr-2 h-4 w-4" />
@@ -474,6 +488,14 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 open={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
             />
+
+            {pdfDelivery && (
+                <DeliveryPdfPreview
+                    delivery={pdfDelivery}
+                    open={isPdfOpen}
+                    onClose={() => setIsPdfOpen(false)}
+                />
+            )}
         </div>
     )
 }
