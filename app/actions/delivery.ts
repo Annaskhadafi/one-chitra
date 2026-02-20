@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, salesOrderItems, stockLevels } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, salesOrderItems, stockLevels, warehouses, products } from "@/db/schema"
 import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -94,24 +94,76 @@ export async function getSalesOrdersForDelivery() {
 }
 
 export async function checkStockAvailability(warehouseId: number, items: { productId: number; quantity: number }[]) {
-    const results: { productId: number; requested: number; available: number; sufficient: boolean }[] = []
+    const results: {
+        productId: number;
+        requested: number;
+        available: number;
+        sufficient: boolean;
+        alternativeIds?: { id: number; stock: number; description: string }[]
+    }[] = []
+
+    console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
 
     for (const item of items) {
-        const stock = await db.select()
-            .from(stockLevels)
-            .where(and(
+        // 1. Get exact product stock
+        const stockRecord = await db.query.stockLevels.findFirst({
+            where: and(
                 eq(stockLevels.warehouseId, warehouseId),
                 eq(stockLevels.productId, item.productId),
-            ))
-            .limit(1)
+            )
+        })
 
-        const available = stock.length > 0 ? stock[0].totalStock : 0
-        results.push({
+        const available = stockRecord ? stockRecord.totalStock : 0
+        const sufficient = available >= item.quantity
+
+        const result: any = {
             productId: item.productId,
             requested: item.quantity,
             available,
-            sufficient: available >= item.quantity,
-        })
+            sufficient,
+        }
+
+        // 2. Smart Check: If 0 or insufficient, look for other products with same description
+        if (!sufficient) {
+            const currentProduct = await db.query.products.findFirst({
+                where: eq(products.id, item.productId)
+            })
+
+            if (currentProduct?.materialDescription) {
+                // Find other products with SAME description
+                const relatedProducts = await db.query.products.findMany({
+                    where: and(
+                        eq(products.materialDescription, currentProduct.materialDescription),
+                        sql`${products.id} != ${item.productId}`
+                    )
+                })
+
+                if (relatedProducts.length > 0) {
+                    const alternatives: { id: number; stock: number; description: string }[] = []
+                    for (const rel of relatedProducts) {
+                        const relStock = await db.query.stockLevels.findFirst({
+                            where: and(
+                                eq(stockLevels.warehouseId, warehouseId),
+                                eq(stockLevels.productId, rel.id)
+                            )
+                        })
+                        if (relStock && relStock.totalStock > 0) {
+                            alternatives.push({
+                                id: rel.id,
+                                stock: relStock.totalStock,
+                                description: rel.materialDescription || ""
+                            })
+                        }
+                    }
+                    if (alternatives.length > 0) {
+                        result.alternativeIds = alternatives
+                    }
+                }
+            }
+        }
+
+        console.log(`[STOCKS] Product ${item.productId}: available=${available}, alternatives=${result.alternativeIds?.length || 0}`)
+        results.push(result)
     }
 
     return results

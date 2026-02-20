@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2, Plus, Trash, Check, ChevronsUpDown } from "lucide-react"
+import { CalendarIcon, Loader2, Plus, Trash, Check, ChevronsUpDown, Package, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -49,7 +49,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { createStockTransfer } from "@/app/actions/stock-transfer"
+import { createStockTransfer, checkTransferStockAvailability } from "@/app/actions/stock-transfer"
 import { toast } from "sonner"
 
 const stockTransferItemSchema = z.object({
@@ -185,7 +185,38 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
         name: "items",
     })
 
+    const [stockResults, setStockResults] = useState<{ productId: number; available: number; sufficient: boolean }[]>([])
+    const [checkingStock, setCheckingStock] = useState(false)
+
     const isSubmitting = form.formState.isSubmitting
+
+    async function handleCheckStock() {
+        const sourceWhId = form.getValues("sourceWarehouseId")
+        const items = form.getValues("items")
+
+        if (!sourceWhId) {
+            toast.error("Please select a source warehouse first")
+            return
+        }
+
+        if (items.length === 0 || !items[0].productId) {
+            toast.error("Please add at least one product")
+            return
+        }
+
+        setCheckingStock(true)
+        try {
+            const results = await checkTransferStockAvailability(
+                parseInt(sourceWhId),
+                items.map(i => ({ productId: parseInt(i.productId), quantity: parseInt(i.quantity) }))
+            )
+            setStockResults(results)
+        } catch {
+            toast.error("Failed to check stock")
+        } finally {
+            setCheckingStock(false)
+        }
+    }
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
@@ -204,7 +235,7 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                 toast.success("Stock transferred successfully")
                 router.push("/dashboard/stock-transfers")
             } else {
-                toast.error(result.error)
+                toast.error("error" in result ? result.error : "Failed to transfer")
             }
         } catch (error) {
             toast.error("An unexpected error occurred")
@@ -315,11 +346,12 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
 
                     <div className="rounded-md border">
                         <Table>
-                            <TableHeader>
+                            <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     <TableHead className="w-[50px]">#</TableHead>
                                     <TableHead>Product</TableHead>
                                     <TableHead className="w-[150px]">Quantity</TableHead>
+                                    <TableHead className="w-[200px] text-right">Availability (Source)</TableHead>
                                     <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -361,6 +393,33 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                                                 )}
                                             />
                                         </TableCell>
+                                        <TableCell className="text-right">
+                                            {stockResults.find(r => r.productId === parseInt(form.getValues(`items.${index}.productId`))) ? (
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <div className={cn(
+                                                        "flex items-center gap-1.5 font-medium text-xs",
+                                                        stockResults.find(r => r.productId === parseInt(form.getValues(`items.${index}.productId`)))?.sufficient ? "text-green-600" : "text-red-600"
+                                                    )}>
+                                                        {stockResults.find(r => r.productId === parseInt(form.getValues(`items.${index}.productId`)))?.sufficient ? (
+                                                            <>
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                <span>Available</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <XCircle className="h-3 w-3" />
+                                                                <span>Insufficient</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {stockResults.find(r => r.productId === parseInt(form.getValues(`items.${index}.productId`)))?.available} in stock
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[10px] text-muted-foreground italic">Check stock...</span>
+                                            )}
+                                        </TableCell>
                                         <TableCell>
                                             <Button
                                                 type="button"
@@ -378,16 +437,33 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                         </Table>
                     </div>
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => append({ productId: "", quantity: "1" })}
-                    >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Product
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => append({ productId: "", quantity: "1" })}
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Product
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="mt-2"
+                            onClick={handleCheckStock}
+                            disabled={checkingStock || !form.getValues("sourceWarehouseId")}
+                        >
+                            {checkingStock ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Package className="mr-2 h-4 w-4" />
+                            )}
+                            Check Stock
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid gap-4">

@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels, customers, user, products } from "@/db/schema"
+import { salesOrders, salesOrderItems, stockLevels, customers, user, products, deliveries, deliveryItems, stockTransfers, stockTransferItems } from "@/db/schema"
 import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -137,7 +137,86 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                 }
             }
 
+            // Automation for VHS/Consignment
+            if (data.categoryPo === "VHS/Consignment" && data.warehouseId) {
+                const mainWarehouseId = 4 // Central Warehouse (Jakarta)
+
+                // 1. Create Stock Transfer from MAIN to Consignment Warehouse
+                const transferRef = `ST-AUTO-${Date.now()}`
+                const [transfer] = await tx.insert(stockTransfers).values({
+                    referenceNumber: transferRef,
+                    fromWarehouseId: mainWarehouseId,
+                    toWarehouseId: data.warehouseId,
+                    status: "completed",
+                    notes: `Automatic transfer for Consignment SO: ${invoiceNumber}`,
+                    transferDate: new Date(),
+                }).returning()
+
+                // 2. Create Delivery record (Scheduled)
+                const deliveryNumber = `DN-AUTO-${Date.now()}`
+                const [delivery] = await tx.insert(deliveries).values({
+                    deliveryNumber,
+                    salesOrderId: newOrder.id,
+                    warehouseId: data.warehouseId,
+                    scheduledDate: new Date(data.salesDate),
+                    status: "scheduled",
+                    deliveryType: "full",
+                    isExternal: false,
+                    notes: `Automatic delivery for Consignment SO: ${invoiceNumber}`,
+                }).returning()
+
+                if (data.items.length > 0) {
+                    // Item records for Transfer and Delivery
+                    await tx.insert(stockTransferItems).values(data.items.map(item => ({
+                        transferId: transfer.id,
+                        productId: item.productId,
+                        quantity: item.quantity,
+                    })))
+
+                    await tx.insert(deliveryItems).values(data.items.map(item => ({
+                        deliveryId: delivery.id,
+                        productId: item.productId,
+                        orderedQuantity: item.quantity,
+                        deliveredQuantity: item.quantity,
+                    })))
+
+                    // Stock Movement: Deduct from MAIN, Add to Consignment
+                    for (const item of data.items) {
+                        // Deduct from MAIN
+                        await tx.insert(stockLevels)
+                            .values({
+                                warehouseId: mainWarehouseId,
+                                productId: item.productId,
+                                totalStock: 0,
+                                bookedStock: 0,
+                                minStock: 0,
+                            })
+                            .onConflictDoUpdate({
+                                target: [stockLevels.warehouseId, stockLevels.productId],
+                                set: {
+                                    totalStock: sql`${stockLevels.totalStock} - ${item.quantity}`,
+                                    updatedAt: new Date(),
+                                },
+                            })
+
+                        // Add to Consignment (if not already handled by the "Book Stock" logic above)
+                        // Note: the "Book Stock" logic above already ensures a record exists for data.warehouseId
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, data.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+            }
+
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
     } catch (error) {

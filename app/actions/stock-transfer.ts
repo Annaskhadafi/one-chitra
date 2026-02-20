@@ -131,3 +131,40 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
         revalidatePath("/dashboard/warehouse")
     }
 }
+
+export async function checkTransferStockAvailability(warehouseId: number, items: { productId: number; quantity: number }[]) {
+    const results: { productId: number; requested: number; available: number; sufficient: boolean }[] = []
+
+    for (const item of items) {
+        const stock = await db.query.stockLevels.findFirst({
+            where: and(
+                eq(stockLevels.warehouseId, warehouseId),
+                eq(stockLevels.productId, item.productId),
+            )
+        })
+
+        const available = stock ? stock.totalStock : 0
+        results.push({
+            productId: item.productId,
+            requested: item.quantity,
+            available,
+            sufficient: available >= item.quantity,
+        })
+    }
+
+    return results
+}
+
+export async function getStockTransferStats() {
+    const transfers = await db.query.stockTransfers.findMany()
+
+    const totalTransfers = transfers.length
+    const completedTransfers = transfers.filter(t => t.status === "completed").length
+    const pendingTransfers = transfers.filter(t => t.status === "pending").length
+
+    return {
+        totalTransfers,
+        completedTransfers,
+        pendingTransfers,
+    }
+}

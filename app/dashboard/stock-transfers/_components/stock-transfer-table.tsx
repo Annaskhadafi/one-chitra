@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Search, ArrowRight, Package, Calendar } from "lucide-react"
 import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { cn } from "@/lib/utils"
 
 interface TransferItem {
     id: number
@@ -166,36 +167,71 @@ export function StockTransferTable({ data }: { data: Transfer[] }) {
                         ) : (
                             filtered.map((transfer) => (
                                 <TableRow key={transfer.id}>
-                                    <TableCell className="font-mono text-sm">
+                                    <TableCell className="font-mono text-sm font-medium">
                                         {transfer.referenceNumber}
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Calendar className="h-3 w-3" />
-                                            {format(transfer.transferDate, "MMM dd, yyyy")}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="text-sm">
-                                                <div className="font-medium">{transfer.fromWarehouse.sloc}</div>
-                                                <div className="text-xs text-muted-foreground">{transfer.fromWarehouse.description}</div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-1.5 text-sm font-medium">
+                                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                                {format(transfer.transferDate, "MMM dd, yyyy")}
                                             </div>
-                                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                            <div className="text-sm">
-                                                <div className="font-medium">{transfer.toWarehouse.sloc}</div>
-                                                <div className="text-xs text-muted-foreground">{transfer.toWarehouse.description}</div>
+                                            <div className="text-[10px] text-muted-foreground ml-5">
+                                                Created {format(transfer.createdAt, "HH:mm")}
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Package className="h-4 w-4 text-muted-foreground" />
-                                            <span className="font-medium">{transfer.items.length} items</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-bold font-mono px-1.5 py-0.5 bg-gray-100 rounded border w-fit">
+                                                    {transfer.fromWarehouse.sloc}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                                    {transfer.fromWarehouse.description}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col items-center">
+                                                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                                <div className="h-px w-4 bg-gray-200 mt-0.5" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-bold font-mono px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100 w-fit">
+                                                    {transfer.toWarehouse.sloc}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                                    {transfer.toWarehouse.description}
+                                                </span>
+                                            </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={transfer.status === "completed" ? "default" : "secondary"}>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                                                <Package className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold">{transfer.items.length}</span>
+                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">SKUs</span>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "capitalize px-2.5 py-0.5 border-transparent",
+                                                transfer.status === "completed" && "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+                                                transfer.status === "pending" && "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+                                                transfer.status === "cancelled" && "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "mr-1.5 h-1.5 w-1.5 rounded-full animate-pulse",
+                                                transfer.status === "completed" && "bg-emerald-600",
+                                                transfer.status === "pending" && "bg-amber-600",
+                                                transfer.status === "cancelled" && "bg-rose-600",
+                                            )} />
                                             {transfer.status}
                                         </Badge>
                                     </TableCell>
@@ -207,8 +243,14 @@ export function StockTransferTable({ data }: { data: Transfer[] }) {
             </div>
 
             {/* Footer Info */}
-            <div className="text-sm text-muted-foreground">
-                Showing {filtered.length} of {data.length} transfers
+            <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg border border-dashed">
+                <div className="flex gap-4">
+                    <span>Total Records: <strong>{data.length}</strong></span>
+                    <span>Filtered: <strong>{filtered.length}</strong></span>
+                </div>
+                <div>
+                    Last updated: {format(new Date(), "HH:mm:ss")}
+                </div>
             </div>
         </div>
     )
