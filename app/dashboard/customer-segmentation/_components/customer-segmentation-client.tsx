@@ -80,8 +80,8 @@ export function CustomerSegmentationClient() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSegment, setFilterSegment] = useState('All');
     const [loading, setLoading] = useState(true);
-    const [startDate, setStartDate] = useState('2024-01-01');
-    const [endDate, setEndDate] = useState('2024-12-31');
+    const [startDate, setStartDate] = useState('2025-01-01');
+    const [endDate, setEndDate] = useState('2025-12-31');
 
     const fetchData = useCallback(async () => {
         setLoading(true);
