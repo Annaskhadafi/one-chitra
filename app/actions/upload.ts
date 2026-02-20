@@ -37,6 +37,16 @@ export async function uploadImage(formData: FormData) {
         console.log(`[Upload] Writing file to: ${filepath}`)
         await writeFile(filepath, buffer)
 
+        // Verify write
+        try {
+            const { stat } = await import("fs/promises")
+            const fileStat = await stat(filepath)
+            console.log(`[Upload] Verification Success: File exists, size: ${fileStat.size} bytes`)
+        } catch (statError) {
+            console.error("[Upload] Verification Failed: File NOT found after write!", statError)
+            return { success: false, error: "File verification failed after write" }
+        }
+
         // Return relative URL for web access
         const url = `/${uploadDirName}/${filename}`
         console.log(`[Upload] Success! URL: ${url}`)
