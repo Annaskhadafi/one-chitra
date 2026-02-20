@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { updateDoMonitoringFields } from "@/app/actions/delivery"
+import { uploadImage } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -12,6 +13,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
     Select,
@@ -21,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { Upload, FileText, ExternalLink } from "lucide-react"
 
 export function EditDoDialog({
     delivery,
@@ -39,6 +42,9 @@ export function EditDoDialog({
         delivery?.invoiceDate ? new Date(delivery.invoiceDate).toISOString().slice(0, 10) : ""
     )
     const [doStatus, setDoStatus] = useState(delivery?.doStatus || "Pending")
+    const [remark, setRemark] = useState(delivery?.remark || "")
+    const [scanDoDocument, setScanDoDocument] = useState(delivery?.scanDoDocument || "")
+    const [isUploading, setIsUploading] = useState(false)
     const [saving, setSaving] = useState(false)
 
     // Sync state when dialog opens with selected delivery
@@ -48,6 +54,8 @@ export function EditDoDialog({
             setInvoiceNumber(delivery.invoiceNumber || "")
             setInvoiceDate(delivery.invoiceDate ? new Date(delivery.invoiceDate).toISOString().slice(0, 10) : "")
             setDoStatus(delivery.doStatus || "Pending")
+            setRemark(delivery.remark || "")
+            setScanDoDocument(delivery.scanDoDocument || "")
         }
     }, [delivery, open])
 
@@ -58,7 +66,9 @@ export function EditDoDialog({
             returnDoDate: returnDoDate ? new Date(returnDoDate) : null,
             invoiceNumber,
             invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
-            doStatus
+            doStatus,
+            remark,
+            scanDoDocument
         })
 
         if (res.success) {
@@ -68,6 +78,34 @@ export function EditDoDialog({
             toast.error(res.error || "Failed to update DO Info")
         }
         setSaving(false)
+    }
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("File size should be less than 5MB")
+            return
+        }
+
+        setIsUploading(true)
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            const result = await uploadImage(formData)
+            if (result.success && result.url) {
+                setScanDoDocument(result.url)
+                toast.success("Document uploaded successfully")
+            } else {
+                toast.error(result.error || "Failed to upload document")
+            }
+        } catch (error) {
+            toast.error("An error occurred during upload")
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     return (
@@ -119,6 +157,59 @@ export function EditDoDialog({
                             onChange={(e) => setInvoiceDate(e.target.value)}
                             className="col-span-3"
                         />
+                    </div>
+                    <div className="grid grid-cols-4 items-start gap-4">
+                        <Label className="text-right mt-3">Remark</Label>
+                        <Textarea
+                            value={remark}
+                            onChange={(e) => setRemark(e.target.value)}
+                            className="col-span-3 min-h-[80px]"
+                            placeholder="Add any remarks or notes..."
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">Scan DO</Label>
+                        <div className="col-span-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    id="scan-do-upload"
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                    disabled={isUploading || saving}
+                                />
+                                <Label
+                                    htmlFor="scan-do-upload"
+                                    className={`flex items-center justify-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md cursor-pointer transition-colors text-sm font-medium w-full ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    {isUploading ? (
+                                        <span className="animate-spin">⏳</span>
+                                    ) : (
+                                        <Upload className="h-4 w-4" />
+                                    )}
+                                    {isUploading ? "Uploading..." : "Upload Scan DO"}
+                                </Label>
+                            </div>
+                            {scanDoDocument && (
+                                <div className="flex items-center justify-between p-2 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 text-sm">
+                                    <div className="flex items-center gap-2 truncate text-blue-700 dark:text-blue-300">
+                                        <FileText className="h-4 w-4 flex-shrink-0" />
+                                        <span className="truncate flex-1">Document Attached</span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 text-blue-700 dark:text-blue-300 hover:text-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 ml-2 flex-shrink-0"
+                                        onClick={() => window.open(scanDoDocument, '_blank')}
+                                    >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        View
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <DialogFooter>

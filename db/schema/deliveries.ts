@@ -36,6 +36,8 @@ export const deliveries = pgTable("deliveries", {
     invoiceNumber: varchar("invoice_number", { length: 100 }),
     invoiceDate: timestamp("invoice_date"),
     doStatus: varchar("do_status", { length: 50 }).default("Pending"),
+    remark: text("remark"),
+    scanDoDocument: varchar("scan_do_document", { length: 255 }),
     fleetTripId: integer("fleet_trip_id"), // Reference to fleet_trips table (circular dependency avoided by not importing it here directly in definition if possible, or handling carefully)
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),

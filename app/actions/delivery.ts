@@ -389,6 +389,8 @@ export async function updateDoMonitoringFields(id: number, data: {
     invoiceNumber: string | null,
     invoiceDate: Date | null,
     doStatus: string,
+    remark?: string | null,
+    scanDoDocument?: string | null,
 }) {
     try {
         await db.update(deliveries)
@@ -397,6 +399,8 @@ export async function updateDoMonitoringFields(id: number, data: {
                 invoiceNumber: data.invoiceNumber || null,
                 invoiceDate: data.invoiceDate,
                 doStatus: data.doStatus,
+                remark: data.remark || null,
+                scanDoDocument: data.scanDoDocument || null,
                 updatedAt: new Date(),
             })
             .where(eq(deliveries.id, id))

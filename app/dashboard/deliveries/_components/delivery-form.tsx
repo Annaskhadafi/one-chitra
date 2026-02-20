@@ -621,7 +621,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                             <span className="font-medium text-base">{selectedSO.customer.name}</span>
                                         </div>
                                         <div>
-                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Reference (PO)</span>
+                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">No. PO Customer</span>
                                             <span className="font-medium">{selectedSO.customerPo || "-"}</span>
                                         </div>
                                         <div>

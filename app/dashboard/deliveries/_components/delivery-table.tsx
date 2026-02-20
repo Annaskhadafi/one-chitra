@@ -67,6 +67,7 @@ interface DeliveryWithRelations {
     salesOrder: {
         id: number
         invoiceNumber: string | null
+        customerPo: string | null
         customer: Customer
     }
     warehouse: Warehouse | null
@@ -305,7 +306,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                 />
                             </TableHead>
                             <TableHead>Delivery No</TableHead>
-                            <TableHead>SO Number</TableHead>
+                            <TableHead>No. PO Customer</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead>Scheduled</TableHead>
                             <TableHead>Status</TableHead>
@@ -338,7 +339,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                         {delivery.deliveryNumber || "-"}
                                     </TableCell>
                                     <TableCell className="font-mono text-sm">
-                                        {delivery.salesOrder?.invoiceNumber || "-"}
+                                        {delivery.salesOrder?.customerPo || "-"}
                                     </TableCell>
                                     <TableCell>
                                         {delivery.salesOrder?.customer?.name || "-"}

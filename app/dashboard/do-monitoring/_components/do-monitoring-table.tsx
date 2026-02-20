@@ -104,11 +104,14 @@ export function DoMonitoringTable({ data }: { data: any[] }) {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Delivery/DO No</TableHead>
+                            <TableHead>No. PO</TableHead>
+                            <TableHead>Tgl Pengiriman</TableHead>
                             <TableHead>Return Date</TableHead>
                             <TableHead>DO Status</TableHead>
                             <TableHead>Invoice No</TableHead>
                             <TableHead>Invoice Date</TableHead>
                             <TableHead>Customer</TableHead>
+                            <TableHead>Remark</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -130,6 +133,12 @@ export function DoMonitoringTable({ data }: { data: any[] }) {
                                             SO: {delivery.salesOrder?.invoiceNumber || "-"}
                                         </div>
                                     </TableCell>
+                                    <TableCell className="font-mono text-sm">
+                                        {delivery.salesOrder?.customerPo || "-"}
+                                    </TableCell>
+                                    <TableCell>
+                                        {delivery.deliveryDate ? new Date(delivery.deliveryDate).toLocaleDateString("id-ID") : "-"}
+                                    </TableCell>
                                     <TableCell>
                                         {delivery.returnDoDate ? new Date(delivery.returnDoDate).toLocaleDateString("id-ID") : "-"}
                                     </TableCell>
@@ -149,6 +158,9 @@ export function DoMonitoringTable({ data }: { data: any[] }) {
                                     </TableCell>
                                     <TableCell>
                                         {delivery.salesOrder?.customer?.name || "-"}
+                                    </TableCell>
+                                    <TableCell className="max-w-[200px] truncate" title={delivery.remark || ""}>
+                                        {delivery.remark || "-"}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">

@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
+import { uploadImage } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -38,7 +39,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, Upload, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse } from "@/lib/types"
@@ -68,6 +69,7 @@ interface SalesOrderFormProps {
         poReceive?: Date | null
         categoryPo?: string | null
         categoryProduct?: string | null
+        poDocument?: string | null
         status: string
         termsConditions: string | null
         notes: string | null
@@ -116,6 +118,8 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     const [categoryProduct, setCategoryProduct] = useState(initialData?.categoryProduct || "Prime Product")
     const [categories, setCategories] = useState<string[]>(["Prime Product", "Product Accessories", "Wheel & Rim", "SPM"])
     const [categoryOpen, setCategoryOpen] = useState(false)
+    const [poDocument, setPoDocument] = useState(initialData?.poDocument || "")
+    const [isUploading, setIsUploading] = useState(false)
 
     useEffect(() => {
         getSalesOrderCategories().then(fetched => {
@@ -164,6 +168,29 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         () => warehouses.find(w => w.id === warehouseId),
         [warehouses, warehouseId]
     )
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploading(true)
+        const formData = new FormData()
+        formData.append("file", file)
+
+        try {
+            const result = await uploadImage(formData)
+            if (result.success && result.url) {
+                setPoDocument(result.url)
+                toast.success("PO Document uploaded successfully")
+            } else {
+                toast.error(result.error || "Failed to upload document")
+            }
+        } catch (error) {
+            toast.error("An error occurred during upload")
+        } finally {
+            setIsUploading(false)
+        }
+    }
 
     // Add product to order
     const addProduct = useCallback((product: Product) => {
@@ -226,6 +253,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 poReceive: poReceive || undefined,
                 categoryPo,
                 categoryProduct,
+                poDocument: poDocument || undefined,
                 status: status as "draft" | "confirmed" | "completed" | "cancelled",
                 termsConditions: termsConditions || undefined,
                 notes: notes || undefined,
@@ -434,6 +462,45 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     <SelectItem value="VHS/Consignment">VHS/Consignment</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        {/* Upload PO */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold text-blue-600">Upload PO (PDF/Image)</Label>
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input
+                                    type="file"
+                                    accept=".pdf,image/*"
+                                    className="hidden"
+                                    id="po-upload"
+                                    onChange={handleFileUpload}
+                                    disabled={isUploading}
+                                />
+                                <Label
+                                    htmlFor="po-upload"
+                                    className="flex items-center justify-center w-full px-4 py-2 border border-input rounded-md cursor-pointer bg-background hover:bg-muted font-medium text-sm transition-colors"
+                                >
+                                    {isUploading ? "Uploading..." : "Choose File"}
+                                </Label>
+                                {poDocument && (
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            window.open(poDocument, "_blank")
+                                        }}
+                                        title="Preview PDF"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
+                            {poDocument && (
+                                <p className="text-xs text-green-600 font-medium truncate mt-1">
+                                    Document attached.
+                                </p>
+                            )}
                         </div>
 
                         {/* Category Product */}

@@ -15,6 +15,7 @@ export const salesOrders = pgTable("sales_orders", {
     poReceive: timestamp("po_receive"),
     categoryPo: varchar("category_po", { length: 50 }),
     categoryProduct: varchar("category_product", { length: 50 }),
+    poDocument: varchar("po_document", { length: 255 }),
     status: varchar("status", { length: 20 }).default("draft").notNull(),
     termsConditions: text("terms_conditions"),
     notes: text("notes"),

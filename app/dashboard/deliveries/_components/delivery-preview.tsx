@@ -49,6 +49,7 @@ interface DeliveryWithRelations {
     salesOrder: {
         id: number
         invoiceNumber: string | null
+        customerPo: string | null
         customer: Customer
     }
     warehouse: Warehouse | null
@@ -131,7 +132,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                                     </p>
                                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                         <FileText className="h-3 w-3" />
-                                        SO: {delivery.salesOrder?.invoiceNumber || "N/A"}
+                                        No. PO: {delivery.salesOrder?.customerPo || "-"}
                                     </div>
                                 </div>
                             </div>
