@@ -19,8 +19,15 @@ export async function uploadImage(formData: FormData) {
         const buffer = Buffer.from(bytes)
 
         // Ensure directory exists
-        console.log(`[Upload] Ensuring directory exists: ${uploadDir}`)
-        await mkdir(uploadDir, { recursive: true })
+        console.log(`[Upload] process.cwd(): ${process.cwd()}`)
+        console.log(`[Upload] Target Dir: ${uploadDir}`)
+
+        try {
+            await mkdir(uploadDir, { recursive: true })
+        } catch (mkdirError) {
+            console.error("[Upload] mkdir failed:", mkdirError)
+            return { success: false, error: `Failed to create directory: ${(mkdirError as Error).message}` }
+        }
 
         // Generate unique filename
         const ext = file.name.split(".").pop()
@@ -41,11 +48,12 @@ export async function uploadImage(formData: FormData) {
             message: err.message,
             code: err.code,
             path: err.path,
-            uploadDir
+            uploadDir,
+            stack: err.stack
         })
         return {
             success: false,
-            error: `Upload failed: ${err.message}. Check server permissions for ${uploadDir}`
+            error: `Upload failed: ${err.message}. (Code: ${err.code || 'UNKNOWN'})`
         }
     }
 }
