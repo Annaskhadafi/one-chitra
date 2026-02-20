@@ -241,6 +241,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                         flex-direction: column;
                         height: 120px;
                         justify-content: space-between;
+                        text-align: center;
                     }
                     
                     .sig-label {
@@ -315,11 +316,10 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             <div className="ship-to">
                                 <span className="ship-to-label">Ship To:</span>
                                 <div className="customer-name">{customer?.name}</div>
-                                <div className="site-info">Site : {delivery.warehouse?.description || "-"}</div>
-                                <div className="address-box">
-                                    {address || delivery.shippingAddress || "-"}
+                                <div className="site-info" style={{ fontWeight: "normal" }}>
+                                    Site : {address || delivery.shippingAddress || "-"}
                                 </div>
-                                <div className="contact-info">
+                                <div className="contact-info" style={{ marginTop: "10px" }}>
                                     <div>PIC: {customer?.contactName || "-"}</div>
                                     <div>Email : {customer?.email || "-"}</div>
                                     <div>HP : -</div>
@@ -397,14 +397,16 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                {Array.from({ length: Math.ceil((item.serialNumbers?.length || item.deliveredQuantity) / 5) }).map((_, rowIdx) => (
+                                                                {Array.from({ length: Math.ceil(item.deliveredQuantity / 5) }).map((_, rowIdx) => (
                                                                     <tr key={rowIdx}>
                                                                         {Array.from({ length: 5 }).map((_, colIdx) => {
                                                                             const snIdx = rowIdx * 5 + colIdx
                                                                             const sn = item.serialNumbers?.[snIdx]
+                                                                            const isVisible = snIdx < item.deliveredQuantity
+
                                                                             return (
-                                                                                <td key={colIdx}>
-                                                                                    {sn || item.product.materialNumber}
+                                                                                <td key={colIdx} style={{ border: isVisible ? "1px solid #000" : "none" }}>
+                                                                                    {isVisible ? (sn || item.product.materialNumber) : ""}
                                                                                 </td>
                                                                             )
                                                                         })}
@@ -442,10 +444,10 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             </div>
                             <div className="sig-box">
                                 <div className="sig-label">Forwarder / Driver,</div>
-                                <div className="sig-name" style={{ textAlign: "center" }}>
+                                <div className="sig-name">
                                     {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
                                 </div>
-                                <div style={{ marginTop: "20px", textAlign: "center" }}>( Name, Sign & stamp )</div>
+                                <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
                             </div>
                             <div className="sig-box" style={{ textAlign: "right" }}>
                                 <div className="sig-label">Received by,</div>
