@@ -113,56 +113,54 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
             )
         })
 
-        const available = stockRecord ? stockRecord.totalStock : 0
-        const sufficient = available >= item.quantity
+        const directAvailable = stockRecord ? stockRecord.totalStock : 0
 
-        const result: any = {
-            productId: item.productId,
-            requested: item.quantity,
-            available,
-            sufficient,
-        }
+        let totalAvailable = directAvailable
+        const alternatives: { id: number; stock: number; description: string }[] = []
 
-        // 2. Smart Check: If 0 or insufficient, look for other products with same description
-        if (!sufficient) {
-            const currentProduct = await db.query.products.findFirst({
-                where: eq(products.id, item.productId)
+        // 2. Smart Check: look for other products with same description
+        const currentProduct = await db.query.products.findFirst({
+            where: eq(products.id, item.productId)
+        })
+
+        if (currentProduct?.materialDescription) {
+            // Find other products with SAME description
+            const relatedProducts = await db.query.products.findMany({
+                where: and(
+                    eq(products.materialDescription, currentProduct.materialDescription),
+                    sql`${products.id} != ${item.productId}`
+                )
             })
 
-            if (currentProduct?.materialDescription) {
-                // Find other products with SAME description
-                const relatedProducts = await db.query.products.findMany({
+            for (const rel of relatedProducts) {
+                const relStock = await db.query.stockLevels.findFirst({
                     where: and(
-                        eq(products.materialDescription, currentProduct.materialDescription),
-                        sql`${products.id} != ${item.productId}`
+                        eq(stockLevels.warehouseId, warehouseId),
+                        eq(stockLevels.productId, rel.id)
                     )
                 })
-
-                if (relatedProducts.length > 0) {
-                    const alternatives: { id: number; stock: number; description: string }[] = []
-                    for (const rel of relatedProducts) {
-                        const relStock = await db.query.stockLevels.findFirst({
-                            where: and(
-                                eq(stockLevels.warehouseId, warehouseId),
-                                eq(stockLevels.productId, rel.id)
-                            )
-                        })
-                        if (relStock && relStock.totalStock > 0) {
-                            alternatives.push({
-                                id: rel.id,
-                                stock: relStock.totalStock,
-                                description: rel.materialDescription || ""
-                            })
-                        }
-                    }
-                    if (alternatives.length > 0) {
-                        result.alternativeIds = alternatives
-                    }
+                if (relStock && relStock.totalStock > 0) {
+                    alternatives.push({
+                        id: rel.id,
+                        stock: relStock.totalStock,
+                        description: rel.materialDescription || ""
+                    })
+                    totalAvailable += relStock.totalStock
                 }
             }
         }
 
-        console.log(`[STOCKS] Product ${item.productId}: available=${available}, alternatives=${result.alternativeIds?.length || 0}`)
+        const sufficient = totalAvailable >= item.quantity
+
+        const result: any = {
+            productId: item.productId,
+            requested: item.quantity,
+            available: directAvailable,
+            sufficient,
+            alternativeIds: alternatives.length > 0 ? alternatives : undefined
+        }
+
+        console.log(`[STOCKS] Product ${item.productId}: available=${directAvailable}, alternatives=${alternatives.length}`)
         results.push(result)
     }
 

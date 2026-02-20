@@ -729,10 +729,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         stock.sufficient ? "text-green-600" : "text-red-600"
                                                                     )}>
                                                                         {stock.sufficient ? (
-                                                                            <>
-                                                                                <CheckCircle2 className="h-4 w-4" />
-                                                                                <span>Available</span>
-                                                                            </>
+                                                                            <div className="flex flex-col items-end">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <CheckCircle2 className="h-4 w-4" />
+                                                                                    <span>Available</span>
+                                                                                </div>
+                                                                                {stock.alternativeIds && stock.alternativeIds.length > 0 && stock.available === 0 && (
+                                                                                    <div className="mt-1 flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                                        <span>Found {stock.alternativeIds[0].stock} in duplicate record</span>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
                                                                         ) : (
                                                                             <div className="flex flex-col items-end">
                                                                                 <div className="flex items-center gap-1">
