@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { updateDoMonitoringFields } from "@/app/actions/delivery"
-import { uploadImage } from "@/app/actions/upload"
+import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -94,7 +94,7 @@ export function EditDoDialog({
         formData.append('file', file)
 
         try {
-            const result = await uploadImage(formData)
+            const result = await uploadFile(formData)
             if (result.success && result.url) {
                 setScanDoDocument(result.url)
                 toast.success("Document uploaded successfully")

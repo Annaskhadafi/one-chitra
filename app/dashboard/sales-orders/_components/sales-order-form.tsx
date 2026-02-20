@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
-import { uploadImage } from "@/app/actions/upload"
+import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -178,7 +178,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         formData.append("file", file)
 
         try {
-            const result = await uploadImage(formData)
+            const result = await uploadFile(formData)
             if (result.success && result.url) {
                 setPoDocument(result.url)
                 toast.success("PO Document uploaded successfully")

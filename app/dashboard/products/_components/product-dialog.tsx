@@ -281,8 +281,8 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                                         formData.append("file", file)
                                         setIsLoading(true)
                                         try {
-                                            const { uploadImage } = await import("@/app/actions/upload")
-                                            const res = await uploadImage(formData)
+                                            const { uploadFile } = await import("@/app/actions/upload")
+                                            const res = await uploadFile(formData)
                                             if (res.success && res.url) {
                                                 form.setValue("imageUrl", res.url)
                                                 toast.success("Image uploaded")

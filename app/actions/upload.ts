@@ -4,7 +4,7 @@ import { writeFile, mkdir } from "fs/promises"
 import { join, resolve } from "path"
 import { v4 as uuidv4 } from "uuid"
 
-export async function uploadImage(formData: FormData) {
+export async function uploadFile(formData: FormData) {
     const uploadDirName = "uploads"
     const publicDir = resolve(process.cwd(), "public")
     const uploadDir = join(publicDir, uploadDirName)
