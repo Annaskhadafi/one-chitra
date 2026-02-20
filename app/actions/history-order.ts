@@ -59,6 +59,18 @@ export async function getHistoryOrder() {
             };
         });
 
+        // Sort the data chronologically descending (newest first)
+        formattedData.sort((a, b) => {
+            const dateA = new Date(a.billing_date).getTime();
+            const dateB = new Date(b.billing_date).getTime();
+
+            if (isNaN(dateA) && isNaN(dateB)) return 0;
+            if (isNaN(dateA)) return 1;
+            if (isNaN(dateB)) return -1;
+
+            return dateB - dateA;
+        });
+
         return { success: true, data: formattedData };
     } catch (error) {
         console.error("Failed to fetch history order:", error);

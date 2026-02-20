@@ -73,6 +73,23 @@ export function HistoryOrderTable() {
         "billing_date", "customer_name", "po_number", "material_no", "description", "qty", "revenue", "salesman"
     ]);
 
+    // Load from localStorage on mount
+    React.useEffect(() => {
+        const savedColumns = localStorage.getItem("historyOrderVisibleColumns");
+        if (savedColumns) {
+            try {
+                setVisibleColumns(JSON.parse(savedColumns));
+            } catch (e) {
+                console.error("Failed to parse saved columns", e);
+            }
+        }
+    }, []);
+
+    // Save to localStorage when changed
+    React.useEffect(() => {
+        localStorage.setItem("historyOrderVisibleColumns", JSON.stringify(visibleColumns));
+    }, [visibleColumns]);
+
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1)
     const itemsPerPage = 50
