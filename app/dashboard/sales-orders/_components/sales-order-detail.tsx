@@ -31,6 +31,9 @@ interface SalesOrderWithRelations {
     customerPo: string | null
     customerId: number
     salesDate: Date
+    poReceive: Date | null
+    categoryPo: string | null
+    categoryProduct: string | null
     status: string
     discount: string
     shipping: string
@@ -217,6 +220,19 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                                 </div>
                                                 {order.createdByUser?.name || "-"}
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category PO</div>
+                                            <Badge variant="outline" className="font-medium">{order.categoryPo || "Normal"}</Badge>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category Product</div>
+                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
+                                                {order.categoryProduct || "-"}
+                                            </Badge>
                                         </div>
                                     </div>
 

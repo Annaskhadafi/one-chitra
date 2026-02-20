@@ -50,6 +50,7 @@ interface SalesOrderWithRelations {
     salesDate: Date
     poReceive: Date | null
     categoryPo: string | null
+    categoryProduct: string | null
     status: string
     discount: string
     shipping: string
@@ -298,9 +299,9 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                 <TableHead className="w-[160px]">Invoice Number</TableHead>
                                 <TableHead>No PO Customer</TableHead>
                                 <TableHead>Customer</TableHead>
-                                <TableHead>Customer</TableHead>
                                 <TableHead>Date PO</TableHead>
                                 <TableHead>PO Receive</TableHead>
+                                <TableHead>Cat. PO</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead>Items</TableHead>
                                 <TableHead>Grand Total</TableHead>
@@ -312,7 +313,7 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                         <TableBody>
                             {filteredData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={10} className="h-24 text-center">
+                                    <TableCell colSpan={13} className="h-24 text-center">
                                         No sales orders found.
                                     </TableCell>
                                 </TableRow>
@@ -348,6 +349,11 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{order.categoryPo || "Normal"}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                                {order.categoryProduct || "-"}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">{order.items.length} items</Badge>
