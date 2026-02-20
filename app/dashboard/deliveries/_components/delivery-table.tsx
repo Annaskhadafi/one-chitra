@@ -45,11 +45,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface DeliveryWithRelations {
     id: number
@@ -117,6 +118,11 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function DeliveryTable({ data }: DeliveryTableProps) {
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('deliveries', 'edit')
+    const canDelete = hasResourcePermission('deliveries', 'delete')
+    const canView = hasResourcePermission('deliveries', 'view')
+
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -184,6 +190,47 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
             } else {
                 toast.error(result.error)
             }
+        }
+    }
+
+    const handleExport = () => {
+        const headers = ["Delivery No", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
+        const csvData = filtered.map(d => [
+            d.deliveryNumber || "",
+            d.salesOrder?.customerPo || "",
+            d.salesOrder?.customer?.name || "",
+            new Date(d.scheduledDate).toLocaleDateString("id-ID"),
+            d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
+            statusLabels[d.status] || d.status,
+            d.deliveryType,
+            d.driverName || "",
+            d.vehicleNumber || "",
+            d.warehouse?.sloc || "",
+            d.createdByUser?.name || ""
+        ])
+
+        const csvContent = [
+            headers.join(","),
+            ...csvData.map(row => row.join(","))
+        ].join("\n")
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const link = document.createElement("a")
+        const url = URL.createObjectURL(blob)
+        link.setAttribute("href", url)
+        link.setAttribute("download", `deliveries-${new Date().toISOString().slice(0, 10)}.csv`)
+        link.style.visibility = "hidden"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    const handleUpdateStatus = async (id: number, status: string) => {
+        const result = await bulkUpdateDeliveryStatus([id], status)
+        if (result.success) {
+            toast.success("Status updated")
+        } else {
+            toast.error(result.error)
         }
     }
 
@@ -285,20 +332,26 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                         className="pl-10"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                        <SelectItem value="ready">Ready</SelectItem>
-                        <SelectItem value="partial">Partial</SelectItem>
-                        <SelectItem value="in_transit">In Transit</SelectItem>
-                        <SelectItem value="delivered">Delivered</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex bg-items-center gap-2">
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export CSV
+                    </Button>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="All Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
+                            <SelectItem value="ready">Ready</SelectItem>
+                            <SelectItem value="partial">Partial</SelectItem>
+                            <SelectItem value="in_transit">In Transit</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div className="rounded-md border">
@@ -366,9 +419,31 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                         }) : "-"}
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={statusVariants[delivery.status] || "secondary"}>
-                                            {statusLabels[delivery.status] || delivery.status}
-                                        </Badge>
+                                        {canEdit ? (
+                                            <Select
+                                                defaultValue={delivery.status}
+                                                onValueChange={(value) => handleUpdateStatus(delivery.id, value)}
+                                            >
+                                                <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[delivery.status] === 'default' ? 'bg-primary text-primary-foreground' :
+                                                    statusVariants[delivery.status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                                                        statusVariants[delivery.status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
+                                                    }`}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                                                    <SelectItem value="ready">Ready</SelectItem>
+                                                    <SelectItem value="partial">Partial</SelectItem>
+                                                    <SelectItem value="in_transit">In Transit</SelectItem>
+                                                    <SelectItem value="delivered">Delivered</SelectItem>
+                                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <Badge variant={statusVariants[delivery.status] || "secondary"}>
+                                                {statusLabels[delivery.status] || delivery.status}
+                                            </Badge>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className="capitalize">
@@ -413,15 +488,17 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem
-                                                        onClick={() => {
-                                                            setPreviewDelivery(delivery)
-                                                            setIsPreviewOpen(true)
-                                                        }}
-                                                    >
-                                                        <Eye className="mr-2 h-4 w-4" />
-                                                        Preview Detail
-                                                    </DropdownMenuItem>
+                                                    {canEdit && (
+                                                        <DropdownMenuItem
+                                                            onClick={() => {
+                                                                setPreviewDelivery(delivery)
+                                                                setIsPreviewOpen(true)
+                                                            }}
+                                                        >
+                                                            <Eye className="mr-2 h-4 w-4" />
+                                                            Preview Detail
+                                                        </DropdownMenuItem>
+                                                    )}
                                                     <DropdownMenuItem
                                                         onClick={() => {
                                                             setPdfDelivery(delivery)
@@ -431,41 +508,47 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                                         <FileDown className="mr-2 h-4 w-4" />
                                                         Cetak PDF
                                                     </DropdownMenuItem>
-                                                    <Link href={`/dashboard/deliveries/${delivery.id}`}>
-                                                        <DropdownMenuItem>
-                                                            <Pencil className="mr-2 h-4 w-4" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                    </Link>
-                                                    <DropdownMenuSeparator />
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Delete
+                                                    {canEdit && (
+                                                        <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                                            <DropdownMenuItem>
+                                                                <Pencil className="mr-2 h-4 w-4" />
+                                                                Edit
                                                             </DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This will permanently delete delivery{" "}
-                                                                    <strong>{delivery.deliveryNumber}</strong>. This action
-                                                                    cannot be undone.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    onClick={() => handleDelete(delivery.id)}
-                                                                    disabled={deleting === delivery.id}
-                                                                    className="bg-red-600 hover:bg-red-700"
-                                                                >
-                                                                    {deleting === delivery.id ? "Deleting..." : "Delete"}
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                        </Link>
+                                                    )}
+                                                    {canDelete && (
+                                                        <>
+                                                            <DropdownMenuSeparator />
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                                        Delete
+                                                                    </DropdownMenuItem>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            This will permanently delete delivery{" "}
+                                                                            <strong>{delivery.deliveryNumber}</strong>. This action
+                                                                            cannot be undone.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            onClick={() => handleDelete(delivery.id)}
+                                                                            disabled={deleting === delivery.id}
+                                                                            className="bg-red-600 hover:bg-red-700"
+                                                                        >
+                                                                            {deleting === delivery.id ? "Deleting..." : "Delete"}
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </>
+                                                    )}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </div>
@@ -477,12 +560,14 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 </Table>
             </div>
 
-            <BulkActions
-                selectedCount={selectedIds.length}
-                onDelete={handleBulkDelete}
-                onEdit={handleBulkUpdateStatus}
-                entityName="delivery"
-            />
+            {selectedIds.length > 0 && (canEdit || canDelete) && (
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={canDelete ? handleBulkDelete : () => { }}
+                    onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
+                    entityName="delivery"
+                />
+            )}
 
             <DeliveryPreview
                 delivery={previewDelivery}

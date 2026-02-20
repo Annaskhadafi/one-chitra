@@ -12,7 +12,7 @@ import {
     getSortedRowModel,
     useReactTable,
 } from "@tanstack/react-table"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Download } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -35,6 +35,7 @@ import { BillingImportDialog } from "./billing-import-dialog"
 import { BillingSheet } from "./billing-sheet"
 import { deleteBillingRecord } from "@/app/actions/billing"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/use-permissions"
 // import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog" 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +73,50 @@ export function BillingTable({ data }: { data: any[] }) {
         }
     }
 
-    const columns = React.useMemo(() => getColumns(handleEdit, handleDelete, handleView), [])
+    const handleExport = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const headers = ["Customer", "PO No", "PO Date", "Delivery No", "Material No", "Description", "Qty", "Price", "Amount"]
+        const csvData = table.getFilteredRowModel().rows.map(row => {
+            const d = row.original
+            return [
+                d.customer || "",
+                d.poNo || "",
+                d.poDate ? new Date(d.poDate).toLocaleDateString("id-ID") : "",
+                d.deliveryNo || "",
+                d.materialNo || "",
+                d.description || "",
+                d.qty || 0,
+                d.price || 0,
+                d.amount || 0
+            ]
+        })
+
+        const csvContent = [
+            headers.join(","),
+            ...csvData.map(row => row.join(","))
+        ].join("\n")
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const link = document.createElement("a")
+        const url = URL.createObjectURL(blob)
+        link.setAttribute("href", url)
+        link.setAttribute("download", `billing-${new Date().toISOString().slice(0, 10)}.csv`)
+        link.style.visibility = "hidden"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    const { hasResourcePermission } = usePermissions()
+    const canCreate = hasResourcePermission('billing', 'create')
+    const canEdit = hasResourcePermission('billing', 'edit')
+    const canDelete = hasResourcePermission('billing', 'delete')
+
+    const columns = React.useMemo(() => getColumns(
+        canEdit ? handleEdit : () => toast.error("No permission"),
+        canDelete ? handleDelete : () => toast.error("No permission"),
+        handleView
+    ), [canEdit, canDelete])
 
     const table = useReactTable({
         data,
@@ -117,7 +161,11 @@ export function BillingTable({ data }: { data: any[] }) {
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    <BillingImportDialog />
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export CSV
+                    </Button>
+                    {canCreate && <BillingImportDialog />}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="ml-auto">

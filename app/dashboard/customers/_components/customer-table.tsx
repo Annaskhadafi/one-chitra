@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/use-permissions"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -33,6 +34,11 @@ import {
 import { Customer } from "@/lib/types"
 
 export function CustomerTable({ customers: initialCustomers }: { customers: Customer[] }) {
+    const { hasResourcePermission } = usePermissions()
+    const canCreate = hasResourcePermission('customers', 'create')
+    const canEdit = hasResourcePermission('customers', 'edit')
+    const canDelete = hasResourcePermission('customers', 'delete')
+
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
 
@@ -125,8 +131,12 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                     />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <CustomerCSVUpload />
-                    <CustomerDialog />
+                    {canCreate && (
+                        <>
+                            <CustomerCSVUpload />
+                            <CustomerDialog />
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -182,36 +192,40 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
-                                                <CustomerDialog
-                                                    customer={item}
-                                                    trigger={
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    }
-                                                />
+                                                {canEdit && (
+                                                    <CustomerDialog
+                                                        customer={item}
+                                                        trigger={
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                )}
 
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Are you sure you want to delete {item.name}? This action cannot be undone.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                                Delete
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                {canDelete && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Are you sure you want to delete {item.name}? This action cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                    Delete
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -222,12 +236,14 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                 </div>
             </div>
 
-            <BulkActions
-                selectedCount={selectedIds.length}
-                onDelete={handleBulkDelete}
-                entityName="customer"
-                showEdit={false}
-            />
+            {selectedIds.length > 0 && (canDelete) && (
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={handleBulkDelete}
+                    entityName="customer"
+                    showEdit={false}
+                />
+            )}
         </div>
     )
 }

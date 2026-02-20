@@ -16,7 +16,7 @@ import { UserRoleDialog } from "./user-role-dialog"
 import { User } from "@/lib/types"
 import { useState } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Users, Shield, UserCheck, Trash2, Plus, Download } from "lucide-react"
+import { Users, Shield, UserCheck, Trash2 } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser } from "@/app/actions/users"
@@ -24,6 +24,7 @@ import { AddUserDialog } from "./add-user-dialog"
 import { ImportUsersDialog } from "./import-users-dialog"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface UserListProps {
     users: User[]
@@ -31,6 +32,11 @@ interface UserListProps {
 }
 
 export function UserList({ users, roles }: UserListProps) {
+    const { hasResourcePermission } = usePermissions()
+    const canCreate = hasResourcePermission('users', 'create')
+    const canEdit = hasResourcePermission('users', 'edit')
+    const canDelete = hasResourcePermission('users', 'delete')
+
     const [selectedIds, setSelectedIds] = useState<string[]>([])
 
     // Stats calculation
@@ -116,10 +122,12 @@ export function UserList({ users, roles }: UserListProps) {
                 </div>
             </div>
 
-            <div className="flex justify-end gap-2">
-                <ImportUsersDialog />
-                <AddUserDialog roles={roles} />
-            </div>
+            {canCreate && (
+                <div className="flex justify-end gap-2">
+                    <ImportUsersDialog />
+                    <AddUserDialog roles={roles} />
+                </div>
+            )}
 
             <div className="border rounded-md">
                 <Table>
@@ -161,24 +169,28 @@ export function UserList({ users, roles }: UserListProps) {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end items-center gap-2">
-                                        <UserRoleDialog
-                                            userId={user.id}
-                                            currentRole={user.role}
-                                            roles={roles}
-                                            trigger={
-                                                <Button variant="ghost" size="sm">
-                                                    Edit Role
-                                                </Button>
-                                            }
-                                        />
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => handleDelete(user.id)}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        {canEdit && (
+                                            <UserRoleDialog
+                                                userId={user.id}
+                                                currentRole={user.role}
+                                                roles={roles}
+                                                trigger={
+                                                    <Button variant="ghost" size="sm">
+                                                        Edit Role
+                                                    </Button>
+                                                }
+                                            />
+                                        )}
+                                        {canDelete && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                onClick={() => handleDelete(user.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -187,12 +199,14 @@ export function UserList({ users, roles }: UserListProps) {
                 </Table>
             </div>
 
-            <BulkActions
-                selectedCount={selectedIds.length}
-                onDelete={handleBulkDelete}
-                onEdit={handleBulkEditRole}
-                entityName="user"
-            />
+            {selectedIds.length > 0 && (canEdit || canDelete) && (
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={canDelete ? handleBulkDelete : () => { }}
+                    onEdit={canEdit ? handleBulkEditRole : () => { }}
+                    entityName="user"
+                />
+            )}
         </div>
     )
 }

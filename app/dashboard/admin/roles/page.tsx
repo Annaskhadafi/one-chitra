@@ -7,6 +7,7 @@ import { SyncPermissionsButton } from "./_components/sync-button"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import type { RoleWithPermissions } from "@/lib/types"
+import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function RolesPage() {
     const roles = await getRoles()
@@ -26,16 +27,20 @@ export default async function RolesPage() {
                     <p className="text-muted-foreground">Manage roles and their access levels.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <SyncPermissionsButton />
-                    <RoleDialog
-                        allPermissions={allPermissions}
-                        trigger={
-                            <Button>
-                                <Plus className="mr-2 h-4 w-4" />
-                                Create Role
-                            </Button>
-                        }
-                    />
+                    <PermissionGuard resource="roles" action="edit">
+                        <SyncPermissionsButton />
+                    </PermissionGuard>
+                    <PermissionGuard resource="roles" action="create">
+                        <RoleDialog
+                            allPermissions={allPermissions}
+                            trigger={
+                                <Button>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Create Role
+                                </Button>
+                            }
+                        />
+                    </PermissionGuard>
                 </div>
             </div>
 

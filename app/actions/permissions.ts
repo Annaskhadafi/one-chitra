@@ -41,7 +41,7 @@ export async function syncPermissions() {
         // resources.add('users') // Already in nav
         // resources.add('roles') // Already in nav
 
-        const actions = ['view', 'create', 'update', 'delete']
+        const actions = ['view', 'create', 'edit', 'delete']
         let addedCount = 0
 
         for (const resource of Array.from(resources)) {

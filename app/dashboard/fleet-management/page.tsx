@@ -3,6 +3,7 @@ import { FleetTripTable } from "./_components/fleet-trip-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function FleetManagementPage() {
     const fleetTripsData = await getFleetTrips()
@@ -16,12 +17,14 @@ export default async function FleetManagementPage() {
                         Manage internal fleet trips, assign drivers, and track operational costs.
                     </p>
                 </div>
-                <Link href="/dashboard/fleet-management/create">
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        New Trip
-                    </Button>
-                </Link>
+                <PermissionGuard resource="fleet-management" action="create">
+                    <Link href="/dashboard/fleet-management/create">
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            New Trip
+                        </Button>
+                    </Link>
+                </PermissionGuard>
             </div>
 
             <div className="flex-1">

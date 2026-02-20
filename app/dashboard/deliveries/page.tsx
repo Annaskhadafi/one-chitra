@@ -3,6 +3,7 @@ import { DeliveryTable } from "./_components/delivery-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function DeliveriesPage() {
     const deliveriesData = await getDeliveries()
@@ -16,12 +17,14 @@ export default async function DeliveriesPage() {
                         Schedule and manage deliveries from sales orders.
                     </p>
                 </div>
-                <Link href="/dashboard/deliveries/create">
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Delivery
-                    </Button>
-                </Link>
+                <PermissionGuard resource="deliveries" action="create">
+                    <Link href="/dashboard/deliveries/create">
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Delivery
+                        </Button>
+                    </Link>
+                </PermissionGuard>
             </div>
 
             <div className="flex-1">

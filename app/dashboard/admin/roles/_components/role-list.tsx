@@ -15,6 +15,7 @@ import { deleteRole } from "@/app/actions/roles"
 import { RoleDialog } from "./role-dialog"
 import { Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/use-permissions"
 
 import { PermissionGroup } from "./role-dialog"
 
@@ -24,6 +25,10 @@ interface RoleListProps {
 }
 
 export function RoleList({ roles, allPermissions }: RoleListProps) {
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('roles', 'edit')
+    const canDelete = hasResourcePermission('roles', 'delete')
+
     const handleDelete = async (roleId: number) => {
         if (confirm("Are you sure you want to delete this role?")) {
             const result = await deleteRole(roleId)
@@ -58,23 +63,27 @@ export function RoleList({ roles, allPermissions }: RoleListProps) {
                             </TableCell>
                             <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
-                                    <RoleDialog
-                                        role={role}
-                                        allPermissions={allPermissions}
-                                        trigger={
-                                            <Button variant="ghost" size="icon">
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                        }
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-destructive hover:text-destructive"
-                                        onClick={() => handleDelete(role.id)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    {canEdit && (
+                                        <RoleDialog
+                                            role={role}
+                                            allPermissions={allPermissions}
+                                            trigger={
+                                                <Button variant="ghost" size="icon">
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                            }
+                                        />
+                                    )}
+                                    {canDelete && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => handleDelete(role.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
                                 </div>
                             </TableCell>
                         </TableRow>

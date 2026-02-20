@@ -14,6 +14,7 @@ import {
     SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { navigationConfig } from "@/lib/navigation"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     permissions?: string[]
@@ -24,18 +25,13 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     }
 }
 
-export function AppSidebar({ permissions = [], user, ...props }: AppSidebarProps) {
-    // Check if user has explicit 'resource:view' OR 'admin:view'
-    const hasPermission = (resource: string) => {
-        // Special case for dashboard which is always visible or if it matches the generic view permission
-        if (resource === 'dashboard') return true
-        return permissions.includes(`${resource}:view`) || permissions.includes("admin:view")
-    }
+export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSidebarProps) {
+    const { hasResourcePermission } = usePermissions()
 
     // Filter logic
     const filteredConfig = navigationConfig.map(section => ({
         ...section,
-        items: section.items.filter(item => hasPermission(item.resource))
+        items: section.items.filter(item => hasResourcePermission(item.resource, 'view'))
     })).filter(section => section.items.length > 0)
 
     // Fallback user if not provided (though layout should provide it)

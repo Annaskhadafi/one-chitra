@@ -3,6 +3,7 @@ import { SalesOrderTable } from "./_components/sales-order-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function SalesOrdersPage() {
     const orders = await getSalesOrders()
@@ -16,12 +17,14 @@ export default async function SalesOrdersPage() {
                         Manage sales orders, invoices, and order tracking.
                     </p>
                 </div>
-                <Link href="/dashboard/sales-orders/create">
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Sales Order
-                    </Button>
-                </Link>
+                <PermissionGuard resource="sales-orders" action="create">
+                    <Link href="/dashboard/sales-orders/create">
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Sales Order
+                        </Button>
+                    </Link>
+                </PermissionGuard>
             </div>
 
             <div className="flex-1">

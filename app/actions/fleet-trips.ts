@@ -6,7 +6,9 @@ import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { fleetTripSchema } from "@/lib/schemas"
-import { generateDeliveryNumber } from "./delivery"
+import { checkPermission } from "@/lib/rbac"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
 
 export async function getFleetTrips() {
     return await db.query.fleetTrips.findMany({
@@ -66,6 +68,7 @@ export async function generateTripNumber() {
 
 export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
     try {
+        await checkPermission('fleet-management', 'create')
         const tripNumber = await generateTripNumber()
 
         return await db.transaction(async (tx) => {
@@ -196,6 +199,7 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
 
 export async function updateFleetTrip(id: number, data: z.infer<typeof fleetTripSchema>) {
     try {
+        await checkPermission('fleet-management', 'edit')
         await db.transaction(async (tx) => {
             await tx.update(fleetTrips)
                 .set({
@@ -242,6 +246,7 @@ export async function updateFleetTrip(id: number, data: z.infer<typeof fleetTrip
 
 export async function deleteFleetTrip(id: number) {
     try {
+        await checkPermission('fleet-management', 'delete')
         // Deleting trip should probably NOT delete deliveries? Or convert them to individual?
         // Or cascade delete?
         // If we cascade, we lose the deliveries.
@@ -260,5 +265,35 @@ export async function deleteFleetTrip(id: number) {
         return { success: true }
     } catch (error) {
         return { success: false, error: "Failed to delete fleet trip" }
+    }
+}
+export async function updateFleetTripStatus(id: number, status: string) {
+    try {
+        await checkPermission('fleet-management', 'edit')
+        await db.update(fleetTrips)
+            .set({ status, updatedAt: new Date() })
+            .where(eq(fleetTrips.id, id))
+
+        // Also update linked deliveries status? 
+        // If trip is completed, deliveries should be delivered
+        if (status === 'completed') {
+            const trip = await db.query.fleetTrips.findFirst({
+                where: eq(fleetTrips.id, id),
+                with: { deliveries: true }
+            })
+            if (trip?.deliveries.length) {
+                const deliveryIds = trip.deliveries.map(d => d.id)
+                await db.update(deliveries)
+                    .set({ status: 'delivered', updatedAt: new Date() })
+                    .where(inArray(deliveries.id, deliveryIds))
+            }
+        }
+
+        revalidatePath("/dashboard/fleet-management")
+        revalidatePath("/dashboard/deliveries")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update fleet trip status:", error)
+        return { success: false, error: "Failed to update status" }
     }
 }

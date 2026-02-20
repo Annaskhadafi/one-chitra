@@ -23,7 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Upload, FileText, ExternalLink } from "lucide-react"
+import { Upload, FileText, ExternalLink, X, Maximize2 } from "lucide-react"
 
 export function EditDoDialog({
     delivery,
@@ -46,6 +46,7 @@ export function EditDoDialog({
     const [scanDoDocument, setScanDoDocument] = useState(delivery?.scanDoDocument || "")
     const [isUploading, setIsUploading] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
     // Sync state when dialog opens with selected delivery
     useEffect(() => {
@@ -202,10 +203,20 @@ export function EditDoDialog({
                                         variant="ghost"
                                         size="sm"
                                         className="h-8 text-blue-700 dark:text-blue-300 hover:text-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 ml-2 flex-shrink-0"
+                                        onClick={() => setIsPreviewOpen(true)}
+                                    >
+                                        <Maximize2 className="h-3 w-3 mr-1" />
+                                        Preview
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 text-blue-700 dark:text-blue-300 hover:text-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 ml-2 flex-shrink-0"
                                         onClick={() => window.open(scanDoDocument, '_blank')}
                                     >
                                         <ExternalLink className="h-3 w-3 mr-1" />
-                                        View
+                                        Open
                                     </Button>
                                 </div>
                             )}
@@ -221,6 +232,45 @@ export function EditDoDialog({
                     </Button>
                 </DialogFooter>
             </DialogContent>
+
+            {/* Wide File Preview Popup */}
+            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                <DialogContent className="sm:max-w-[90vw] h-[90vh] p-0 overflow-hidden bg-slate-100 dark:bg-slate-900">
+                    <DialogHeader className="p-4 bg-background border-b flex flex-row items-center justify-between sticky top-0 z-10">
+                        <div>
+                            <DialogTitle className="text-lg">Document Preview</DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Viewing scan for {delivery?.deliveryNumber}
+                            </DialogDescription>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={() => setIsPreviewOpen(false)}
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </DialogHeader>
+                    <div className="w-full h-full flex items-center justify-center p-4">
+                        {scanDoDocument?.toLowerCase().endsWith('.pdf') ? (
+                            <iframe
+                                src={scanDoDocument}
+                                className="w-full h-full rounded-md shadow-lg bg-white"
+                                title="PDF Preview"
+                            />
+                        ) : (
+                            <div className="relative w-full h-full flex items-center justify-center">
+                                <img
+                                    src={scanDoDocument}
+                                    alt="Scan DO Preview"
+                                    className="max-w-full max-h-full object-contain rounded-md shadow-2xl transition-transform duration-300 hover:scale-105"
+                                />
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </Dialog>
     )
 }

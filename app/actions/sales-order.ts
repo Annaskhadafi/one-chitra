@@ -8,6 +8,8 @@ import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
+import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
+import { deleteFile } from "./upload"
 
 export async function getSalesOrders() {
     // Fetch orders with customer and createdByUser first
@@ -84,10 +86,8 @@ export async function generateInvoiceNumber() {
 
 export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        })
-        const userId = session?.user?.id || "system"
+        const session = await getAuthenticatedSession('sales-orders', 'create')
+        const userId = session.user.id
         const invoiceNumber = data.invoiceNumber || await generateInvoiceNumber()
 
         // Start transaction
@@ -235,6 +235,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
 
 export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrderSchema>) {
     try {
+        await checkPermission('sales-orders', 'edit')
         return await db.transaction(async (tx) => {
             // Get original order to see if items changed
             const originalOrder = await tx.query.salesOrders.findFirst({
@@ -353,27 +354,68 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
 
 export async function deleteSalesOrder(id: number) {
     try {
-        await db.delete(salesOrders).where(eq(salesOrders.id, id))
-        revalidatePath("/dashboard/sales-orders")
-        return { success: true }
-    } catch (_error) {
+        await checkPermission('sales-orders', 'delete')
+
+        // Fetch order to check for assets
+        const order = await db.query.salesOrders.findFirst({
+            where: eq(salesOrders.id, id),
+            with: { items: true }
+        })
+
+        if (!order) return { success: false, error: "Sales Order not found" }
+
+        // Start transaction
+        return await db.transaction(async (tx) => {
+            // Permanent deletion of assets
+            if (order.poDocument) {
+                await deleteFile(order.poDocument)
+            }
+
+            // Permanent deletion of items
+            await tx.delete(salesOrderItems).where(eq(salesOrderItems.salesOrderId, id))
+            // Permanent deletion of the record
+            await tx.delete(salesOrders).where(eq(salesOrders.id, id))
+
+            revalidatePath("/dashboard/sales-orders")
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Failed to delete sales order:", error)
         return { success: false, error: "Failed to delete sales order" }
     }
 }
 
 export async function bulkDeleteSalesOrders(ids: number[]) {
     try {
+        await checkPermission('sales-orders', 'delete')
+
+        // Current implementation: Fetch and delete one by one or in bulk
+        // For asset deletion, we need to know what we are deleting
+        const orders = await db.query.salesOrders.findMany({
+            where: inArray(salesOrders.id, ids)
+        })
+
+        // Delete files
+        for (const order of orders) {
+            if (order.poDocument) {
+                await deleteFile(order.poDocument)
+            }
+        }
+
+        await db.delete(salesOrderItems).where(inArray(salesOrderItems.salesOrderId, ids))
         await db.delete(salesOrders).where(inArray(salesOrders.id, ids))
+
         revalidatePath("/dashboard/sales-orders")
         return { success: true }
-    } catch (_error) {
-        console.error("Bulk delete SO error:", _error)
-        return { success: false, error: "Failed to delete sales orders" }
+    } catch (error) {
+        console.error("Failed to bulk delete sales orders:", error)
+        return { success: false, error: "Failed to bulk delete sales orders" }
     }
 }
 
 export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) {
     try {
+        await checkPermission('sales-orders', 'edit')
         await db.update(salesOrders)
             .set({ status, updatedAt: new Date() })
             .where(inArray(salesOrders.id, ids))

@@ -30,7 +30,8 @@ import {
     FileText,
     Pencil,
     CreditCard,
-    FileDown
+    FileDown,
+    CheckCircle2
 } from "lucide-react"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -131,42 +132,46 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                     </div>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 px-6">
-                    <div className="flex flex-col gap-8 py-6">
+                <ScrollArea className="flex-1 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="max-w-[21cm] mx-auto my-8 space-y-8 p-8 bg-white dark:bg-slate-950 shadow-xl border min-h-[29.7cm] rounded-sm">
                         {/* Key Details Grid */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-background rounded-lg border p-4 shadow-sm space-y-3">
-                                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
                                     <User className="h-4 w-4" />
                                     Customer Details
                                 </div>
-                                <div className="space-y-1">
-                                    <p className="font-medium truncate" title={delivery.salesOrder?.customer?.name}>
+                                <div className="space-y-2 p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                                    <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
                                         {delivery.salesOrder?.customer?.name || "N/A"}
                                     </p>
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                        <FileText className="h-3 w-3" />
-                                        No. PO: {delivery.salesOrder?.customerPo || "-"}
+                                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                                        <FileText className="h-4 w-4" />
+                                        No. PO: <span className="font-mono">{delivery.salesOrder?.customerPo || "-"}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-500 mt-2">
+                                        Invoice SO: {delivery.salesOrder?.invoiceNumber || "-"}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-background rounded-lg border p-4 shadow-sm space-y-3">
-                                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
                                     <Calendar className="h-4 w-4" />
-                                    Schedule
+                                    Delivery Schedule
                                 </div>
-                                <div className="space-y-1">
-                                    <p className="font-medium">
+                                <div className="space-y-2 p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                                    <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
                                         {new Date(delivery.scheduledDate).toLocaleDateString("id-ID", {
-                                            weekday: 'short',
+                                            weekday: 'long',
                                             day: "2-digit",
-                                            month: "short",
+                                            month: "long",
                                             year: "numeric"
                                         })}
                                     </p>
                                     {delivery.deliveryDate && (
-                                        <div className="text-xs text-muted-foreground">
+                                        <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                                            <CheckCircle2 className="h-4 w-4" />
                                             Actual: {new Date(delivery.deliveryDate).toLocaleDateString("id-ID")}
                                         </div>
                                     )}
@@ -174,79 +179,79 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                             </div>
                         </div>
 
+                        <Separator />
+
                         {/* Logistics Section */}
                         <div className="space-y-4">
-                            <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
+                            <h3 className="text-sm font-bold flex items-center gap-2 text-primary uppercase tracking-wider">
                                 <MapPin className="h-4 w-4" />
                                 Logistics Information
                             </h3>
-                            <div className="bg-background rounded-lg border divide-y shadow-sm">
-                                <div className="grid grid-cols-2 p-4 gap-4">
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Driver</label>
-                                        <p className="text-sm font-medium">{delivery.driverName || "Not assigned"}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Vehicle</label>
-                                        <div className="text-sm">
-                                            <span className="font-medium">{delivery.vehicleNumber || "Not assigned"}</span>
-                                            {delivery.vehicleType && <span className="text-muted-foreground ml-1">({delivery.vehicleType})</span>}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Warehouse</label>
-                                        <p className="text-sm font-medium">{delivery.warehouse?.sloc} - {delivery.warehouse?.description || "N/A"}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Created By</label>
-                                        <p className="text-sm">{delivery.createdByUser?.name || "System"}</p>
+                            <div className="grid grid-cols-2 gap-x-12 gap-y-6 px-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Driver Name</label>
+                                    <p className="text-sm font-semibold">{delivery.driverName || "Not assigned"}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Vehicle Details</label>
+                                    <div className="text-sm">
+                                        <span className="font-semibold">{delivery.vehicleNumber || "Not assigned"}</span>
+                                        {delivery.vehicleType && <span className="text-muted-foreground ml-1">({delivery.vehicleType})</span>}
                                     </div>
                                 </div>
-
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Source Warehouse</label>
+                                    <p className="text-sm font-semibold">{delivery.warehouse?.sloc} - {delivery.warehouse?.description || "N/A"}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Originator</label>
+                                    <p className="text-sm font-semibold">{delivery.createdByUser?.name || "System"}</p>
+                                </div>
                                 {delivery.shippingAddress && (
-                                    <div className="p-4 space-y-1 bg-slate-50/50 dark:bg-slate-900/50">
-                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Shipping Address</label>
-                                        <p className="text-sm leading-relaxed">{delivery.shippingAddress}</p>
+                                    <div className="col-span-2 space-y-1">
+                                        <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Shipping Destination</label>
+                                        <p className="text-sm leading-relaxed font-medium">{delivery.shippingAddress}</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
+                        <Separator />
+
                         {/* Items Section */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
+                                <h3 className="text-sm font-bold flex items-center gap-2 text-primary uppercase tracking-wider">
                                     <Package className="h-4 w-4" />
-                                    Delivery Items
-                                    <Badge variant="secondary" className="ml-2 h-5 min-w-5 px-1.5 lg:px-2 rounded-full">
+                                    Manifest Items
+                                    <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 flex items-center justify-center rounded-full text-[10px]">
                                         {delivery.items.length}
                                     </Badge>
                                 </h3>
                             </div>
 
-                            <div className="rounded-lg border bg-background overflow-hidden shadow-sm">
+                            <div className="rounded-md border overflow-hidden">
                                 <Table>
                                     <TableHeader className="bg-slate-50 dark:bg-slate-900">
                                         <TableRow>
-                                            <TableHead className="w-[50%]">Product</TableHead>
-                                            <TableHead className="text-right">Ordered</TableHead>
-                                            <TableHead className="text-right">Delivered</TableHead>
+                                            <TableHead className="w-[100px] text-[10px] uppercase font-bold">Material No</TableHead>
+                                            <TableHead className="text-[10px] uppercase font-bold">Description</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold">Ordered</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold">Manifested</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {delivery.items.map((item) => (
                                             <TableRow key={item.id}>
+                                                <TableCell className="font-mono text-xs">{item.product.materialNumber}</TableCell>
                                                 <TableCell>
                                                     <div className="font-medium text-sm">{item.product.materialDescription}</div>
-                                                    <div className="text-xs text-muted-foreground mt-0.5">{item.product.materialNumber}</div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-sm">
+                                                <TableCell className="text-right font-mono text-sm text-muted-foreground">
                                                     {item.orderedQuantity}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-sm">
-                                                    <Badge variant={item.deliveredQuantity < item.orderedQuantity ? "secondary" : "default"} className="font-normal font-mono">
-                                                        {item.deliveredQuantity}
-                                                    </Badge>
+                                                <TableCell className="text-right font-mono text-sm font-bold">
+                                                    {item.deliveredQuantity}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -254,6 +259,13 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                                 </Table>
                             </div>
                         </div>
+
+                        {delivery.notes && (
+                            <div className="mt-auto pt-8 border-t-2 border-dashed">
+                                <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Additional Notes</label>
+                                <p className="text-sm italic text-slate-600 dark:text-slate-400 mt-1">"{delivery.notes}"</p>
+                            </div>
+                        )}
                     </div>
                 </ScrollArea>
 

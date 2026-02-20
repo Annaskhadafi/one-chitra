@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { deleteFleetTrip } from "@/app/actions/fleet-trips"
+import { deleteFleetTrip, updateFleetTripStatus } from "@/app/actions/fleet-trips"
 import {
     Table,
     TableBody,
@@ -13,6 +13,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -31,9 +38,10 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, Trash2, Pencil, Calendar, Truck, User } from "lucide-react"
+import { Search, MoreHorizontal, Trash2, Pencil, Calendar, Truck, User, Download } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface FleetTripWithRelations {
     id: number
@@ -66,6 +74,10 @@ export function FleetTripTable({ data }: FleetTripTableProps) {
     const [search, setSearch] = useState("")
     const [deleting, setDeleting] = useState<number | null>(null)
 
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('fleet-management', 'edit')
+    const canDelete = hasResourcePermission('fleet-management', 'delete')
+
     const filtered = data.filter(trip => {
         const s = search.toLowerCase()
         return !search ||
@@ -85,6 +97,43 @@ export function FleetTripTable({ data }: FleetTripTableProps) {
         setDeleting(null)
     }
 
+    const handleExport = () => {
+        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "Total Cost"]
+        const csvData = filtered.map(trip => [
+            trip.tripNumber,
+            new Date(trip.date).toLocaleDateString("id-ID"),
+            trip.status,
+            trip.driver?.name || "",
+            trip.vehicle?.policeNumber || "",
+            trip.deliveries.length,
+            calculateTotalCost(trip)
+        ])
+
+        const csvContent = [
+            headers.join(","),
+            ...csvData.map(row => row.join(","))
+        ].join("\n")
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const link = document.createElement("a")
+        const url = URL.createObjectURL(blob)
+        link.setAttribute("href", url)
+        link.setAttribute("download", `fleet-trips-${new Date().toISOString().slice(0, 10)}.csv`)
+        link.style.visibility = "hidden"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    const handleUpdateStatus = async (id: number, status: string) => {
+        const result = await updateFleetTripStatus(id, status)
+        if (result.success) {
+            toast.success("Status updated")
+        } else {
+            toast.error(result.error)
+        }
+    }
+
     const calculateTotalCost = (trip: FleetTripWithRelations) => {
         return (Number(trip.costGasoline) || 0) +
             (Number(trip.costToll) || 0) +
@@ -96,12 +145,20 @@ export function FleetTripTable({ data }: FleetTripTableProps) {
 
     return (
         <div className="space-y-4">
-            <div className="flex w-full max-w-sm items-center space-x-2">
-                <Input
-                    placeholder="Search trip number, driver, vehicle..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
+            <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+                <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search trip number, driver, vehicle..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-8"
+                    />
+                </div>
+                <Button variant="outline" onClick={handleExport}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export CSV
+                </Button>
             </div>
 
             <div className="rounded-md border">
@@ -136,9 +193,29 @@ export function FleetTripTable({ data }: FleetTripTableProps) {
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={statusVariants[trip.status] || "secondary"} className="capitalize">
-                                            {trip.status.replace("_", " ")}
-                                        </Badge>
+                                        {canEdit ? (
+                                            <Select
+                                                defaultValue={trip.status}
+                                                onValueChange={(value) => handleUpdateStatus(trip.id, value)}
+                                            >
+                                                <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[trip.status] === 'default' ? 'bg-primary text-primary-foreground' :
+                                                    statusVariants[trip.status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                                                        statusVariants[trip.status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
+                                                    }`}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                                                    <SelectItem value="in_transit">In Transit</SelectItem>
+                                                    <SelectItem value="completed">Completed</SelectItem>
+                                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <Badge variant={statusVariants[trip.status] || "secondary"} className="capitalize">
+                                                {trip.status.replace("_", " ")}
+                                            </Badge>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
@@ -169,37 +246,41 @@ export function FleetTripTable({ data }: FleetTripTableProps) {
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <Link href={`/dashboard/fleet-management/${trip.id}`}>
-                                                    <DropdownMenuItem>
-                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                        Edit / Details
-                                                    </DropdownMenuItem>
-                                                </Link>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            Delete
+                                                {canEdit && (
+                                                    <Link href={`/dashboard/fleet-management/${trip.id}`}>
+                                                        <DropdownMenuItem>
+                                                            <Pencil className="mr-2 h-4 w-4" />
+                                                            Edit / Details
                                                         </DropdownMenuItem>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Trip?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                This will permanently delete this trip and unlink associated deliveries.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction
-                                                                onClick={() => handleDelete(trip.id)}
-                                                                className="bg-red-600 hover:bg-red-700"
-                                                            >
-                                                                {deleting === trip.id ? "Deleting..." : "Delete"}
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                    </Link>
+                                                )}
+                                                {canDelete && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Trip?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This will permanently delete this trip and unlink associated deliveries.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => handleDelete(trip.id)}
+                                                                    className="bg-red-600 hover:bg-red-700"
+                                                                >
+                                                                    {deleting === trip.id ? "Deleting..." : "Delete"}
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>

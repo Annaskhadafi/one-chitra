@@ -8,6 +8,8 @@ import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
+import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
+import { deleteFile } from "./upload"
 
 export async function getDeliveries() {
     return await db.query.deliveries.findMany({
@@ -182,10 +184,8 @@ export async function generateDeliveryNumber() {
 
 export async function createDelivery(data: z.infer<typeof deliverySchema>) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        })
-        const userId = session?.user?.id || "system"
+        const session = await getAuthenticatedSession('deliveries', 'create')
+        const userId = session.user.id
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
 
         return await db.transaction(async (tx) => {
@@ -262,6 +262,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
 export async function updateDelivery(id: number, data: z.infer<typeof deliverySchema>) {
     try {
+        await checkPermission('deliveries', 'edit')
         return await db.transaction(async (tx) => {
             const originalDelivery = await tx.query.deliveries.findFirst({
                 where: eq(deliveries.id, id),
@@ -363,16 +364,58 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
 export async function deleteDelivery(id: number) {
     try {
-        await db.delete(deliveries).where(eq(deliveries.id, id))
-        revalidatePath("/dashboard/deliveries")
-        return { success: true }
-    } catch (_error) {
+        await checkPermission('deliveries', 'delete')
+
+        // Fetch delivery to check for assets and items
+        const delivery = await db.query.deliveries.findFirst({
+            where: eq(deliveries.id, id),
+            with: { items: true }
+        })
+
+        if (!delivery) return { success: false, error: "Delivery not found" }
+
+        // Start transaction
+        return await db.transaction(async (tx) => {
+            // Restore stock for items if the delivery was not cancelled and had a warehouse
+            const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
+            if (committedStatuses.includes(delivery.status) && delivery.warehouseId) {
+                for (const item of delivery.items) {
+                    await tx.update(stockLevels)
+                        .set({
+                            totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
+                            bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`, // Also restore booked stock
+                            updatedAt: new Date(),
+                        })
+                        .where(and(
+                            eq(stockLevels.warehouseId, delivery.warehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        ))
+                }
+            }
+
+            // Permanent deletion of assets
+            if (delivery.scanDoDocument) {
+                await deleteFile(delivery.scanDoDocument)
+            }
+
+            // Permanent deletion of items
+            await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
+            // Permanent deletion of the delivery record
+            await tx.delete(deliveries).where(eq(deliveries.id, id))
+
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/inventory") // Revalidate inventory as stock levels changed
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Failed to delete delivery:", error)
         return { success: false, error: "Failed to delete delivery" }
     }
 }
 
 export async function bulkDeleteDeliveries(ids: number[]) {
     try {
+        await checkPermission('deliveries', 'delete')
         await db.delete(deliveries).where(inArray(deliveries.id, ids))
         revalidatePath("/dashboard/deliveries")
         return { success: true }
@@ -383,6 +426,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
 
 export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     try {
+        await checkPermission('deliveries', 'edit')
         await db.update(deliveries)
             .set({ status, updatedAt: new Date() })
             .where(inArray(deliveries.id, ids))
@@ -394,14 +438,15 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 }
 
 export async function updateDoMonitoringFields(id: number, data: {
-    returnDoDate: Date | null,
-    invoiceNumber: string | null,
-    invoiceDate: Date | null,
-    doStatus: string,
+    returnDoDate?: Date | null,
+    invoiceNumber?: string | null,
+    invoiceDate?: Date | null,
+    doStatus?: string,
     remark?: string | null,
     scanDoDocument?: string | null,
 }) {
     try {
+        await checkPermission('deliveries', 'edit')
         await db.update(deliveries)
             .set({
                 returnDoDate: data.returnDoDate,

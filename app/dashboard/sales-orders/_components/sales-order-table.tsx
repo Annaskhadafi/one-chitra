@@ -35,12 +35,13 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface SalesOrderWithRelations {
     id: number
@@ -105,6 +106,11 @@ function calculateGrandTotal(order: SalesOrderWithRelations) {
 }
 
 export function SalesOrderTable({ data }: SalesOrderTableProps) {
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('sales-orders', 'edit')
+    const canDelete = hasResourcePermission('sales-orders', 'delete')
+    const canView = hasResourcePermission('sales-orders', 'view')
+
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -181,6 +187,46 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
             } else {
                 toast.error(result.error)
             }
+        }
+    }
+
+    const handleExport = () => {
+        const headers = ["Invoice Number", "Customer PO", "Customer", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
+        const csvData = filteredData.map(order => [
+            order.invoiceNumber || "",
+            order.customerPo || "",
+            order.customer?.name || "",
+            new Date(order.salesDate).toLocaleDateString("id-ID"),
+            order.categoryPo || "Normal",
+            order.categoryProduct || "",
+            order.items.length,
+            calculateGrandTotal(order),
+            order.status,
+            order.createdByUser?.name || ""
+        ])
+
+        const csvContent = [
+            headers.join(","),
+            ...csvData.map(row => row.join(","))
+        ].join("\n")
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const link = document.createElement("a")
+        const url = URL.createObjectURL(blob)
+        link.setAttribute("href", url)
+        link.setAttribute("download", `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`)
+        link.style.visibility = "hidden"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    const handleUpdateStatus = async (id: number, status: string) => {
+        const result = await bulkUpdateSalesOrderStatus([id], status)
+        if (result.success) {
+            toast.success("Status updated")
+        } else {
+            toast.error(result.error)
         }
     }
 
@@ -271,18 +317,24 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="confirmed">Confirmed</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export CSV
+                    </Button>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="All Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="confirmed">Confirmed</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div className="rounded-md border overflow-hidden">
@@ -362,9 +414,29 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                             {formatCurrency(calculateGrandTotal(order))}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant={statusVariants[order.status] || "secondary"}>
-                                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                                            </Badge>
+                                            {canEdit ? (
+                                                <Select
+                                                    defaultValue={order.status}
+                                                    onValueChange={(value) => handleUpdateStatus(order.id, value)}
+                                                >
+                                                    <SelectTrigger className={`h-8 w-[110px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[order.status] === 'default' ? 'bg-primary text-primary-foreground' :
+                                                        statusVariants[order.status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                                                            statusVariants[order.status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
+                                                        }`}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="draft">Draft</SelectItem>
+                                                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                                                        <SelectItem value="completed">Completed</SelectItem>
+                                                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <Badge variant={statusVariants[order.status] || "secondary"}>
+                                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                                </Badge>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             {order.createdByUser ? (
@@ -378,46 +450,52 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-                                                    onClick={() => {
-                                                        setViewOrder(order)
-                                                        setIsViewOpen(true)
-                                                    }}
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </Button>
-                                                <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <Pencil className="h-3.5 w-3.5" />
+                                                {canView && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                                                        onClick={() => {
+                                                            setViewOrder(order)
+                                                            setIsViewOpen(true)
+                                                        }}
+                                                    >
+                                                        <Eye className="h-4 w-4" />
                                                     </Button>
-                                                </Link>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                )}
+                                                {canEdit && (
+                                                    <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                            <Pencil className="h-3.5 w-3.5" />
                                                         </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Sales Order</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Are you sure you want to delete {order.invoiceNumber}? This action cannot be undone.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction
-                                                                onClick={() => handleDelete(order.id)}
-                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                            >
-                                                                Delete
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                    </Link>
+                                                )}
+                                                {canDelete && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Sales Order</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Are you sure you want to delete {order.invoiceNumber}? This action cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => handleDelete(order.id)}
+                                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                >
+                                                                    Delete
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -428,12 +506,14 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                 </div>
             </div>
 
-            <BulkActions
-                selectedCount={selectedIds.length}
-                onDelete={handleBulkDelete}
-                onEdit={handleBulkUpdateStatus}
-                entityName="sales order"
-            />
+            {selectedIds.length > 0 && (canEdit || canDelete) && (
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={canDelete ? handleBulkDelete : () => { }}
+                    onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
+                    entityName="sales order"
+                />
+            )}
 
             <SalesOrderDetail
                 open={isViewOpen}

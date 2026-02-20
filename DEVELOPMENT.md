@@ -35,9 +35,92 @@ The system automatically detects and sets the correct headers for:
 
 ---
 
-## 🛠️ Infrastructure Reminder
-If you add a new service or redeploy, ensure the following command has been run on the VPS host:
-```bash
-sudo chown -R 1001:1001 /mnt/data/one-chitra/uploads
-sudo chmod -R 775 /mnt/data/one-chitra/uploads
+---
+
+## � Role Management & Permissions (RBAC)
+
+To ensure consistent access control, all new features MUST integrate with the central permission system.
+
+### 1. Registering New Resources
+When adding a new module/page, register its resource name in `lib/navigation.ts`:
+```typescript
+{
+  title: "My New Feature",
+  url: "/dashboard/my-feature",
+  icon: MyIcon,
+  resource: "my-feature", // This is the identifier for permissions
+}
 ```
+
+### 2. Permission Naming Convention
+Actions are standardized as: `view`, `create`, `edit`, `delete`.
+Permissions are mapped as `resource:action` (e.g., `sales-orders:edit`).
+
+### 3. Permission Sync
+After adding a new resource to `navigationConfig`, run the "Sync Permissions" action in the **Admin > Roles** page. This will automatically generate the four standard permissions for your new resource in the database.
+
+### 4. Client-Side Checks (`usePermissions`)
+Use the `usePermissions` hook to hide/show UI elements dynamically.
+```typescript
+import { usePermissions } from "@/hooks/use-permissions"
+
+const { hasResourcePermission } = usePermissions()
+const canEdit = hasResourcePermission('my-resource', 'edit')
+
+{canEdit && <Button>Edit Item</Button>}
+```
+
+### 5. Nested or Server-Side Guards (`PermissionGuard`)
+Use the `PermissionGuard` component for higher-level wrapping.
+```typescript
+import { PermissionGuard } from "@/components/permission-guard"
+
+<PermissionGuard resource="my-resource" action="create">
+  <MyCreationForm />
+</PermissionGuard>
+```
+
+---
+
+## 📥 Import & Export Features
+
+When implementing Import functionality for a table, follow these standards:
+
+### 1. CSV Template/Example
+Provide a download button for a CSV example data with correct headers to guide the user.
+
+### 2. Field Mapping
+The import dialog MUST include a mapping step where users can match CSV columns to database fields.
+
+### 3. CSV Export
+Always provide an Export button to download the table data as CSV.
+
+---
+
+## ✨ UI/UX Standard: Actions & Previews
+
+### 1. Document Preview (Detail View)
+- Use a **Large Dialog (max-w-4xl/5xl)** or a clean "Document-style" layout.
+- It should feel like a official document, not just a list of labels.
+- MUST include an **"Edit" button** within the preview for quick transition.
+
+### 2. File Upload Preview
+If a record has an uploaded file (PDF or Image):
+- Add a dedicated "Preview File" action.
+- Use a **Wide Dialog/Iframe Popup** to display the content clearly without leaving the page.
+
+### 3. Inline Status Change
+If a table has a **Status** column:
+- Users with `edit` permission should be able to click the status badge directly in the list.
+- Use a **Popover or Select** dropdown to change the status immediately without opening the full Edit form.
+- Trigger a server action and refresh the router/query after selection.
+
+---
+
+## 💾 Backend Implementation Rules
+
+### 1. Permanent Deletion
+When a **Delete** action is triggered, ensure the record is physically deleted from the database (or soft-deleted if the schema explicitly requires it) and all related file assets are considered for cleanup.
+
+### 2. Permission Enforcement
+Always wrap these actions with the RBAC rules defined above.

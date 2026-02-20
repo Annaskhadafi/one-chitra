@@ -20,6 +20,7 @@ import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
 import { Search, Trash2, Pencil, Package, Layers, Tag, Eye } from "lucide-react"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/use-permissions"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -94,6 +95,11 @@ function ImagePreview({ imageUrl, alt }: { imageUrl: string; alt: string }) {
 }
 
 export function ProductTable({ data }: ProductTableProps) {
+    const { hasResourcePermission } = usePermissions()
+    const canCreate = hasResourcePermission('products', 'create')
+    const canEdit = hasResourcePermission('products', 'edit')
+    const canDelete = hasResourcePermission('products', 'delete')
+
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
     const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -270,8 +276,12 @@ export function ProductTable({ data }: ProductTableProps) {
                     </Select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <ProductCSVUpload />
-                    <ProductDialog />
+                    {canCreate && (
+                        <>
+                            <ProductCSVUpload />
+                            <ProductDialog />
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -345,36 +355,40 @@ export function ProductTable({ data }: ProductTableProps) {
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
                                                 <ProductDetail product={item} manualRate={manualRate} />
-                                                <ProductDialog
-                                                    product={item}
-                                                    trigger={
-                                                        <Button variant="ghost" size="icon">
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                    }
-                                                />
+                                                {canEdit && (
+                                                    <ProductDialog
+                                                        product={item}
+                                                        trigger={
+                                                            <Button variant="ghost" size="icon">
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                )}
 
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Product</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Are you sure you want to delete {item.materialNumber}? This action cannot be undone.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                                Delete
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                {canDelete && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Product</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Are you sure you want to delete {item.materialNumber}? This action cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                    Delete
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -385,12 +399,14 @@ export function ProductTable({ data }: ProductTableProps) {
                 </Table>
             </div>
 
-            <BulkActions
-                selectedCount={selectedIds.length}
-                onDelete={handleBulkDelete}
-                onEdit={handleBulkEditCategory}
-                entityName="product"
-            />
+            {selectedIds.length > 0 && (canEdit || canDelete) && (
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={canDelete ? handleBulkDelete : () => { }}
+                    onEdit={canEdit ? handleBulkEditCategory : () => { }}
+                    entityName="product"
+                />
+            )}
         </div>
     )
 }

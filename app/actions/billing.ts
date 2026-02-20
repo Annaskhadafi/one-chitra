@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { checkPermission } from "@/lib/rbac";
 
 type BillingRecordUpdate = {
     deliveryItemId: number;
@@ -118,6 +119,7 @@ export async function getBillingRecords() {
 
 export async function updateBillingRecord(data: BillingRecordUpdate) {
     try {
+        await checkPermission('billing', 'edit');
         const { deliveryItemId, ...updateData } = data;
 
         if (!deliveryItemId) throw new Error("Delivery Item ID is required");
@@ -149,6 +151,7 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
 // Delete Billing Record (Reset to default)
 export async function deleteBillingRecord(deliveryItemId: number) {
     try {
+        await checkPermission('billing', 'delete');
         await db.delete(billingRecords).where(eq(billingRecords.deliveryItemId, deliveryItemId));
         revalidatePath("/dashboard/billing");
         return { success: true };
@@ -161,6 +164,7 @@ export async function deleteBillingRecord(deliveryItemId: number) {
 // Bulk import function
 export async function importBillingRecords(records: Record<string, unknown>[]) {
     try {
+        await checkPermission('billing', 'create');
         // Implementation for processing CSV data and matching to delivery items
         // This will be complex as we need to match by PO Number / Material etc.
         // For now, let's just scaffold it.

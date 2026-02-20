@@ -163,7 +163,7 @@ export function RoleDialog({ role, allPermissions, trigger }: RoleDialogProps) {
                                                                     />
                                                                 </FormControl>
                                                                 <FormLabel className="font-normal capitalize cursor-pointer">
-                                                                    {perm.action}
+                                                                    {perm.action === 'update' ? 'edit' : perm.action}
                                                                 </FormLabel>
                                                             </FormItem>
                                                         )

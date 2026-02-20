@@ -13,6 +13,7 @@ import "@/app/dashboard/theme.css"
 import { auth } from "@/lib/auth"
 import { getPermissionsByRoleName } from "@/app/actions/roles"
 import { headers } from "next/headers"
+import { PermissionsProvider } from "@/hooks/use-permissions"
 
 // ... imports
 
@@ -50,25 +51,27 @@ export default async function DashboardLayout({
   }
 
   return (
-    <SidebarProvider
-      defaultOpen={defaultOpen}
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" permissions={permissions} user={
-        user ? {
-          name: user.name,
-          email: user.email,
-          avatar: user.image || "",
-        } : undefined
-      } />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
+    <PermissionsProvider permissions={permissions}>
+      <SidebarProvider
+        defaultOpen={defaultOpen}
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+          } as React.CSSProperties
+        }
+      >
+        <AppSidebar variant="inset" permissions={permissions} user={
+          user ? {
+            name: user.name,
+            email: user.email,
+            avatar: user.image || "",
+          } : undefined
+        } />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col">{children}</div>
+        </SidebarInset>
+      </SidebarProvider>
+    </PermissionsProvider>
   )
 }

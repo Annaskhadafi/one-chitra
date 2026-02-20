@@ -1,6 +1,6 @@
 "use server"
 
-import { writeFile, mkdir } from "fs/promises"
+import { writeFile, mkdir, unlink } from "fs/promises"
 import { join, resolve } from "path"
 import { v4 as uuidv4 } from "uuid"
 
@@ -65,5 +65,26 @@ export async function uploadFile(formData: FormData) {
             success: false,
             error: `Upload failed: ${err.message}. (Code: ${err.code || 'UNKNOWN'})`
         }
+    }
+}
+
+export async function deleteFile(url: string) {
+    if (!url) return { success: false, error: "No URL provided" }
+
+    // Expecting URL like /api/uploads/filename.ext
+    const filename = url.split('/').pop()
+    if (!filename) return { success: false, error: "Invalid file URL" }
+
+    const uploadDirName = "uploads"
+    const publicDir = resolve(process.cwd(), "public")
+    const filepath = join(publicDir, uploadDirName, filename)
+
+    try {
+        await unlink(filepath).catch(() => { /* ignore if already gone */ })
+        console.log(`[Upload] Permanently deleted file: ${filepath}`)
+        return { success: true }
+    } catch (error) {
+        console.error(`[Upload] Failed to delete file: ${filepath}`, error)
+        return { success: false, error: "File deletion failed" }
     }
 }
