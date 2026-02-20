@@ -117,6 +117,32 @@ If a table has a **Status** column:
 
 ---
 
+## 📄 PDF & Print Preview Standards
+
+When creating features that require document printing (Invoice, DO, Reports):
+
+### 1. Unified CSS Styling (WYSIWYG)
+Always share the same CSS structure between the **Screen Preview** and the **Print Output** to ensure "What You See Is What You Get".
+- Wrap the content in a `.pdf-wrapper` class.
+- Define a base font size (usually `10pt`) and use `Arial/sans-serif` for clarity.
+
+### 2. High-Width Modal Overrides
+The base `DialogContent` has a responsive `sm:max-w-lg` constraint. To show an A4 document properly:
+- MUST use `sm:max-w-7xl` or higher on the `DialogContent`.
+- Always verify that the modal doesn't "squish" the document on Desktop views.
+
+### 3. Print-Safe Styles
+Ensure that internal information or specific footers use fixed positioning or specific print media queries:
+```css
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+}
+```
+
+---
+
 ## 💾 Backend Implementation Rules
 
 ### 1. Permanent Deletion
