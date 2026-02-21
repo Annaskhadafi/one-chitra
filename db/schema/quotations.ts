@@ -30,6 +30,14 @@ export const quotations = pgTable("quotations", {
     rejectionReason: text("rejection_reason"),
     salesPersonId: text("sales_person_id").references(() => user.id),
     attn: varchar("attn", { length: 200 }),
+    address: text("address"),
+    closingStatus: varchar("closing_status", { length: 50 }),
+    tags: text("tags"),
+    currency: varchar("currency", { length: 10 }).default("IDR"),
+    referenceNumber: varchar("reference_number", { length: 100 }),
+    adminNote: text("admin_note"),
+    clientNote: text("client_note"),
+    discountType: varchar("discount_type", { length: 20 }).default("fixed"),
 });
 
 export const quotationItems = pgTable("quotation_items", {
@@ -38,6 +46,7 @@ export const quotationItems = pgTable("quotation_items", {
     productId: integer("product_id").references(() => products.id).notNull(),
     quantity: integer("quantity").notNull(),
     description: text("description"),
+    longDescription: text("long_description"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     discount: numeric("discount", { precision: 12, scale: 2 }).default("0").notNull(),
     tax: numeric("tax", { precision: 12, scale: 2 }).default("0").notNull(),

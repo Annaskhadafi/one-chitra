@@ -77,6 +77,14 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
                     discount: data.discount.toString(),
                     tax: data.tax.toString(),
                     shipping: data.shipping.toString(),
+                    address: data.address || null,
+                    closingStatus: data.closingStatus || null,
+                    tags: data.tags || null,
+                    currency: data.currency || "IDR",
+                    referenceNumber: data.referenceNumber || null,
+                    adminNote: data.adminNote || null,
+                    clientNote: data.clientNote || null,
+                    discountType: data.discountType || "fixed",
                 })
                 .returning()
 
@@ -86,6 +94,7 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
                         quotationId: newQuotation.id,
                         productId: item.productId,
                         description: item.description || null,
+                        longDescription: item.longDescription || null,
                         quantity: item.quantity,
                         unitPrice: item.unitPrice.toString(),
                         discount: item.discount.toString(),
@@ -129,6 +138,14 @@ export async function updateQuotation(id: number, data: z.infer<typeof quotation
                     discount: data.discount.toString(),
                     tax: data.tax.toString(),
                     shipping: data.shipping.toString(),
+                    address: data.address || null,
+                    closingStatus: data.closingStatus || null,
+                    tags: data.tags || null,
+                    currency: data.currency || "IDR",
+                    referenceNumber: data.referenceNumber || null,
+                    adminNote: data.adminNote || null,
+                    clientNote: data.clientNote || null,
+                    discountType: data.discountType || "fixed",
                     updatedAt: new Date(),
                 })
                 .where(eq(quotations.id, id))
@@ -142,6 +159,7 @@ export async function updateQuotation(id: number, data: z.infer<typeof quotation
                         quotationId: id,
                         productId: item.productId,
                         description: item.description || null,
+                        longDescription: item.longDescription || null,
                         quantity: item.quantity,
                         unitPrice: item.unitPrice.toString(),
                         discount: item.discount.toString(),
@@ -341,6 +359,14 @@ export async function duplicateQuotation(id: number) {
                     discount: originalQuotation.discount,
                     tax: originalQuotation.tax,
                     shipping: originalQuotation.shipping,
+                    address: originalQuotation.address,
+                    closingStatus: originalQuotation.closingStatus,
+                    tags: originalQuotation.tags,
+                    currency: originalQuotation.currency,
+                    referenceNumber: originalQuotation.referenceNumber,
+                    adminNote: originalQuotation.adminNote,
+                    clientNote: originalQuotation.clientNote,
+                    discountType: originalQuotation.discountType,
                 })
                 .returning()
 
@@ -350,6 +376,7 @@ export async function duplicateQuotation(id: number) {
                         quotationId: newQuotation.id,
                         productId: item.productId,
                         description: item.description,
+                        longDescription: item.longDescription,
                         quantity: item.quantity,
                         unitPrice: item.unitPrice,
                         discount: item.discount,

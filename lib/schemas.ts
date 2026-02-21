@@ -107,6 +107,7 @@ export const deliverySchema = z.object({
 export const quotationItemSchema = z.object({
     productId: z.number().min(1, "Product is required"),
     description: z.string().optional(),
+    longDescription: z.string().optional(),
     quantity: z.number().min(1, "Quantity must be at least 1"),
     unitPrice: z.number().min(0, "Unit price must be >= 0"),
     discount: z.number().min(0).default(0),
@@ -128,6 +129,14 @@ export const quotationSchema = z.object({
     discount: z.number().min(0).default(0),
     tax: z.number().min(0).default(0),
     shipping: z.number().min(0).default(0),
+    address: z.string().optional(),
+    closingStatus: z.string().optional(),
+    tags: z.string().optional(),
+    currency: z.string().default("IDR"),
+    referenceNumber: z.string().optional(),
+    adminNote: z.string().optional(),
+    clientNote: z.string().optional(),
+    discountType: z.enum(["percent", "fixed"]).default("fixed"),
     items: z.array(quotationItemSchema).min(1, "At least one item is required"),
 })
 

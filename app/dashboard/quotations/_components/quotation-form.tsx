@@ -38,7 +38,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -50,6 +50,7 @@ interface QuotationItemRow {
     productId: number
     productName: string
     description: string
+    longDescription: string
     quantity: number
     unitPrice: number
     discount: number
@@ -70,6 +71,14 @@ interface QuotationFormProps {
         subject: string | null
         salesPersonId: string | null
         attn: string | null
+        address: string | null
+        closingStatus: string | null
+        tags: string | null
+        currency: string
+        referenceNumber: string | null
+        adminNote: string | null
+        clientNote: string | null
+        discountType: string
         status: string
         paymentTerms: string | null
         termsConditions: string | null
@@ -80,6 +89,7 @@ interface QuotationFormProps {
         items: {
             productId: number
             description: string | null
+            longDescription: string | null
             quantity: number
             unitPrice: string
             discount: string
@@ -117,10 +127,18 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [subject, setSubject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
     const [attn, setAttn] = useState(initialData?.attn || "")
+    const [address, setAddress] = useState(initialData?.address || "")
+    const [closingStatus, setClosingStatus] = useState(initialData?.closingStatus || "")
+    const [tags, setTags] = useState(initialData?.tags || "")
+    const [currency, setCurrency] = useState(initialData?.currency || "IDR")
+    const [referenceNumber, setReferenceNumber] = useState(initialData?.referenceNumber || "")
+    const [adminNote, setAdminNote] = useState(initialData?.adminNote || "")
+    const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
+    const [discountType, setDiscountType] = useState(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
     const [paymentTerms, setPaymentTerms] = useState(initialData?.paymentTerms || "")
     const [termsConditions, setTermsConditions] = useState(
-        initialData?.termsConditions || "1. Quotation is valid for 30 days from the date of issue\n2. Prices are subject to change without notice\n3. Payment terms: Net 30 days"
+        initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n______________________________________________\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 – 000 – 00 – 17416\n______________________________________________"
     )
     const [notes, setNotes] = useState(initialData?.notes || "")
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
@@ -133,6 +151,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             productId: item.productId,
             productName: item.product?.materialDescription || item.product?.materialNumber || "",
             description: item.description || "",
+            longDescription: item.longDescription || "",
             quantity: item.quantity,
             unitPrice: Number(item.unitPrice),
             discount: Number(item.discount),
@@ -162,6 +181,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 description: "",
+                longDescription: "",
                 quantity: 1,
                 unitPrice: 0,
                 discount: 0,
@@ -187,8 +207,9 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     }, [items])
 
     const grandTotal = useMemo(() => {
-        return subTotal - discount + tax + shipping
-    }, [subTotal, discount, tax, shipping])
+        const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
+        return subTotal - discAmount + tax + shipping
+    }, [subTotal, discount, discountType, tax, shipping])
 
     const handleSubmit = async () => {
         if (!customerId) {
@@ -202,14 +223,22 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
         setIsSubmitting(true)
         try {
-            const payload = {
+            const payload: any = {
                 quotationNumber: quotationNumber || undefined,
-                customerId,
-                quotationDate,
+                customerId: customerId,
+                quotationDate: quotationDate,
                 validUntil: validUntil || undefined,
                 subject: subject || undefined,
                 salesPersonId: salesPersonId || undefined,
                 attn: attn || undefined,
+                address: address || undefined,
+                closingStatus: closingStatus || undefined,
+                tags: tags || undefined,
+                currency: currency || "IDR",
+                referenceNumber: referenceNumber || undefined,
+                adminNote: adminNote || undefined,
+                clientNote: clientNote || undefined,
+                discountType: discountType,
                 status: status as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
@@ -220,6 +249,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 items: items.map(item => ({
                     productId: item.productId,
                     description: item.description || undefined,
+                    longDescription: item.longDescription || undefined,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
                     discount: item.discount,
@@ -227,12 +257,9 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 })),
             }
 
-            let result
-            if (isEdit) {
-                result = await updateQuotation(initialData!.id, payload)
-            } else {
-                result = await createQuotation(payload)
-            }
+            const result = isEdit
+                ? await updateQuotation(initialData!.id, payload)
+                : await createQuotation(payload)
 
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
@@ -337,41 +364,13 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Quotation Header Fields */}
-            <Card>
-                <CardContent className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {/* Sales Person */}
-                        <div className="space-y-2">
-                            <Label className="font-semibold">Sales Person</Label>
-                            <Select value={salesPersonId} onValueChange={setSalesPersonId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Sales Person" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {users.map(u => (
-                                        <SelectItem key={u.id} value={u.id}>
-                                            {u.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* QT Number */}
-                        <div className="space-y-2">
-                            <Label className="text-blue-600 font-semibold">Quotation Number</Label>
-                            <Input
-                                placeholder="Leave blank to auto-generate"
-                                value={quotationNumber}
-                                onChange={(e) => setQuotationNumber(e.target.value)}
-                            />
-                            <p className="text-xs text-muted-foreground">Leave it blank to generate automatically</p>
-                        </div>
-
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <CardContent className="p-6 space-y-4">
                         {/* Customer */}
                         <div className="space-y-2">
-                            <Label className="font-semibold">
-                                <span className="text-red-500">*</span> Customer
+                            <Label className="font-semibold text-destructive">
+                                * Customer
                             </Label>
                             <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
                                 <PopoverTrigger asChild>
@@ -381,11 +380,11 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                         aria-expanded={customerOpen}
                                         className="w-full justify-between font-normal"
                                     >
-                                        {selectedCustomer ? selectedCustomer.name : "Select Customer..."}
+                                        {selectedCustomer ? selectedCustomer.name : "Select and begin typing"}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0">
+                                <PopoverContent className="w-[400px] p-0">
                                     <Command>
                                         <CommandInput placeholder="Search customer..." />
                                         <CommandList>
@@ -414,51 +413,224 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </Popover>
                         </div>
 
-                        {/* Attn */}
-                        <div className="space-y-2">
-                            <Label className="text-blue-600 font-semibold">Attn</Label>
-                            <Input
-                                placeholder="Attention to (Person Name)"
-                                value={attn}
-                                onChange={(e) => setAttn(e.target.value)}
-                            />
+                        {/* Bill To / Ship To */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <Label className="text-sm font-medium text-blue-600 flex items-center gap-1">
+                                    <Search className="h-3 w-3" /> Bill To
+                                </Label>
+                                <div className="text-sm text-muted-foreground min-h-[40px]">
+                                    {selectedCustomer ? (
+                                        <>
+                                            <p className="font-bold">{selectedCustomer.name}</p>
+                                            <p>{selectedCustomer.address1}</p>
+                                        </>
+                                    ) : "--"}
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-sm font-medium text-blue-600 flex items-center gap-1">
+                                    <Search className="h-3 w-3" /> Ship To
+                                </Label>
+                                <div className="text-sm text-muted-foreground min-h-[40px]">
+                                    {selectedCustomer ? (
+                                        <>
+                                            <p className="font-bold">{selectedCustomer.name}</p>
+                                            <p>{selectedCustomer.address1}</p>
+                                        </>
+                                    ) : "--"}
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Quotation Date */}
+                        {/* Quo Number */}
                         <div className="space-y-2">
-                            <Label className="font-semibold">
-                                <span className="text-red-500">*</span> Quotation Date
+                            <Label className="text-destructive font-semibold">* Quo Number</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    className="bg-muted"
+                                    value="QUO/CP/"
+                                    readOnly
+                                    disabled
+                                />
+                                <Input
+                                    placeholder="Number"
+                                    value={quotationNumber}
+                                    onChange={(e) => setQuotationNumber(e.target.value)}
+                                />
+                                <Input
+                                    className="bg-muted w-32"
+                                    value={new Date().toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' })}
+                                    readOnly
+                                    disabled
+                                />
+                            </div>
+                        </div>
+
+                        {/* Dates */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-destructive font-semibold">* Quo Date</Label>
+                                <Input
+                                    type="date"
+                                    value={quotationDate}
+                                    onChange={(e) => setQuotationDate(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="font-semibold">Expiry Date</Label>
+                                <Input
+                                    type="date"
+                                    value={validUntil}
+                                    onChange={(e) => setValidUntil(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Alamat Dropdown */}
+                        <div className="space-y-2">
+                            <Label className="text-destructive font-semibold flex items-center gap-1">
+                                <Pencil className="h-3 w-3" /> * Alamat
+                            </Label>
+                            <Select value={address} onValueChange={setAddress}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select address..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="PT Chitra Paratama Jakarta (Jl. Raya Cilandak KKO No.N0.1 RT.13/RW.5 Cilandak Tim. Ps. Minggu | Kota Jakarta Selatan. DKI Jakarta 12560)">
+                                        PT Chitra Paratama Jakarta (Jl. Raya Cilandak KKO)
+                                    </SelectItem>
+                                    <SelectItem value="Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612">
+                                        Jl. Amd No.69 Karang Joang (Balikpapan)
+                                    </SelectItem>
+                                    <SelectItem value="PT Chitra Paratama Tanjung Redep (Jl. M. Iswahyudi Rinding-Berau | Kalimantan Timur 77313)">
+                                        PT Chitra Paratama Tanjung Redep
+                                    </SelectItem>
+                                    <SelectItem value="PT Chitra Paratama Balikpapan (Graha Indah Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612)">
+                                        PT Chitra Paratama Balikpapan (Graha Indah)
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Closing Status */}
+                        <div className="space-y-2">
+                            <Label className="text-blue-600 font-semibold flex items-center gap-1">
+                                <Pencil className="h-3 w-3" /> Closing Status
+                            </Label>
+                            <Select value={closingStatus} onValueChange={setClosingStatus}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Nothing selected" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Price">Price</SelectItem>
+                                    <SelectItem value="Leadtime">Leadtime</SelectItem>
+                                    <SelectItem value="TOP">TOP</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardContent className="p-6 space-y-4">
+                        {/* Tags */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold flex items-center gap-1">
+                                <FileDown className="h-3 w-3" /> Tags
                             </Label>
                             <Input
-                                type="date"
-                                value={quotationDate}
-                                onChange={(e) => setQuotationDate(e.target.value)}
+                                placeholder="Tag"
+                                value={tags}
+                                onChange={(e) => setTags(e.target.value)}
                             />
                         </div>
 
-                        {/* Valid Until */}
+                        {/* Currency & Status */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-destructive font-semibold">* Currency</Label>
+                                <Select value={currency} onValueChange={setCurrency}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="IDR">IDR Rp</SelectItem>
+                                        <SelectItem value="USD">USD $</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="font-semibold">Status</Label>
+                                <Select value={status} onValueChange={setStatus}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="draft">Draft</SelectItem>
+                                        <SelectItem value="sent">Sent</SelectItem>
+                                        <SelectItem value="approved">Approved</SelectItem>
+                                        <SelectItem value="rejected">Rejected</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {/* Reference # */}
                         <div className="space-y-2">
-                            <Label className="text-blue-600 font-semibold">Valid Until</Label>
+                            <Label className="font-semibold">Reference #</Label>
                             <Input
-                                type="date"
-                                value={validUntil}
-                                onChange={(e) => setValidUntil(e.target.value)}
+                                value={referenceNumber}
+                                onChange={(e) => setReferenceNumber(e.target.value)}
                             />
-                            <p className="text-xs text-muted-foreground">Expiry date for this quotation</p>
                         </div>
 
-                        {/* Subject */}
-                        <div className="space-y-2 lg:col-span-4">
-                            <Label className="text-blue-600 font-semibold">Subject</Label>
-                            <Input
-                                placeholder="Brief description or reference for this quotation"
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
+                        {/* From (Sales Person) & Discount Type */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="font-semibold">From</Label>
+                                <Select value={salesPersonId} onValueChange={setSalesPersonId}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {users.map(u => (
+                                            <SelectItem key={u.id} value={u.id}>
+                                                {u.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="font-semibold">Discount Type</Label>
+                                <Select value={discountType} onValueChange={setDiscountType}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="fixed">No discount</SelectItem>
+                                        <SelectItem value="percent">Percentage</SelectItem>
+                                        <SelectItem value="fixed_amount">Fixed Amount</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {/* Admin Note */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold text-muted-foreground">Admin Note</Label>
+                            <Textarea
+                                rows={4}
+                                value={adminNote}
+                                onChange={(e) => setAdminNote(e.target.value)}
+                                className="resize-none"
                             />
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Product Search + Add */}
             <Card>
@@ -511,16 +683,14 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead className="w-[50px]">#</TableHead>
-                                            <TableHead>Name</TableHead>
-                                            <TableHead className="w-[200px]">Description</TableHead>
-                                            <TableHead className="w-[100px]">Quantity</TableHead>
-                                            <TableHead className="w-[140px]">Unit Price</TableHead>
-                                            <TableHead className="w-[120px]">Discount</TableHead>
-                                            <TableHead className="w-[120px]">Tax</TableHead>
-                                            <TableHead className="w-[140px]">SubTotal</TableHead>
-                                            <TableHead className="w-[60px]">Action</TableHead>
+                                        <TableRow className="bg-blue-600 hover:bg-blue-600">
+                                            <TableHead className="w-[50px] text-white"># Item</TableHead>
+                                            <TableHead className="text-white">Description</TableHead>
+                                            <TableHead className="w-[100px] text-white">Qty</TableHead>
+                                            <TableHead className="w-[200px] text-white">Price</TableHead>
+                                            <TableHead className="w-[120px] text-white">Tax</TableHead>
+                                            <TableHead className="w-[140px] text-white">Amount</TableHead>
+                                            <TableHead className="w-[60px] text-white">Action</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -537,65 +707,74 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                             items.map((item, index) => {
                                                 const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
                                                 return (
-                                                    <TableRow key={index}>
+                                                    <TableRow key={index} className="group">
                                                         <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
-                                                        <TableCell className="font-medium">{item.productName}</TableCell>
                                                         <TableCell>
-                                                            <Input
-                                                                placeholder="Item description"
-                                                                value={item.description}
-                                                                onChange={(e) => updateItem(index, "description", e.target.value)}
-                                                                className="h-8 min-w-[160px]"
-                                                            />
+                                                            <div className="space-y-2">
+                                                                <Textarea
+                                                                    placeholder="Description"
+                                                                    value={item.description}
+                                                                    onChange={(e) => updateItem(index, "description", e.target.value)}
+                                                                    className="min-h-[60px] font-bold"
+                                                                />
+                                                                <Textarea
+                                                                    placeholder="Long description"
+                                                                    value={item.longDescription}
+                                                                    onChange={(e) => updateItem(index, "longDescription", e.target.value)}
+                                                                    className="min-h-[80px] text-xs"
+                                                                />
+                                                            </div>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                value={item.quantity}
-                                                                onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
-                                                                className="w-20 h-8"
-                                                            />
+                                                            <div className="space-y-1 text-center">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={1}
+                                                                    value={item.quantity}
+                                                                    onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                                    className="w-20"
+                                                                />
+                                                                <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                            </div>
                                                         </TableCell>
                                                         <TableCell>
                                                             <Input
                                                                 type="number"
                                                                 min={0}
+                                                                placeholder="Rate"
                                                                 value={item.unitPrice}
                                                                 onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
-                                                                className="w-28 h-8"
+                                                                className="w-full"
                                                             />
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                value={item.discount}
-                                                                onChange={(e) => updateItem(index, "discount", Number(e.target.value))}
-                                                                className="w-24 h-8"
-                                                            />
+                                                            <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                                <SelectTrigger className="w-24">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="0">No Tax</SelectItem>
+                                                                    <SelectItem value="11">11.00%</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
                                                         </TableCell>
-                                                        <TableCell>
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                value={item.tax}
-                                                                onChange={(e) => updateItem(index, "tax", Number(e.target.value))}
-                                                                className="w-24 h-8"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="font-medium">
+                                                        <TableCell className="font-medium text-right">
                                                             {formatCurrency(lineSubtotal)}
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                                                onClick={() => removeItem(index)}
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>
+                                                            <div className="flex flex-col gap-1 items-center">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    onClick={() => removeItem(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600">
+                                                                    <Check className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 )
@@ -605,151 +784,79 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                 </Table>
                             </div>
 
-                            {/* SubTotal Row */}
-                            <div className="flex justify-end items-center gap-8 px-4 py-3 border-t bg-muted/20">
-                                <span className="font-semibold text-sm">SubTotal</span>
-                                <span className="font-semibold w-[140px] text-right">{formatCurrency(subTotal)}</span>
+                            {/* Totals Summary */}
+                            <div className="mt-4 flex flex-col items-end gap-2 border-t pt-4">
+                                <div className="flex items-center gap-20">
+                                    <span className="text-sm font-medium">Sub Total :</span>
+                                    <span className="text-sm font-medium w-32 text-right">{formatCurrency(subTotal)}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-sm font-medium">Discount :</span>
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="number"
+                                            value={discount}
+                                            onChange={(e) => setDiscount(Number(e.target.value))}
+                                            className="w-24 h-8 text-right"
+                                        />
+                                        <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
+                                            <SelectTrigger className="w-16 h-8">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="percent">%</SelectItem>
+                                                <SelectItem value="fixed">Rp</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <span className="text-sm font-medium w-32 text-right text-destructive">
+                                        -{formatCurrency(discountType === "percent" ? (subTotal * discount) / 100 : discount)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-sm font-medium">Delivery :</span>
+                                    <Input
+                                        type="number"
+                                        value={shipping}
+                                        onChange={(e) => setShipping(Number(e.target.value))}
+                                        className="w-24 h-8 text-right"
+                                    />
+                                    <span className="text-sm font-medium w-32 text-right">{formatCurrency(shipping)}</span>
+                                </div>
+                                <div className="flex items-center gap-20 pt-2">
+                                    <span className="text-sm font-bold">Total :</span>
+                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(grandTotal)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </CardContent>
             </Card>
 
+            {/* Client Note & Terms */}
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Client Note</Label>
+                    <Textarea
+                        rows={4}
+                        value={clientNote}
+                        onChange={(e) => setClientNote(e.target.value)}
+                        className="resize-none"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Terms & Conditions</Label>
+                    <Textarea
+                        rows={6}
+                        value={termsConditions}
+                        onChange={(e) => setTermsConditions(e.target.value)}
+                        className="resize-none bg-orange-50/30 text-orange-800"
+                    />
+                </div>
+            </div>
+
             {/* Footer: Terms & Summary */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left: Terms + Notes */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Terms & Notes</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-blue-600 font-semibold">Payment Terms</Label>
-                            <Input
-                                placeholder="e.g. Net 30 / COD / 50% Down Payment"
-                                value={paymentTerms}
-                                onChange={(e) => setPaymentTerms(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-blue-600 font-semibold">Terms & Conditions</Label>
-                            <Textarea
-                                rows={4}
-                                value={termsConditions}
-                                onChange={(e) => setTermsConditions(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="font-semibold">Notes</Label>
-                            <Textarea
-                                rows={3}
-                                placeholder="Internal notes"
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Right: Status + Financials */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {/* Status */}
-                        <div className="space-y-2">
-                            <Label className="font-semibold">
-                                <span className="text-red-500">*</span> Status
-                            </Label>
-                            <Select value={status} onValueChange={setStatus}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Status..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="draft">Draft</SelectItem>
-                                    <SelectItem value="sent">Sent</SelectItem>
-                                    <SelectItem value="approved">Approved</SelectItem>
-                                    <SelectItem value="rejected">Rejected</SelectItem>
-                                    <SelectItem value="expired">Expired</SelectItem>
-                                    <SelectItem value="converted">Converted</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* Discount */}
-                        <div className="space-y-2">
-                            <Label className="font-semibold">Discount</Label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-muted-foreground bg-muted px-3 py-2 rounded-l-md border border-r-0">Rp</span>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    value={discount}
-                                    onChange={(e) => setDiscount(Number(e.target.value))}
-                                    className="rounded-l-none"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Tax */}
-                        <div className="space-y-2">
-                            <Label className="font-semibold">Tax (PPN)</Label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-muted-foreground bg-muted px-3 py-2 rounded-l-md border border-r-0">Rp</span>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    value={tax}
-                                    onChange={(e) => setTax(Number(e.target.value))}
-                                    className="rounded-l-none"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Shipping */}
-                        <div className="space-y-2">
-                            <Label className="font-semibold">Shipping</Label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-muted-foreground bg-muted px-3 py-2 rounded-l-md border border-r-0">Rp</span>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    value={shipping}
-                                    onChange={(e) => setShipping(Number(e.target.value))}
-                                    className="rounded-l-none"
-                                />
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Totals Summary */}
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">SubTotal</span>
-                                <span className="font-medium">{formatCurrency(subTotal)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Discount</span>
-                                <span className="font-medium text-red-500">-{formatCurrency(discount)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Tax (PPN)</span>
-                                <span className="font-medium">{formatCurrency(tax)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Shipping</span>
-                                <span className="font-medium">{formatCurrency(shipping)}</span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between text-base font-bold">
-                                <span>Grand Total</span>
-                                <span>{formatCurrency(grandTotal)}</span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
 
             {/* Bottom Save Buttons */}

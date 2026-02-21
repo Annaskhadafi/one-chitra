@@ -43,6 +43,13 @@
       "when": 1771575910423,
       "tag": "0005_simple_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771681290470,
+      "tag": "0006_plain_polaris",
+      "breakpoints": true
     }
   ]
 }
