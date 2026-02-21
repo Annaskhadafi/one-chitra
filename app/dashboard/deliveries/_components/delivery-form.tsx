@@ -73,6 +73,7 @@ interface SalesOrderForDelivery {
     salesDate: Date
     status: string
     customer: Customer
+    warehouseId: number | null
     items: SOItemWithRemaining[]
 }
 
@@ -93,6 +94,7 @@ interface StockResult {
     available: number
     sufficient: boolean
     alternativeIds?: { id: number; stock: number; description: string }[]
+    otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
 }
 
 interface DeliveryFormProps {
@@ -285,6 +287,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
                 }))
             setItems(newItems)
+
+            // Auto-fill warehouse if available in SO
+            if (so.warehouseId) {
+                setWarehouseId(so.warehouseId)
+            }
 
             // Auto-fill customer address
             const addr = [so.customer.address1, so.customer.address2, so.customer.address3, so.customer.address4, so.customer.address5]
@@ -753,12 +760,6 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                                     <CheckCircle2 className="h-4 w-4" />
                                                                                     <span>Available</span>
                                                                                 </div>
-                                                                                {stock.alternativeIds && stock.alternativeIds.length > 0 && stock.available === 0 && (
-                                                                                    <div className="mt-1 flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                                                                                        <AlertTriangle className="h-3 w-3" />
-                                                                                        <span>Found {stock.alternativeIds[0].stock} in duplicate record</span>
-                                                                                    </div>
-                                                                                )}
                                                                             </div>
                                                                         ) : (
                                                                             <div className="flex flex-col items-end">
@@ -766,18 +767,32 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                                     <XCircle className="h-4 w-4" />
                                                                                     <span>Insufficient</span>
                                                                                 </div>
-                                                                                {stock.alternativeIds && stock.alternativeIds.length > 0 && (
-                                                                                    <div className="mt-1 flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                                                                                        <AlertTriangle className="h-3 w-3" />
-                                                                                        <span>Found {stock.alternativeIds[0].stock} in duplicate record</span>
-                                                                                    </div>
-                                                                                )}
                                                                             </div>
                                                                         )}
                                                                     </div>
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        {stock.available} in stock
-                                                                    </span>
+                                                                    <div className="flex flex-col items-end gap-1 mt-1">
+                                                                        <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+                                                                            {stock.available} in Origin Warehouse
+                                                                        </span>
+
+                                                                        {stock.alternativeIds && stock.alternativeIds.length > 0 && (
+                                                                            <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                                                                                <AlertTriangle className="h-3 w-3" />
+                                                                                <span>Alternative record: {stock.alternativeIds[0].stock}</span>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
+                                                                            <div className="mt-1 flex flex-col items-end gap-1">
+                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
+                                                                                {stock.otherWarehouses.map((ow, owIdx) => (
+                                                                                    <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                                                                                        {ow.warehouseName}: <strong>{ow.stock}</strong>
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             ) : (
                                                                 <span className="text-xs text-muted-foreground italic">

@@ -103,13 +103,14 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
         requested: number;
         available: number;
         sufficient: boolean;
-        alternativeIds?: { id: number; stock: number; description: string }[]
+        alternativeIds?: { id: number; stock: number; description: string }[];
+        otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[];
     }[] = []
 
     console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
 
     for (const item of items) {
-        // 1. Get exact product stock
+        // 1. Get exact product stock in requested warehouse
         const stockRecord = await db.query.stockLevels.findFirst({
             where: and(
                 eq(stockLevels.warehouseId, warehouseId),
@@ -122,7 +123,7 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
         let totalAvailable = directAvailable
         const alternatives: { id: number; stock: number; description: string }[] = []
 
-        // 2. Smart Check: look for other products with same description
+        // 2. Smart Check: look for other products with same description in requested warehouse
         const currentProduct = await db.query.products.findFirst({
             where: eq(products.id, item.productId)
         })
@@ -154,6 +155,24 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
             }
         }
 
+        // 3. Check other warehouses for the same product
+        const otherWarehouseStocks = await db.query.stockLevels.findMany({
+            where: and(
+                eq(stockLevels.productId, item.productId),
+                sql`${stockLevels.warehouseId} != ${warehouseId}`,
+                sql`${stockLevels.totalStock} > 0`
+            ),
+            with: {
+                warehouse: true
+            }
+        })
+
+        const otherWarehouses = otherWarehouseStocks.map(sw => ({
+            warehouseId: sw.warehouseId,
+            warehouseName: sw.warehouse?.description || sw.warehouse?.sloc || "Unknown",
+            stock: sw.totalStock
+        }))
+
         const sufficient = totalAvailable >= item.quantity
 
         const result: any = {
@@ -161,10 +180,11 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
             requested: item.quantity,
             available: directAvailable,
             sufficient,
-            alternativeIds: alternatives.length > 0 ? alternatives : undefined
+            alternativeIds: alternatives.length > 0 ? alternatives : undefined,
+            otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined
         }
 
-        console.log(`[STOCKS] Product ${item.productId}: available=${directAvailable}, alternatives=${alternatives.length}`)
+        console.log(`[STOCKS] Product ${item.productId}: available=${directAvailable}, alternatives=${alternatives.length}, otherWHs=${otherWarehouses.length}`)
         results.push(result)
     }
 

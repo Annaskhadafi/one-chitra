@@ -253,7 +253,8 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
         if (res.success) {
             toast.success("Delivery deleted successfully")
         } else {
-            toast.error(res.error || "Failed to delete delivery")
+            const errorMsg = 'error' in res && res.error ? res.error : "Failed to delete delivery"
+            toast.error(errorMsg)
         }
         setDeleting(null)
     }
@@ -462,7 +463,7 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {delivery.warehouse?.sloc || "-"}
+                                        {delivery.warehouse?.description || delivery.warehouse?.sloc || "-"}
                                     </TableCell>
                                     <TableCell>
                                         {delivery.createdByUser ? (
