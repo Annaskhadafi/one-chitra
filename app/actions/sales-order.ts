@@ -366,6 +366,49 @@ export async function deleteSalesOrder(id: number) {
 
         // Start transaction
         return await db.transaction(async (tx) => {
+            // 1. Revert booked stock for SO items
+            if (order.warehouseId) {
+                for (const item of order.items) {
+                    await tx.update(stockLevels)
+                        .set({
+                            bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                            updatedAt: new Date(),
+                        })
+                        .where(and(
+                            eq(stockLevels.warehouseId, order.warehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        ))
+                }
+            }
+
+            // 2. Handle related deliveries and their stock
+            const relatedDeliveries = await tx.query.deliveries.findMany({
+                where: eq(deliveries.salesOrderId, id),
+                with: { items: true }
+            })
+
+            for (const delivery of relatedDeliveries) {
+                const wasCommitted = delivery.status !== "cancelled"
+                if (wasCommitted && delivery.warehouseId) {
+                    for (const dItem of delivery.items) {
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, delivery.warehouseId),
+                                eq(stockLevels.productId, dItem.productId)
+                            ))
+                    }
+                }
+                // Delete delivery items (cascaded by DB but safe to be explicit if needed, 
+                // though insert/delete in tx is fine)
+                await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id))
+                await tx.delete(deliveries).where(eq(deliveries.id, delivery.id))
+            }
+
             // Permanent deletion of assets
             if (order.poDocument) {
                 await deleteFile(order.poDocument)
@@ -377,6 +420,7 @@ export async function deleteSalesOrder(id: number) {
             await tx.delete(salesOrders).where(eq(salesOrders.id, id))
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
             return { success: true }
         })
     } catch (error) {
@@ -389,24 +433,68 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
     try {
         await checkPermission('sales-orders', 'delete')
 
-        // Current implementation: Fetch and delete one by one or in bulk
-        // For asset deletion, we need to know what we are deleting
+        // For asset deletion and stock reversion, we need to know what we are deleting
         const orders = await db.query.salesOrders.findMany({
-            where: inArray(salesOrders.id, ids)
+            where: inArray(salesOrders.id, ids),
+            with: { items: true }
         })
 
-        // Delete files
-        for (const order of orders) {
-            if (order.poDocument) {
-                await deleteFile(order.poDocument)
+        return await db.transaction(async (tx) => {
+            for (const order of orders) {
+                // 1. Revert booked stock for SO items
+                if (order.warehouseId) {
+                    for (const item of order.items) {
+                        await tx.update(stockLevels)
+                            .set({
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, order.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+
+                // 2. Handle related deliveries
+                const relatedDeliveries = await tx.query.deliveries.findMany({
+                    where: eq(deliveries.salesOrderId, order.id),
+                    with: { items: true }
+                })
+
+                for (const delivery of relatedDeliveries) {
+                    const wasCommitted = delivery.status !== "cancelled"
+                    if (wasCommitted && delivery.warehouseId) {
+                        for (const dItem of delivery.items) {
+                            await tx.update(stockLevels)
+                                .set({
+                                    totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
+                                    bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
+                                    updatedAt: new Date(),
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, delivery.warehouseId),
+                                    eq(stockLevels.productId, dItem.productId)
+                                ))
+                        }
+                    }
+                    await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id))
+                    await tx.delete(deliveries).where(eq(deliveries.id, delivery.id))
+                }
+
+                // Delete files
+                if (order.poDocument) {
+                    await deleteFile(order.poDocument)
+                }
             }
-        }
 
-        await db.delete(salesOrderItems).where(inArray(salesOrderItems.salesOrderId, ids))
-        await db.delete(salesOrders).where(inArray(salesOrders.id, ids))
+            await tx.delete(salesOrderItems).where(inArray(salesOrderItems.salesOrderId, ids))
+            await tx.delete(salesOrders).where(inArray(salesOrders.id, ids))
 
-        revalidatePath("/dashboard/sales-orders")
-        return { success: true }
+            revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
+            return { success: true }
+        })
     } catch (error) {
         console.error("Failed to bulk delete sales orders:", error)
         return { success: false, error: "Failed to bulk delete sales orders" }

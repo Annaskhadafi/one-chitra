@@ -551,7 +551,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             <CardDescription>Select the Sales Order to be delivered.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid gap-6">
+                            <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <Label className="text-sm font-medium">Delivery Order Number</Label>
                                     <Input
@@ -562,329 +562,64 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Sales Order Number</Label>
-                                    <Popover open={soOpen} onOpenChange={setSoOpen}>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                role="combobox"
-                                                className={cn(
-                                                    "w-full justify-between h-11 text-base",
-                                                    !salesOrderId && "text-muted-foreground"
-                                                )}
-                                                disabled={isEdit}
-                                            >
-                                                {selectedSO
-                                                    ? `${selectedSO.invoiceNumber} — ${selectedSO.customer.name}`
-                                                    : "Select Sales Order..."}
-                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-[600px] p-0" align="start">
-                                            <Command>
-                                                <CommandInput placeholder="Search SO number, customer name..." />
-                                                <CommandList>
-                                                    <CommandEmpty>No confirmed Sales Orders found.</CommandEmpty>
-                                                    <CommandGroup heading="Available Sales Orders">
-                                                        {salesOrders.map(so => (
-                                                            <CommandItem
-                                                                key={so.id}
-                                                                value={`${so.invoiceNumber} ${so.customer.name}`}
-                                                                onSelect={() => {
-                                                                    handleSOChange(so.id)
-                                                                    setSoOpen(false)
-                                                                }}
-                                                                className="py-3"
-                                                            >
-                                                                <Check
-                                                                    className={cn(
-                                                                        "mr-2 h-4 w-4 text-blue-600",
-                                                                        salesOrderId === so.id ? "opacity-100" : "opacity-0"
-                                                                    )}
-                                                                />
-                                                                <div className="flex flex-col">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="font-semibold font-mono text-base">
-                                                                            {so.invoiceNumber}
-                                                                        </span>
-                                                                        <Badge variant="secondary" className="text-xs">
-                                                                            {new Date(so.salesDate).toLocaleDateString("id-ID")}
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <span className="text-sm text-muted-foreground mt-1">
-                                                                        {so.customer.name} • {so.items.length} items
-                                                                    </span>
-                                                                </div>
-                                                            </CommandItem>
-                                                        ))}
-                                                    </CommandGroup>
-                                                </CommandList>
-                                            </Command>
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-
-                                {selectedSO && (
-                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-md p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm border">
-                                        <div>
-                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Customer</span>
-                                            <span className="font-medium text-base">{selectedSO.customer.name}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">No. PO Customer</span>
-                                            <span className="font-medium">{selectedSO.customerPo || "-"}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Status</span>
-                                            <Badge className={cn(
-                                                "capitalize",
-                                                selectedSO.status === 'confirmed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800'
-                                            )}>
-                                                {selectedSO.status}
-                                            </Badge>
-                                        </div>
+                                    <Label className="text-sm font-medium">Customer PO Number</Label>
+                                    <div className="h-11 flex items-center px-3 rounded-md bg-gray-50 border border-gray-200 text-gray-700 font-medium">
+                                        {selectedSO?.customerPo || "-"}
                                     </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* 2. Items Table */}
-                    {items.length > 0 && (
-                        <Card className="shadow-sm">
-                            <CardHeader className="pb-2 border-b bg-gray-50/50 dark:bg-gray-900/50">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="text-lg">Items to Deliver</CardTitle>
-                                        <CardDescription>Adjust quantities and enter serial numbers if required.</CardDescription>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleCheckStock}
-                                        disabled={checkingStock || !warehouseId}
-                                        className={cn(
-                                            "gap-2",
-                                            !warehouseId && "opacity-50 cursor-not-allowed"
-                                        )}
-                                    >
-                                        {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
-                                        Check Stock
-                                    </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-transparent hover:bg-transparent">
-                                            <TableHead className="w-[40%] pl-6">Product Details</TableHead>
-                                            <TableHead className="w-[15%] text-center">Ordered</TableHead>
-                                            <TableHead className="w-[20%]">Deliver Qty</TableHead>
-                                            <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, idx) => {
-                                            const stock = getStockStatus(item.productId)
-                                            const isTyre = item.productCategory === "TYRE"
-
-                                            return (
-                                                <TableRow key={idx} className="group">
-                                                    <TableCell className="pl-6 align-top py-4">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="font-medium text-base text-gray-900 dark:text-gray-100">
-                                                                {item.productName}
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                                                                    {item.productCategory}
-                                                                </Badge>
-                                                                {isTyre && (
-                                                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
-                                                                        Serial No. Required
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Serial Number Input Section for TYRE */}
-                                                        {isTyre && item.deliveredQuantity > 0 && (
-                                                            <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
-                                                                <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
-                                                                    Enter {item.deliveredQuantity} Serial Number(s)
-                                                                </Label>
-                                                                <div className="grid grid-cols-1 gap-2">
-                                                                    {item.serialNumbers.map((sn, snIdx) => (
-                                                                        <Input
-                                                                            key={snIdx}
-                                                                            placeholder={`SN #${snIdx + 1}`}
-                                                                            value={sn}
-                                                                            onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                            className="h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500"
-                                                                        />
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </TableCell>
-
-                                                    <TableCell className="text-center align-top py-4">
-                                                        <div className="text-sm">
-                                                            <span className="font-semibold">{item.orderedQuantity}</span>
-                                                            <span className="text-muted-foreground text-xs block">Order</span>
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground mt-1">
-                                                            (Rem: {item.remainingQuantity})
-                                                        </div>
-                                                    </TableCell>
-
-                                                    <TableCell className="align-top py-4">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            max={item.remainingQuantity}
-                                                            value={item.deliveredQuantity}
-                                                            onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                            className="w-24 font-mono text-center"
-                                                        />
-                                                    </TableCell>
-
-                                                    <TableCell className="text-right pr-6 align-top py-4">
-                                                        {warehouseId ? (
-                                                            stock ? (
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <div className={cn(
-                                                                        "flex items-center gap-1.5 font-medium text-sm",
-                                                                        stock.sufficient ? "text-green-600" : "text-red-600"
-                                                                    )}>
-                                                                        {stock.sufficient ? (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                                    <span>Available</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <XCircle className="h-4 w-4" />
-                                                                                    <span>Insufficient</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex flex-col items-end gap-1 mt-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-                                                                            {stock.available} in Origin Warehouse
-                                                                        </span>
-
-                                                                        {stock.alternativeIds && stock.alternativeIds.length > 0 && (
-                                                                            <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                                                                                <AlertTriangle className="h-3 w-3" />
-                                                                                <span>Alternative record: {stock.alternativeIds[0].stock}</span>
-                                                                            </div>
-                                                                        )}
-
-                                                                        {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
-                                                                            <div className="mt-1 flex flex-col items-end gap-1">
-                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
-                                                                                {stock.otherWarehouses.map((ow, owIdx) => (
-                                                                                    <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
-                                                                                        {ow.warehouseName}: <strong>{ow.stock}</strong>
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-xs text-muted-foreground italic">
-                                                                    Check stock to see availability
-                                                                </span>
-                                                            )
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">Select warehouse first</span>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                            <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
-                                <div className="text-muted-foreground">
-                                    Total Types: <span className="font-medium text-foreground">{totalItems}</span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-muted-foreground">Total Quantity:</span>
-                                    <span className="text-lg font-bold text-blue-600">{totalQty}</span>
                                 </div>
                             </div>
-                        </Card>
-                    )}
-                </div>
-
-                {/* Right Column: Meta Details */}
-                <div className="space-y-6">
-                    {/* Origin & Destination */}
-                    <Card className="shadow-sm">
-                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
-                            <CardTitle className="text-base flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-primary" />
-                                Logistics Route
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-5 pt-5">
                             <div className="space-y-2">
-                                <Label className="flex justify-between">
-                                    <span>Origin Warehouse</span>
-                                </Label>
-                                <Popover open={whOpen} onOpenChange={setWhOpen}>
+                                <Label className="text-sm font-medium">Sales Order Number</Label>
+                                <Popover open={soOpen} onOpenChange={setSoOpen}>
                                     <PopoverTrigger asChild>
                                         <Button
                                             variant="outline"
                                             role="combobox"
                                             className={cn(
-                                                "w-full justify-between",
-                                                !warehouseId && "text-muted-foreground"
+                                                "w-full justify-between h-11 text-base",
+                                                !salesOrderId && "text-muted-foreground"
                                             )}
+                                            disabled={isEdit}
                                         >
-                                            {warehouseId
-                                                ? warehouses.find(w => w.id === warehouseId)?.sloc +
-                                                (warehouses.find(w => w.id === warehouseId)?.description
-                                                    ? ` - ${warehouses.find(w => w.id === warehouseId)?.description}`
-                                                    : "")
-                                                : "Select Origin..."}
+                                            {selectedSO
+                                                ? `${selectedSO.invoiceNumber} — ${selectedSO.customer.name}`
+                                                : "Select Sales Order..."}
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-[350px] p-0" align="start">
+                                    <PopoverContent className="w-[600px] p-0" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Search warehouse..." />
+                                            <CommandInput placeholder="Search SO number, customer name..." />
                                             <CommandList>
-                                                <CommandEmpty>No warehouses found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {warehouses.map(wh => (
+                                                <CommandEmpty>No confirmed Sales Orders found.</CommandEmpty>
+                                                <CommandGroup heading="Available Sales Orders">
+                                                    {salesOrders.map(so => (
                                                         <CommandItem
-                                                            key={wh.id}
-                                                            value={`${wh.sloc} ${wh.description || ""}`}
+                                                            key={so.id}
+                                                            value={`${so.invoiceNumber} ${so.customer.name}`}
                                                             onSelect={() => {
-                                                                setWarehouseId(wh.id)
-                                                                setWhOpen(false)
-                                                                setStockResults([]) // Reset stock check on warehouse change
+                                                                handleSOChange(so.id)
+                                                                setSoOpen(false)
                                                             }}
+                                                            className="py-3"
                                                         >
                                                             <Check
                                                                 className={cn(
-                                                                    "mr-2 h-4 w-4",
-                                                                    warehouseId === wh.id ? "opacity-100" : "opacity-0"
+                                                                    "mr-2 h-4 w-4 text-blue-600",
+                                                                    salesOrderId === so.id ? "opacity-100" : "opacity-0"
                                                                 )}
                                                             />
                                                             <div className="flex flex-col">
-                                                                <span className="font-mono font-medium">{wh.sloc}</span>
-                                                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                                                    {wh.description}
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-semibold font-mono text-base">
+                                                                        {so.invoiceNumber}
+                                                                    </span>
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        {new Date(so.salesDate).toLocaleDateString("id-ID")}
+                                                                    </Badge>
+                                                                </div>
+                                                                <span className="text-sm text-muted-foreground mt-1">
+                                                                    {so.customer.name} • {so.items.length} items
                                                                 </span>
                                                             </div>
                                                         </CommandItem>
@@ -896,134 +631,467 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 </Popover>
                             </div>
 
+                            {selectedSO && (
+                                <div className="bg-slate-50 dark:bg-slate-900 rounded-md p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm border">
+                                    <div>
+                                        <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Customer</span>
+                                        <span className="font-medium text-base">{selectedSO.customer.name}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">No. PO Customer</span>
+                                        <span className="font-medium">{selectedSO.customerPo || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground block text-xs uppercase tracking-wider mb-1">Status</span>
+                                        <Badge className={cn(
+                                            "capitalize",
+                                            selectedSO.status === 'confirmed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800'
+                                        )}>
+                                            {selectedSO.status}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* 2. Items Table */}
+                {items.length > 0 && (
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-2 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-lg">Items to Deliver</CardTitle>
+                                    <CardDescription>Adjust quantities and enter serial numbers if required.</CardDescription>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleCheckStock}
+                                    disabled={checkingStock || !warehouseId}
+                                    className={cn(
+                                        "gap-2",
+                                        !warehouseId && "opacity-50 cursor-not-allowed"
+                                    )}
+                                >
+                                    {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
+                                    Check Stock
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-transparent hover:bg-transparent">
+                                        <TableHead className="w-[40%] pl-6">Product Details</TableHead>
+                                        <TableHead className="w-[15%] text-center">Ordered</TableHead>
+                                        <TableHead className="w-[20%]">Deliver Qty</TableHead>
+                                        <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {items.map((item, idx) => {
+                                        const stock = getStockStatus(item.productId)
+                                        const isTyre = item.productCategory === "TYRE"
+
+                                        return (
+                                            <TableRow key={idx} className="group">
+                                                <TableCell className="pl-6 align-top py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-medium text-base text-gray-900 dark:text-gray-100">
+                                                            {item.productName}
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                                                                {item.productCategory}
+                                                            </Badge>
+                                                            {isTyre && (
+                                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
+                                                                    Serial No. Required
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Serial Number Input Section for TYRE */}
+                                                    {isTyre && item.deliveredQuantity > 0 && (
+                                                        <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
+                                                            <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
+                                                                Enter {item.deliveredQuantity} Serial Number(s)
+                                                            </Label>
+                                                            <div className="grid grid-cols-1 gap-2">
+                                                                {item.serialNumbers.map((sn, snIdx) => (
+                                                                    <Input
+                                                                        key={snIdx}
+                                                                        placeholder={`SN #${snIdx + 1}`}
+                                                                        value={sn}
+                                                                        onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                        className="h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500"
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+
+                                                <TableCell className="text-center align-top py-4">
+                                                    <div className="text-sm">
+                                                        <span className="font-semibold">{item.orderedQuantity}</span>
+                                                        <span className="text-muted-foreground text-xs block">Order</span>
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground mt-1">
+                                                        (Rem: {item.remainingQuantity})
+                                                    </div>
+                                                </TableCell>
+
+                                                <TableCell className="align-top py-4">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        max={item.remainingQuantity}
+                                                        value={item.deliveredQuantity}
+                                                        onChange={e => updateItemQty(idx, Number(e.target.value))}
+                                                        className="w-24 font-mono text-center"
+                                                    />
+                                                </TableCell>
+
+                                                <TableCell className="text-right pr-6 align-top py-4">
+                                                    {warehouseId ? (
+                                                        stock ? (
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <div className={cn(
+                                                                    "flex items-center gap-1.5 font-medium text-sm",
+                                                                    stock.sufficient ? "text-green-600" : "text-red-600"
+                                                                )}>
+                                                                    {stock.sufficient ? (
+                                                                        <div className="flex flex-col items-end">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <CheckCircle2 className="h-4 w-4" />
+                                                                                <span>Available</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex flex-col items-end">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <XCircle className="h-4 w-4" />
+                                                                                <span>Insufficient</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-1 mt-1">
+                                                                    <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+                                                                        {stock.available} in Origin Warehouse
+                                                                    </span>
+
+                                                                    {stock.alternativeIds && stock.alternativeIds.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                                                                            <AlertTriangle className="h-3 w-3" />
+                                                                            <span>Alternative record: {stock.alternativeIds[0].stock}</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
+                                                                        <div className="mt-1 flex flex-col items-end gap-1">
+                                                                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
+                                                                            {stock.otherWarehouses.map((ow, owIdx) => (
+                                                                                <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                                                                                    {ow.warehouseName}: <strong>{ow.stock}</strong>
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground italic">
+                                                                Check stock to see availability
+                                                            </span>
+                                                        )
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">Select warehouse first</span>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                        <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
+                            <div className="text-muted-foreground">
+                                Total Types: <span className="font-medium text-foreground">{totalItems}</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="text-muted-foreground">Total Quantity:</span>
+                                <span className="text-lg font-bold text-blue-600">{totalQty}</span>
+                            </div>
+                        </div>
+                    </Card>
+                )}
+            </div>
+
+            {/* Right Column: Meta Details */}
+            <div className="space-y-6">
+                {/* Origin & Destination */}
+                <Card className="shadow-sm">
+                    <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-primary" />
+                            Logistics Route
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-5 pt-5">
+                        <div className="space-y-2">
+                            <Label className="flex justify-between">
+                                <span>Origin Warehouse</span>
+                            </Label>
+                            <Popover open={whOpen} onOpenChange={setWhOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        className={cn(
+                                            "w-full justify-between",
+                                            !warehouseId && "text-muted-foreground"
+                                        )}
+                                    >
+                                        {warehouseId
+                                            ? warehouses.find(w => w.id === warehouseId)?.sloc +
+                                            (warehouses.find(w => w.id === warehouseId)?.description
+                                                ? ` - ${warehouses.find(w => w.id === warehouseId)?.description}`
+                                                : "")
+                                            : "Select Origin..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[350px] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search warehouse..." />
+                                        <CommandList>
+                                            <CommandEmpty>No warehouses found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {warehouses.map(wh => (
+                                                    <CommandItem
+                                                        key={wh.id}
+                                                        value={`${wh.sloc} ${wh.description || ""}`}
+                                                        onSelect={() => {
+                                                            setWarehouseId(wh.id)
+                                                            setWhOpen(false)
+                                                            setStockResults([]) // Reset stock check on warehouse change
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                warehouseId === wh.id ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        <div className="flex flex-col">
+                                                            <span className="font-mono font-medium">{wh.sloc}</span>
+                                                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                                                {wh.description}
+                                                            </span>
+                                                        </div>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Shipping Address</Label>
+                            <Textarea
+                                placeholder="Destination address..."
+                                value={shippingAddress}
+                                onChange={e => setShippingAddress(e.target.value)}
+                                rows={4}
+                                className="resize-none"
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Schedule & Status */}
+                <Card className="shadow-sm">
+                    <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-primary" />
+                            Shipment Details
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-5">
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>Shipping Address</Label>
-                                <Textarea
-                                    placeholder="Destination address..."
-                                    value={shippingAddress}
-                                    onChange={e => setShippingAddress(e.target.value)}
-                                    rows={4}
-                                    className="resize-none"
+                                <Label>Schedule Date</Label>
+                                <Input
+                                    type="date"
+                                    value={scheduledDate}
+                                    onChange={e => setScheduledDate(e.target.value)}
+                                    max="9999-12-31"
                                 />
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Schedule & Status */}
-                    <Card className="shadow-sm">
-                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
-                            <CardTitle className="text-base flex items-center gap-2">
-                                <Truck className="h-4 w-4 text-primary" />
-                                Shipment Details
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4 pt-5">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Schedule Date</Label>
-                                    <Input
-                                        type="date"
-                                        value={scheduledDate}
-                                        onChange={e => setScheduledDate(e.target.value)}
-                                        max="9999-12-31"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Delivery Date</Label>
-                                    <Input
-                                        type="date"
-                                        value={deliveryDate}
-                                        onChange={e => setDeliveryDate(e.target.value)}
-                                        max="9999-12-31"
-                                    />
-                                </div>
-                            </div>
-
                             <div className="space-y-2">
-                                <Label>Shipment Status</Label>
-                                <Select value={status} onValueChange={setStatus}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                                        <SelectItem value="ready">Ready to Load</SelectItem>
-                                        <SelectItem value="in_transit">In Transit</SelectItem>
-                                        <SelectItem value="partial">Partially Delivered</SelectItem>
-                                        <SelectItem value="delivered">Delivered</SelectItem>
-                                        <SelectItem value="cancelled" className="text-red-600">Cancelled</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Label>Delivery Date</Label>
+                                <Input
+                                    type="date"
+                                    value={deliveryDate}
+                                    onChange={e => setDeliveryDate(e.target.value)}
+                                    max="9999-12-31"
+                                />
                             </div>
+                        </div>
 
-                            <Separator />
+                        <div className="space-y-2">
+                            <Label>Shipment Status</Label>
+                            <Select value={status} onValueChange={setStatus}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                                    <SelectItem value="ready">Ready to Load</SelectItem>
+                                    <SelectItem value="in_transit">In Transit</SelectItem>
+                                    <SelectItem value="partial">Partially Delivered</SelectItem>
+                                    <SelectItem value="delivered">Delivered</SelectItem>
+                                    <SelectItem value="cancelled" className="text-red-600">Cancelled</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                            <div className="flex items-center justify-between pb-2">
-                                <Label className="text-base font-semibold">Delivery Mode</Label>
-                                <div className="flex items-center gap-2">
-                                    <span className={cn("text-sm", !isExternal && "font-bold")}>Internal Fleet</span>
-                                    <Switch checked={isExternal} onCheckedChange={setIsExternal} />
-                                    <span className={cn("text-sm", isExternal && "font-bold")}>External Vendor</span>
-                                </div>
+                        <Separator />
+
+                        <div className="flex items-center justify-between pb-2">
+                            <Label className="text-base font-semibold">Delivery Mode</Label>
+                            <div className="flex items-center gap-2">
+                                <span className={cn("text-sm", !isExternal && "font-bold")}>Internal Fleet</span>
+                                <Switch checked={isExternal} onCheckedChange={setIsExternal} />
+                                <span className={cn("text-sm", isExternal && "font-bold")}>External Vendor</span>
                             </div>
+                        </div>
 
-                            <Separator />
+                        <Separator />
 
-                            {!isExternal ? (
-                                <div className="space-y-3">
-                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                                        Internal Fleet
-                                    </Label>
-                                    <div className="space-y-4">
-                                        {/* Driver Selection */}
+                        {!isExternal ? (
+                            <div className="space-y-3">
+                                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                                    Internal Fleet
+                                </Label>
+                                <div className="space-y-4">
+                                    {/* Driver Selection */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <Label className="text-xs text-muted-foreground">Driver Name</Label>
+                                        <Popover open={driverOpen} onOpenChange={setDriverOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    className={cn("w-full justify-between", !driverName && "text-muted-foreground")}
+                                                >
+                                                    {driverName || "Select Driver..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[300px] p-0" align="start">
+                                                <Command>
+                                                    <CommandInput
+                                                        placeholder="Search driver..."
+                                                        value={driverSearch}
+                                                        onValueChange={setDriverSearch}
+                                                    />
+                                                    <CommandList>
+                                                        <CommandEmpty>
+                                                            <div className="p-2">
+                                                                <p className="text-sm text-muted-foreground mb-2">No driver found.</p>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="w-full h-8"
+                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                    onClick={() => handleCreateDriver(driverSearch)}
+                                                                >
+                                                                    <Plus className="mr-2 h-3 w-3" />
+                                                                    Add New &quot;{driverSearch}&quot;
+                                                                </Button>
+                                                            </div>
+                                                        </CommandEmpty>
+                                                        <CommandGroup>
+                                                            {drivers.map(driver => (
+                                                                <CommandItem
+                                                                    key={driver.id}
+                                                                    value={driver.name}
+                                                                    onSelect={() => {
+                                                                        setDriverName(driver.name)
+                                                                        setDriverOpen(false)
+                                                                    }}
+                                                                >
+                                                                    <Check className={cn("mr-2 h-4 w-4", driverName === driver.name ? "opacity-100" : "opacity-0")} />
+                                                                    {driver.name}
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    {/* Vehicle Selection */}
+                                    <div className="grid grid-cols-2 gap-2">
                                         <div className="flex flex-col gap-1.5">
-                                            <Label className="text-xs text-muted-foreground">Driver Name</Label>
-                                            <Popover open={driverOpen} onOpenChange={setDriverOpen}>
+                                            <Label className="text-xs text-muted-foreground">Vehicle No.</Label>
+                                            <Popover open={vehicleOpen} onOpenChange={setVehicleOpen}>
                                                 <PopoverTrigger asChild>
                                                     <Button
                                                         variant="outline"
                                                         role="combobox"
-                                                        className={cn("w-full justify-between", !driverName && "text-muted-foreground")}
+                                                        className={cn("w-full justify-between", !vehicleNumber && "text-muted-foreground")}
                                                     >
-                                                        {driverName || "Select Driver..."}
+                                                        {vehicleNumber || "Select Vehicle..."}
                                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-[300px] p-0" align="start">
                                                     <Command>
                                                         <CommandInput
-                                                            placeholder="Search driver..."
-                                                            value={driverSearch}
-                                                            onValueChange={setDriverSearch}
+                                                            placeholder="Search police number..."
+                                                            value={vehicleSearch}
+                                                            onValueChange={setVehicleSearch}
                                                         />
                                                         <CommandList>
                                                             <CommandEmpty>
                                                                 <div className="p-2">
-                                                                    <p className="text-sm text-muted-foreground mb-2">No driver found.</p>
+                                                                    <p className="text-sm text-muted-foreground mb-2">No vehicle found.</p>
                                                                     <Button
                                                                         variant="outline"
                                                                         size="sm"
                                                                         className="w-full h-8"
                                                                         onMouseDown={(e) => e.preventDefault()}
-                                                                        onClick={() => handleCreateDriver(driverSearch)}
+                                                                        onClick={() => handleCreateVehicle(vehicleSearch)}
                                                                     >
                                                                         <Plus className="mr-2 h-3 w-3" />
-                                                                        Add New &quot;{driverSearch}&quot;
+                                                                        Add New &quot;{vehicleSearch}&quot;
                                                                     </Button>
                                                                 </div>
                                                             </CommandEmpty>
                                                             <CommandGroup>
-                                                                {drivers.map(driver => (
+                                                                {vehicles.map(vehicle => (
                                                                     <CommandItem
-                                                                        key={driver.id}
-                                                                        value={driver.name}
+                                                                        key={vehicle.id}
+                                                                        value={vehicle.policeNumber}
                                                                         onSelect={() => {
-                                                                            setDriverName(driver.name)
-                                                                            setDriverOpen(false)
+                                                                            setVehicleNumber(vehicle.policeNumber)
+                                                                            setVehicleType(vehicle.type)
+                                                                            setVehicleOpen(false)
                                                                         }}
                                                                     >
-                                                                        <Check className={cn("mr-2 h-4 w-4", driverName === driver.name ? "opacity-100" : "opacity-0")} />
-                                                                        {driver.name}
+                                                                        <Check className={cn("mr-2 h-4 w-4", vehicleNumber === vehicle.policeNumber ? "opacity-100" : "opacity-0")} />
+                                                                        <span className="font-mono">{vehicle.policeNumber}</span>
+                                                                        <span className="ml-2 text-muted-foreground text-xs">({vehicle.type})</span>
                                                                     </CommandItem>
                                                                 ))}
                                                             </CommandGroup>
@@ -1032,269 +1100,230 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                 </PopoverContent>
                                             </Popover>
                                         </div>
-
-                                        {/* Vehicle Selection */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="flex flex-col gap-1.5">
-                                                <Label className="text-xs text-muted-foreground">Vehicle No.</Label>
-                                                <Popover open={vehicleOpen} onOpenChange={setVehicleOpen}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            className={cn("w-full justify-between", !vehicleNumber && "text-muted-foreground")}
-                                                        >
-                                                            {vehicleNumber || "Select Vehicle..."}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-[300px] p-0" align="start">
-                                                        <Command>
-                                                            <CommandInput
-                                                                placeholder="Search police number..."
-                                                                value={vehicleSearch}
-                                                                onValueChange={setVehicleSearch}
-                                                            />
-                                                            <CommandList>
-                                                                <CommandEmpty>
-                                                                    <div className="p-2">
-                                                                        <p className="text-sm text-muted-foreground mb-2">No vehicle found.</p>
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="w-full h-8"
-                                                                            onMouseDown={(e) => e.preventDefault()}
-                                                                            onClick={() => handleCreateVehicle(vehicleSearch)}
-                                                                        >
-                                                                            <Plus className="mr-2 h-3 w-3" />
-                                                                            Add New &quot;{vehicleSearch}&quot;
-                                                                        </Button>
-                                                                    </div>
-                                                                </CommandEmpty>
-                                                                <CommandGroup>
-                                                                    {vehicles.map(vehicle => (
-                                                                        <CommandItem
-                                                                            key={vehicle.id}
-                                                                            value={vehicle.policeNumber}
-                                                                            onSelect={() => {
-                                                                                setVehicleNumber(vehicle.policeNumber)
-                                                                                setVehicleType(vehicle.type)
-                                                                                setVehicleOpen(false)
-                                                                            }}
-                                                                        >
-                                                                            <Check className={cn("mr-2 h-4 w-4", vehicleNumber === vehicle.policeNumber ? "opacity-100" : "opacity-0")} />
-                                                                            <span className="font-mono">{vehicle.policeNumber}</span>
-                                                                            <span className="ml-2 text-muted-foreground text-xs">({vehicle.type})</span>
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            </div>
-                                            <div className="flex flex-col gap-1.5">
-                                                <Label className="text-xs text-muted-foreground">Type</Label>
-                                                <Popover open={vehicleTypeOpen} onOpenChange={setVehicleTypeOpen}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            className={cn("w-full justify-between h-9", !vehicleType && "text-muted-foreground")}
-                                                        >
-                                                            {vehicleType || "Select Type..."}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-[300px] p-0" align="start">
-                                                        <Command>
-                                                            <CommandInput
-                                                                placeholder="Search or type new..."
-                                                                value={vehicleTypeSearch}
-                                                                onValueChange={setVehicleTypeSearch}
-                                                            />
-                                                            <CommandList>
-                                                                <CommandEmpty>
-                                                                    <div className="p-2">
-                                                                        <p className="text-sm text-muted-foreground mb-2">No type found.</p>
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="w-full h-8"
-                                                                            onMouseDown={(e) => e.preventDefault()}
-                                                                            onClick={() => {
-                                                                                if (vehicleTypeSearch.trim()) {
-                                                                                    setVehicleType(vehicleTypeSearch.trim())
-                                                                                    setVehicleTypeOpen(false)
-                                                                                    setVehicleTypeSearch("")
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <Plus className="mr-2 h-3 w-3" />
-                                                                            Create &quot;{vehicleTypeSearch}&quot;
-                                                                        </Button>
-                                                                    </div>
-                                                                </CommandEmpty>
-                                                                <CommandGroup>
-                                                                    {["Truk", "Pick-up", "Van", "Container", "Motor", "Other"].map((type) => (
-                                                                        <CommandItem
-                                                                            key={type}
-                                                                            value={type}
-                                                                            onSelect={() => {
-                                                                                setVehicleType(type)
+                                        <div className="flex flex-col gap-1.5">
+                                            <Label className="text-xs text-muted-foreground">Type</Label>
+                                            <Popover open={vehicleTypeOpen} onOpenChange={setVehicleTypeOpen}>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        className={cn("w-full justify-between h-9", !vehicleType && "text-muted-foreground")}
+                                                    >
+                                                        {vehicleType || "Select Type..."}
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[300px] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput
+                                                            placeholder="Search or type new..."
+                                                            value={vehicleTypeSearch}
+                                                            onValueChange={setVehicleTypeSearch}
+                                                        />
+                                                        <CommandList>
+                                                            <CommandEmpty>
+                                                                <div className="p-2">
+                                                                    <p className="text-sm text-muted-foreground mb-2">No type found.</p>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="w-full h-8"
+                                                                        onMouseDown={(e) => e.preventDefault()}
+                                                                        onClick={() => {
+                                                                            if (vehicleTypeSearch.trim()) {
+                                                                                setVehicleType(vehicleTypeSearch.trim())
                                                                                 setVehicleTypeOpen(false)
                                                                                 setVehicleTypeSearch("")
-                                                                            }}
-                                                                        >
-                                                                            <Check className={cn("mr-2 h-4 w-4", vehicleType === type ? "opacity-100" : "opacity-0")} />
-                                                                            {type}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-3 pt-2">
-                                        <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                                            Operational Costs
-                                        </Label>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Gasoline</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costGasoline}
-                                                    onChange={e => setCostGasoline(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Toll</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costToll}
-                                                    onChange={e => setCostToll(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Parking</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costParking}
-                                                    onChange={e => setCostParking(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Meals</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costMeals}
-                                                    onChange={e => setCostMeals(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Maintenance</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costMaintenance}
-                                                    onChange={e => setCostMaintenance(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Others</Label>
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    value={costOthers}
-                                                    onChange={e => setCostOthers(e.target.value)}
-                                                    className="h-8 font-mono text-right"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-end pt-4 border-t">
-                                            <div className="flex flex-col items-end gap-1">
-                                                <Label className="text-sm font-semibold text-muted-foreground">Total Operational Cost</Label>
-                                                <div className="text-xl font-bold">
-                                                    {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(totalInternalCost)}
-                                                </div>
-                                            </div>
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <Plus className="mr-2 h-3 w-3" />
+                                                                        Create &quot;{vehicleTypeSearch}&quot;
+                                                                    </Button>
+                                                                </div>
+                                                            </CommandEmpty>
+                                                            <CommandGroup>
+                                                                {["Truk", "Pick-up", "Van", "Container", "Motor", "Other"].map((type) => (
+                                                                    <CommandItem
+                                                                        key={type}
+                                                                        value={type}
+                                                                        onSelect={() => {
+                                                                            setVehicleType(type)
+                                                                            setVehicleTypeOpen(false)
+                                                                            setVehicleTypeSearch("")
+                                                                        }}
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-4 w-4", vehicleType === type ? "opacity-100" : "opacity-0")} />
+                                                                        {type}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                                        External Vendor
+                                <div className="space-y-3 pt-2">
+                                    <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+                                        Operational Costs
                                     </Label>
-                                    <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Vendor Name</Label>
+                                            <Label className="text-xs">Gasoline</Label>
                                             <Input
-                                                placeholder="e.g. JNE, Dakota, GoBox..."
-                                                value={vendorName}
-                                                onChange={e => setVendorName(e.target.value)}
-                                                className="h-9"
+                                                type="number"
+                                                min={0}
+                                                value={costGasoline}
+                                                onChange={e => setCostGasoline(e.target.value)}
+                                                className="h-8 font-mono text-right"
                                             />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">AWB / Receipt No.</Label>
-                                                <Input
-                                                    placeholder="Tracking Number"
-                                                    value={awbNumber}
-                                                    onChange={e => setAwbNumber(e.target.value)}
-                                                    className="h-9 font-mono"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Shipping Cost</Label>
-                                                <Input
-                                                    type="number"
-                                                    placeholder="Rp 0"
-                                                    value={shippingCost}
-                                                    onChange={e => setShippingCost(e.target.value)}
-                                                    className="h-9 font-mono text-right"
-                                                    min={0}
-                                                />
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Toll</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={costToll}
+                                                onChange={e => setCostToll(e.target.value)}
+                                                className="h-8 font-mono text-right"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Parking</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={costParking}
+                                                onChange={e => setCostParking(e.target.value)}
+                                                className="h-8 font-mono text-right"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Meals</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={costMeals}
+                                                onChange={e => setCostMeals(e.target.value)}
+                                                className="h-8 font-mono text-right"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Maintenance</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={costMaintenance}
+                                                onChange={e => setCostMaintenance(e.target.value)}
+                                                className="h-8 font-mono text-right"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Others</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={costOthers}
+                                                onChange={e => setCostOthers(e.target.value)}
+                                                className="h-8 font-mono text-right"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end pt-4 border-t">
+                                        <div className="flex flex-col items-end gap-1">
+                                            <Label className="text-sm font-semibold text-muted-foreground">Total Operational Cost</Label>
+                                            <div className="text-xl font-bold">
+                                                {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(totalInternalCost)}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                                    External Vendor
+                                </Label>
+                                <div className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Vendor Name</Label>
+                                        <Input
+                                            placeholder="e.g. JNE, Dakota, GoBox..."
+                                            value={vendorName}
+                                            onChange={e => setVendorName(e.target.value)}
+                                            className="h-9"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">AWB / Receipt No.</Label>
+                                            <Input
+                                                placeholder="Tracking Number"
+                                                value={awbNumber}
+                                                onChange={e => setAwbNumber(e.target.value)}
+                                                className="h-9 font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Shipping Cost</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="Rp 0"
+                                                value={shippingCost}
+                                                onChange={e => setShippingCost(e.target.value)}
+                                                className="h-9 font-mono text-right"
+                                                min={0}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-                        </CardContent>
-                    </Card>
+                    </CardContent>
+                </Card>
 
-                    {/* Notes */}
-                    <Card className="shadow-sm">
-                        <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
-                            <CardTitle className="text-base">Additional Notes</CardTitle>
+                {/* Notes */}
+                <Card className="shadow-sm">
+                    <CardHeader className="pb-3 border-b bg-gray-50/50 dark:bg-gray-900/50">
+                        <CardTitle className="text-base">Additional Notes</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <Textarea
+                            placeholder="Any special instructions or notes..."
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                            rows={3}
+                            className="resize-none"
+                        />
+                    </CardContent>
+                </Card>
+
+                {/* PDF Preview */}
+                {selectedSO?.poDocument && (
+                    <Card className="shadow-sm border-l-4 border-l-amber-500">
+                        <CardHeader className="pb-3 border-b bg-amber-50/50 dark:bg-amber-900/50">
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <Plus className="h-4 w-4 rotate-45 text-amber-500" />
+                                Customer PO Preview
+                            </CardTitle>
+                            <CardDescription>Verify items against the original Customer PO document.</CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            <Textarea
-                                placeholder="Any special instructions or notes..."
-                                value={notes}
-                                onChange={e => setNotes(e.target.value)}
-                                rows={3}
-                                className="resize-none"
-                            />
+                        <CardContent className="p-0">
+                            <div className="aspect-[1/1.4] w-full">
+                                <iframe
+                                    src={`/api/uploads/${selectedSO.poDocument}`}
+                                    className="w-full h-full border-0"
+                                    title="Customer PO Preview"
+                                />
+                            </div>
                         </CardContent>
                     </Card>
-                </div >
+                )}
             </div >
+        </div >
         </div >
     )
 }
