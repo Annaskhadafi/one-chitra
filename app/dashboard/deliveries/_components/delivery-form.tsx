@@ -69,6 +69,7 @@ interface SalesOrderForDelivery {
     id: number
     invoiceNumber: string | null
     customerPo: string | null
+    poDocument: string | null
     customerId: number
     salesDate: Date
     status: string
@@ -129,6 +130,8 @@ interface DeliveryFormProps {
         salesOrder: {
             id: number
             invoiceNumber: string | null
+            customerPo: string | null
+            poDocument: string | null
             customer: Customer
             items: {
                 id: number
