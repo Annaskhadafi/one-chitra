@@ -57,12 +57,12 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { cn } from "@/lib/utils"
+import type { Product, Warehouse, Stock } from "@/lib/types"
 
 interface StockTableProps {
-    data: any[] // Initial data for query hydrantion if needed
-    products: any[]
-    warehouses: any[]
+    data: Stock[] // Initial data for query hydrantion if needed
+    products: Product[]
+    warehouses: Warehouse[]
     defaultRate?: string
 }
 
@@ -88,8 +88,8 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         return ["all", ...Array.from(categories).sort()]
     }, [products])
 
-    const warehouseTypes = useMemo(() => {
-        const types = new Set(warehouses.map(w => w.type).filter(Boolean))
+    const warehouseTypes: string[] = useMemo(() => {
+        const types = new Set(warehouses.map(w => w.type).filter((t): t is string => Boolean(t)))
         return ["all", ...Array.from(types).sort()]
     }, [warehouses])
 
@@ -109,7 +109,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         return stock * cost * rate
     }
 
-    const columns = useMemo<ColumnDef<any>[]>(() => [
+    const columns = useMemo<ColumnDef<Stock>[]>(() => [
         {
             id: "select",
             header: ({ table }) => (
@@ -316,7 +316,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         getRowId: (row) => row.id.toString(),
-        globalFilterFn: (row, columnId, filterValue) => {
+        globalFilterFn: (row, columnId, filterValue): boolean => {
             const term = filterValue.toLowerCase()
             const item = row.original
 
@@ -333,7 +333,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
             const matchesSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
 
-            return matchesSearch && matchesTab && matchesCategory && matchesSlocDesc
+            return !!(matchesSearch && matchesTab && matchesCategory && matchesSlocDesc)
         },
     })
 
@@ -419,7 +419,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                     <TabsList>
                         <TabsTrigger value="all">All Stocks</TabsTrigger>
                         {warehouseTypes.filter(t => t !== "all").map(type => (
-                            <TabsTrigger key={type} value={type}>
+                            <TabsTrigger key={type || "unknown"} value={type || "unknown"}>
                                 {type}
                             </TabsTrigger>
                         ))}

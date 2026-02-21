@@ -54,7 +54,6 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 export function HistoryOrderTable() {
-    const queryClient = useQueryClient()
     const { data: rawData = [], isLoading, refetch } = useQuery({
         queryKey: ["history-orders"],
         queryFn: async () => {
@@ -173,8 +172,8 @@ export function HistoryOrderTable() {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const term = filterValue.toLowerCase()
+        globalFilterFn: (row, _columnId, filterValue): boolean => {
+            const term = (filterValue as string).toLowerCase()
             const item = row.original
 
             const matchesSearch = !!(
@@ -280,7 +279,15 @@ export function HistoryOrderTable() {
 
     const hasActiveFilters = customerFilter.length > 0 || plantFilter.length > 0 || yearFilter.length > 0 || monthFilter.length > 0 || matGrpFilter.length > 0 || globalFilter !== ""
 
-    const FilterPopover = ({ title, options, selectedValues, onSelect, onClear }: any) => (
+    interface FilterPopoverProps {
+        title: string
+        options: string[]
+        selectedValues: string[]
+        onSelect: (val: string) => void
+        onClear: () => void
+    }
+
+    const FilterPopover = ({ title, options, selectedValues, onSelect, onClear }: FilterPopoverProps) => (
         <Popover>
             <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 border-dashed">

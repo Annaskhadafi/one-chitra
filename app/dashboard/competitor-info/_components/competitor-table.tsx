@@ -14,7 +14,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
-import { toast } from "sonner"
 import { getCompetitorInfo, CompetitorItem } from "@/app/actions/competitor"
 
 import {
@@ -202,7 +201,15 @@ export function CompetitorTable() {
         ]
         : [0, 0]
 
-    const FilterPopover = ({ title, options, selectedValues, onSelect, onClear }: any) => (
+    interface FilterPopoverProps {
+        title: string
+        options: string[]
+        selectedValues: string[]
+        onSelect: (val: string) => void
+        onClear: () => void
+    }
+
+    const FilterPopover = ({ title, options, selectedValues, onSelect, onClear }: FilterPopoverProps) => (
         <Popover>
             <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 border-dashed">

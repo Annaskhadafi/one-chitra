@@ -1,5 +1,5 @@
 import { getDeliveries } from "@/app/actions/delivery"
-import { DoMonitoringTable } from "./_components/do-monitoring-table"
+import { DoMonitoringTable, type DeliveryWithRelations } from "./_components/do-monitoring-table"
 import { Truck, Clock, CheckCircle } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 
@@ -51,7 +51,7 @@ export default async function DoMonitoringPage() {
             </div>
 
             <div className="flex-1">
-                <DoMonitoringTable data={deliveriesData as any} />
+                <DoMonitoringTable data={deliveriesData as DeliveryWithRelations[]} />
             </div>
         </div>
     )

@@ -42,13 +42,28 @@ export async function getQuotation(id: number) {
 
 export async function generateQuotationNumber() {
     const now = new Date()
-    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const year = now.getFullYear()
 
+    // Get the highest quotation number that follows the new format
     const allQuotations = await db.select({ quotationNumber: quotations.quotationNumber }).from(quotations)
-    const todayQuotations = allQuotations.filter(q => q.quotationNumber?.startsWith(`QT-${dateStr}`))
-    const nextNum = todayQuotations.length + 1
 
-    return `QT-${dateStr}-${String(nextNum).padStart(4, "0")}`
+    let maxNumber = 4999 // Start from 4999 so the first one is 5000
+
+    allQuotations.forEach(q => {
+        if (q.quotationNumber?.startsWith("QUO/CP/")) {
+            const parts = q.quotationNumber.split("/")
+            if (parts.length >= 3) {
+                const num = parseInt(parts[2])
+                if (!isNaN(num) && num > maxNumber) {
+                    maxNumber = num
+                }
+            }
+        }
+    })
+
+    const nextNum = maxNumber + 1
+    return `QUO/CP/${nextNum}/${month}/${year}`
 }
 
 export async function createQuotation(data: z.infer<typeof quotationSchema>) {
@@ -92,7 +107,7 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
                 await tx.insert(quotationItems)
                     .values(data.items.map(item => ({
                         quotationId: newQuotation.id,
-                        productId: item.productId,
+                        productId: item.productId || null,
                         description: item.description || null,
                         longDescription: item.longDescription || null,
                         quantity: item.quantity,
@@ -157,7 +172,7 @@ export async function updateQuotation(id: number, data: z.infer<typeof quotation
                 await tx.insert(quotationItems)
                     .values(data.items.map(item => ({
                         quotationId: id,
-                        productId: item.productId,
+                        productId: item.productId || null,
                         description: item.description || null,
                         longDescription: item.longDescription || null,
                         quantity: item.quantity,
@@ -294,7 +309,7 @@ export async function convertToSalesOrder(id: number) {
                 await tx.insert(salesOrderItems)
                     .values(quotation.items.map(item => ({
                         salesOrderId: newSO.id,
-                        productId: item.productId,
+                        productId: item.productId || null,
                         quantity: item.quantity,
                         unitPrice: item.unitPrice,
                         discount: item.discount,

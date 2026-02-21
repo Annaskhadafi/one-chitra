@@ -99,7 +99,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
     const canEdit = hasResourcePermission('fleet-management', 'edit')
     const canDelete = hasResourcePermission('fleet-management', 'delete')
 
-    const calculateTotalCost = (trip: any) => {
+    const calculateTotalCost = (trip: FleetTripWithRelations) => {
         return (Number(trip.costGasoline) || 0) +
             (Number(trip.costToll) || 0) +
             (Number(trip.costParking) || 0) +
@@ -108,7 +108,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
             (Number(trip.costOthers) || 0)
     }
 
-    const columns = useMemo<ColumnDef<any>[]>(() => [
+    const columns = useMemo<ColumnDef<FleetTripWithRelations>[]>(() => [
         {
             accessorKey: "tripNumber",
             header: ({ column }) => (
@@ -291,8 +291,8 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const term = filterValue.toLowerCase()
+        globalFilterFn: (row, _columnId, filterValue): boolean => {
+            const term = (filterValue as string).toLowerCase()
             const trip = row.original
 
             return !!(

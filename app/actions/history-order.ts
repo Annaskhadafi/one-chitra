@@ -78,7 +78,7 @@ export async function getHistoryOrder() {
     }
 }
 
-export async function importHistoryOrderBatch(batchData: any[]) {
+export async function importHistoryOrderBatch(batchData: Record<string, unknown>[]) {
     try {
         if (!batchData || batchData.length === 0) {
             return { success: false, error: "No data provided" };
@@ -92,58 +92,58 @@ export async function importHistoryOrderBatch(batchData: any[]) {
         };
 
         const mappedBatch = batchData.map(item => ({
-            sorg: item['Sorg.'] || null,
-            billTy: item['BillTy'] || null,
-            revType: item['Rev. Type'] || null,
-            customer: item['Customer'] || null,
-            customerName: item['Customer Name'] || null,
-            salesman: item['Salesman'] || null,
-            item: item['Item'] || null,
-            sloc: item['Sloc'] || null,
-            plant: item['Plant'] || null,
-            materialNo: item['Material No'] || null,
-            materialDescription: item['Material Description'] || null,
-            sizeDimen: item['Size/Dimen'] || null,
-            materialGroup: item['Material Group'] || null,
-            matGrpDesc: item['Mat Grp Desc.'] || null,
-            matGrp1: item['Mat Grp1'] || null,
-            matGrp1Desc: item['Mat Grp1 Desc.'] || null,
-            matGrp2: item['Mat Grp2'] || null,
-            matGrp2Desc: item['Mat Grp2 Desc.'] || null,
-            matGrp3: item['Mat Grp3'] || null,
-            matGrp3Desc: item['Mat Grp3 Desc.'] || null,
-            matGrp4: item['Mat Grp4'] || null,
-            matGrp4Desc: item['Mat Grp4 Desc.'] || null,
-            matGrp5: item['Mat Grp5'] || null,
-            matGrp5Desc: item['Mat Grp5 Desc.'] || null,
-            qty: parseNumber(item['Qty']),
-            uom: item['UOM'] || null,
-            curr: item['Curr'] || null,
-            basePrice: parseNumber(item['Base Price']),
-            intdeptPrice: parseNumber(item['Intdept Price']),
-            adjustmentPrice: parseNumber(item['Adjustment Price']),
-            revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.']),
-            revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.']),
-            billingNo: item['Billing No'] || null,
-            billingDate: item['Billing Date'] || item['BillingDate'] || null,
-            inco1: item['INCO1'] || null,
-            inco2: item['INCO2'] || null,
-            c: item['C'] || null,
-            cancelled: item['Cancelled'] || null,
-            deliveryNo: item['Delivery No'] || null,
-            salesOrder: item['Sales Order'] || null,
-            workOrder: item['Work Order'] || null,
-            poNo: item['PO No.'] || null,
-            poDate: item['PO Date'] || null,
-            poType: item['PO Type'] || null,
-            costOfSales: parseNumber(item['Cost Of Sales']),
-            profitMargin: parseNumber(item['Profit Margin'])
+            sorg: (item['Sorg.'] as string) || null,
+            billTy: (item['BillTy'] as string) || null,
+            revType: (item['Rev. Type'] as string) || null,
+            customer: (item['Customer'] as string) || null,
+            customerName: (item['Customer Name'] as string) || null,
+            salesman: (item['Salesman'] as string) || null,
+            item: (item['Item'] as string) || null,
+            sloc: (item['Sloc'] as string) || null,
+            plant: (item['Plant'] as string) || null,
+            materialNo: (item['Material No'] as string) || null,
+            materialDescription: (item['Material Description'] as string) || null,
+            sizeDimen: (item['Size/Dimen'] as string) || null,
+            materialGroup: (item['Material Group'] as string) || null,
+            matGrpDesc: (item['Mat Grp Desc.'] as string) || null,
+            matGrp1: (item['Mat Grp1'] as string) || null,
+            matGrp1Desc: (item['Mat Grp1 Desc.'] as string) || null,
+            matGrp2: (item['Mat Grp2'] as string) || null,
+            matGrp2Desc: (item['Mat Grp2 Desc.'] as string) || null,
+            matGrp3: (item['Mat Grp3'] as string) || null,
+            matGrp3Desc: (item['Mat Grp3 Desc.'] as string) || null,
+            matGrp4: (item['Mat Grp4'] as string) || null,
+            matGrp4Desc: (item['Mat Grp4 Desc.'] as string) || null,
+            matGrp5: (item['Mat Grp5'] as string) || null,
+            matGrp5Desc: (item['Mat Grp5 Desc.'] as string) || null,
+            qty: parseNumber(item['Qty'] as string),
+            uom: (item['UOM'] as string) || null,
+            curr: (item['Curr'] as string) || null,
+            basePrice: parseNumber(item['Base Price'] as string),
+            intdeptPrice: parseNumber(item['Intdept Price'] as string),
+            adjustmentPrice: parseNumber(item['Adjustment Price'] as string),
+            revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.'] as string),
+            revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.'] as string),
+            billingNo: (item['Billing No'] as string) || null,
+            billingDate: (item['Billing Date'] as string) || (item['BillingDate'] as string) || null,
+            inco1: (item['INCO1'] as string) || null,
+            inco2: (item['INCO2'] as string) || null,
+            c: (item['C'] as string) || null,
+            cancelled: (item['Cancelled'] as string) || null,
+            deliveryNo: (item['Delivery No'] as string) || null,
+            salesOrder: (item['Sales Order'] as string) || null,
+            workOrder: (item['Work Order'] as string) || null,
+            poNo: (item['PO No.'] as string) || null,
+            poDate: (item['PO Date'] as string) || null,
+            poType: (item['PO Type'] as string) || null,
+            costOfSales: parseNumber(item['Cost Of Sales'] as string),
+            profitMargin: parseNumber(item['Profit Margin'] as string)
         }));
 
         await db.insert(historyOrders).values(mappedBatch);
         return { success: true, count: mappedBatch.length };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Failed to import history orders batch:", error);
-        return { success: false, error: error.message || "Failed to import duplicate or invalid rows" };
+        return { success: false, error: error instanceof Error ? error.message : "Failed to import duplicate or invalid rows" };
     }
 }

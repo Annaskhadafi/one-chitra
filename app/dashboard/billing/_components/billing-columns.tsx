@@ -13,15 +13,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { BillingRecordDisplay } from "@/lib/types"
 
 // Define a type for the action handler prop
 interface ActionProps {
     row: {
-        original: Record<string, unknown>;
+        original: BillingRecordDisplay;
     }
-    onEdit: (record: Record<string, unknown>) => void
+    onEdit: (record: BillingRecordDisplay) => void
     onDelete: (id: number) => void
-    onView: (record: Record<string, unknown>) => void
+    onView: (record: BillingRecordDisplay) => void
 }
 
 const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
@@ -52,10 +53,10 @@ const ActionCell = ({ row, onEdit, onDelete, onView }: ActionProps) => {
 
 // We need a factory function to create columns with handlers
 export const getColumns = (
-    onEdit: (record: Record<string, unknown>) => void,
+    onEdit: (record: BillingRecordDisplay) => void,
     onDelete: (id: number) => void,
-    onView: (record: Record<string, unknown>) => void
-): ColumnDef<Record<string, unknown>>[] => [
+    onView: (record: BillingRecordDisplay) => void
+): ColumnDef<BillingRecordDisplay>[] => [
         {
             id: "select",
             header: ({ table }) => (

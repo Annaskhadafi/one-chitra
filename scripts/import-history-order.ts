@@ -13,7 +13,7 @@ async function main() {
     }
 
     const fileStream = fs.createReadStream(filePath);
-    let batch: any[] = [];
+    let batch: Record<string, string | number | null>[] = [];
     const BATCH_SIZE = 1000;
     let totalProcessed = 0;
     let totalInserted = 0;
@@ -24,7 +24,7 @@ async function main() {
             skipEmptyLines: true,
             transformHeader: (header: string) => header.trim(),
             step: async (results, parser) => {
-                const item: any = results.data;
+                const item = results.data as Record<string, string>;
                 totalProcessed++;
 
                 try {

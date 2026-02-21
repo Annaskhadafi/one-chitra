@@ -180,9 +180,9 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
             enableHiding: false,
         },
         {
-            accessorKey: "plant",
-            header: "Plant",
-            cell: ({ row }) => <span className="font-mono text-xs">{row.original.plant || "-"}</span>,
+            id: "stock",
+            header: "Stock",
+            cell: ({ row }) => <span className="font-mono text-xs">{row.original.totalStock ?? 0}</span>,
         },
         {
             id: "image",
@@ -238,13 +238,13 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         },
         {
             accessorKey: "sloc",
-            header: "Sloc",
-            cell: ({ row }) => <span className="text-xs font-mono">{row.original.sloc || "-"}</span>,
-        },
-        {
-            accessorKey: "slocDescription",
-            header: "Sloc Description",
-            cell: ({ row }) => <div className="max-w-[150px] truncate text-xs">{row.original.slocDescription || "-"}</div>,
+            header: "WH",
+            cell: ({ row }) => (
+                <div className="flex flex-col">
+                    <span className="text-xs font-bold text-blue-700">{row.original.slocDescription || "-"}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground">{row.original.sloc || "-"}</span>
+                </div>
+            ),
         },
         {
             accessorKey: "costSap",

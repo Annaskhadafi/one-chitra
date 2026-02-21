@@ -18,18 +18,17 @@ import { Separator } from "@/components/ui/separator"
 import { updateBillingRecord } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import type { BillingRecordDisplay } from "@/lib/types"
 
 interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    record: Record<string, any>
+    record: BillingRecordDisplay | null
 }
 
 export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [formData, setFormData] = useState<Record<string, any>>({})
+    const [formData, setFormData] = useState<Partial<BillingRecordDisplay>>({})
 
     useEffect(() => {
         if (record) {

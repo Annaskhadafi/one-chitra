@@ -55,8 +55,16 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product } from "@/lib/types"
 
-export function DoMonitoringTable({ data: initialData }: { data: any[] }) {
+export interface DeliveryWithRelations extends Delivery {
+    salesOrder: (SalesOrder & { customer: Customer }) | null
+    warehouse: Warehouse | null
+    createdByUser: User | null
+    items: (DeliveryItem & { product: Product })[]
+}
+
+export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRelations[] }) {
     const queryClient = useQueryClient()
     const { data = initialData } = useQuery({
         queryKey: ["deliveries"],
@@ -73,11 +81,11 @@ export function DoMonitoringTable({ data: initialData }: { data: any[] }) {
     const [statusFilter, setStatusFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
 
-    const [editDelivery, setEditDelivery] = useState<any | null>(null)
+    const [editDelivery, setEditDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [deleting, setDeleting] = useState<number | null>(null)
 
-    const columns = useMemo<ColumnDef<any>[]>(() => [
+    const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
             accessorKey: "deliveryNumber",
             header: ({ column }) => (
@@ -272,17 +280,17 @@ export function DoMonitoringTable({ data: initialData }: { data: any[] }) {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const term = filterValue.toLowerCase()
+        globalFilterFn: (row, _columnId, filterValue): boolean => {
+            const term = (filterValue as string).toLowerCase()
             const d = row.original
-            const matchesSearch =
+            const matchesSearch = !!(
                 d.deliveryNumber?.toLowerCase().includes(term) ||
-                d.salesOrder?.invoiceNumber?.toLowerCase().includes(term) ||
                 d.salesOrder?.customer?.name?.toLowerCase().includes(term) ||
                 d.invoiceNumber?.toLowerCase().includes(term)
+            )
 
             const matchesStatus = statusFilter === "all" || (d.doStatus || "Pending") === statusFilter
-            return matchesSearch && matchesStatus
+            return !!(matchesSearch && matchesStatus)
         },
     })
 

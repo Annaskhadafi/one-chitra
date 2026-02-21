@@ -1,7 +1,7 @@
 import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
-export type Product = InferSelectModel<typeof products>
+export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
 export type NewProduct = InferInsertModel<typeof products>
 
 export type Customer = InferSelectModel<typeof customers>
@@ -17,6 +17,10 @@ export type NewRole = InferInsertModel<typeof roles>
 
 export type User = InferSelectModel<typeof user>
 
+export type Stock = InferSelectModel<typeof stockLevels> & {
+    product?: Product | null
+    warehouse?: Warehouse | null
+}
 export type NewStock = InferInsertModel<typeof stockLevels>
 
 export type SalesOrder = InferSelectModel<typeof salesOrders>
@@ -34,3 +38,40 @@ export type NewQuotation = InferInsertModel<typeof quotations>
 export type QuotationItem = InferSelectModel<typeof quotationItems>
 export type NewQuotationItem = InferInsertModel<typeof quotationItems>
 
+export type BillingRecordDisplay = {
+    deliveryItemId: number
+    billingRecordId: number | null
+    no: string | null
+    year: number | null
+    month: string | null
+    plant: string
+    customer: string
+    poNo: string
+    datePo: Date
+    materialNumber: string
+    materialDescription: string
+    qty: string
+    curr: string
+    pricePerPcsIdr: string | null
+    totalPriceIdr: string | null
+    ppn: string | null
+    price: string | null
+    includePpn: string | null
+    noInvSap: string | null
+    dateInvoice: Date | null
+    custId: string | null
+    salesName: string | null
+    ddpAddress: string | null
+    paymentType: string | null
+    nomorDoSap: string | null
+    actualNoDo: string | null
+    tglDoFaktur: Date | null
+    remaks: string | null
+    dateSendInvoice: Date | null
+    receiverDate: Date | null
+    recvDateApproved: Date | null
+    eFaktur: string | null
+    status: string
+    deliveryNumber: string | null
+    originalPrice: string
+}

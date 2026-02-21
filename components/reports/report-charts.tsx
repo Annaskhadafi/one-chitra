@@ -38,7 +38,7 @@ export function SalesTrendChart({ data, title, description, height = 300 }: Sale
         orders: d.orders ?? 0,
     }))
 
-    const totalSales = data.reduce((sum, d) => sum + d.sales, 0)
+    const totalSales = data.reduce((sum: number, d) => sum + d.sales, 0)
 
     return (
         <Card>
@@ -211,7 +211,7 @@ export function ReportPieChart({ data, title, description, height = 300, showLeg
         value: d.value,
     }))
 
-    const total = data.reduce((sum, d) => sum + d.value, 0)
+    const total = data.reduce((sum: number, d) => sum + d.value, 0)
 
     return (
         <Card>
@@ -354,9 +354,9 @@ export function ReportTreemapChart({ data, title, description, height = 300 }: T
                             stroke="#fff"
                             fill="hsl(var(--primary))"
                         >
-                            <Tooltip content={(props: any) => {
+                            <Tooltip content={(props) => {
                                 if (props.active && props.payload && props.payload.length) {
-                                    const { name, size } = props.payload[0].payload
+                                    const { name, size } = props.payload[0].payload as { name: string; size: number }
                                     return (
                                         <div className="bg-background border rounded p-2 shadow-md text-xs">
                                             <p className="font-bold">{name}</p>

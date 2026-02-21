@@ -8,13 +8,13 @@ import Link from "next/link"
 export default async function SalesReportPage() {
     const data = await getSalesReport()
 
-    const totalSales = data.salesTrend.reduce((sum, d) => sum + d.sales, 0)
-    const totalOrders = data.salesTrend.reduce((sum, d) => sum + d.orders, 0)
+    const totalSales = data.salesTrend.reduce((sum: number, d) => sum + d.sales, 0)
+    const totalOrders = data.salesTrend.reduce((sum: number, d) => sum + d.orders, 0)
     const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0
 
     // Calculate growth from sales trend
-    const recentSales = data.salesTrend.slice(-7).reduce((sum, d) => sum + d.sales, 0)
-    const previousSales = data.salesTrend.slice(-14, -7).reduce((sum, d) => sum + d.sales, 0)
+    const recentSales = data.salesTrend.slice(-7).reduce((sum: number, d) => sum + d.sales, 0)
+    const previousSales = data.salesTrend.slice(-14, -7).reduce((sum: number, d) => sum + d.sales, 0)
     const growthRate = previousSales > 0 ? ((recentSales - previousSales) / previousSales) * 100 : 0
 
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
@@ -24,7 +24,7 @@ export default async function SalesReportPage() {
             change: growthRate,
             changeLabel: "vs previous period",
             icon: "dollar",
-            variant: "success",
+            variant: "success" as const,
         },
         {
             title: "Total Orders",
@@ -46,7 +46,7 @@ export default async function SalesReportPage() {
             title: "Monthly Target",
             value: `${data.salesTarget.percentage.toFixed(1)}%`,
             icon: "target",
-            variant: (data.salesTarget.percentage >= 80 ? "success" : data.salesTarget.percentage >= 50 ? "warning" : "danger") as any,
+            variant: data.salesTarget.percentage >= 80 ? "success" : data.salesTarget.percentage >= 50 ? "warning" : "danger",
         },
     ]
 

@@ -42,8 +42,20 @@ interface SAPStockItem {
     isMapped: boolean
 }
 
+interface RawSAPInventoryItem {
+    idinv?: string | number
+    plant?: string | number
+    plantname?: string | number
+    material?: string | number
+    oldmaterial?: string | number
+    desc?: string | number
+    sloc?: string | number
+    slocdesc?: string
+    qtystock?: string | number
+    valuestock?: string | number
+}
+
 export function StockSAPTable() {
-    const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState("")
     const [syncingId, setSyncingId] = useState<string | null>(null)
     const [sorting, setSorting] = useState<SortingState>([])
@@ -55,7 +67,7 @@ export function StockSAPTable() {
             const result = await response.json();
 
             if (result.status === "OK") {
-                return result.result.map((item: any) => ({
+                return (result.result as RawSAPInventoryItem[]).map((item) => ({
                     idInv: item.idinv?.toString().trim() ?? "",
                     plant: item.plant?.toString().trim() ?? "",
                     plantName: item.plantname?.toString().trim() ?? "",

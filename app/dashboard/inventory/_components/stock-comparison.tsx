@@ -51,6 +51,19 @@ interface SAPStockItem {
     valueStock: number
 }
 
+interface RawSAPInventoryItem {
+    idinv?: string | number
+    plant?: string | number
+    plantname?: string | number
+    material?: string | number
+    oldmaterial?: string | number
+    desc?: string | number
+    sloc?: string | number
+    slocdesc?: string
+    qtystock?: string | number
+    valuestock?: string | number
+}
+
 interface LocalStockItem {
     id: number
     product: {
@@ -97,7 +110,6 @@ interface StockComparisonProps {
 }
 
 export function StockComparison({ localStocks: initialLocalStocks }: StockComparisonProps) {
-    const queryClient = useQueryClient()
 
     // --- Data Fetching ---
     const { data: localStocks = initialLocalStocks } = useQuery({
@@ -115,7 +127,7 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
             )
             const result = await response.json()
             if (result.status === "OK") {
-                return result.result.map((item: any) => ({
+                return (result.result as RawSAPInventoryItem[]).map((item) => ({
                     idInv: item.idinv?.toString().trim() ?? "",
                     plant: item.plant?.toString().trim() ?? "",
                     plantName: item.plantname?.toString().trim() ?? "",
@@ -290,8 +302,8 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const term = filterValue.toLowerCase()
+        globalFilterFn: (row, _columnId, filterValue): boolean => {
+            const term = (filterValue as string).toLowerCase()
             const item = row.original
             const matchesSearch = !!(
                 item.materialNumber.toLowerCase().includes(term) ||
@@ -300,7 +312,7 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
                 item.slocDesc.toLowerCase().includes(term)
             )
             const matchesStatus = statusFilter === "all" || item.status === statusFilter
-            return matchesSearch && matchesStatus
+            return !!(matchesSearch && matchesStatus)
         }
     })
 

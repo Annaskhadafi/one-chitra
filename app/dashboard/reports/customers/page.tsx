@@ -33,7 +33,7 @@ export default async function CustomerReportPage() {
             title: "Repeat Purchase Rate",
             value: `${data.repeatPurchaseRate.repeatRate.toFixed(1)}%`,
             icon: "repeat" as const,
-            variant: data.repeatPurchaseRate.repeatRate > 20 ? "success" : ("warning" as "success" | "warning"),
+            variant: data.repeatPurchaseRate.repeatRate > 20 ? "success" : "warning",
         },
         {
             title: "Average Orders per Customer",

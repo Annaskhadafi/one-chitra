@@ -8,8 +8,8 @@ import Link from "next/link"
 export default async function OrderFulfillmentReportPage() {
     const data = await getOrderFulfillmentReport()
 
-    const totalOrdersAll = data.orderTrend.reduce((sum, m) => sum + m.totalOrders, 0)
-    const completedOrdersAll = data.orderTrend.reduce((sum, m) => sum + m.completedOrders, 0)
+    const totalOrdersAll = data.orderTrend.reduce((sum: number, m) => sum + m.totalOrders, 0)
+    const completedOrdersAll = data.orderTrend.reduce((sum: number, m) => sum + m.completedOrders, 0)
     const overallCompletionRate = totalOrdersAll > 0 ? (completedOrdersAll / totalOrdersAll) * 100 : 0
 
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
@@ -33,7 +33,7 @@ export default async function OrderFulfillmentReportPage() {
         },
         {
             title: "Items on Backorder",
-            value: data.backorderAnalysis.reduce((sum, b) => sum + b.totalBackorderQuantity, 0).toLocaleString(),
+            value: data.backorderAnalysis.reduce((sum: number, b) => sum + b.totalBackorderQuantity, 0).toLocaleString(),
             icon: "alertOctagon" as const,
             variant: data.backorderAnalysis.length > 0 ? "danger" : "success",
         },

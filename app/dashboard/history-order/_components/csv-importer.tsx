@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, X, Loader2, CheckCircle2 } from "lucide-react"
+import { Upload, Loader2, CheckCircle2 } from "lucide-react"
 import Papa from "papaparse"
 import { toast } from "sonner"
 import { importHistoryOrderBatch } from "@/app/actions/history-order"
@@ -45,8 +45,6 @@ export function CsvImporter() {
     const [file, setFile] = useState<File | null>(null)
     const [csvHeaders, setCsvHeaders] = useState<string[]>([])
     const [mapping, setMapping] = useState<Record<string, string>>({})
-    const [parsedData, setParsedData] = useState<any[]>([])
-
     // Status
     const [step, setStep] = useState<"upload" | "map" | "importing" | "success">("upload")
     const [progress, setProgress] = useState(0)
@@ -89,7 +87,6 @@ export function CsvImporter() {
             header: true,
             skipEmptyLines: true,
             complete: async (results) => {
-                setParsedData(results.data)
                 const total = results.data.length
                 const BATCH_SIZE = 1000
                 const batches = Math.ceil(total / BATCH_SIZE)
@@ -100,15 +97,16 @@ export function CsvImporter() {
                     const batchRaw = results.data.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
 
                     // Apply mapping
-                    const mappedBatch = batchRaw.map((row: any) => {
-                        const newRow: any = {}
+                    const mappedBatch = batchRaw.map((row) => {
+                        const r = row as Record<string, unknown>
+                        const newRow: Record<string, unknown> = {}
                         // Always pass mapped values based on the required fields
                         REQUIRED_FIELDS.forEach(req => {
                             const mappedKey = mapping[req.key]
-                            newRow[req.key] = mappedKey ? row[mappedKey] : null
+                            newRow[req.key] = mappedKey ? r[mappedKey] : null
                         })
                         // Also safely attach any unmapped fields as-is just in case the server action looks for them (like matGrp1, basePrice etc if exact match)
-                        return { ...row, ...newRow }
+                        return { ...r, ...newRow }
                     })
 
                     try {
@@ -143,7 +141,6 @@ export function CsvImporter() {
         setFile(null)
         setCsvHeaders([])
         setMapping({})
-        setParsedData([])
         setStep("upload")
         setProgress(0)
     }

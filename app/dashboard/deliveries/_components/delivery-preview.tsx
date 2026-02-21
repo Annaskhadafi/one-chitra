@@ -29,7 +29,6 @@ import {
     Package,
     FileText,
     Pencil,
-    CreditCard,
     FileDown,
     CheckCircle2
 } from "lucide-react"
@@ -263,7 +262,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                         {delivery.notes && (
                             <div className="mt-auto pt-8 border-t-2 border-dashed">
                                 <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Additional Notes</label>
-                                <p className="text-sm italic text-slate-600 dark:text-slate-400 mt-1">"{delivery.notes}"</p>
+                                <p className="text-sm italic text-slate-600 dark:text-slate-400 mt-1">&quot;{delivery.notes}&quot;</p>
                             </div>
                         )}
                     </div>

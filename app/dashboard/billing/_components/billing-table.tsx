@@ -38,8 +38,45 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function BillingTable({ data: initialData }: { data: any[] }) {
+interface BillingRecordDisplay {
+    deliveryItemId: number
+    billingRecordId: number | null
+    no: string | null
+    year: number | null
+    month: string | null
+    plant: string
+    customer: string
+    poNo: string
+    datePo: Date
+    materialNumber: string
+    materialDescription: string
+    qty: string
+    curr: string
+    pricePerPcsIdr: string | null
+    totalPriceIdr: string | null
+    ppn: string | null
+    price: string | null
+    includePpn: string | null
+    noInvSap: string | null
+    dateInvoice: Date | null
+    custId: string | null
+    salesName: string | null
+    ddpAddress: string | null
+    paymentType: string | null
+    nomorDoSap: string | null
+    actualNoDo: string | null
+    tglDoFaktur: Date | null
+    remaks: string | null
+    dateSendInvoice: Date | null
+    receiverDate: Date | null
+    recvDateApproved: Date | null
+    eFaktur: string | null
+    status: string
+    deliveryNumber: string | null
+    originalPrice: string
+}
+
+export function BillingTable({ data: initialData }: { data: BillingRecordDisplay[] }) {
     const { data: records = initialData, isLoading, refetch } = useQuery({
         queryKey: ["billing-records"],
         queryFn: async () => {
@@ -59,16 +96,15 @@ export function BillingTable({ data: initialData }: { data: any[] }) {
     // Sheet State
     const [sheetOpen, setSheetOpen] = React.useState(false)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [selectedRecord, setSelectedRecord] = React.useState<any>(null)
+    const [selectedRecord, setSelectedRecord] = React.useState<BillingRecordDisplay | null>(null)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleEdit = (record: any) => {
+    const handleEdit = (record: BillingRecordDisplay) => {
         setSelectedRecord(record)
         setSheetOpen(true)
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleView = (record: any) => {
+    const handleView = (record: BillingRecordDisplay) => {
         setSelectedRecord(record)
         setSheetOpen(true)
     }
@@ -93,11 +129,11 @@ export function BillingTable({ data: initialData }: { data: any[] }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const headers = ["Customer", "PO No", "PO Date", "Delivery No", "Material No", "Description", "Qty", "Price", "Amount"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
-            const d = row.original as any
+            const d = row.original
             return [
                 d.customer || "",
                 d.poNo || "",
-                d.poDate ? new Date(d.poDate).toLocaleDateString("id-ID") : "",
+                d.poDate ? new Date(d.datePo).toLocaleDateString("id-ID") : "",
                 d.deliveryNo || "",
                 d.materialNo || "",
                 d.description || "",
@@ -132,7 +168,7 @@ export function BillingTable({ data: initialData }: { data: any[] }) {
         canEdit ? handleEdit : () => toast.error("No permission"),
         canDelete ? handleDelete : () => toast.error("No permission"),
         handleView
-    ), [canEdit, canDelete])
+    ), [canEdit, canDelete, handleDelete])
 
     const table = useReactTable({
         data: records,

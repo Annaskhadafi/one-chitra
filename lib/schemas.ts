@@ -105,7 +105,7 @@ export const deliverySchema = z.object({
 })
 
 export const quotationItemSchema = z.object({
-    productId: z.number().min(1, "Product is required"),
+    productId: z.number().optional().nullable(),
     description: z.string().optional(),
     longDescription: z.string().optional(),
     quantity: z.number().min(1, "Quantity must be at least 1"),

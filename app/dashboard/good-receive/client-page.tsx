@@ -2,8 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { format } from "date-fns"
-import { Calendar as CalendarIcon, Check, Loader2, Search, Warehouse, Package, ArrowRight, RefreshCcw, ChevronUp, ChevronDown } from "lucide-react"
+import { Loader2, Search, Warehouse, Package, ArrowRight, ChevronUp, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -80,7 +79,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
             } else {
                 toast.error(result.error || "Failed to fetch data")
             }
-        } catch (error) {
+        } catch {
             toast.error("An unexpected error occurred")
         } finally {
             setIsFetching(false)
@@ -123,7 +122,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
             } else {
                 toast.error(result.error || "Failed to process items")
             }
-        } catch (error) {
+        } catch {
             toast.error("An unexpected error occurred")
         } finally {
             setIsProcessing(false)
@@ -396,7 +395,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                         <ArrowRight className="h-8 w-8 text-muted-foreground" />
                     </div>
                     <h3 className="text-lg font-semibold">No data fetched</h3>
-                    <p className="text-muted-foreground max-w-xs text-center">Click "Fetch SAP Data" to retrieve Purchase Order items for the selected range.</p>
+                    <p className="text-muted-foreground max-w-xs text-center">Click &quot;Fetch SAP Data&quot; to retrieve Purchase Order items for the selected range.</p>
                 </div>
             )}
         </div>

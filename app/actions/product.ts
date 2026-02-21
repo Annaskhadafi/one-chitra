@@ -1,17 +1,44 @@
 "use server"
 
 import { db } from "@/db"
-import { products } from "@/db/schema"
+import { products, stockLevels } from "@/db/schema"
 import { eq, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-
-
 import { productSchema } from "@/lib/schemas"
 
 export async function getProducts() {
-    return await db.select().from(products).orderBy(products.materialNumber)
+    const aggregatedStock = db.select({
+        productId: stockLevels.productId,
+        totalStockSum: sql<number>`sum(${stockLevels.totalStock})`.as('total_stock_sum')
+    })
+        .from(stockLevels)
+        .groupBy(stockLevels.productId)
+        .as('aggregated_stock')
+
+    const results = await db.select({
+        id: products.id,
+        category: products.category,
+        materialNumber: products.materialNumber,
+        oldMaterialNo: products.oldMaterialNo,
+        materialDescription: products.materialDescription,
+        brand: products.brand,
+        costSap: products.costSap,
+        plant: products.plant,
+        sloc: products.sloc,
+        slocDescription: products.slocDescription,
+        typeWarehouse: products.typeWarehouse,
+        imageUrl: products.imageUrl,
+        createdAt: products.createdAt,
+        updatedAt: products.updatedAt,
+        totalStock: sql<number>`coalesce(${aggregatedStock.totalStockSum}, 0)`.mapWith(Number),
+    })
+        .from(products)
+        .leftJoin(aggregatedStock, eq(products.id, aggregatedStock.productId))
+        .orderBy(products.materialNumber)
+
+    return results
 }
 
 export async function createProduct(data: z.infer<typeof productSchema>) {

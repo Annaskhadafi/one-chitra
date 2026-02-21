@@ -11,25 +11,25 @@ export default async function WarehouseLogisticsReportPage() {
     const totalWarehouses = data.warehouseCapacity.length
     const activeVehicles = data.fleetUtilization.filter(f => f.totalTrips > 0).length
 
-    const totalDeliveries = data.deliveryPerformance.reduce((sum, d) => sum + d.totalDeliveries, 0)
+    const totalDeliveries = data.deliveryPerformance.reduce((sum: number, d) => sum + d.totalDeliveries, 0)
     const onTimeRate = totalDeliveries > 0
-        ? (data.deliveryPerformance.reduce((sum, d) => sum + d.completedDeliveries, 0) / totalDeliveries) * 100
+        ? (data.deliveryPerformance.reduce((sum: number, d) => sum + d.completedDeliveries, 0) / totalDeliveries) * 100
         : 0
 
-    const totalShippingCost = data.shippingCostAnalysis.reduce((sum, s) => sum + s.totalShippingCost, 0)
+    const totalShippingCost = data.shippingCostAnalysis.reduce((sum: number, s) => sum + s.totalShippingCost, 0)
 
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
             title: "Total Facilities",
             value: totalWarehouses.toString(),
             icon: "warehouse",
-            variant: "default",
+            variant: "default" as const,
         },
         {
             title: "Active Fleet Vehicles",
             value: activeVehicles.toString(),
             icon: "truck",
-            variant: "success",
+            variant: "success" as const,
         },
         {
             title: "Delivery Success Rate",
@@ -41,7 +41,7 @@ export default async function WarehouseLogisticsReportPage() {
             title: "Total Shipping Costs",
             value: formatCurrency(totalShippingCost),
             icon: "dollar",
-            variant: "default",
+            variant: "default" as const,
         },
     ]
 

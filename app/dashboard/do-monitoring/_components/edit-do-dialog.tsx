@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { updateDoMonitoringFields } from "@/app/actions/delivery"
 import { uploadFile } from "@/app/actions/upload"
+import type { Delivery } from "@/lib/types"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -30,7 +32,7 @@ export function EditDoDialog({
     open,
     onOpenChange
 }: {
-    delivery: any,
+    delivery: Delivery | null,
     open: boolean,
     onOpenChange: (open: boolean) => void
 }) {
@@ -102,7 +104,7 @@ export function EditDoDialog({
             } else {
                 toast.error(result.error || "Failed to upload document")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred during upload")
         } finally {
             setIsUploading(false)
@@ -261,10 +263,11 @@ export function EditDoDialog({
                             />
                         ) : (
                             <div className="relative w-full h-full flex items-center justify-center">
-                                <img
+                                <Image
                                     src={scanDoDocument}
                                     alt="Scan DO Preview"
-                                    className="max-w-full max-h-full object-contain rounded-md shadow-2xl transition-transform duration-300 hover:scale-105"
+                                    fill
+                                    className="object-contain rounded-md shadow-2xl transition-transform duration-300 hover:scale-105"
                                 />
                             </div>
                         )}

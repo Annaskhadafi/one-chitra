@@ -28,8 +28,8 @@ import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
+    AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
@@ -378,7 +378,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 )
             },
         },
-    ], [canEdit, canView, canDelete])
+    ], [canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
 
     const table = useReactTable({
         data,
@@ -436,7 +436,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 setRowSelection({})
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error((result as any).error || "Failed to delete sales orders")
+                toast.error(('error' in result ? String(result.error) : "Failed to delete sales orders"))
             }
         }
     }
@@ -451,7 +451,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 setRowSelection({})
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error((result as any).error || "Failed to update statuses")
+                toast.error(('error' in result ? String(result.error) : "Failed to update statuses"))
             }
         }
     }
@@ -496,7 +496,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             toast.success("Status updated")
             queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
         } else {
-            toast.error((result as any).error || "Failed to update status")
+            toast.error(('error' in result ? String(result.error) : "Failed to update status"))
         }
     }
 
@@ -507,7 +507,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 toast.success("Sales order deleted")
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error((result as any).error || "Failed to delete sales order")
+                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
             }
         } catch {
             toast.error("Failed to delete sales order")

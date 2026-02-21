@@ -1,13 +1,11 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, salesOrderItems, stockLevels, warehouses, products } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products } from "@/db/schema"
 import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 
@@ -177,7 +175,7 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
 
         const sufficient = totalAvailable >= item.quantity
 
-        const result: any = {
+        const result = {
             productId: item.productId,
             requested: item.quantity,
             available: directAvailable,

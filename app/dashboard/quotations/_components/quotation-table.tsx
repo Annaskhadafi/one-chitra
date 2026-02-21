@@ -56,7 +56,7 @@ interface QuotationWithRelations {
     quotationNumber: string | null
     customerId: number
     quotationDate: Date
-    validUntil: Date | null
+    closingStatus: string | null
     subject: string | null
     status: string
     discount: string
@@ -65,10 +65,23 @@ interface QuotationWithRelations {
     salesOrderId: number | null
     createdAt: Date
     customer: Customer
+    tags: string | null
+    currency: string
+    referenceNumber: string | null
+    adminNote: string | null
+    clientNote: string | null
+    paymentTerms: string | null
+    termsConditions: string | null
+    notes: string | null
+    salesPersonId: string | null
+    validUntil: Date | null
+    salesPerson: { id: string; name: string; email: string } | null
     createdByUser: { id: string; name: string; email: string } | null
     items: {
         id: number
-        productId: number
+        productId: number | null
+        description: string | null
+        longDescription: string | null
         quantity: number
         unitPrice: string
         discount: string
@@ -351,7 +364,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 </div>
             ),
         },
-    ], [refetch])
+    ], [refetch, isDuplicating])
 
     const table = useReactTable({
         data: quotations,
@@ -584,7 +597,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
             {previewQuotation && (
                 <QuotationPdfPreview
-                    quotation={previewQuotation as any}
+                    quotation={previewQuotation}
                     open={isPreviewOpen}
                     onClose={() => setIsPreviewOpen(false)}
                 />

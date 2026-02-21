@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createQuotation, updateQuotation } from "@/app/actions/quotation"
+import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -35,7 +36,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil } from "lucide-react"
@@ -43,11 +44,12 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
+import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 
 type User = typeof user.$inferSelect
 
 interface QuotationItemRow {
-    productId: number
+    productId: number | null
     productName: string
     description: string
     longDescription: string
@@ -55,6 +57,8 @@ interface QuotationItemRow {
     unitPrice: number
     discount: number
     tax: number
+    costIdr?: number
+    costSap?: number
 }
 
 interface QuotationFormProps {
@@ -94,7 +98,7 @@ interface QuotationFormProps {
             unitPrice: string
             discount: string
             tax: string
-            product: Product
+            product: Product | null
         }[]
     }
 }
@@ -124,10 +128,10 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             ? new Date(initialData.validUntil).toISOString().split("T")[0]
             : ""
     )
-    const [subject, setSubject] = useState(initialData?.subject || "")
+    const [subject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
     const [attn, setAttn] = useState(initialData?.attn || "")
-    const [address, setAddress] = useState(initialData?.address || "")
+    const [address, setAddress] = useState(initialData?.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612")
     const [closingStatus, setClosingStatus] = useState(initialData?.closingStatus || "")
     const [tags, setTags] = useState(initialData?.tags || "")
     const [currency, setCurrency] = useState(initialData?.currency || "IDR")
@@ -136,14 +140,24 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
     const [discountType, setDiscountType] = useState(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
-    const [paymentTerms, setPaymentTerms] = useState(initialData?.paymentTerms || "")
+    const [paymentTerms] = useState(initialData?.paymentTerms || "")
     const [termsConditions, setTermsConditions] = useState(
-        initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n______________________________________________\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 – 000 – 00 – 17416\n______________________________________________"
+        initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 – 000 – 00 – 17416"
     )
-    const [notes, setNotes] = useState(initialData?.notes || "")
+    const [notes] = useState(initialData?.notes || "")
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
-    const [tax, setTax] = useState(Number(initialData?.tax || 0))
+    const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
+    const [globalMargin, setGlobalMargin] = useState<number>(0)
+    const [exchangeRate, setExchangeRate] = useState<number>(1)
+
+    useEffect(() => {
+        const fetchRate = async () => {
+            const rate = await getSetting("manual_usd_rate")
+            if (rate) setExchangeRate(Number(rate))
+        }
+        fetchRate()
+    }, [])
 
     // Items
     const [items, setItems] = useState<QuotationItemRow[]>(
@@ -156,6 +170,8 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             unitPrice: Number(item.unitPrice),
             discount: Number(item.discount),
             tax: Number(item.tax),
+            costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
+            costSap: Number(item.product?.costSap || 0),
         })) || []
     )
 
@@ -169,9 +185,22 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         [customers, customerId]
     )
 
+    const ceilToThousand = (val: number) => Math.ceil(val / 1000) * 1000
+
     // Add product
     const addProduct = useCallback((product: Product) => {
         const existing = items.find(i => i.productId === product.id)
+        const costSap = Number(product.costSap || 0)
+        const costIdr = costSap * exchangeRate
+        // Auto calculate price if global margin is set
+        let unitPrice = costIdr
+        if (globalMargin > 0) {
+            unitPrice = costIdr + (costIdr * globalMargin / 100)
+        }
+
+        // Always round UP to thousand for selling price
+        unitPrice = ceilToThousand(unitPrice)
+
         if (existing) {
             setItems(prev =>
                 prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i)
@@ -180,16 +209,53 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             setItems(prev => [...prev, {
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
-                description: "",
+                description: product.materialDescription || "",
                 longDescription: "",
                 quantity: 1,
-                unitPrice: 0,
+                unitPrice: unitPrice,
                 discount: 0,
                 tax: 0,
+                costIdr: costIdr,
+                costSap: costSap,
             }])
         }
         setProductOpen(false)
-    }, [items])
+    }, [items, globalMargin, exchangeRate])
+
+    const addEmptyRow = () => {
+        setItems(prev => [...prev, {
+            productId: null,
+            productName: "Custom Item",
+            description: "",
+            longDescription: "",
+            quantity: 1,
+            unitPrice: 0,
+            discount: 0,
+            tax: 0,
+            costIdr: 0,
+            costSap: 0,
+        }])
+    }
+
+    const applyGlobalMargin = () => {
+        if (globalMargin <= 0) {
+            toast.error("Please set a margin greater than 0")
+            return
+        }
+        setItems(prev => prev.map(item => {
+            const currentCostIdr = item.costSap ? item.costSap * exchangeRate : (item.costIdr || 0)
+            if (currentCostIdr > 0) {
+                const rawPrice = currentCostIdr + (currentCostIdr * globalMargin / 100)
+                return {
+                    ...item,
+                    costIdr: currentCostIdr,
+                    unitPrice: ceilToThousand(rawPrice)
+                }
+            }
+            return item
+        }))
+        toast.success(`Applied ${globalMargin}% margin (rounded up to thousand)`)
+    }
 
     const removeItem = (index: number) => {
         setItems(prev => prev.filter((_, i) => i !== index))
@@ -223,7 +289,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
         setIsSubmitting(true)
         try {
-            const payload: any = {
+            const payload = {
                 quotationNumber: quotationNumber || undefined,
                 customerId: customerId,
                 quotationDate: quotationDate,
@@ -265,7 +331,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 router.push("/dashboard/quotations")
             } else {
-                toast.error(result.error || "Something went wrong")
+                toast.error("error" in result ? result.error : "Something went wrong")
             }
         } catch {
             toast.error("Failed to save quotation")
@@ -294,6 +360,14 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 subject: subject || undefined,
                 salesPersonId: salesPersonId || undefined,
                 attn: attn || undefined,
+                address: address || undefined,
+                closingStatus: closingStatus || undefined,
+                tags: tags || undefined,
+                currency: currency || "IDR",
+                referenceNumber: referenceNumber || undefined,
+                adminNote: adminNote || undefined,
+                clientNote: clientNote || undefined,
+                discountType: discountType,
                 status: status as "draft" | "sent" | "approved" | "rejected" | "expired" | "converted",
                 paymentTerms: paymentTerms || undefined,
                 termsConditions: termsConditions || undefined,
@@ -304,6 +378,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 items: items.map(item => ({
                     productId: item.productId,
                     description: item.description || undefined,
+                    longDescription: item.longDescription || undefined,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
                     discount: item.discount,
@@ -323,7 +398,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 const qId = isEdit ? initialData!.id : (result as { id: number }).id
                 router.push(`/dashboard/quotations/${qId}?pdf=true`)
             } else {
-                toast.error(result.error || "Something went wrong")
+                toast.error("error" in result ? result.error : "Something went wrong")
             }
         } catch {
             toast.error("Failed to save quotation")
@@ -333,7 +408,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     }
 
     return (
-        <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto w-full">
+        <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 mx-auto w-full">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -413,58 +488,29 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </Popover>
                         </div>
 
-                        {/* Bill To / Ship To */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <Label className="text-sm font-medium text-blue-600 flex items-center gap-1">
-                                    <Search className="h-3 w-3" /> Bill To
-                                </Label>
-                                <div className="text-sm text-muted-foreground min-h-[40px]">
-                                    {selectedCustomer ? (
-                                        <>
-                                            <p className="font-bold">{selectedCustomer.name}</p>
-                                            <p>{selectedCustomer.address1}</p>
-                                        </>
-                                    ) : "--"}
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-sm font-medium text-blue-600 flex items-center gap-1">
-                                    <Search className="h-3 w-3" /> Ship To
-                                </Label>
-                                <div className="text-sm text-muted-foreground min-h-[40px]">
-                                    {selectedCustomer ? (
-                                        <>
-                                            <p className="font-bold">{selectedCustomer.name}</p>
-                                            <p>{selectedCustomer.address1}</p>
-                                        </>
-                                    ) : "--"}
-                                </div>
-                            </div>
+                        {/* Attn Section */}
+                        <div className="space-y-2">
+                            <Label className="text-sm font-medium text-blue-600 flex items-center gap-1">
+                                <Search className="h-3 w-3" /> Attn
+                            </Label>
+                            <Textarea
+                                placeholder="Attn: Name / Department"
+                                value={attn}
+                                onChange={(e) => setAttn(e.target.value)}
+                                className="min-h-[80px]"
+                            />
                         </div>
 
                         {/* Quo Number */}
                         <div className="space-y-2">
-                            <Label className="text-destructive font-semibold">* Quo Number</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    className="bg-muted"
-                                    value="QUO/CP/"
-                                    readOnly
-                                    disabled
-                                />
-                                <Input
-                                    placeholder="Number"
-                                    value={quotationNumber}
-                                    onChange={(e) => setQuotationNumber(e.target.value)}
-                                />
-                                <Input
-                                    className="bg-muted w-32"
-                                    value={new Date().toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' })}
-                                    readOnly
-                                    disabled
-                                />
-                            </div>
+                            <Label className="text-destructive font-semibold">* Quo Number (QUO/CP/[NO]/[MM]/[YYYY])</Label>
+                            <Input
+                                placeholder="Generated automatically..."
+                                value={quotationNumber}
+                                onChange={(e) => setQuotationNumber(e.target.value)}
+                                readOnly={!initialData} // Let them edit if they want, but show it's auto
+                                className={cn(!initialData && "bg-muted cursor-not-allowed")}
+                            />
                         </div>
 
                         {/* Dates */}
@@ -493,21 +539,36 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                 <Pencil className="h-3 w-3" /> * Alamat
                             </Label>
                             <Select value={address} onValueChange={setAddress}>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-auto py-2">
                                     <SelectValue placeholder="Select address..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="PT Chitra Paratama Jakarta (Jl. Raya Cilandak KKO No.N0.1 RT.13/RW.5 Cilandak Tim. Ps. Minggu | Kota Jakarta Selatan. DKI Jakarta 12560)">
-                                        PT Chitra Paratama Jakarta (Jl. Raya Cilandak KKO)
-                                    </SelectItem>
-                                    <SelectItem value="Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612">
-                                        Jl. Amd No.69 Karang Joang (Balikpapan)
+                                        PT Chitra Paratama Jakarta (Cilandak)
                                     </SelectItem>
                                     <SelectItem value="PT Chitra Paratama Tanjung Redep (Jl. M. Iswahyudi Rinding-Berau | Kalimantan Timur 77313)">
-                                        PT Chitra Paratama Tanjung Redep
+                                        PT Chitra Paratama Tanjung Redep (Berau)
+                                    </SelectItem>
+                                    <SelectItem value="Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612">
+                                        PT Chitra Paratama Balikpapan (Default - Jl. Amd)
                                     </SelectItem>
                                     <SelectItem value="PT Chitra Paratama Balikpapan (Graha Indah Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612)">
                                         PT Chitra Paratama Balikpapan (Graha Indah)
+                                    </SelectItem>
+                                    <SelectItem value="PT Chitra Paratama Palembang (Trakindo Palembang-Jl. Kol. H. Burlian No.KM 8.5 Kec.Sukarami. Kota Palembang | Sumatera Selatan 30961)">
+                                        PT Chitra Paratama Palembang
+                                    </SelectItem>
+                                    <SelectItem value="PT Chitra Paratama Pekanbaru (Trakindo Pekanbaru-Jl. Soekarno - Hatta No.36 Kec. Payung Sekaki. Kota Pekanbaru | Riau 28291)">
+                                        PT Chitra Paratama Pekanbaru
+                                    </SelectItem>
+                                    <SelectItem value="PT. Chitra Paratama Tanjung Trakindo Utama Tanjung Adaro Branch Regional Integrated Support Area (RISA) Hauling Paringin Road KM 68. Balangan | South Kalimantan - Indonesia">
+                                        PT. Chitra Paratama Tanjung (Adaro/RISA)
+                                    </SelectItem>
+                                    <SelectItem value="PT Chitra Paratama Sangata (Jl. Kabo Jaya RT 05 / No. 01 Sangata – Kutai Timur | Kalimantan Timur 75611)">
+                                        PT Chitra Paratama Sangata
+                                    </SelectItem>
+                                    <SelectItem value="PT. Chitra Paratama Kendari (Trakindo Utama Jalan Bypass Y Wayong Kel Lepo-Lepo Kec.Baruga Kota.Kendari | Sulawesi Tenggara 93118)">
+                                        PT. Chitra Paratama Kendari
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -633,6 +694,36 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Product Search + Add */}
+            <div className="flex items-center justify-between mb-2 px-2">
+                <div className="flex items-center gap-4 bg-muted/30 p-2 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="margin-input" className="text-xs font-bold text-blue-700 whitespace-nowrap">Margin (%)</Label>
+                        <Input
+                            id="margin-input"
+                            type="number"
+                            value={globalMargin}
+                            onChange={(e) => setGlobalMargin(Number(e.target.value))}
+                            className="w-20 h-8 text-right font-mono"
+                        />
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={applyGlobalMargin}
+                        className="h-8 bg-blue-600 text-white hover:bg-blue-700 font-bold px-4"
+                    >
+                        SET MARGIN
+                    </Button>
+                </div>
+                <Button
+                    onClick={addEmptyRow}
+                    variant="outline"
+                    className="h-8 border-blue-600 text-blue-600 hover:bg-blue-50 border-dashed border-2 font-bold"
+                >
+                    <Plus className="h-4 w-4 mr-1" /> TAMBAH BARIS
+                </Button>
+            </div>
+
             <Card>
                 <CardContent className="p-6">
                     <div className="space-y-4">
@@ -657,10 +748,17 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         value={`${product.materialNumber} ${product.materialDescription}`}
                                                         onSelect={() => addProduct(product)}
                                                     >
-                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground" />
-                                                        <div>
-                                                            <p className="font-medium">{product.materialNumber}</p>
-                                                            <p className="text-xs text-muted-foreground">{product.materialDescription}</p>
+                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground mt-1" />
+                                                        <div className="flex-1">
+                                                            <div className="flex justify-between items-start">
+                                                                <p className="font-bold text-blue-700">{product.materialNumber}</p>
+                                                                <p className="text-[10px] font-mono bg-blue-50 px-1 rounded border">Cost: {formatCurrency(Number(product.costSap || 0) * exchangeRate)}</p>
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground line-clamp-1">{product.materialDescription}</p>
+                                                            <div className="flex gap-2 mt-1">
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">WH: {product.slocDescription || product.sloc || "-"}</span>
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">Stock: {product.totalStock ?? 0}</span>
+                                                            </div>
                                                         </div>
                                                     </CommandItem>
                                                 ))}
@@ -669,13 +767,17 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                     </Command>
                                 </PopoverContent>
                             </Popover>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setProductOpen(true)}
-                            >
-                                <Plus className="h-4 w-4" />
-                            </Button>
+                            <ProductDialog
+                                trigger={
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </Button>
+                                }
+                                onSuccess={() => router.refresh()}
+                            />
                         </div>
 
                         {/* Items Table */}
@@ -785,22 +887,22 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </div>
 
                             {/* Totals Summary */}
-                            <div className="mt-4 flex flex-col items-end gap-2 border-t pt-4">
-                                <div className="flex items-center gap-20">
-                                    <span className="text-sm font-medium">Sub Total :</span>
-                                    <span className="text-sm font-medium w-32 text-right">{formatCurrency(subTotal)}</span>
+                            <div className="mt-4 flex flex-col items-end gap-1 border-t pt-4 pe-4 pb-4">
+                                <div className="flex items-center justify-end w-[400px] gap-4">
+                                    <span className="text-sm font-medium text-muted-foreground">Sub Total :</span>
+                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(subTotal)}</span>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-sm font-medium">Discount :</span>
+                                <div className="flex items-center justify-end w-[400px] gap-4 mt-2">
+                                    <span className="text-sm font-medium text-muted-foreground">Discount :</span>
                                     <div className="flex items-center gap-1">
                                         <Input
                                             type="number"
                                             value={discount}
                                             onChange={(e) => setDiscount(Number(e.target.value))}
-                                            className="w-24 h-8 text-right"
+                                            className="w-20 h-8 text-right font-mono text-xs"
                                         />
                                         <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
-                                            <SelectTrigger className="w-16 h-8">
+                                            <SelectTrigger className="w-14 h-8 text-xs">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -809,23 +911,24 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <span className="text-sm font-medium w-32 text-right text-destructive">
+                                    <span className="text-sm font-bold w-32 text-right text-destructive">
                                         -{formatCurrency(discountType === "percent" ? (subTotal * discount) / 100 : discount)}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-sm font-medium">Delivery :</span>
+                                <div className="flex items-center justify-end w-[400px] gap-4 mt-1">
+                                    <span className="text-sm font-medium text-muted-foreground">Delivery :</span>
                                     <Input
                                         type="number"
                                         value={shipping}
                                         onChange={(e) => setShipping(Number(e.target.value))}
-                                        className="w-24 h-8 text-right"
+                                        className="w-20 h-8 text-right font-mono text-xs"
                                     />
-                                    <span className="text-sm font-medium w-32 text-right">{formatCurrency(shipping)}</span>
+                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(shipping)}</span>
                                 </div>
-                                <div className="flex items-center gap-20 pt-2">
-                                    <span className="text-sm font-bold">Total :</span>
-                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(grandTotal)}</span>
+                                <Separator className="my-2 w-[400px]" />
+                                <div className="flex items-center justify-end w-[400px] gap-4">
+                                    <span className="text-base font-black text-blue-700">TOTAL :</span>
+                                    <span className="text-lg font-black w-32 text-right text-blue-700">{formatCurrency(grandTotal)}</span>
                                 </div>
                             </div>
                         </div>

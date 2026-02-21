@@ -43,7 +43,7 @@ export const quotations = pgTable("quotations", {
 export const quotationItems = pgTable("quotation_items", {
     id: serial("id").primaryKey(),
     quotationId: integer("quotation_id").references(() => quotations.id, { onDelete: "cascade" }).notNull(),
-    productId: integer("product_id").references(() => products.id).notNull(),
+    productId: integer("product_id").references(() => products.id),
     quantity: integer("quantity").notNull(),
     description: text("description"),
     longDescription: text("long_description"),

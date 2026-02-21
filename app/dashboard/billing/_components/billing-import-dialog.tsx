@@ -38,7 +38,7 @@ export function BillingImportDialog() {
     const [file, setFile] = useState<File | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [step, setStep] = useState<'upload' | 'map' | 'importing'>('upload')
-    const [csvData, setCsvData] = useState<any[]>([])
+    const [csvData, setCsvData] = useState<Record<string, unknown>[]>([])
     const [headers, setHeaders] = useState<string[]>([])
     const [mapping, setMapping] = useState<Record<string, string>>({
         customer: "",
@@ -74,7 +74,7 @@ export function BillingImportDialog() {
                 skipEmptyLines: true,
                 complete: (results) => {
                     if (results.data.length > 0) {
-                        setCsvData(results.data)
+                        setCsvData(results.data as Record<string, unknown>[])
                         const csvHeaders = Object.keys(results.data[0] as object)
                         setHeaders(csvHeaders)
 
@@ -124,17 +124,20 @@ export function BillingImportDialog() {
 
         try {
             // Transform data based on mapping
-            const transformedData = csvData.map(row => ({
-                customer: row[mapping.customer] || "",
-                poNo: row[mapping.poNo] || "",
-                poDate: row[mapping.poDate] ? new Date(row[mapping.poDate]) : null,
-                deliveryNo: row[mapping.deliveryNo] || "",
-                materialNo: row[mapping.materialNo] || "",
-                description: row[mapping.description] || "",
-                qty: Number(row[mapping.qty]) || 0,
-                price: Number(row[mapping.price]) || 0,
-                amount: Number(row[mapping.amount]) || 0,
-            }))
+            const transformedData = csvData.map((row) => {
+                const r = row as Record<string, unknown>
+                return {
+                    customer: (r[mapping.customer] as string) || "",
+                    poNo: (r[mapping.poNo] as string) || "",
+                    poDate: r[mapping.poDate] ? new Date(r[mapping.poDate] as string) : null,
+                    deliveryNo: (r[mapping.deliveryNo] as string) || "",
+                    materialNo: (r[mapping.materialNo] as string) || "",
+                    description: (r[mapping.description] as string) || "",
+                    qty: Number(r[mapping.qty]) || 0,
+                    price: Number(r[mapping.price]) || 0,
+                    amount: Number(r[mapping.amount]) || 0,
+                }
+            })
 
             const result = await importBillingRecords(transformedData)
 
@@ -146,8 +149,8 @@ export function BillingImportDialog() {
                 toast.error(result.error || "Failed to import records")
                 setStep('map')
             }
-        } catch (error) {
-            console.error("Import error:", error)
+        } catch (_error) {
+            console.error("Import error:", _error)
             toast.error("An error occurred during import")
             setStep('map')
         } finally {

@@ -216,7 +216,7 @@ export function LowStockAlertRow({ productName, materialNumber, warehouseName, c
             <td className="py-3 px-4 tabular-nums">{currentStock.toLocaleString()}</td>
             <td className="py-3 px-4 tabular-nums">{minStock.toLocaleString()}</td>
             <td className="py-3 px-4">
-                <Badge variant={getSeverity() as any}>
+                <Badge variant={getSeverity() as "destructive" | "warning" | "secondary" | "success"}>
                     {getSeverityLabel()}
                 </Badge>
             </td>
@@ -325,8 +325,7 @@ export function DateRangeFilter({ value, onChange, presets }: DateRangeFilterPro
 }
 
 interface ExportButtonProps {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: any[]
+    data: Record<string, unknown>[]
     filename: string
     format?: "csv" | "json"
     variant?: "default" | "outline"

@@ -11,7 +11,7 @@ export default async function InventoryReportPage() {
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
         {
             title: "Total Products",
-            value: data.stockOverview.reduce((sum, w) => sum + w.totalProducts, 0),
+            value: data.stockOverview.reduce((sum: number, w) => sum + w.totalProducts, 0),
             change: 5.2,
             changeLabel: "vs last month",
             icon: "package",
@@ -19,7 +19,7 @@ export default async function InventoryReportPage() {
         },
         {
             title: "Total Stock Value",
-            value: formatCurrency(data.stockOverview.reduce((sum, w) => sum + w.totalValue, 0)),
+            value: formatCurrency(data.stockOverview.reduce((sum: number, w) => sum + w.totalValue, 0)),
             change: 3.8,
             changeLabel: "vs last month",
             icon: "dollar",
@@ -31,7 +31,7 @@ export default async function InventoryReportPage() {
             change: -12.5,
             changeLabel: "vs last week",
             icon: "alert",
-            variant: data.lowStockAlerts.length > 10 ? "danger" : ("warning" as "danger" | "warning"),
+            variant: data.lowStockAlerts.length > 10 ? ("danger" as const) : ("warning" as const),
         },
         {
             title: "Warehouses",

@@ -8,11 +8,11 @@ import Link from "next/link"
 export default async function ProductPerformanceReportPage() {
     const data = await getProductPerformanceReport()
 
-    const totalSold = data.bestSellingProducts.reduce((sum: number, p: any) => sum + p.quantitySold, 0)
-    const totalRev = data.bestSellingProducts.reduce((sum: number, p: any) => sum + p.totalRevenue, 0)
+    const totalSold = data.bestSellingProducts.reduce((sum: number, p) => sum + p.quantitySold, 0)
+    const totalRev = data.bestSellingProducts.reduce((sum: number, p) => sum + p.totalRevenue, 0)
 
     // Calculate total profit from performance data (totalRevenue * profitMargin / 100)
-    const totalProfit = data.bestSellingProducts.reduce((sum: number, p: any) => sum + (p.profitMargin ? (p.profitMargin / 100) * p.totalRevenue : 0), 0)
+    const totalProfit = data.bestSellingProducts.reduce((sum: number, p) => sum + (p.profitMargin ? (p.profitMargin / 100) * p.totalRevenue : 0), 0)
     const avgMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0
 
     const kpis: React.ComponentProps<typeof ReportKPIGrid>["kpis"] = [
@@ -42,19 +42,19 @@ export default async function ProductPerformanceReportPage() {
         },
     ]
 
-    const scatterData = data.bestSellingProducts.map((p: any) => ({
+    const scatterData = data.bestSellingProducts.map((p) => ({
         name: p.productName || "Unknown",
         revenue: Number(p.totalRevenue) || 0,
         margin: Number(p.profitMargin || 0),
         sold: Number(p.quantitySold) || 0
     }))
 
-    const treemapData = data.categoryPerformance.map((c: any) => ({
+    const treemapData = data.categoryPerformance.map((c) => ({
         name: (c.category as string) || "Unknown",
         size: Number(c.totalRevenue) || 0
     }))
 
-    const topProductsBarData = data.bestSellingProducts.slice(0, 10).map((p: any) => ({
+    const topProductsBarData = data.bestSellingProducts.slice(0, 10).map((p) => ({
         name: (p.productName as string)?.substring(0, 20) + "..." || "Unknown",
         value: Number(p.totalRevenue) || 0,
     }))
@@ -138,7 +138,7 @@ export default async function ProductPerformanceReportPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {data.worstSellingProducts.map((prod: any, i: number) => (
+                                        {data.worstSellingProducts.map((prod, i: number) => (
                                             <tr key={i} className="border-b hover:bg-muted/30">
                                                 <td className="py-3 px-4 text-sm font-medium">{prod.productName as string || "Unknown"}</td>
                                                 <td className="py-3 px-4 text-sm text-muted-foreground">{prod.category as string || "Unknown"}</td>
