@@ -302,3 +302,66 @@ export async function convertToSalesOrder(id: number) {
         return { success: false, error: "Failed to convert quotation to Sales Order" }
     }
 }
+
+export async function duplicateQuotation(id: number) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+        const userId = session?.user?.id || "system"
+
+        return await db.transaction(async (tx) => {
+            const originalQuotation = await tx.query.quotations.findFirst({
+                where: eq(quotations.id, id),
+                with: {
+                    items: true,
+                },
+            })
+
+            if (!originalQuotation) {
+                return { success: false, error: "Original quotation not found" }
+            }
+
+            const quotationNumber = await generateQuotationNumber()
+
+            const [newQuotation] = await tx.insert(quotations)
+                .values({
+                    quotationNumber,
+                    customerId: originalQuotation.customerId,
+                    quotationDate: new Date(),
+                    validUntil: originalQuotation.validUntil,
+                    subject: originalQuotation.subject ? `${originalQuotation.subject} (Copy)` : "Copy",
+                    salesPersonId: originalQuotation.salesPersonId,
+                    attn: originalQuotation.attn,
+                    createdBy: userId,
+                    status: "draft",
+                    paymentTerms: originalQuotation.paymentTerms,
+                    termsConditions: originalQuotation.termsConditions,
+                    notes: originalQuotation.notes ? `Duplicated from ${originalQuotation.quotationNumber}. ${originalQuotation.notes}` : `Duplicated from ${originalQuotation.quotationNumber}`,
+                    discount: originalQuotation.discount,
+                    tax: originalQuotation.tax,
+                    shipping: originalQuotation.shipping,
+                })
+                .returning()
+
+            if (originalQuotation.items.length > 0) {
+                await tx.insert(quotationItems)
+                    .values(originalQuotation.items.map(item => ({
+                        quotationId: newQuotation.id,
+                        productId: item.productId,
+                        description: item.description,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        discount: item.discount,
+                        tax: item.tax,
+                    })))
+            }
+
+            revalidatePath("/dashboard/quotations")
+            return { success: true, id: newQuotation.id }
+        })
+    } catch (error) {
+        console.error("Failed to duplicate quotation:", error)
+        return { success: false, error: "Failed to duplicate quotation" }
+    }
+}

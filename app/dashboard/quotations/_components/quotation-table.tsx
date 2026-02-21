@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useRef } from "react"
-import { deleteQuotation, bulkDeleteQuotations, getQuotations } from "@/app/actions/quotation"
+import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation } from "@/app/actions/quotation"
 import {
     Table,
     TableBody,
@@ -33,7 +33,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2, Copy } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
@@ -49,6 +49,7 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { QuotationPdfPreview } from "./quotation-pdf-preview"
 
 interface QuotationWithRelations {
     id: number
@@ -145,6 +146,9 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [rowSelection, setRowSelection] = useState({})
+    const [previewQuotation, setPreviewQuotation] = useState<QuotationWithRelations | null>(null)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
 
     // Chart data: status breakdown
     const chartData = useMemo(() => {
@@ -188,12 +192,15 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 </Button>
             ),
             cell: ({ row }) => (
-                <Link
-                    href={`/dashboard/quotations/${row.original.id}`}
-                    className="font-mono text-sm font-medium text-primary hover:underline"
+                <button
+                    onClick={() => {
+                        setPreviewQuotation(row.original)
+                        setIsPreviewOpen(true)
+                    }}
+                    className="font-mono text-sm font-medium text-primary hover:underline bg-transparent border-none p-0 cursor-pointer text-left"
                 >
                     {row.original.quotationNumber}
-                </Link>
+                </button>
             ),
         },
         {
@@ -282,6 +289,34 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                             <Pencil className="h-3.5 w-3.5" />
                         </Button>
                     </Link>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                        disabled={isDuplicating === row.original.id}
+                        onClick={async () => {
+                            setIsDuplicating(row.original.id)
+                            try {
+                                const result = await duplicateQuotation(row.original.id)
+                                if (result.success) {
+                                    toast.success("Quotation duplicated")
+                                    refetch()
+                                } else {
+                                    toast.error(result.error || "Failed to duplicate")
+                                }
+                            } catch {
+                                toast.error("An error occurred while duplicating")
+                            } finally {
+                                setIsDuplicating(null)
+                            }
+                        }}
+                    >
+                        {isDuplicating === row.original.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                        )}
+                    </Button>
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
@@ -546,6 +581,14 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             <div className="text-sm text-muted-foreground">
                 Showing {table.getFilteredRowModel().rows.length} of {quotations.length} quotations
             </div>
+
+            {previewQuotation && (
+                <QuotationPdfPreview
+                    quotation={previewQuotation as any}
+                    open={isPreviewOpen}
+                    onClose={() => setIsPreviewOpen(false)}
+                />
+            )}
         </div>
     )
 }
