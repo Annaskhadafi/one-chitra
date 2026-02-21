@@ -142,6 +142,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "competitor-info",
             },
             {
+                title: "Competitor Info New",
+                url: "/dashboard/competitor-info-new",
+                icon: TrendingUp,
+                resource: "competitor-info-new",
+            },
+            {
                 title: "History Order",
                 url: "/dashboard/history-order",
                 icon: History,
