@@ -35,18 +35,20 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
 import { usePermissions } from "@/hooks/use-permissions"
+import { PoPreviewDialog } from "@/components/po-preview-dialog"
 
 interface SalesOrderWithRelations {
     id: number
     invoiceNumber: string | null
     customerPo: string | null
+    poDocument: string | null
     customerId: number
     salesDate: Date
     poReceive: Date | null
@@ -116,6 +118,8 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [viewOrder, setViewOrder] = useState<SalesOrderWithRelations | null>(null)
     const [isViewOpen, setIsViewOpen] = useState(false)
+    const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderWithRelations | null>(null)
+    const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
 
     // Stats calculation
     const totalOrders = data.length
@@ -463,6 +467,20 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
                                                 )}
+                                                {order.poDocument && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                                        onClick={() => {
+                                                            setPoPreviewOrder(order)
+                                                            setIsPoPreviewOpen(true)
+                                                        }}
+                                                        title="Preview Customer PO"
+                                                    >
+                                                        <FileText className="h-4 w-4" />
+                                                    </Button>
+                                                )}
                                                 {canEdit && (
                                                     <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -519,6 +537,13 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                 open={isViewOpen}
                 onOpenChange={setIsViewOpen}
                 order={viewOrder}
+            />
+
+            <PoPreviewDialog
+                open={isPoPreviewOpen}
+                onOpenChange={setIsPoPreviewOpen}
+                poDocument={poPreviewOrder?.poDocument || null}
+                title="Customer PO Preview"
             />
         </div>
     )

@@ -45,12 +45,13 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { usePermissions } from "@/hooks/use-permissions"
+import { PoPreviewDialog } from "@/components/po-preview-dialog"
 
 interface DeliveryWithRelations {
     id: number
@@ -71,6 +72,7 @@ interface DeliveryWithRelations {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
+        poDocument: string | null
         poReceive: Date | null
         customer: Customer
     }
@@ -131,6 +133,8 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [pdfDelivery, setPdfDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPdfOpen, setIsPdfOpen] = useState(false)
+    const [poPreviewDelivery, setPoPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
+    const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
 
     // Stats calculation
     const totalDeliveries = data.length
@@ -500,6 +504,17 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                                                             Preview Detail
                                                         </DropdownMenuItem>
                                                     )}
+                                                    {delivery.salesOrder?.poDocument && (
+                                                        <DropdownMenuItem
+                                                            onClick={() => {
+                                                                setPoPreviewDelivery(delivery)
+                                                                setIsPoPreviewOpen(true)
+                                                            }}
+                                                        >
+                                                            <FileText className="mr-2 h-4 w-4" />
+                                                            Preview Customer PO
+                                                        </DropdownMenuItem>
+                                                    )}
                                                     <DropdownMenuItem
                                                         onClick={() => {
                                                             setPdfDelivery(delivery)
@@ -583,6 +598,13 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                     onClose={() => setIsPdfOpen(false)}
                 />
             )}
+
+            <PoPreviewDialog
+                open={isPoPreviewOpen}
+                onOpenChange={setIsPoPreviewOpen}
+                poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
+                title="Customer PO Preview"
+            />
         </div>
     )
 }
