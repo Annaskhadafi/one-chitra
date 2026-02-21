@@ -165,6 +165,12 @@ export const navigationConfig: NavSection[] = [
                 icon: FileText,
                 resource: "quotations",
             },
+            {
+                title: "Sales Document",
+                url: "/dashboard/sales-documents",
+                icon: FileText,
+                resource: "sales-documents",
+            },
         ],
     },
     {

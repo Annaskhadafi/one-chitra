@@ -50,6 +50,13 @@
       "when": 1771681290470,
       "tag": "0006_plain_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771688751660,
+      "tag": "0007_lucky_chamber",
+      "breakpoints": true
     }
   ]
 }

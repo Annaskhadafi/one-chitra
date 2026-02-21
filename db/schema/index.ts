@@ -34,3 +34,14 @@ export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, 
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
 export { historyOrders } from "./history-orders";
+export { salesDocuments } from "./sales-documents";
+
+import { user } from "./auth";
+import { salesDocuments } from "./sales-documents";
+
+export const salesDocumentsRelations = relations(salesDocuments, ({ one }) => ({
+    uploadedBy: one(user, {
+        fields: [salesDocuments.uploadedById],
+        references: [user.id],
+    }),
+}));
