@@ -831,6 +831,36 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             </div>
                         </Card>
                     )}
+
+                    {/* Customer PO Preview */}
+                    {selectedSO && (
+                        <Card className="shadow-sm border-l-4 border-l-amber-500">
+                            <CardHeader className="pb-3 border-b bg-amber-50/50 dark:bg-amber-900/50">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Plus className="h-4 w-4 rotate-45 text-amber-500" />
+                                    Customer PO Preview
+                                </CardTitle>
+                                <CardDescription>Verify items against the original Customer PO document.</CardDescription>
+                            </CardHeader>
+                            <CardContent className={cn("p-0", !selectedSO?.poDocument && "p-8")}>
+                                {selectedSO?.poDocument ? (
+                                    <div className="aspect-[1/1.4] w-full">
+                                        <iframe
+                                            src={`/api/uploads/${selectedSO.poDocument}`}
+                                            className="w-full h-full border-0"
+                                            title="Customer PO Preview"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-center py-4 text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg border border-dashed">
+                                        <AlertTriangle className="h-8 w-8 mb-2 opacity-20" />
+                                        <p className="text-sm font-medium">No Customer PO document attached</p>
+                                        <p className="text-xs opacity-70">Select a Sales Order that has an uploaded PO document to see the preview.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
 
                 {/* Right Column: Meta Details */}
@@ -1301,28 +1331,6 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             />
                         </CardContent>
                     </Card>
-
-                    {/* PDF Preview */}
-                    {selectedSO?.poDocument && (
-                        <Card className="shadow-sm border-l-4 border-l-amber-500">
-                            <CardHeader className="pb-3 border-b bg-amber-50/50 dark:bg-amber-900/50">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Plus className="h-4 w-4 rotate-45 text-amber-500" />
-                                    Customer PO Preview
-                                </CardTitle>
-                                <CardDescription>Verify items against the original Customer PO document.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                <div className="aspect-[1/1.4] w-full">
-                                    <iframe
-                                        src={`/api/uploads/${selectedSO.poDocument}`}
-                                        className="w-full h-full border-0"
-                                        title="Customer PO Preview"
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
                 </div >
             </div >
         </div >
