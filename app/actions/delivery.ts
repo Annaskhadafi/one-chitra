@@ -254,9 +254,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         serialNumbers: item.serialNumbers || null,
                     })))
 
-                // If status is a "committed" status, deduct stock
-                const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
-                if (committedStatuses.includes(data.status)) {
+                // Deduct stock for all statuses EXCEPT cancelled
+                const isCommitted = data.status !== "cancelled"
+
+                if (isCommitted) {
                     for (const item of data.items) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
@@ -295,9 +296,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 return { success: false, error: "Delivery not found" }
             }
 
-            // Revert stock if it was previously in a committed status
-            const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
-            if (committedStatuses.includes(originalDelivery.status) && originalDelivery.warehouseId) {
+            // Revert stock if it was previously committed (not cancelled)
+            const originalWasCommitted = originalDelivery.status !== "cancelled"
+
+            if (originalWasCommitted && originalDelivery.warehouseId) {
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
                         .set({
@@ -358,8 +360,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         serialNumbers: item.serialNumbers || null,
                     })))
 
-                // Apply new stock deduction if in a committed status
-                if (committedStatuses.includes(data.status)) {
+                // Apply new stock deduction if now committed (not cancelled)
+                const isCommitted = data.status !== "cancelled"
+
+                if (isCommitted) {
                     for (const item of data.items) {
                         await tx.update(stockLevels)
                             .set({
@@ -398,9 +402,10 @@ export async function deleteDelivery(id: number) {
 
         // Start transaction
         return await db.transaction(async (tx) => {
-            // Restore stock for items if the delivery was not cancelled and had a warehouse
-            const committedStatuses = ["scheduled", "ready", "partial", "in_transit", "delivered"]
-            if (committedStatuses.includes(delivery.status) && delivery.warehouseId) {
+            // Restore stock for items if the delivery was committed (not cancelled)
+            const wasCommitted = delivery.status !== "cancelled"
+
+            if (wasCommitted && delivery.warehouseId) {
                 for (const item of delivery.items) {
                     await tx.update(stockLevels)
                         .set({
