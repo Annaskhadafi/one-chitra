@@ -543,7 +543,8 @@ export function SalesOrderTable({ data }: SalesOrderTableProps) {
                 open={isPoPreviewOpen}
                 onOpenChange={setIsPoPreviewOpen}
                 poDocument={poPreviewOrder?.poDocument || null}
-                title="Customer PO Preview"
+                title={`PO Preview: ${poPreviewOrder?.invoiceNumber || "Customer PO"}`}
+                editUrl={poPreviewOrder ? `/dashboard/sales-orders/${poPreviewOrder.id}/edit` : undefined}
             />
         </div>
     )

@@ -603,7 +603,8 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 open={isPoPreviewOpen}
                 onOpenChange={setIsPoPreviewOpen}
                 poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
-                title="Customer PO Preview"
+                title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
+                editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
             />
         </div>
     )
