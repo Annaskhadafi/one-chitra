@@ -60,17 +60,6 @@ export async function getSalesOrdersForDelivery() {
     // Get confirmed sales orders with their items and already-delivered quantities
     const orders = await db.query.salesOrders.findMany({
         where: eq(salesOrders.status, "confirmed"),
-        columns: {
-            id: true,
-            invoiceNumber: true,
-            customerPo: true,
-            poDocument: true,
-            customerId: true,
-            salesDate: true,
-            status: true,
-            warehouseId: true,
-            createdAt: true,
-        },
         with: {
             customer: true,
             items: {

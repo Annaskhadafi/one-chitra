@@ -56,7 +56,7 @@ export const deliveryItems = pgTable("delivery_items", {
 
 // Import fleetTrips here to avoid circular dependency issues in table definition if possible, 
 // but for relations it's fine.
-import { fleetTrips } from "./fleet-trips";
+// Avoid circular dependency with fleet-trips. Import it elsewhere if needed.
 
 export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     salesOrder: one(salesOrders, {
@@ -66,10 +66,6 @@ export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     warehouse: one(warehouses, {
         fields: [deliveries.warehouseId],
         references: [warehouses.id],
-    }),
-    fleetTrip: one(fleetTrips, {
-        fields: [deliveries.fleetTripId],
-        references: [fleetTrips.id],
     }),
     createdByUser: one(user, {
         fields: [deliveries.createdBy],

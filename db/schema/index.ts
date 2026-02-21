@@ -1,5 +1,5 @@
-// Auth tables (better-auth)
-export { user, session, account, verification } from "./auth";
+// Trigger recompile
+import { user, session, account, verification } from "./auth";
 import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { stockLevels } from "./stock-levels";

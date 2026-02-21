@@ -15,7 +15,22 @@ interface PoPreviewDialogProps {
     title?: string
 }
 
+// Helper function to ensure the URL has the correct format
+function getFileUrl(poDocument: string | null): string | null {
+    if (!poDocument) return null
+
+    // If it already starts with /api/uploads/, use it as is
+    if (poDocument.startsWith('/api/uploads/')) {
+        return poDocument
+    }
+
+    // If it's just a filename, prepend /api/uploads/
+    return `/api/uploads/${poDocument}`
+}
+
 export function PoPreviewDialog({ open, onOpenChange, poDocument, title = "Customer PO Preview" }: PoPreviewDialogProps) {
+    const fileUrl = getFileUrl(poDocument)
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-5xl h-[90vh] p-0">
@@ -23,9 +38,9 @@ export function PoPreviewDialog({ open, onOpenChange, poDocument, title = "Custo
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>
                 <div className="flex-1 overflow-hidden">
-                    {poDocument ? (
+                    {fileUrl ? (
                         <iframe
-                            src={`/api/uploads/${poDocument}`}
+                            src={fileUrl}
                             className="w-full h-full border-0"
                             title="Customer PO Document"
                         />

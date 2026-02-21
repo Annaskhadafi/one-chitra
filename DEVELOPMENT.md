@@ -150,3 +150,39 @@ When a **Delete** action is triggered, ensure the record is physically deleted f
 
 ### 2. Permission Enforcement
 Always wrap these actions with the RBAC rules defined above.
+
+
+---
+
+## 🗄️ Database Schema & Migration Standards
+
+To prevent "missing column" errors after adding new features or fields, you MUST follow these steps to synchronize the database with your schema.
+
+### 1. Update Schema
+Define your new table or field in `db/schema/`.
+
+### 2. Push Changes (Simple Sync)
+For rapid development, you can sync the database schema directly:
+```bash
+npm run db:push
+```
+> [!WARNING]
+> This command will attempt to synchronize your database with your schema files. It may prompt for confirmation if changes involve data loss.
+
+### 3. Generate Migrations (Production/Stable)
+If you need a record of the change (migration file), use:
+```bash
+npm run db:generate
+```
+This will create a new `.sql` file in the `drizzle/` directory.
+
+### 4. Verification Step (MANDATORY)
+After pushing or migrating, ALWAYS verify that the database reflected your changes. You can run a quick check using a script or the Drizzle Studio:
+```bash
+npm run db:studio
+```
+Or use a verification script like the one in `scripts/verify-columns.ts` (if available) to list table columns.
+
+### 5. Common Troubleshooting
+- **Missing Columns in App**: If the app still complains about missing columns after `db:push`, restart your dev server to clear the Drizzle metadata cache.
+- **Drizzle Hub/Studio Issues**: If Drizzle Studio doesn't show your changes, ensure your `drizzle.config.ts` points to the correct database URL and schema location.
