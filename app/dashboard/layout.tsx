@@ -47,6 +47,10 @@ export default async function DashboardLayout({
 
     if (dbUser?.role) {
       permissions = await getPermissionsByRoleName(dbUser.role)
+      const roleLower = dbUser.role.toLowerCase()
+      if (roleLower === 'admin' || roleLower === 'superuser') {
+        permissions.push('admin:view')
+      }
     }
   }
 
