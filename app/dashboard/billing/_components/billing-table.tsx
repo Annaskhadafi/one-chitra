@@ -8,11 +8,10 @@ import {
     flexRender,
     getCoreRowModel,
     getFilteredRowModel,
-    getPaginationRowModel,
     getSortedRowModel,
     useReactTable,
 } from "@tanstack/react-table"
-import { ChevronDown, Download } from "lucide-react"
+import { ChevronDown, Download, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -33,13 +32,25 @@ import {
 import { getColumns } from "./billing-columns"
 import { BillingImportDialog } from "./billing-import-dialog"
 import { BillingSheet } from "./billing-sheet"
-import { deleteBillingRecord } from "@/app/actions/billing"
+import { deleteBillingRecord, getBillingRecords } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
-// import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog" 
+import { useQuery } from "@tanstack/react-query"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function BillingTable({ data }: { data: any[] }) {
+export function BillingTable({ data: initialData }: { data: any[] }) {
+    const { data: records = initialData, isLoading, refetch } = useQuery({
+        queryKey: ["billing-records"],
+        queryFn: async () => {
+            const result = await getBillingRecords()
+            if (result.success) return result.data || []
+            throw new Error(result.error || "Failed to fetch")
+        },
+        initialData,
+        staleTime: 60 * 1000,
+    })
+
     const [sorting, setSorting] = React.useState<SortingState>([])
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
     const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -65,8 +76,13 @@ export function BillingTable({ data }: { data: any[] }) {
     const handleDelete = async (id: number) => {
         if (confirm("Are you sure you want to delete the billing data for this delivery item? This will reset it to default.")) {
             try {
-                await deleteBillingRecord(id)
-                toast.success("Billing data deleted")
+                const result = await deleteBillingRecord(id)
+                if (result.success) {
+                    toast.success("Billing data deleted")
+                    refetch()
+                } else {
+                    toast.error(result.error || "Failed to delete")
+                }
             } catch (_error) {
                 toast.error("Failed to delete billing data")
             }
@@ -77,7 +93,7 @@ export function BillingTable({ data }: { data: any[] }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const headers = ["Customer", "PO No", "PO Date", "Delivery No", "Material No", "Description", "Qty", "Price", "Amount"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
-            const d = row.original
+            const d = row.original as any
             return [
                 d.customer || "",
                 d.poNo || "",
@@ -119,12 +135,11 @@ export function BillingTable({ data }: { data: any[] }) {
     ), [canEdit, canDelete])
 
     const table = useReactTable({
-        data,
+        data: records,
         columns,
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
@@ -136,6 +151,32 @@ export function BillingTable({ data }: { data: any[] }) {
             rowSelection,
         },
     })
+
+    // Virtualization
+    const parentRef = React.useRef<HTMLDivElement>(null)
+    const { rows } = table.getRowModel()
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 50,
+        overscan: 20,
+    })
+
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
+
+    if (isLoading) {
+        return (
+            <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
 
     return (
         <div className="w-full space-y-4">
@@ -194,13 +235,17 @@ export function BillingTable({ data }: { data: any[] }) {
                     </DropdownMenu>
                 </div>
             </div>
-            <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
+
+            <div className="rounded-md border bg-card overflow-hidden">
+                <div
+                    ref={parentRef}
+                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => (
                                         <TableHead key={header.id}>
                                             {header.isPlaceholder
                                                 ? null
@@ -209,63 +254,57 @@ export function BillingTable({ data }: { data: any[] }) {
                                                     header.getContext()
                                                 )}
                                         </TableHead>
-                                    )
-                                })}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={row.getIsSelected() && "selected"}
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext()
-                                            )}
-                                        </TableCell>
                                     ))}
                                 </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center"
-                                >
-                                    No results.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} className="p-0" />
+                                    </TableRow>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow
+                                                key={row.id}
+                                                data-state={row.getIsSelected() && "selected"}
+                                            >
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(
+                                                            cell.column.columnDef.cell,
+                                                            cell.getContext()
+                                                        )}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} className="p-0" />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={columns.length}
+                                        className="h-24 text-center"
+                                    >
+                                        No results.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
+
             <div className="flex items-center justify-end space-x-2 py-4">
                 <div className="flex-1 text-sm text-muted-foreground">
                     {table.getFilteredSelectedRowModel().rows.length} of{" "}
                     {table.getFilteredRowModel().rows.length} row(s) selected.
-                </div>
-                <div className="space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        Previous
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                    </Button>
                 </div>
             </div>
         </div>

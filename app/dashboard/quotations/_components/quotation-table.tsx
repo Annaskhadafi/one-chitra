@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { deleteQuotation, bulkDeleteQuotations } from "@/app/actions/quotation"
+import { useState, useMemo, useRef } from "react"
+import { deleteQuotation, bulkDeleteQuotations, getQuotations } from "@/app/actions/quotation"
 import {
     Table,
     TableBody,
@@ -33,11 +33,22 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { useQuery } from "@tanstack/react-query"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 interface QuotationWithRelations {
     id: number
@@ -119,15 +130,26 @@ function formatDate(date: Date) {
     })
 }
 
-export function QuotationTable({ data }: QuotationTableProps) {
-    const [search, setSearch] = useState("")
+export function QuotationTable({ data: initialData }: QuotationTableProps) {
+    const { data: quotations = initialData, isLoading, refetch } = useQuery({
+        queryKey: ["quotations"],
+        queryFn: async () => {
+            const result = await getQuotations()
+            return result as QuotationWithRelations[]
+        },
+        initialData,
+        staleTime: 60 * 1000,
+    })
+
+    const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
+    const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
-    const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [rowSelection, setRowSelection] = useState({})
 
     // Chart data: status breakdown
     const chartData = useMemo(() => {
         const statusCounts: Record<string, number> = {}
-        data.forEach(q => {
+        quotations.forEach(q => {
             statusCounts[q.status] = (statusCounts[q.status] || 0) + 1
         })
         return Object.entries(statusCounts).map(([status, count]) => ({
@@ -135,42 +157,210 @@ export function QuotationTable({ data }: QuotationTableProps) {
             count,
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
-    }, [data])
+    }, [quotations])
 
-    const filtered = useMemo(() => {
-        return data.filter(q => {
-            const matchesSearch =
-                q.quotationNumber?.toLowerCase().includes(search.toLowerCase()) ||
-                q.customer.name.toLowerCase().includes(search.toLowerCase()) ||
-                q.subject?.toLowerCase().includes(search.toLowerCase()) ||
-                q.createdByUser?.name?.toLowerCase().includes(search.toLowerCase())
+    const columns = useMemo<ColumnDef<QuotationWithRelations>[]>(() => [
+        {
+            id: "select",
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Select all"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "quotationNumber",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    QT Number
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
+                <Link
+                    href={`/dashboard/quotations/${row.original.id}`}
+                    className="font-mono text-sm font-medium text-primary hover:underline"
+                >
+                    {row.original.quotationNumber}
+                </Link>
+            ),
+        },
+        {
+            accessorKey: "customer.name",
+            header: "Customer",
+            cell: ({ row }) => (
+                <div>
+                    <p className="font-medium">{row.original.customer.name}</p>
+                    <p className="text-xs text-muted-foreground">{row.original.customer.customerCode}</p>
+                </div>
+            ),
+        },
+        {
+            accessorKey: "subject",
+            header: "Subject",
+            cell: ({ row }) => <div className="max-w-[200px] truncate text-sm text-muted-foreground">{row.original.subject || "-"}</div>,
+        },
+        {
+            accessorKey: "quotationDate",
+            header: "Date",
+            cell: ({ row }) => <div className="text-sm">{formatDate(row.original.quotationDate)}</div>,
+        },
+        {
+            accessorKey: "validUntil",
+            header: "Valid Until",
+            cell: ({ row }) => {
+                const q = row.original
+                const isExpired = q.validUntil && new Date(q.validUntil) < new Date() && q.status !== "converted" && q.status !== "approved"
+                return (
+                    <div className="text-sm">
+                        {q.validUntil ? (
+                            <span className={isExpired ? "text-destructive font-medium" : ""}>
+                                {formatDate(q.validUntil)}
+                                {isExpired && " (Expired)"}
+                            </span>
+                        ) : "-"}
+                    </div>
+                )
+            },
+        },
+        {
+            id: "grandTotal",
+            header: "Grand Total",
+            cell: ({ row }) => <div className="font-medium">{formatCurrency(calculateGrandTotal(row.original))}</div>,
+        },
+        {
+            accessorKey: "status",
+            header: "Status",
+            cell: ({ row }) => {
+                const status = row.original.status
+                const StatusIcon = statusIcons[status] || FileText
+                return (
+                    <Badge variant={statusVariants[status] || "secondary"} className="gap-1">
+                        <StatusIcon className="h-3 w-3" />
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Badge>
+                )
+            },
+        },
+        {
+            accessorKey: "createdByUser.name",
+            header: "Created By",
+            cell: ({ row }) => (
+                <div className="flex items-center gap-1.5 text-sm">
+                    {row.original.createdByUser ? (
+                        <>
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span>{row.original.createdByUser.name}</span>
+                        </>
+                    ) : "-"}
+                </div>
+            ),
+        },
+        {
+            id: "actions",
+            header: () => <div className="text-right">Actions</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link href={`/dashboard/quotations/${row.original.id}`}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                    </Link>
+                    <Link href={`/dashboard/quotations/${row.original.id}/edit`}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                    </Link>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will permanently delete quotation {row.original.quotationNumber} and all its items.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={async () => {
+                                        const result = await deleteQuotation(row.original.id)
+                                        if (result.success) {
+                                            toast.success("Quotation deleted")
+                                            refetch()
+                                        } else {
+                                            toast.error(result.error || "Failed to delete")
+                                        }
+                                    }}
+                                >
+                                    Delete
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+            ),
+        },
+    ], [refetch])
+
+    const table = useReactTable({
+        data: quotations,
+        columns,
+        state: {
+            sorting,
+            globalFilter,
+            rowSelection,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setGlobalFilter,
+        onRowSelectionChange: setRowSelection,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getRowId: (row) => row.id.toString(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const term = filterValue.toLowerCase()
+            const q = row.original
+
+            const matchesSearch = !!(
+                q.quotationNumber?.toLowerCase().includes(term) ||
+                q.customer.name.toLowerCase().includes(term) ||
+                q.subject?.toLowerCase().includes(term) ||
+                q.createdByUser?.name?.toLowerCase().includes(term)
+            )
+
             const matchesStatus = statusFilter === "all" || q.status === statusFilter
             return matchesSearch && matchesStatus
-        })
-    }, [data, search, statusFilter])
+        },
+    })
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filtered.map(q => q.id))
-        } else {
-            setSelectedIds([])
-        }
-    }
-
-    const handleSelectOne = (checked: boolean, id: number) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, id])
-        } else {
-            setSelectedIds(prev => prev.filter(i => i !== id))
-        }
-    }
+    const selectedIds = useMemo(() =>
+        Object.keys(rowSelection).map(id => parseInt(id)),
+        [rowSelection]
+    )
 
     const handleBulkDelete = async () => {
         try {
             const result = await bulkDeleteQuotations(selectedIds)
             if (result.success) {
                 toast.success(`${selectedIds.length} quotations deleted`)
-                setSelectedIds([])
+                setRowSelection({})
+                refetch()
             } else {
                 toast.error(result.error || "Failed to delete")
             }
@@ -179,27 +369,41 @@ export function QuotationTable({ data }: QuotationTableProps) {
         }
     }
 
-    const handleDelete = async (id: number) => {
-        try {
-            const result = await deleteQuotation(id)
-            if (result.success) {
-                toast.success("Quotation deleted")
-            } else {
-                toast.error(result.error || "Failed to delete")
-            }
-        } catch {
-            toast.error("Failed to delete quotation")
-        }
+    // Virtualization
+    const parentRef = useRef<HTMLDivElement>(null)
+    const { rows } = table.getRowModel()
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 64,
+        overscan: 20,
+    })
+
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading quotations...</p>
+            </div>
+        )
     }
 
     return (
         <div className="space-y-4">
             {/* Status Chart */}
-            {data.length > 0 && (
+            {quotations.length > 0 && (
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base">Quotation Status Overview</CardTitle>
-                        <CardDescription>{data.length} total quotations</CardDescription>
+                        <CardDescription>{quotations.length} total quotations</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ResponsiveContainer width="100%" height={180}>
@@ -231,12 +435,16 @@ export function QuotationTable({ data }: QuotationTableProps) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search by QT number, customer, subject, or user..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        value={globalFilter ?? ""}
+                        onChange={(e) => setGlobalFilter(e.target.value)}
                         className="pl-9"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select value={statusFilter} onValueChange={(val) => {
+                    setStatusFilter(val)
+                    // Trigger table filter update
+                    table.setGlobalFilter(globalFilter)
+                }}>
                     <SelectTrigger className="w-[160px]">
                         <SelectValue placeholder="All Status" />
                     </SelectTrigger>
@@ -280,139 +488,63 @@ export function QuotationTable({ data }: QuotationTableProps) {
             )}
 
             {/* Table */}
-            <div className="rounded-lg border overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-muted/50">
-                            <TableHead className="w-[40px]">
-                                <Checkbox
-                                    checked={selectedIds.length === filtered.length && filtered.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                />
-                            </TableHead>
-                            <TableHead>QT Number</TableHead>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>Subject</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Valid Until</TableHead>
-                            <TableHead>Grand Total</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Created By</TableHead>
-                            <TableHead className="w-[120px]">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filtered.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={10} className="h-32 text-center">
-                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                        <FileText className="h-10 w-10 opacity-30" />
-                                        <p>No quotations found</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filtered.map((quotation) => {
-                                const StatusIcon = statusIcons[quotation.status] || FileText
-                                const isExpired = quotation.validUntil && new Date(quotation.validUntil) < new Date() && quotation.status !== "converted" && quotation.status !== "approved"
-
-                                return (
-                                    <TableRow key={quotation.id} className="group">
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedIds.includes(quotation.id)}
-                                                onCheckedChange={(checked) => handleSelectOne(!!checked, quotation.id)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Link
-                                                href={`/dashboard/quotations/${quotation.id}`}
-                                                className="font-mono text-sm font-medium text-primary hover:underline"
-                                            >
-                                                {quotation.quotationNumber}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div>
-                                                <p className="font-medium">{quotation.customer.name}</p>
-                                                <p className="text-xs text-muted-foreground">{quotation.customer.customerCode}</p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
-                                            {quotation.subject || "-"}
-                                        </TableCell>
-                                        <TableCell className="text-sm">{formatDate(quotation.quotationDate)}</TableCell>
-                                        <TableCell className="text-sm">
-                                            {quotation.validUntil ? (
-                                                <span className={isExpired ? "text-destructive font-medium" : ""}>
-                                                    {formatDate(quotation.validUntil)}
-                                                    {isExpired && " (Expired)"}
-                                                </span>
-                                            ) : "-"}
-                                        </TableCell>
-                                        <TableCell className="font-medium">
-                                            {formatCurrency(calculateGrandTotal(quotation))}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={statusVariants[quotation.status] || "secondary"} className="gap-1">
-                                                <StatusIcon className="h-3 w-3" />
-                                                {quotation.status.charAt(0).toUpperCase() + quotation.status.slice(1)}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            {quotation.createdByUser ? (
-                                                <div className="flex items-center gap-1.5">
-                                                    <User className="h-3 w-3 text-muted-foreground" />
-                                                    <span className="text-sm">{quotation.createdByUser.name}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-sm text-muted-foreground">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Link href={`/dashboard/quotations/${quotation.id}`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <Eye className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </Link>
-                                                <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <Pencil className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </Link>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                This will permanently delete quotation {quotation.quotationNumber} and all its items.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDelete(quotation.id)}>Delete</AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </div>
-                                        </TableCell>
+            <div className="rounded-lg border overflow-hidden bg-card">
+                <div
+                    ref={parentRef}
+                    className="h-[500px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id} className="bg-muted/50">
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} />
                                     </TableRow>
-                                )
-                            })
-                        )}
-                    </TableBody>
-                </Table>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={columns.length} className="h-32 text-center">
+                                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                            <FileText className="h-10 w-10 opacity-30" />
+                                            <p>No quotations found</p>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
 
             {/* Footer Info */}
             <div className="text-sm text-muted-foreground">
-                Showing {filtered.length} of {data.length} quotations
+                Showing {table.getFilteredRowModel().rows.length} of {quotations.length} quotations
             </div>
         </div>
     )

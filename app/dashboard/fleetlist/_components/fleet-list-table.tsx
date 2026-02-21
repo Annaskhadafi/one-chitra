@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, ChevronLeft, ChevronRight, Download, X } from "lucide-react"
+import { useState, useMemo, useRef } from "react"
+import { Search, Loader2, RefreshCcw, Check, ListFilter, Download, X, ChevronUp, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,9 +32,20 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-
 import Papa from "papaparse"
 import { FleetCharts } from "./fleet-charts"
+import { useQuery } from "@tanstack/react-query"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+    ColumnFiltersState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 interface FleetItem {
     id_fleet_list: string
@@ -55,74 +66,139 @@ interface FleetItem {
 }
 
 export function FleetListTable() {
-    const [data, setData] = useState<FleetItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [searchTerm, setSearchTerm] = useState("")
-    const [statusFilter, setStatusFilter] = useState<string[]>(['Active'])
-    const [locationFilter, setLocationFilter] = useState<string[]>([])
-    const [customerFilter, setCustomerFilter] = useState<string[]>([])
-    const [tireSizeFilter, setTireSizeFilter] = useState<string[]>([])
-
-    // Pagination state
-    const [currentPage, setCurrentPage] = useState(1)
-    const itemsPerPage = 50
-
-    const fetchData = React.useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const result = await getFleetList();
+    const { data: rawData = [], isLoading, refetch } = useQuery({
+        queryKey: ["fleet-list"],
+        queryFn: async () => {
+            const result = await getFleetList()
             if (result.success && Array.isArray(result.data)) {
-                setData(result.data);
-            } else {
-                setData([]);
-                toast.error("Failed to load data");
+                return result.data
             }
-        } catch (_error) {
-            toast.error("Failed to fetch Fleetlist data");
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+            throw new Error("Failed to load fleet data")
+        },
+        staleTime: 60 * 1000,
+    })
 
-    React.useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+    const [globalFilter, setGlobalFilter] = useState("")
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
+        { id: "status", value: ["Active"] }
+    ])
 
-    const uniqueStatuses = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.status))).filter(Boolean).sort();
-    }, [data]);
+    const columns = useMemo<ColumnDef<FleetItem>[]>(() => [
+        {
+            accessorKey: "customer",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium">{row.original.customer}</span>,
+        },
+        {
+            accessorKey: "site",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Site
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+        },
+        {
+            accessorKey: "status",
+            header: "Status",
+            cell: ({ row }) => (
+                <Badge variant={row.original.status === 'Active' ? 'default' : 'secondary'}>
+                    {row.original.status}
+                </Badge>
+            ),
+            filterFn: (row, id, filterValue) => {
+                if (!filterValue || filterValue.length === 0) return true
+                return filterValue.includes(row.getValue(id))
+            }
+        },
+        {
+            accessorKey: "location",
+            header: "Location",
+            filterFn: (row, id, filterValue) => {
+                if (!filterValue || filterValue.length === 0) return true
+                return filterValue.includes(row.getValue(id))
+            }
+        },
+        {
+            accessorKey: "unit_manufacture",
+            header: "Manufacture",
+        },
+        {
+            accessorKey: "model",
+            header: "Model",
+        },
+        {
+            accessorKey: "tire_size",
+            header: "Tire Size",
+            filterFn: (row, id, filterValue) => {
+                if (!filterValue || filterValue.length === 0) return true
+                return filterValue.includes(row.getValue(id))
+            }
+        },
+        {
+            accessorKey: "unit_qty",
+            header: () => <div className="text-right">Unit Qty</div>,
+            cell: ({ row }) => <div className="text-right">{row.original.unit_qty}</div>,
+        },
+        {
+            accessorKey: "totaltire",
+            header: () => <div className="text-right">Total Tire</div>,
+            cell: ({ row }) => <div className="text-right">{row.original.totaltire}</div>,
+        },
+    ], [])
 
-    const uniqueLocations = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.location))).filter(Boolean).sort();
-    }, [data]);
+    const table = useReactTable({
+        data: rawData,
+        columns,
+        state: {
+            sorting,
+            globalFilter,
+            columnFilters,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setGlobalFilter,
+        onColumnFiltersChange: setColumnFilters,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const term = filterValue.toLowerCase()
+            const item = row.original
+            return !!(
+                item.customer.toLowerCase().includes(term) ||
+                item.site.toLowerCase().includes(term) ||
+                item.unit_manufacture.toLowerCase().includes(term) ||
+                item.model.toLowerCase().includes(term) ||
+                item.tire_size.toLowerCase().includes(term) ||
+                item.location.toLowerCase().includes(term)
+            )
+        },
+    })
 
-    const uniqueCustomers = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.customer))).filter(Boolean).sort();
-    }, [data]);
+    const { rows } = table.getRowModel()
+    const parentRef = useRef<HTMLDivElement>(null)
 
-    const uniqueTireSizes = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.tire_size))).filter(Boolean).sort();
-    }, [data]);
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 45,
+        overscan: 20,
+    })
 
-    const filteredData = useMemo(() => {
-        // Reset to page 1 when filters change
-        setCurrentPage(1);
-        return data.filter(item => {
-            const matchesSearch =
-                item.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.site.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.unit_manufacture.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.tire_size.toLowerCase().includes(searchTerm.toLowerCase());
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
 
-            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(item.status);
-            const matchesLocation = locationFilter.length === 0 || locationFilter.includes(item.location);
-            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.customer);
-            const matchesTireSize = tireSizeFilter.length === 0 || tireSizeFilter.includes(item.tire_size);
-
-            return matchesSearch && matchesStatus && matchesLocation && matchesCustomer && matchesTireSize;
-        });
-    }, [data, searchTerm, statusFilter, locationFilter, customerFilter, tireSizeFilter]);
+    const filteredData = useMemo(() => table.getFilteredRowModel().rows.map(r => r.original), [table.getFilteredRowModel().rows])
 
     const stats = useMemo(() => {
         const totalUnits = filteredData.reduce((acc, item) => acc + (parseInt(item.unit_qty) || 0), 0);
@@ -131,54 +207,14 @@ export function FleetListTable() {
         return { totalUnits, totalTires, totalForecast };
     }, [filteredData]);
 
-    // Pagination logic
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-    const paginatedData = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredData.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredData, currentPage, itemsPerPage]);
-
-    const toggleStatusFilter = (status: string) => {
-        setStatusFilter(prev =>
-            prev.includes(status)
-                ? prev.filter(s => s !== status)
-                : [...prev, status]
-        );
-    };
-
-    const toggleLocationFilter = (location: string) => {
-        setLocationFilter(prev =>
-            prev.includes(location)
-                ? prev.filter(l => l !== location)
-                : [...prev, location]
-        );
-    };
-
-    const toggleCustomerFilter = (customer: string) => {
-        setCustomerFilter(prev =>
-            prev.includes(customer)
-                ? prev.filter(c => c !== customer)
-                : [...prev, customer]
-        );
-    };
-
-    const toggleTireSizeFilter = (tireSize: string) => {
-        setTireSizeFilter(prev =>
-            prev.includes(tireSize)
-                ? prev.filter(t => t !== tireSize)
-                : [...prev, tireSize]
-        );
-    };
-
-    const clearAllFilters = () => {
-        setStatusFilter([]);
-        setLocationFilter([]);
-        setCustomerFilter([]);
-        setTireSizeFilter([]);
-        setSearchTerm("");
-    };
-
-    const hasActiveFilters = statusFilter.length > 0 || locationFilter.length > 0 || customerFilter.length > 0 || tireSizeFilter.length > 0 || searchTerm !== "";
+    const uniqueOptions = useMemo(() => {
+        return {
+            status: Array.from(new Set(rawData.map(item => item.status))).filter(Boolean).sort(),
+            location: Array.from(new Set(rawData.map(item => item.location))).filter(Boolean).sort(),
+            customer: Array.from(new Set(rawData.map(item => item.customer))).filter(Boolean).sort(),
+            tireSize: Array.from(new Set(rawData.map(item => item.tire_size))).filter(Boolean).sort(),
+        }
+    }, [rawData])
 
     const handleExportCSV = () => {
         const csv = Papa.unparse(filteredData);
@@ -186,25 +222,38 @@ export function FleetListTable() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.setAttribute("download", "fleet_data_export.csv");
+        link.setAttribute("download", `fleet_data_export_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
+    const clearAllFilters = () => {
+        setColumnFilters([])
+        setGlobalFilter("")
+    };
+
+    const hasActiveFilters = columnFilters.length > 0 || globalFilter !== "";
+
     const FilterPopover = ({
+        columnId,
         title,
         options,
-        selectedValues,
-        onSelect,
-        onClear
     }: {
+        columnId: string,
         title: string,
         options: string[],
-        selectedValues: string[],
-        onSelect: (value: string) => void,
-        onClear: () => void
     }) => {
+        const column = table.getColumn(columnId)
+        const selectedValues = (column?.getFilterValue() as string[]) || []
+
+        const toggleFilter = (value: string) => {
+            const newValues = selectedValues.includes(value)
+                ? selectedValues.filter(v => v !== value)
+                : [...selectedValues, value]
+            column?.setFilterValue(newValues.length ? newValues : undefined)
+        }
+
         return (
             <Popover>
                 <PopoverTrigger asChild>
@@ -212,12 +261,25 @@ export function FleetListTable() {
                         <ListFilter className="mr-2 h-4 w-4" />
                         {title}
                         {selectedValues.length > 0 && (
-                            <>
-                                <div className="ml-1 px-1 py-0.5 rounded-sm bg-secondary text-xs font-normal hidden lg:inline-flex">
-                                    {selectedValues.length}
-                                </div>
-                            </>
+                            <Badge variant="secondary" className="ml-1 px-1 py-0 font-normal lg:hidden">
+                                {selectedValues.length}
+                            </Badge>
                         )}
+                        <div className="hidden space-x-1 lg:flex">
+                            {selectedValues.length > 2 ? (
+                                <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                                    {selectedValues.length} selected
+                                </Badge>
+                            ) : (
+                                options
+                                    .filter(opt => selectedValues.includes(opt))
+                                    .map(opt => (
+                                        <Badge variant="secondary" key={opt} className="rounded-sm px-1 font-normal">
+                                            {opt}
+                                        </Badge>
+                                    ))
+                            )}
+                        </div>
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[200px] p-0" align="start">
@@ -231,7 +293,7 @@ export function FleetListTable() {
                                     return (
                                         <CommandItem
                                             key={option}
-                                            onSelect={() => onSelect(option)}
+                                            onSelect={() => toggleFilter(option)}
                                         >
                                             <div
                                                 className={cn(
@@ -253,7 +315,7 @@ export function FleetListTable() {
                                     <CommandSeparator />
                                     <CommandGroup>
                                         <CommandItem
-                                            onSelect={onClear}
+                                            onSelect={() => column?.setFilterValue(undefined)}
                                             className="justify-center text-center"
                                         >
                                             Clear filters
@@ -265,10 +327,10 @@ export function FleetListTable() {
                     </Command>
                 </PopoverContent>
             </Popover>
-        );
-    };
+        )
+    }
 
-    if (isLoading) {
+    if (isLoading && !rawData.length) {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -279,11 +341,10 @@ export function FleetListTable() {
 
     return (
         <div className="space-y-6 relative">
-            {/* Charts Section */}
             <FleetCharts data={filteredData} />
 
             <div className="grid gap-4 md:grid-cols-3">
-                <Card>
+                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Units</CardTitle>
                     </CardHeader>
@@ -291,7 +352,7 @@ export function FleetListTable() {
                         <div className="text-2xl font-bold">{stats.totalUnits.toLocaleString()}</div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Tires</CardTitle>
                     </CardHeader>
@@ -299,7 +360,7 @@ export function FleetListTable() {
                         <div className="text-2xl font-bold">{stats.totalTires.toLocaleString()}</div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Forecast</CardTitle>
                     </CardHeader>
@@ -315,124 +376,97 @@ export function FleetListTable() {
                     <Input
                         placeholder="Search customer, site, model..."
                         className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        value={globalFilter}
+                        onChange={(e) => setGlobalFilter(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 scrollbar-none">
                     <FilterPopover
+                        columnId="status"
                         title="Status"
-                        options={uniqueStatuses}
-                        selectedValues={statusFilter}
-                        onSelect={toggleStatusFilter}
-                        onClear={() => setStatusFilter([])}
+                        options={uniqueOptions.status}
                     />
                     <FilterPopover
+                        columnId="location"
                         title="Location"
-                        options={uniqueLocations}
-                        selectedValues={locationFilter}
-                        onSelect={toggleLocationFilter}
-                        onClear={() => setLocationFilter([])}
+                        options={uniqueOptions.location}
                     />
                     <FilterPopover
+                        columnId="customer"
                         title="Customer"
-                        options={uniqueCustomers}
-                        selectedValues={customerFilter}
-                        onSelect={toggleCustomerFilter}
-                        onClear={() => setCustomerFilter([])}
+                        options={uniqueOptions.customer}
                     />
                     <FilterPopover
+                        columnId="tire_size"
                         title="Tire Size"
-                        options={uniqueTireSizes}
-                        selectedValues={tireSizeFilter}
-                        onSelect={toggleTireSizeFilter}
-                        onClear={() => setTireSizeFilter([])}
+                        options={uniqueOptions.tireSize}
                     />
 
                     <Button variant="outline" size="sm" onClick={handleExportCSV} className="ml-auto">
                         <Download className="mr-2 h-4 w-4" />
-                        Export CSV
+                        Export
                     </Button>
 
-                    <Button variant="outline" size="sm" onClick={fetchData}>
+                    <Button variant="outline" size="sm" onClick={() => refetch()}>
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>Site</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Location</TableHead>
-                            <TableHead>Manufacture</TableHead>
-                            <TableHead>Model</TableHead>
-                            <TableHead>Tire Size</TableHead>
-                            <TableHead className="text-right">Unit Qty</TableHead>
-                            <TableHead className="text-right">Total Tire</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {paginatedData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
-                                    No records found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            paginatedData.map((item) => (
-                                <TableRow key={item.id_fleet_list}>
-                                    <TableCell className="font-medium">{item.customer}</TableCell>
-                                    <TableCell>{item.site}</TableCell>
-                                    <TableCell>
-                                        <Badge variant={item.status === 'Active' ? 'default' : 'secondary'}>
-                                            {item.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>{item.location}</TableCell>
-                                    <TableCell>{item.unit_manufacture}</TableCell>
-                                    <TableCell>{item.model}</TableCell>
-                                    <TableCell>{item.tire_size}</TableCell>
-                                    <TableCell className="text-right">{item.unit_qty}</TableCell>
-                                    <TableCell className="text-right">{item.totaltire}</TableCell>
+            <div className="rounded-md border bg-card relative">
+                <div
+                    ref={parentRef}
+                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id} className="bg-muted/50">
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                        </TableHead>
+                                    ))}
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={9} />
+                                    </TableRow>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                                        <TableCell colSpan={9} />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                                        No records found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
 
-            <div className="flex items-center justify-between space-x-2 py-4">
-                <div className="text-sm text-muted-foreground">
-                    Showing {paginatedData.length} of {filteredData.length} records
-                </div>
-                <div className="space-x-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                    </Button>
-                    <div className="inline-flex items-center text-sm font-medium">
-                        Page {currentPage} of {totalPages || 1}
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages || totalPages === 0}
-                    >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground py-2">
+                <div>Showing {filteredData.length} of {rawData.length} records</div>
             </div>
 
             {hasActiveFilters && (

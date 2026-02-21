@@ -40,6 +40,16 @@ import {
     CartesianGrid,
 } from "recharts"
 import { getHistoryOrderForSegmentation, HistoryOrderItem } from "@/app/actions/customer-segmentation"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { cn } from "@/lib/utils"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -102,6 +112,12 @@ export function CustomerSegmentationClient() {
     React.useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const formatIDR = (val: number) => new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0
+    }).format(val);
 
     // --- Analisis RFM ---
     const rfmData = useMemo<CustomerData[]>(() => {
@@ -213,18 +229,86 @@ export function CustomerSegmentationClient() {
         return { totalRev, totalCust: rfmData.length, pieData };
     }, [rfmData]);
 
-    const filteredData = useMemo(() => {
-        return rfmData.filter(d =>
-            d.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-            (filterSegment === 'All' || d.segment === filterSegment)
-        ).sort((a, b) => b.monetary - a.monetary);
-    }, [rfmData, searchTerm, filterSegment]);
+    // --- TanStack Table ---
+    const columns = useMemo<ColumnDef<CustomerData>[]>(() => [
+        {
+            accessorKey: "name",
+            header: "Customer",
+            cell: ({ row }) => {
+                const cust = row.original
+                return (
+                    <div>
+                        <div className="font-semibold">{cust.name}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                            <div
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: SEGMENT_CONFIG[cust.segment]?.color }}
+                            />
+                            <span
+                                className="text-xs font-medium"
+                                style={{ color: SEGMENT_CONFIG[cust.segment]?.color }}
+                            >
+                                {cust.segment}
+                            </span>
+                        </div>
+                    </div>
+                )
+            }
+        },
+        {
+            id: "rfm",
+            header: () => <div className="text-center">Skor RFM</div>,
+            cell: ({ row }) => {
+                const cust = row.original
+                return (
+                    <div className="flex justify-center gap-1">
+                        <ScoreBadge label="R" score={cust.r} />
+                        <ScoreBadge label="F" score={cust.f} />
+                        <ScoreBadge label="M" score={cust.m} />
+                    </div>
+                )
+            }
+        },
+        {
+            accessorKey: "monetary",
+            header: "Revenue",
+            cell: ({ row }) => {
+                const cust = row.original
+                return (
+                    <div>
+                        <div className="font-semibold">{formatIDR(cust.monetary)}</div>
+                        <div className="text-xs text-muted-foreground">{cust.frequency} Transaksi</div>
+                    </div>
+                )
+            }
+        }
+    ], [])
 
-    const formatIDR = (val: number) => new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        maximumFractionDigits: 0
-    }).format(val);
+    const table = useReactTable({
+        data: rfmData,
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        state: {
+            globalFilter: searchTerm,
+        },
+        onGlobalFilterChange: setSearchTerm,
+        globalFilterFn: (row, columnId, filterValue) => {
+            const value = row.getValue(columnId) as string
+            return value?.toLowerCase().includes(filterValue.toLowerCase()) ?? false
+        },
+    })
+
+    const { rows } = table.getRowModel()
+    const parentRef = React.useRef<HTMLDivElement>(null)
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 70,
+        overscan: 10,
+    })
 
     if (loading) {
         return (
@@ -425,57 +509,56 @@ export function CustomerSegmentationClient() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Customer</TableHead>
-                                    <TableHead className="text-center">Skor RFM</TableHead>
-                                    <TableHead>Revenue</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredData.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">
-                                            No customers found.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredData.map((cust, idx) => (
-                                        <TableRow key={idx} className="hover:bg-muted/50">
-                                            <TableCell>
-                                                <div className="font-semibold">{cust.name}</div>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <div
-                                                        className="w-2 h-2 rounded-full"
-                                                        style={{ backgroundColor: SEGMENT_CONFIG[cust.segment]?.color }}
-                                                    />
-                                                    <span
-                                                        className="text-xs font-medium"
-                                                        style={{ color: SEGMENT_CONFIG[cust.segment]?.color }}
-                                                    >
-                                                        {cust.segment}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <div className="flex justify-center gap-1">
-                                                    <ScoreBadge label="R" score={cust.r} />
-                                                    <ScoreBadge label="F" score={cust.f} />
-                                                    <ScoreBadge label="M" score={cust.m} />
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="font-semibold">{formatIDR(cust.monetary)}</div>
-                                                <div className="text-xs text-muted-foreground">{cust.frequency} Transaksi</div>
+                <CardContent className="p-0">
+                    <div className="rounded-md border overflow-hidden mx-6 mb-6">
+                        <div
+                            ref={parentRef}
+                            className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                        >
+                            <Table>
+                                <TableHeader className="sticky top-0 z-10 bg-card shadow-sm">
+                                    {table.getHeaderGroups().map((headerGroup) => (
+                                        <TableRow key={headerGroup.id}>
+                                            {headerGroup.headers.map((header) => (
+                                                <TableHead key={header.id}>
+                                                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                </TableHead>
+                                            ))}
+                                        </TableRow>
+                                    ))}
+                                </TableHeader>
+                                <TableBody>
+                                    {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                        <>
+                                            <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                <TableCell colSpan={columns.length} className="p-0" />
+                                            </TableRow>
+                                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                const row = rows[virtualRow.index]
+                                                return (
+                                                    <TableRow key={row.id} className="hover:bg-muted/50">
+                                                        {row.getVisibleCells().map((cell) => (
+                                                            <TableCell key={cell.id}>
+                                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                            </TableCell>
+                                                        ))}
+                                                    </TableRow>
+                                                )
+                                            })}
+                                            <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                <TableCell colSpan={columns.length} className="p-0" />
+                                            </TableRow>
+                                        </>
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={columns.length} className="h-24 text-center">
+                                                No customers found.
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

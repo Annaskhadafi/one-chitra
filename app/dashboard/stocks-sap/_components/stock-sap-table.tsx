@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
-import { Search, Loader2, RefreshCcw, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { useState, useMemo, useRef } from "react"
+import { Search, Loader2, RefreshCcw, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -16,6 +16,17 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { syncIndividualStock } from "@/app/actions/stock-sap"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 interface SAPStockItem {
     idInv: string
@@ -32,74 +43,42 @@ interface SAPStockItem {
 }
 
 export function StockSAPTable() {
-    const [data, setData] = useState<SAPStockItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+    const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState("")
     const [syncingId, setSyncingId] = useState<string | null>(null)
+    const [sorting, setSorting] = useState<SortingState>([])
 
-    const fetchData = React.useCallback(async () => {
-        setIsLoading(true);
-        try {
+    const { data = [], isLoading, refetch } = useQuery({
+        queryKey: ["sap-inventory"],
+        queryFn: async () => {
             const response = await fetch("https://ics.chitraparatama.co.id/product/api/apiconnect.php?function=get_inventory");
-            const result: {
-                status: string;
-                result: {
-                    idinv: string;
-                    plant: string;
-                    plantname: string;
-                    material: string;
-                    oldmaterial: string;
-                    desc: string;
-                    sloc: string;
-                    slocdesc: string;
-                    qtystock: string;
-                    valuestock: string;
-                }[]
-            } = await response.json();
+            const result = await response.json();
 
             if (result.status === "OK") {
-                const mapped = result.result.map((item) => ({
-                    idInv: item.idinv?.toString().trim(),
-                    plant: item.plant?.toString().trim(),
-                    plantName: item.plantname?.toString().trim(),
-                    material: item.material?.toString().trim(),
-                    oldMaterial: item.oldmaterial?.toString().trim(),
-                    description: item.desc?.toString().trim(),
-                    sloc: item.sloc?.toString().trim(),
-                    slocDesc: item.slocdesc,
-                    qtyStock: Number(item.qtystock),
-                    valueStock: Number(item.valuestock),
+                return result.result.map((item: any) => ({
+                    idInv: item.idinv?.toString().trim() ?? "",
+                    plant: item.plant?.toString().trim() ?? "",
+                    plantName: item.plantname?.toString().trim() ?? "",
+                    material: item.material?.toString().trim() ?? "",
+                    oldMaterial: item.oldmaterial?.toString().trim() ?? "",
+                    description: item.desc?.toString().trim() ?? "",
+                    sloc: item.sloc?.toString().trim() ?? "",
+                    slocDesc: item.slocdesc || "",
+                    qtyStock: Number(item.qtystock) || 0,
+                    valueStock: Number(item.valuestock) || 0,
                     isMapped: true
                 }));
-                setData(mapped);
             }
-        } catch (_error) {
-            toast.error("Failed to fetch SAP data");
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    React.useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const filteredData = useMemo(() => {
-        return data.filter(item =>
-            item.idInv.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.material.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.slocDesc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.plantName.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [data, searchTerm]);
+            throw new Error("Failed to fetch SAP data");
+        },
+        staleTime: 5 * 60 * 1000,
+    })
 
     const handleSync = async (item: SAPStockItem) => {
         setSyncingId(`${item.idInv}-${item.sloc}`);
         try {
             const result = await syncIndividualStock({
-                materialNumber: item.idInv, // Keep using idInv as materialNumber for sync
+                materialNumber: item.idInv,
                 sloc: item.sloc,
                 qty: item.qtyStock,
                 value: item.valueStock
@@ -118,6 +97,130 @@ export function StockSAPTable() {
             setSyncingId(null);
         }
     };
+
+    const columns = useMemo<ColumnDef<SAPStockItem>[]>(() => [
+        {
+            accessorKey: "idInv",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    ID Inv
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium">{row.original.idInv}</span>,
+        },
+        {
+            accessorKey: "plant",
+            header: "Plant",
+            cell: ({ row }) => (
+                <div className="flex flex-col">
+                    <span>{row.original.plant}</span>
+                    <span className="text-[10px] text-muted-foreground">{row.original.plantName}</span>
+                </div>
+            ),
+        },
+        {
+            accessorKey: "material",
+            header: "Material",
+        },
+        {
+            accessorKey: "oldMaterial",
+            header: "Old Material",
+            cell: ({ row }) => <span className="text-muted-foreground">{row.original.oldMaterial}</span>,
+        },
+        {
+            accessorKey: "description",
+            header: "Description",
+            cell: ({ row }) => <span className="text-xs truncate max-w-[200px]" title={row.original.description}>{row.original.description}</span>,
+        },
+        {
+            accessorKey: "sloc",
+            header: "Sloc",
+            cell: ({ row }) => <Badge variant="outline">{row.original.sloc}</Badge>,
+        },
+        {
+            accessorKey: "slocDesc",
+            header: "Sloc Desc",
+            cell: ({ row }) => <span className="text-muted-foreground text-xs italic truncate max-w-[120px]" title={row.original.slocDesc}>{row.original.slocDesc}</span>,
+        },
+        {
+            accessorKey: "qtyStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Qty
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => <div className="text-right font-mono">{row.original.qtyStock.toLocaleString()}</div>,
+        },
+        {
+            accessorKey: "valueStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Value
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => <div className="text-right font-mono text-[10px]">IDR {row.original.valueStock.toLocaleString()}</div>,
+        },
+        {
+            id: "actions",
+            cell: ({ row }) => {
+                const item = row.original
+                const isSyncing = syncingId === `${item.idInv}-${item.sloc}`;
+                return (
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleSync(item)}
+                        disabled={isSyncing}
+                        className="w-full"
+                    >
+                        {isSyncing ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                            "Sync"
+                        )}
+                    </Button>
+                )
+            }
+        }
+    ], [syncingId])
+
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            globalFilter: searchTerm,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setSearchTerm,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+    })
+
+    const parentRef = useRef<HTMLDivElement>(null)
+    const { rows } = table.getRowModel()
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 45,
+        overscan: 20,
+    })
+
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
 
     if (isLoading) {
         return (
@@ -140,87 +243,66 @@ export function StockSAPTable() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchData}>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
                     <RefreshCcw className="mr-2 h-4 w-4" />
                     Refresh SAP Data
                 </Button>
             </div>
 
             <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>ID Inv</TableHead>
-                            <TableHead>Plant</TableHead>
-                            <TableHead>Material</TableHead>
-                            <TableHead>Old Material</TableHead>
-                            <TableHead className="min-w-[200px]">Description</TableHead>
-                            <TableHead>Sloc</TableHead>
-                            <TableHead>Sloc Desc</TableHead>
-                            <TableHead className="text-right">Qty</TableHead>
-                            <TableHead className="text-right">Value</TableHead>
-                            <TableHead className="w-[100px]"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={10} className="h-24 text-center">
-                                    No records found in SAP.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filteredData.map((item) => {
-                                const isSyncing = syncingId === `${item.idInv}-${item.sloc}`;
-                                return (
-                                    <TableRow key={`${item.idInv}-${item.sloc}`}>
-                                        <TableCell className="font-medium">
-                                            {item.idInv}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <span>{item.plant}</span>
-                                                <span className="text-[10px] text-muted-foreground">{item.plantName}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{item.material}</TableCell>
-                                        <TableCell className="text-muted-foreground">{item.oldMaterial}</TableCell>
-                                        <TableCell className="text-xs">
-                                            {item.description}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">{item.sloc}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground text-xs italic">
-                                            {item.slocDesc}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">
-                                            {item.qtyStock.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">
-                                            IDR {item.valueStock.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => handleSync(item)}
-                                                disabled={isSyncing}
-                                                className="w-full"
-                                            >
-                                                {isSyncing ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                    "Sync"
+                <div
+                    ref={parentRef}
+                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder
+                                                ? null
+                                                : flexRender(
+                                                    header.column.columnDef.header,
+                                                    header.getContext()
                                                 )}
-                                            </Button>
-                                        </TableCell>
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} className="p-0" />
                                     </TableRow>
-                                );
-                            })
-                        )}
-                    </TableBody>
-                </Table>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow key={row.id}>
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} className="p-0" />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                                        No records found in SAP.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
 
             <div className="flex items-center gap-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-[11px] text-blue-800">

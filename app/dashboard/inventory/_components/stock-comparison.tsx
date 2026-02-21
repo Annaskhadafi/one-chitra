@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import {
-    Search, Loader2, RefreshCcw, ArrowUpDown, ArrowDown, ArrowUp,
-    Box, AlertTriangle, TrendingUp, CheckCircle2, BarChart3
+    Search, Loader2, RefreshCcw,
+    Box, AlertTriangle, TrendingUp, CheckCircle2, BarChart3, ChevronUp, ChevronDown
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,8 +22,20 @@ import {
     PieChart, Pie, Cell, Legend,
 } from "recharts"
 import {
-    ChartContainer, ChartTooltip, ChartTooltipContent,
+    ChartContainer,
 } from "@/components/ui/chart"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { getStocks } from "@/app/actions/stock"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface SAPStockItem {
@@ -71,14 +83,6 @@ interface ComparisonRow {
     plant: string
 }
 
-type SortField = "gap" | "localStock" | "sapStock" | "materialNumber"
-type SortDirection = "asc" | "desc"
-
-// ─── Component ───────────────────────────────────────────────────────
-interface StockComparisonProps {
-    localStocks: LocalStockItem[]
-}
-
 const PIE_COLORS = ["#22c55e", "#3b82f6", "#ef4444"]
 
 const chartConfig = {
@@ -87,23 +91,31 @@ const chartConfig = {
     sapStock: { label: "Stock SAP", color: "hsl(var(--chart-3))" },
 }
 
-export function StockComparison({ localStocks }: StockComparisonProps) {
-    const [sapData, setSapData] = useState<SAPStockItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [searchTerm, setSearchTerm] = useState("")
-    const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
-    const [sortField, setSortField] = useState<SortField>("gap")
-    const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
+// ─── Component ───────────────────────────────────────────────────────
+interface StockComparisonProps {
+    localStocks: LocalStockItem[]
+}
 
-    const fetchSAPData = React.useCallback(async () => {
-        setIsLoading(true)
-        try {
+export function StockComparison({ localStocks: initialLocalStocks }: StockComparisonProps) {
+    const queryClient = useQueryClient()
+
+    // --- Data Fetching ---
+    const { data: localStocks = initialLocalStocks } = useQuery({
+        queryKey: ["stocks"],
+        queryFn: getStocks,
+        initialData: initialLocalStocks,
+        staleTime: 60 * 1000,
+    })
+
+    const { data: sapData = [], isLoading: isLoadingSAP, refetch: refetchSAP } = useQuery({
+        queryKey: ["sap-inventory"],
+        queryFn: async () => {
             const response = await fetch(
                 "https://ics.chitraparatama.co.id/product/api/apiconnect.php?function=get_inventory"
             )
             const result = await response.json()
             if (result.status === "OK") {
-                const mapped: SAPStockItem[] = result.result.map((item: Record<string, string>) => ({
+                return result.result.map((item: any) => ({
                     idInv: item.idinv?.toString().trim() ?? "",
                     plant: item.plant?.toString().trim() ?? "",
                     plantName: item.plantname?.toString().trim() ?? "",
@@ -115,22 +127,18 @@ export function StockComparison({ localStocks }: StockComparisonProps) {
                     qtyStock: Number(item.qtystock) || 0,
                     valueStock: Number(item.valuestock) || 0,
                 }))
-                setSapData(mapped)
             }
-        } catch {
-            toast.error("Failed to fetch SAP data")
-        } finally {
-            setIsLoading(false)
-        }
-    }, [])
+            throw new Error("Failed to fetch SAP data")
+        },
+        staleTime: 5 * 60 * 1000,
+    })
 
-    React.useEffect(() => {
-        fetchSAPData()
-    }, [fetchSAPData])
+    const [searchTerm, setSearchTerm] = useState("")
+    const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
+    const [sorting, setSorting] = useState<SortingState>([{ id: "gap", desc: true }])
 
     // ─── Build comparison data ─────────────────────────────────────
     const comparisonData = useMemo<ComparisonRow[]>(() => {
-        // Build a map: key = materialNumber|sloc
         const localMap = new Map<string, LocalStockItem>()
         for (const item of localStocks) {
             if (!item.product || !item.warehouse) continue
@@ -140,7 +148,6 @@ export function StockComparison({ localStocks }: StockComparisonProps) {
 
         const sapMap = new Map<string, SAPStockItem>()
         for (const item of sapData) {
-            // SAP uses idInv as the primary material number for mapping
             const key = `${item.idInv}|${item.sloc}`
             sapMap.set(key, item)
         }
@@ -185,36 +192,128 @@ export function StockComparison({ localStocks }: StockComparisonProps) {
         return rows
     }, [localStocks, sapData])
 
-    // ─── Filtered & sorted data ────────────────────────────────────
-    const filteredData = useMemo(() => {
-        let result = comparisonData
+    const columns = useMemo<ColumnDef<ComparisonRow>[]>(() => [
+        {
+            accessorKey: "materialNumber",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Material #
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium text-blue-600 font-mono text-xs">{row.original.materialNumber}</span>,
+        },
+        {
+            accessorKey: "description",
+            header: "Description",
+            cell: ({ row }) => <span className="text-xs truncate max-w-[200px]" title={row.original.description}>{row.original.description || "—"}</span>,
+        },
+        {
+            accessorKey: "sloc",
+            header: "SLoc",
+            cell: ({ row }) => <Badge variant="outline" className="text-xs">{row.original.sloc}</Badge>,
+        },
+        {
+            accessorKey: "slocDesc",
+            header: "SLoc Desc",
+            cell: ({ row }) => <span className="text-xs text-muted-foreground italic truncate max-w-[120px]" title={row.original.slocDesc}>{row.original.slocDesc || "—"}</span>,
+        },
+        {
+            accessorKey: "localStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Stock Lokal
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => <div className="text-right font-mono text-sm font-semibold">{row.original.localStock.toLocaleString()}</div>,
+        },
+        {
+            accessorKey: "sapStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Stock SAP
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => <div className="text-right font-mono text-sm">{row.original.sapStock.toLocaleString()}</div>,
+        },
+        {
+            accessorKey: "gap",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Gap
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => {
+                const gap = row.original.gap
+                return (
+                    <div className={`text-right font-mono text-sm font-bold ${gap > 0 ? "text-blue-600" : gap < 0 ? "text-red-600" : "text-green-600"}`}>
+                        {gap > 0 ? "+" : ""}{gap.toLocaleString()}
+                    </div>
+                )
+            },
+            sortingFn: (rowA, rowB) => Math.abs(rowA.original.gap) - Math.abs(rowB.original.gap)
+        },
+        {
+            accessorKey: "status",
+            header: "Status",
+            cell: ({ row }) => {
+                const status = row.original.status
+                return (
+                    <div className="text-center">
+                        {status === "match" && <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200 text-[10px]">Match</Badge>}
+                        {status === "over" && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200 text-[10px]">Over</Badge>}
+                        {status === "under" && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px]">Under</Badge>}
+                    </div>
+                )
+            }
+        },
+    ], [])
 
-        if (statusFilter !== "all") {
-            result = result.filter(r => r.status === statusFilter)
-        }
-
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase()
-            result = result.filter(r =>
-                r.materialNumber.toLowerCase().includes(term) ||
-                r.description.toLowerCase().includes(term) ||
-                r.sloc.toLowerCase().includes(term) ||
-                r.slocDesc.toLowerCase().includes(term)
+    const table = useReactTable({
+        data: comparisonData,
+        columns,
+        state: {
+            sorting,
+            globalFilter: searchTerm,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setSearchTerm,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const term = filterValue.toLowerCase()
+            const item = row.original
+            const matchesSearch = !!(
+                item.materialNumber.toLowerCase().includes(term) ||
+                item.description.toLowerCase().includes(term) ||
+                item.sloc.toLowerCase().includes(term) ||
+                item.slocDesc.toLowerCase().includes(term)
             )
+            const matchesStatus = statusFilter === "all" || item.status === statusFilter
+            return matchesSearch && matchesStatus
         }
+    })
 
-        result.sort((a, b) => {
-            let cmp = 0
-            if (sortField === "gap") cmp = Math.abs(b.gap) - Math.abs(a.gap)
-            else if (sortField === "localStock") cmp = a.localStock - b.localStock
-            else if (sortField === "sapStock") cmp = a.sapStock - b.sapStock
-            else cmp = a.materialNumber.localeCompare(b.materialNumber)
+    // Virtualization
+    const parentRef = useRef<HTMLDivElement>(null)
+    const { rows } = table.getRowModel()
 
-            return sortDirection === "desc" ? -cmp : cmp
-        })
-
-        return result
-    }, [comparisonData, statusFilter, searchTerm, sortField, sortDirection])
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 45,
+        overscan: 20,
+    })
 
     // ─── Stats ──────────────────────────────────────────────────────
     const stats = useMemo(() => {
@@ -252,25 +351,8 @@ export function StockComparison({ localStocks }: StockComparisonProps) {
         { name: "Under Stock", value: stats.under, color: "#ef4444" },
     ], [stats])
 
-    // ─── Sort handler ───────────────────────────────────────────────
-    const handleSort = (field: SortField) => {
-        if (sortField === field) {
-            setSortDirection(d => d === "asc" ? "desc" : "asc")
-        } else {
-            setSortField(field)
-            setSortDirection("desc")
-        }
-    }
-
-    const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 inline opacity-40" />
-        return sortDirection === "asc"
-            ? <ArrowUp className="ml-1 h-3 w-3 inline text-primary" />
-            : <ArrowDown className="ml-1 h-3 w-3 inline text-primary" />
-    }
-
     // ─── Loading state ──────────────────────────────────────────────
-    if (isLoading) {
+    if (isLoadingSAP) {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -463,120 +545,92 @@ export function StockComparison({ localStocks }: StockComparisonProps) {
                         </SelectContent>
                     </Select>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchSAPData} className="shrink-0">
+                <Button variant="outline" size="sm" onClick={() => refetchSAP()} className="shrink-0">
                     <RefreshCcw className="mr-2 h-4 w-4" />
                     Refresh SAP
                 </Button>
                 <div className="text-xs text-muted-foreground ml-auto">
-                    Showing {filteredData.length} of {comparisonData.length} items
+                    Showing {table.getFilteredRowModel().rows.length} of {comparisonData.length} items
                 </div>
             </div>
 
             {/* ── Comparison Table ───────────────────────────────── */}
             <div className="rounded-md border bg-card">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[50px] text-center">#</TableHead>
-                            <TableHead
-                                className="cursor-pointer select-none"
-                                onClick={() => handleSort("materialNumber")}
-                            >
-                                Material # <SortIcon field="materialNumber" />
-                            </TableHead>
-                            <TableHead className="min-w-[180px]">Description</TableHead>
-                            <TableHead>SLoc</TableHead>
-                            <TableHead>SLoc Desc</TableHead>
-                            <TableHead
-                                className="text-right cursor-pointer select-none"
-                                onClick={() => handleSort("localStock")}
-                            >
-                                Stock Lokal <SortIcon field="localStock" />
-                            </TableHead>
-                            <TableHead
-                                className="text-right cursor-pointer select-none"
-                                onClick={() => handleSort("sapStock")}
-                            >
-                                Stock SAP <SortIcon field="sapStock" />
-                            </TableHead>
-                            <TableHead
-                                className="text-right cursor-pointer select-none"
-                                onClick={() => handleSort("gap")}
-                            >
-                                Gap <SortIcon field="gap" />
-                            </TableHead>
-                            <TableHead className="text-center">Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
-                                    <div className="flex flex-col items-center justify-center text-muted-foreground">
-                                        <Box className="h-8 w-8 mb-2 opacity-20" />
-                                        <p>No comparison data found.</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filteredData.map((row, idx) => (
-                                <TableRow
-                                    key={row.key}
-                                    className={
-                                        row.status === "under"
-                                            ? "bg-red-50/40 dark:bg-red-950/10"
-                                            : row.status === "over"
-                                                ? "bg-blue-50/40 dark:bg-blue-950/10"
-                                                : ""
-                                    }
-                                >
-                                    <TableCell className="text-center text-muted-foreground text-xs">
-                                        {idx + 1}
-                                    </TableCell>
-                                    <TableCell className="font-medium text-blue-600 font-mono text-xs">
-                                        {row.materialNumber}
-                                    </TableCell>
-                                    <TableCell className="text-xs max-w-[200px] truncate" title={row.description}>
-                                        {row.description || "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="text-xs">{row.sloc}</Badge>
-                                    </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground italic max-w-[120px] truncate" title={row.slocDesc}>
-                                        {row.slocDesc || "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono text-sm font-semibold">
-                                        {row.localStock.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono text-sm">
-                                        {row.sapStock.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-mono text-sm font-bold ${row.gap > 0 ? "text-blue-600" : row.gap < 0 ? "text-red-600" : "text-green-600"
-                                        }`}>
-                                        {row.gap > 0 ? "+" : ""}{row.gap.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {row.status === "match" && (
-                                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200 text-[10px]">
-                                                Match
-                                            </Badge>
-                                        )}
-                                        {row.status === "over" && (
-                                            <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200 text-[10px]">
-                                                Over
-                                            </Badge>
-                                        )}
-                                        {row.status === "under" && (
-                                            <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px]">
-                                                Under
-                                            </Badge>
-                                        )}
+                <div
+                    ref={parentRef}
+                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    <TableHead className="w-[50px] text-center">#</TableHead>
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder
+                                                ? null
+                                                : flexRender(
+                                                    header.column.columnDef.header,
+                                                    header.getContext()
+                                                )}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length + 1} className="p-0" />
+                                    </TableRow>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow
+                                                key={row.id}
+                                                className={
+                                                    row.original.status === "under"
+                                                        ? "bg-red-50/40 dark:bg-red-950/10"
+                                                        : row.original.status === "over"
+                                                            ? "bg-blue-50/40 dark:bg-blue-950/10"
+                                                            : ""
+                                                }
+                                            >
+                                                <TableCell className="text-center text-muted-foreground text-xs">
+                                                    {virtualRow.index + 1}
+                                                </TableCell>
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow
+                                        style={{
+                                            height: `${rowVirtualizer.getTotalSize() -
+                                                rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px`,
+                                        }}
+                                        className="border-none"
+                                    >
+                                        <TableCell colSpan={columns.length + 1} className="p-0" />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={columns.length + 1} className="h-24 text-center">
+                                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                                            <Box className="h-8 w-8 mb-2 opacity-20" />
+                                            <p>No comparison data found.</p>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
         </div>
     )

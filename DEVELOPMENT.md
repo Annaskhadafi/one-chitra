@@ -186,3 +186,80 @@ Or use a verification script like the one in `scripts/verify-columns.ts` (if ava
 ### 5. Common Troubleshooting
 - **Missing Columns in App**: If the app still complains about missing columns after `db:push`, restart your dev server to clear the Drizzle metadata cache.
 - **Drizzle Hub/Studio Issues**: If Drizzle Studio doesn't show your changes, ensure your `drizzle.config.ts` points to the correct database URL and schema location.
+
+---
+
+## 🗂️ Table & Virtualization Standards
+
+To ensure high performance and visual consistency across all dashboard tables, all new tables MUST follow the standardized TanStack Virtualization pattern.
+
+### 1. Structure & Container
+- Use a wrapper with `rounded-md border bg-card overflow-hidden`.
+- Use a `parentRef` container with a fixed height (e.g., `h-[600px]`) and `overflow-auto relative`.
+- Apply `scrollbar-thin scrollbar-thumb-accent` for consistent scrollbar styling.
+
+### 2. Standardized Virtualization Pattern
+Always calculate `before` and `after` padding rows to ensure smooth scrolling and no border glitches.
+
+```tsx
+const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 53, // Adjust based on row height
+    overscan: 20,
+})
+
+const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+    ? [
+        rowVirtualizer.getVirtualItems()[0].start,
+        rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+    ]
+    : [0, 0]
+
+return (
+    <Table>
+        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+            {/* ... headers ... */}
+        </TableHeader>
+        <TableBody>
+            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                <>
+                    {/* Padding Row Before */}
+                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                        <TableCell colSpan={columns.length} className="p-0" />
+                    </TableRow>
+                    
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = rows[virtualRow.index]
+                        return (
+                            <TableRow key={row.id}>
+                                {row.getVisibleCells().map((cell) => (
+                                    <TableCell key={cell.id}>
+                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        )
+                    })}
+                    
+                    {/* Padding Row After */}
+                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                        <TableCell colSpan={columns.length} className="p-0" />
+                    </TableRow>
+                </>
+            ) : (
+                <TableRow>
+                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                        No results.
+                    </TableCell>
+                </TableRow>
+            )}
+        </TableBody>
+    </Table>
+)
+```
+
+### 3. Key Requirements
+- **Sticky Headers**: MUST use `sticky top-0 z-10 bg-background shadow-sm` on the `TableHeader`.
+- **Border-None Padding**: MUST use `className="border-none"` on the `before`/`after` `TableRow` to prevent flickering double-borders.
+- **Zero Padding Cells**: MUST use `className="p-0"` on the `TableCell` inside padding rows.

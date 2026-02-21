@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus } from "@/app/actions/delivery"
+import * as React from "react"
+import { useState, useMemo, useRef } from "react"
+import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries } from "@/app/actions/delivery"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import {
@@ -45,13 +46,26 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
+
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    flexRender,
+    ColumnDef,
+    SortingState,
+    ColumnFiltersState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { useQuery } from "@tanstack/react-query"
 
 interface DeliveryWithRelations {
     id: number
@@ -119,15 +133,16 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
-export function DeliveryTable({ data }: DeliveryTableProps) {
+export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
     const canDelete = hasResourcePermission('deliveries', 'delete')
-    const canView = hasResourcePermission('deliveries', 'view')
 
-    const [search, setSearch] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+    const [rowSelection, setRowSelection] = useState({})
+    const [globalFilter, setGlobalFilter] = useState("")
+
     const [deleting, setDeleting] = useState<number | null>(null)
     const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -136,12 +151,386 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
     const [poPreviewDelivery, setPoPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
 
-    // Stats calculation
+    const { data = initialData, isLoading, refetch } = useQuery({
+        queryKey: ["deliveries"],
+        queryFn: () => getDeliveries(),
+        initialData: initialData,
+    })
+
+    const handleUpdateStatus = async (id: number, status: string) => {
+        const result = await bulkUpdateDeliveryStatus([id], status)
+        if (result.success) {
+            toast.success("Status updated")
+            refetch()
+        } else {
+            toast.error(result.error)
+        }
+    }
+
+    const handleDelete = async (id: number) => {
+        setDeleting(id)
+        const res = await deleteDelivery(id)
+        if (res.success) {
+            toast.success("Delivery deleted successfully")
+            refetch()
+        } else {
+            const errorMsg = 'error' in res && res.error ? res.error : "Failed to delete delivery"
+            toast.error(errorMsg)
+        }
+        setDeleting(null)
+    }
+
+    const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
+        {
+            id: "select",
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Select all"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "deliveryNumber",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Delivery No
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-mono text-sm">{row.original.deliveryNumber || "-"}</span>,
+        },
+        {
+            id: "customerPo",
+            header: "No. PO Customer",
+            accessorFn: (row) => row.salesOrder?.customerPo,
+            cell: ({ row }) => <span className="font-mono text-sm">{row.original.salesOrder?.customerPo || "-"}</span>,
+        },
+        {
+            id: "customer",
+            header: "Customer",
+            accessorFn: (row) => row.salesOrder?.customer?.name,
+            cell: ({ row }) => row.original.salesOrder?.customer?.name || "-",
+        },
+        {
+            accessorKey: "scheduledDate",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Scheduled
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => new Date(row.original.scheduledDate).toLocaleDateString("id-ID", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            }),
+        },
+        {
+            accessorKey: "deliveryDate",
+            header: "Delivery Date",
+            cell: ({ row }) => {
+                const date = row.original.deliveryDate
+                return date ? new Date(date).toLocaleDateString("id-ID", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                }) : "-"
+            },
+        },
+        {
+            accessorKey: "status",
+            header: "Status",
+            cell: ({ row }) => {
+                const status = row.original.status
+                const id = row.original.id
+                return canEdit ? (
+                    <Select
+                        defaultValue={status}
+                        onValueChange={(value) => handleUpdateStatus(id, value)}
+                    >
+                        <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[status] === 'default' ? 'bg-primary text-primary-foreground' :
+                            statusVariants[status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                                statusVariants[status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
+                            }`}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {Object.entries(statusLabels).map(([value, label]) => (
+                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                ) : (
+                    <Badge variant={statusVariants[status] || "secondary"}>
+                        {statusLabels[status] || status}
+                    </Badge>
+                )
+            },
+            filterFn: (row, columnId, filterValue) => {
+                if (filterValue === "all" || !filterValue) return true
+                return row.getValue(columnId) === filterValue
+            }
+        },
+        {
+            accessorKey: "deliveryType",
+            header: "Type",
+            cell: ({ row }) => <Badge variant="outline" className="capitalize">{row.original.deliveryType}</Badge>,
+        },
+        {
+            accessorKey: "driverName",
+            header: "Driver",
+            cell: ({ row }) => row.original.driverName || "-",
+        },
+        {
+            accessorKey: "vehicleNumber",
+            header: "Vehicle",
+            cell: ({ row }) => (
+                <div className="text-sm">
+                    <span>{row.original.vehicleNumber || "-"}</span>
+                    {row.original.vehicleType && (
+                        <span className="text-muted-foreground ml-1">({row.original.vehicleType})</span>
+                    )}
+                </div>
+            ),
+        },
+        {
+            id: "warehouse",
+            header: "Warehouse",
+            accessorFn: (row) => row.warehouse?.description || row.warehouse?.sloc,
+            cell: ({ row }) => row.original.warehouse?.description || row.original.warehouse?.sloc || "-",
+        },
+        {
+            id: "createdBy",
+            header: "Created By",
+            accessorFn: (row) => row.createdByUser?.name,
+            cell: ({ row }) => row.original.createdByUser ? (
+                <div className="flex items-center gap-1.5">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm">{row.original.createdByUser.name}</span>
+                </div>
+            ) : "-",
+        },
+        {
+            id: "items",
+            header: () => <div className="text-right">Items</div>,
+            cell: ({ row }) => <div className="text-right">{row.original.items.length}</div>,
+        },
+        {
+            id: "actions",
+            header: () => <div className="text-right">Actions</div>,
+            cell: ({ row }) => {
+                const delivery = row.original
+                return (
+                    <div className="flex justify-end gap-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        setPreviewDelivery(delivery)
+                                        setIsPreviewOpen(true)
+                                    }}
+                                >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    Preview Detail
+                                </DropdownMenuItem>
+                                {delivery.salesOrder?.poDocument && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            setPoPreviewDelivery(delivery)
+                                            setIsPoPreviewOpen(true)
+                                        }}
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview Customer PO
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        setPdfDelivery(delivery)
+                                        setIsPdfOpen(true)
+                                    }}
+                                >
+                                    <FileDown className="mr-2 h-4 w-4" />
+                                    Cetak PDF
+                                </DropdownMenuItem>
+                                {canEdit && (
+                                    <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                        <DropdownMenuItem>
+                                            <Pencil className="mr-2 h-4 w-4" />
+                                            Edit
+                                        </DropdownMenuItem>
+                                    </Link>
+                                )}
+                                {canDelete && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will permanently delete delivery{" "}
+                                                        <strong>{delivery.deliveryNumber}</strong>. This action
+                                                        cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(delivery.id)}
+                                                        disabled={deleting === delivery.id}
+                                                        className="bg-red-600 hover:bg-red-700"
+                                                    >
+                                                        {deleting === delivery.id ? "Deleting..." : "Delete"}
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )
+            },
+        },
+    ], [canEdit, canDelete, deleting])
+
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            columnFilters,
+            rowSelection,
+            globalFilter,
+        },
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
+        onRowSelectionChange: setRowSelection,
+        onGlobalFilterChange: setGlobalFilter,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const search = filterValue.toLowerCase()
+            const d = row.original
+            return !!(
+                d.deliveryNumber?.toLowerCase().includes(search) ||
+                d.salesOrder?.invoiceNumber?.toLowerCase().includes(search) ||
+                d.salesOrder?.customer?.name?.toLowerCase().includes(search) ||
+                d.driverName?.toLowerCase().includes(search) ||
+                d.vehicleNumber?.toLowerCase().includes(search) ||
+                d.createdByUser?.name?.toLowerCase().includes(search) ||
+                d.salesOrder?.customerPo?.toLowerCase().includes(search)
+            )
+        },
+    })
+
+    const { rows } = table.getRowModel()
+    const parentRef = useRef<HTMLDivElement>(null)
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 53,
+        overscan: 20,
+    })
+
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
+
+    const handleBulkDelete = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
+        if (confirm(`Are you sure you want to delete ${selectedIds.length} selected deliveries?`)) {
+            const result = await bulkDeleteDeliveries(selectedIds)
+            if (result.success) {
+                toast.success("Deliveries deleted successfully")
+                setRowSelection({})
+                refetch()
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
+
+    const handleBulkUpdateStatus = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
+        const status = prompt("Enter new status (scheduled/ready/partial/in_transit/delivered/cancelled):")
+        if (status) {
+            const result = await bulkUpdateDeliveryStatus(selectedIds, status)
+            if (result.success) {
+                toast.success("Delivery statuses updated successfully")
+                setRowSelection({})
+                refetch()
+            } else {
+                toast.error(result.error)
+            }
+        }
+    }
+
+    const handleExport = () => {
+        const headers = ["Delivery No", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
+        const csvData = table.getFilteredRowModel().rows.map(r => {
+            const d = r.original
+            return [
+                d.deliveryNumber || "",
+                d.salesOrder?.customerPo || "",
+                d.salesOrder?.customer?.name || "",
+                new Date(d.scheduledDate).toLocaleDateString("id-ID"),
+                d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
+                statusLabels[d.status] || d.status,
+                d.deliveryType,
+                d.driverName || "",
+                d.vehicleNumber || "",
+                d.warehouse?.description || d.warehouse?.sloc || "",
+                d.createdByUser?.name || ""
+            ]
+        })
+
+        const csvContent = [headers.join(","), ...csvData.map(row => row.join(","))].join("\n")
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = url
+        link.setAttribute("download", `deliveries-${new Date().toISOString().slice(0, 10)}.csv`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
     const totalDeliveries = data.length
     const scheduled = data.filter(d => d.status === 'scheduled').length
     const inTransit = data.filter(d => d.status === 'in_transit').length
 
-    // Chart data: status breakdown
     const chartData = useMemo(() => {
         const statusCounts: Record<string, number> = {}
         data.forEach(d => {
@@ -154,113 +543,15 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
         }))
     }, [data])
 
-    const filtered = useMemo(() => {
-        return data.filter(d => {
-            const s = search.toLowerCase()
-            const matchesSearch = !search ||
-                d.deliveryNumber?.toLowerCase().includes(s) ||
-                d.salesOrder?.invoiceNumber?.toLowerCase().includes(s) ||
-                d.salesOrder?.customer?.name?.toLowerCase().includes(s) ||
-                d.driverName?.toLowerCase().includes(s) ||
-                d.vehicleNumber?.toLowerCase().includes(s) ||
-                d.createdByUser?.name?.toLowerCase().includes(s)
-            const matchesStatus = statusFilter === "all" || d.status === statusFilter
-            return matchesSearch && matchesStatus
-        })
-    }, [data, search, statusFilter])
+    const selectedCount = Object.keys(rowSelection).length
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filtered.map(d => d.id))
-        } else {
-            setSelectedIds([])
-        }
-    }
-
-    const handleSelectOne = (checked: boolean, deliveryId: number) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, deliveryId])
-        } else {
-            setSelectedIds(prev => prev.filter(id => id !== deliveryId))
-        }
-    }
-
-    const handleBulkDelete = async () => {
-        if (confirm("Are you sure you want to delete selected deliveries?")) {
-            const result = await bulkDeleteDeliveries(selectedIds)
-            if (result.success) {
-                toast.success("Deliveries deleted successfully")
-                setSelectedIds([])
-            } else {
-                toast.error(result.error)
-            }
-        }
-    }
-
-    const handleExport = () => {
-        const headers = ["Delivery No", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
-        const csvData = filtered.map(d => [
-            d.deliveryNumber || "",
-            d.salesOrder?.customerPo || "",
-            d.salesOrder?.customer?.name || "",
-            new Date(d.scheduledDate).toLocaleDateString("id-ID"),
-            d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
-            statusLabels[d.status] || d.status,
-            d.deliveryType,
-            d.driverName || "",
-            d.vehicleNumber || "",
-            d.warehouse?.sloc || "",
-            d.createdByUser?.name || ""
-        ])
-
-        const csvContent = [
-            headers.join(","),
-            ...csvData.map(row => row.join(","))
-        ].join("\n")
-
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-        const link = document.createElement("a")
-        const url = URL.createObjectURL(blob)
-        link.setAttribute("href", url)
-        link.setAttribute("download", `deliveries-${new Date().toISOString().slice(0, 10)}.csv`)
-        link.style.visibility = "hidden"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-    }
-
-    const handleUpdateStatus = async (id: number, status: string) => {
-        const result = await bulkUpdateDeliveryStatus([id], status)
-        if (result.success) {
-            toast.success("Status updated")
-        } else {
-            toast.error(result.error)
-        }
-    }
-
-    const handleBulkUpdateStatus = async () => {
-        const status = prompt("Enter new status for selected deliveries (scheduled/ready/partial/in_transit/delivered/cancelled):")
-        if (status) {
-            const result = await bulkUpdateDeliveryStatus(selectedIds, status)
-            if (result.success) {
-                toast.success("Delivery statuses updated successfully")
-                setSelectedIds([])
-            } else {
-                toast.error(result.error)
-            }
-        }
-    }
-
-    async function handleDelete(id: number) {
-        setDeleting(id)
-        const res = await deleteDelivery(id)
-        if (res.success) {
-            toast.success("Delivery deleted successfully")
-        } else {
-            const errorMsg = 'error' in res && res.error ? res.error : "Failed to delete delivery"
-            toast.error(errorMsg)
-        }
-        setDeleting(null)
+    if (isLoading && !data.length) {
+        return (
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
+                <RefreshCcw className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Fetching Deliveries...</p>
+            </div>
+        )
     }
 
     return (
@@ -295,7 +586,6 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 />
             </div>
 
-            {/* Status Chart */}
             {data.length > 0 && (
                 <Card>
                     <CardHeader className="pb-2">
@@ -326,259 +616,99 @@ export function DeliveryTable({ data }: DeliveryTableProps) {
                 </Card>
             )}
 
-            {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search delivery, SO, customer, driver, user..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
+                        value={globalFilter}
+                        onChange={e => setGlobalFilter(e.target.value)}
                         className="pl-10"
                     />
                 </div>
-                <div className="flex bg-items-center gap-2">
+                <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={handleExport}>
                         <Download className="mr-2 h-4 w-4" />
-                        Export CSV
+                        Export
                     </Button>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <Select
+                        value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
+                        onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
+                    >
                         <SelectTrigger className="w-[160px]">
                             <SelectValue placeholder="All Status" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="scheduled">Scheduled</SelectItem>
-                            <SelectItem value="ready">Ready</SelectItem>
-                            <SelectItem value="partial">Partial</SelectItem>
-                            <SelectItem value="in_transit">In Transit</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                            {Object.entries(statusLabels).map(([value, label]) => (
+                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
+                    <Button variant="outline" size="icon" onClick={() => refetch()}>
+                        <RefreshCcw className="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
 
-            <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[50px]">
-                                <Checkbox
-                                    checked={selectedIds.length === filtered.length && filtered.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                />
-                            </TableHead>
-                            <TableHead>Delivery No</TableHead>
-                            <TableHead>No. PO Customer</TableHead>
-                            <TableHead>Customer</TableHead>
-                            <TableHead>Scheduled</TableHead>
-                            <TableHead>Delivery Date</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Driver</TableHead>
-                            <TableHead>Vehicle</TableHead>
-                            <TableHead>Warehouse</TableHead>
-                            <TableHead>Created By</TableHead>
-                            <TableHead className="text-right">Items</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filtered.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
-                                    No deliveries found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filtered.map(delivery => (
-                                <TableRow key={delivery.id}>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedIds.includes(delivery.id)}
-                                            onCheckedChange={(checked) => handleSelectOne(!!checked, delivery.id)}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="font-mono text-sm">
-                                        {delivery.deliveryNumber || "-"}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-sm">
-                                        {delivery.salesOrder?.customerPo || "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {delivery.salesOrder?.customer?.name || "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {new Date(delivery.scheduledDate).toLocaleDateString("id-ID", {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                        })}
-                                    </TableCell>
-                                    <TableCell>
-                                        {delivery.deliveryDate ? new Date(delivery.deliveryDate).toLocaleDateString("id-ID", {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                        }) : "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {canEdit ? (
-                                            <Select
-                                                defaultValue={delivery.status}
-                                                onValueChange={(value) => handleUpdateStatus(delivery.id, value)}
-                                            >
-                                                <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[delivery.status] === 'default' ? 'bg-primary text-primary-foreground' :
-                                                    statusVariants[delivery.status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                                                        statusVariants[delivery.status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
-                                                    }`}>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                                                    <SelectItem value="ready">Ready</SelectItem>
-                                                    <SelectItem value="partial">Partial</SelectItem>
-                                                    <SelectItem value="in_transit">In Transit</SelectItem>
-                                                    <SelectItem value="delivered">Delivered</SelectItem>
-                                                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        ) : (
-                                            <Badge variant={statusVariants[delivery.status] || "secondary"}>
-                                                {statusLabels[delivery.status] || delivery.status}
-                                            </Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="capitalize">
-                                            {delivery.deliveryType}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>{delivery.driverName || "-"}</TableCell>
-                                    <TableCell>
-                                        <div className="text-sm">
-                                            <span>{delivery.vehicleNumber || "-"}</span>
-                                            {delivery.vehicleType && (
-                                                <span className="text-muted-foreground ml-1">
-                                                    ({delivery.vehicleType})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {delivery.warehouse?.description || delivery.warehouse?.sloc || "-"}
-                                    </TableCell>
-                                    <TableCell>
-                                        {delivery.createdByUser ? (
-                                            <div className="flex items-center gap-1.5">
-                                                <User className="h-3 w-3 text-muted-foreground" />
-                                                <span className="text-sm">{delivery.createdByUser.name}</span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-sm text-muted-foreground">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {delivery.items.length}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end gap-1">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Open menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    {canEdit && (
-                                                        <DropdownMenuItem
-                                                            onClick={() => {
-                                                                setPreviewDelivery(delivery)
-                                                                setIsPreviewOpen(true)
-                                                            }}
-                                                        >
-                                                            <Eye className="mr-2 h-4 w-4" />
-                                                            Preview Detail
-                                                        </DropdownMenuItem>
-                                                    )}
-                                                    {delivery.salesOrder?.poDocument && (
-                                                        <DropdownMenuItem
-                                                            onClick={() => {
-                                                                setPoPreviewDelivery(delivery)
-                                                                setIsPoPreviewOpen(true)
-                                                            }}
-                                                        >
-                                                            <FileText className="mr-2 h-4 w-4" />
-                                                            Preview Customer PO
-                                                        </DropdownMenuItem>
-                                                    )}
-                                                    <DropdownMenuItem
-                                                        onClick={() => {
-                                                            setPdfDelivery(delivery)
-                                                            setIsPdfOpen(true)
-                                                        }}
-                                                    >
-                                                        <FileDown className="mr-2 h-4 w-4" />
-                                                        Cetak PDF
-                                                    </DropdownMenuItem>
-                                                    {canEdit && (
-                                                        <Link href={`/dashboard/deliveries/${delivery.id}`}>
-                                                            <DropdownMenuItem>
-                                                                <Pencil className="mr-2 h-4 w-4" />
-                                                                Edit
-                                                            </DropdownMenuItem>
-                                                        </Link>
-                                                    )}
-                                                    {canDelete && (
-                                                        <>
-                                                            <DropdownMenuSeparator />
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
-                                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                                        Delete
-                                                                    </DropdownMenuItem>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
-                                                                        <AlertDialogDescription>
-                                                                            This will permanently delete delivery{" "}
-                                                                            <strong>{delivery.deliveryNumber}</strong>. This action
-                                                                            cannot be undone.
-                                                                        </AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                        <AlertDialogAction
-                                                                            onClick={() => handleDelete(delivery.id)}
-                                                                            disabled={deleting === delivery.id}
-                                                                            className="bg-red-600 hover:bg-red-700"
-                                                                        >
-                                                                            {deleting === delivery.id ? "Deleting..." : "Delete"}
-                                                                        </AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
-                                                        </>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
+            <div className="rounded-md border bg-card relative">
+                <div
+                    ref={parentRef}
+                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id} className="bg-muted/50">
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} />
+                                    </TableRow>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group transition-colors hover:bg-muted/50">
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow style={{ height: `${after}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                                        No records found.
                                     </TableCell>
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
 
-            {selectedIds.length > 0 && (canEdit || canDelete) && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground py-2">
+                <div>Showing {table.getFilteredRowModel().rows.length} of {data.length} records</div>
+            </div>
+
+            {selectedCount > 0 && (canEdit || canDelete) && (
                 <BulkActions
-                    selectedCount={selectedIds.length}
+                    selectedCount={selectedCount}
                     onDelete={canDelete ? handleBulkDelete : () => { }}
                     onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
                     entityName="delivery"

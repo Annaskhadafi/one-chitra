@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock } from "@/app/actions/stock"
+import * as React from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
+import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock, getStocks } from "@/app/actions/stock"
 import { StockDialog } from "./stock-dialog"
 import { StockCSVUpload } from "./stock-csv-upload"
-import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp } from "lucide-react"
+import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp, RefreshCcw, ChevronUp, ChevronDown, Check, ListFilter, X, Loader2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -43,89 +44,54 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { updateSetting } from "@/app/actions/settings"
+import { useQuery } from "@tanstack/react-query"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { cn } from "@/lib/utils"
 
 interface StockTableProps {
-    data: {
-        id: number
-        product: {
-            materialNumber: string;
-            materialDescription: string | null;
-            brand: string | null;
-            plant: string | null;
-            category: string;
-            oldMaterialNo: string | null;
-            costSap: string | null;
-        } | null
-        warehouse: { sloc: string; description: string | null; type: string | null } | null
-        totalStock: number
-        minStock: number
-        valuationValue: string // Changed to string as DB returns decimal/numeric as string often, or update based on schema
-        productId: number
-        warehouseId: number
-    }[]
-    products: {
-        id: number;
-        materialNumber: string;
-        materialDescription: string | null;
-        plant: string | null;
-        category: string;
-        oldMaterialNo: string | null;
-        costSap: string | null;
-    }[]
-    warehouses: { id: number; sloc: string; description: string | null; type: string | null }[]
+    data: any[] // Initial data for query hydrantion if needed
+    products: any[]
+    warehouses: any[]
     defaultRate?: string
 }
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { updateSetting } from "@/app/actions/settings"
+export function StockTable({ data: initialData, products, warehouses, defaultRate }: StockTableProps) {
+    const { data: stocks = initialData, isLoading, refetch } = useQuery({
+        queryKey: ["stocks"],
+        queryFn: async () => {
+            return await getStocks()
+        },
+        staleTime: 60 * 1000,
+    })
 
-export function StockTable({ data, products, warehouses, defaultRate }: StockTableProps) {
-    const [searchTerm, setSearchTerm] = useState("")
-    const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [globalFilter, setGlobalFilter] = useState("")
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [rowSelection, setRowSelection] = useState({})
     const [activeTab, setActiveTab] = useState("all")
-
-    // New states for valuation and additional filters
-    const [manualRate, setManualRate] = useState<string>(defaultRate || "1")
-    const [filterSlocDesc, setFilterSlocDesc] = useState("")
     const [filterCategory, setFilterCategory] = useState("all")
+    const [filterSlocDesc, setFilterSlocDesc] = useState("")
+    const [manualRate, setManualRate] = useState<string>(defaultRate || "1")
 
-    // Extract unique product categories
     const productCategories = useMemo(() => {
         const categories = new Set(products.map(p => p.category).filter(Boolean))
         return ["all", ...Array.from(categories).sort()]
     }, [products])
 
-    // Extract unique warehouse types
     const warehouseTypes = useMemo(() => {
         const types = new Set(warehouses.map(w => w.type).filter(Boolean))
         return ["all", ...Array.from(types).sort()]
     }, [warehouses])
-
-    // Filter data based on active tab and search term
-    // Filter data based on active tab, search term, and new filters
-    const filteredData = useMemo(() => {
-        return data.filter(item => {
-            // Tab filter (Warehouse Type)
-            const matchesTab = activeTab === "all" || item.warehouse?.type === activeTab
-
-            // Category Filter
-            const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
-
-            // Sloc Description Filter
-            const matchSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
-
-            // Search filter (General)
-            const matchesSearch =
-                item.product?.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.product?.materialDescription?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.product?.oldMaterialNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.warehouse?.sloc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.warehouse?.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.warehouse?.type?.toLowerCase().includes(searchTerm.toLowerCase())
-
-            return matchesTab && matchesCategory && matchSlocDesc && matchesSearch
-        })
-    }, [data, searchTerm, activeTab, filterCategory, filterSlocDesc])
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("id-ID", {
@@ -138,46 +104,279 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
 
     const calculateValuation = (stock: number, costSap: string | null) => {
         if (!costSap) return 0
-        // Remove any commas if present and parse
         const cost = parseFloat(costSap.toString().replace(/,/g, "")) || 0
         const rate = parseFloat(manualRate) || 0
         return stock * cost * rate
     }
 
-    // Stats calculation based on filtered data (current tab)
+    const columns = useMemo<ColumnDef<any>[]>(() => [
+        {
+            id: "select",
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected()}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Select all"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                />
+            ),
+        },
+        {
+            accessorKey: "product.plant",
+            header: "Plnt",
+            cell: ({ row }) => row.original.product?.plant || "-",
+        },
+        {
+            accessorKey: "product.category",
+            header: "Category",
+            cell: ({ row }) => row.original.product?.category || "-",
+        },
+        {
+            accessorKey: "product.brand",
+            header: "Brand",
+            cell: ({ row }) => row.original.product?.brand || "-",
+        },
+        {
+            accessorKey: "product.materialNumber",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Material #
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
+                <span className="font-medium text-blue-600">
+                    {row.original.product?.materialNumber}
+                </span>
+            ),
+        },
+        {
+            accessorKey: "product.oldMaterialNo",
+            header: "Old Mat. No",
+            cell: ({ row }) => row.original.product?.oldMaterialNo || "-",
+        },
+        {
+            accessorKey: "product.materialDescription",
+            header: "Description",
+            cell: ({ row }) => (
+                <div className="max-w-[200px] truncate" title={row.original.product?.materialDescription || ""}>
+                    {row.original.product?.materialDescription}
+                </div>
+            ),
+        },
+        {
+            accessorKey: "warehouse.sloc",
+            header: "SLoc",
+            cell: ({ row }) => row.original.warehouse?.sloc,
+        },
+        {
+            accessorKey: "warehouse.description",
+            header: "Sloc Desc",
+            cell: ({ row }) => (
+                <div className="max-w-[150px] truncate" title={row.original.warehouse?.description || ""}>
+                    {row.original.warehouse?.description}
+                </div>
+            ),
+        },
+        {
+            accessorKey: "totalStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Act Stock
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <div className="text-right font-mono font-bold">
+                    {row.original.totalStock.toLocaleString()}
+                </div>
+            ),
+        },
+        {
+            accessorKey: "minStock",
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Min Stock
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <div className="text-right font-mono text-orange-600">
+                    {row.original.minStock?.toLocaleString() || 0}
+                </div>
+            ),
+        },
+        {
+            id: "valuation",
+            header: () => <div className="text-right">Valuation</div>,
+            cell: ({ row }) => {
+                const val = calculateValuation(row.original.totalStock, row.original.product?.costSap ?? null)
+                return (
+                    <div className="text-right font-mono">
+                        {formatCurrency(val)}
+                        {manualRate !== "1" && manualRate !== "" && (
+                            <span className="block text-[10px] text-muted-foreground">
+                                x{manualRate}
+                            </span>
+                        )}
+                    </div>
+                )
+            },
+        },
+        {
+            accessorKey: "warehouse.type",
+            header: "Type Warehouse",
+            cell: ({ row }) => (
+                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                    {row.original.warehouse?.type || "N/A"}
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            cell: ({ row }) => (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <StockDialog
+                            stock={row.original}
+                            products={products}
+                            warehouses={warehouses}
+                            trigger={
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Edit
+                                </DropdownMenuItem>
+                            }
+                        />
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem
+                                    onSelect={(e) => e.preventDefault()}
+                                    className="text-destructive focus:text-destructive"
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will remove the stock record for this sloc. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={async () => {
+                                            const result = await deleteStock(row.original.id)
+                                            if (result.success) toast.success("Stock entry deleted")
+                                            else toast.error(result.error)
+                                        }}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ),
+        },
+    ], [manualRate, products, warehouses])
+
+    const table = useReactTable({
+        data: stocks,
+        columns,
+        state: {
+            sorting,
+            globalFilter,
+            rowSelection,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setGlobalFilter,
+        onRowSelectionChange: setRowSelection,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getRowId: (row) => row.id.toString(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const term = filterValue.toLowerCase()
+            const item = row.original
+
+            const matchesSearch = !!(
+                item.product?.materialNumber.toLowerCase().includes(term) ||
+                item.product?.materialDescription?.toLowerCase().includes(term) ||
+                item.product?.oldMaterialNo?.toLowerCase().includes(term) ||
+                item.warehouse?.sloc.toLowerCase().includes(term) ||
+                item.warehouse?.description?.toLowerCase().includes(term) ||
+                item.warehouse?.type?.toLowerCase().includes(term)
+            )
+
+            const matchesTab = activeTab === "all" || item.warehouse?.type === activeTab
+            const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
+            const matchesSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
+
+            return matchesSearch && matchesTab && matchesCategory && matchesSlocDesc
+        },
+    })
+
+    useEffect(() => {
+        table.setGlobalFilter(globalFilter)
+    }, [activeTab, filterCategory, filterSlocDesc, globalFilter, table])
+
+    const { rows } = table.getRowModel()
+    const filteredRows = table.getFilteredRowModel().rows
+
     const stats = useMemo(() => {
         return {
-            totalItems: filteredData.length,
-            lowStock: filteredData.filter(item => item.totalStock <= item.minStock).length,
-            totalValuation: filteredData.reduce((sum, item) => {
-                const val = calculateValuation(item.totalStock, item.product?.costSap ?? null)
-                return sum + val
+            totalItems: filteredRows.length,
+            lowStock: filteredRows.filter(row => row.original.totalStock <= row.original.minStock).length,
+            totalValuation: filteredRows.reduce((sum, row) => {
+                return sum + calculateValuation(row.original.totalStock, row.original.product?.costSap ?? null)
             }, 0)
         }
-    }, [filteredData, manualRate])
+    }, [filteredRows, manualRate])
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filteredData.map(item => item.id))
-        } else {
-            setSelectedIds([])
-        }
-    }
+    const parentRef = useRef<HTMLDivElement>(null)
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 45,
+        overscan: 20,
+    })
 
-    const handleSelectOne = (checked: boolean, id: number) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, id])
-        } else {
-            setSelectedIds(prev => prev.filter(i => i !== id))
-        }
-    }
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
 
     const handleBulkDelete = async () => {
+        const selectedIds = Object.keys(rowSelection).map(id => parseInt(id))
         if (confirm("Are you sure you want to delete selected stock entries?")) {
             const result = await bulkDeleteStocks(selectedIds)
             if (result.success) {
                 toast.success("Stock entries deleted successfully")
-                setSelectedIds([])
+                setRowSelection({})
+                refetch()
             } else {
                 toast.error(result.error)
             }
@@ -185,6 +384,7 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
     }
 
     const handleBulkUpdateMinStock = async () => {
+        const selectedIds = Object.keys(rowSelection).map(id => parseInt(id))
         const minStockStr = prompt("Enter new minimum stock level for selected items:")
         if (minStockStr) {
             const minStock = parseInt(minStockStr)
@@ -195,38 +395,39 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
             const result = await bulkUpdateStockMinStock(selectedIds, minStock)
             if (result.success) {
                 toast.success("Minimum stock levels updated successfully")
-                setSelectedIds([])
+                setRowSelection({})
+                refetch()
             } else {
                 toast.error(result.error)
             }
         }
     }
 
-    const handleDelete = async (id: number) => {
-        try {
-            const result = await deleteStock(id)
-            if (result.success) {
-                toast.success("Stock entry deleted")
-            } else {
-                toast.error(result.error)
-            }
-        } catch (_error) {
-            toast.error("Failed to delete stock")
-        }
+    if (isLoading && !stocks.length) {
+        return (
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Fetching Stock Levels...</p>
+            </div>
+        )
     }
 
     return (
         <div className="space-y-6">
-            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <div className="flex items-center justify-between">
                     <TabsList>
                         <TabsTrigger value="all">All Stocks</TabsTrigger>
                         {warehouseTypes.filter(t => t !== "all").map(type => (
-                            <TabsTrigger key={type} value={type as string}>
+                            <TabsTrigger key={type} value={type}>
                                 {type}
                             </TabsTrigger>
                         ))}
                     </TabsList>
+                    <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        Refresh
+                    </Button>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
@@ -235,27 +436,27 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                         value={stats.totalItems}
                         icon={Box}
                         description={activeTab === 'all' ? "All unique stock units" : `Stock units in ${activeTab}`}
-                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
-                        iconColor="text-blue-600 dark:text-blue-400"
-                        textColor="text-blue-900 dark:text-blue-100"
+                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
+                        iconColor="text-blue-600"
+                        textColor="text-blue-900"
                     />
                     <ScoreCard
                         title="Low Stock Items"
                         value={stats.lowStock}
                         icon={AlertTriangle}
                         description="Items below minimum level"
-                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
-                        iconColor="text-amber-600 dark:text-amber-400"
-                        textColor="text-amber-900 dark:text-amber-100"
+                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
+                        iconColor="text-amber-600"
+                        textColor="text-amber-900"
                     />
                     <ScoreCard
                         title="Total Valuation"
                         value={`IDR ${stats.totalValuation.toLocaleString()}`}
                         icon={TrendingUp}
                         description="Total inventory value"
-                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
-                        iconColor="text-emerald-600 dark:text-emerald-400"
-                        textColor="text-emerald-900 dark:text-emerald-100"
+                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
+                        iconColor="text-emerald-600"
+                        textColor="text-emerald-900"
                     />
                 </div>
 
@@ -307,8 +508,8 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                             <Input
                                 placeholder="Search by material or sloc..."
                                 className="pl-8"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                value={globalFilter}
+                                onChange={(e) => setGlobalFilter(e.target.value)}
                             />
                         </div>
                         <div className="flex items-center gap-2">
@@ -318,266 +519,64 @@ export function StockTable({ data, products, warehouses, defaultRate }: StockTab
                     </div>
                 </div>
 
-                <TabsContent value={activeTab} className="m-0">
-                    {/* Desktop View: Table */}
-                    <div className="hidden md:block rounded-md border bg-card">
+                <div className="rounded-md border bg-card">
+                    <div
+                        ref={parentRef}
+                        className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                    >
                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[50px]">
-                                        <Checkbox
-                                            checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                                            onCheckedChange={handleSelectAll}
-                                        />
-                                    </TableHead>
-                                    <TableHead>Plnt</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Brand</TableHead>
-                                    <TableHead>Material #</TableHead>
-                                    <TableHead>Old Mat. No</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>SLoc</TableHead>
-                                    <TableHead>Sloc Desc</TableHead>
-                                    <TableHead className="text-right">Act Stock</TableHead>
-                                    <TableHead className="text-right">Min Stock</TableHead>
-                                    <TableHead className="text-right">Valuation</TableHead>
-                                    <TableHead>Type Warehouse</TableHead>
-                                    <TableHead className="w-[70px]"></TableHead>
-                                </TableRow>
+                            <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <TableRow key={headerGroup.id} className="bg-muted/50">
+                                        {headerGroup.headers.map((header) => (
+                                            <TableHead key={header.id}>
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </TableHead>
+                                        ))}
+                                    </TableRow>
+                                ))}
                             </TableHeader>
                             <TableBody>
-                                {filteredData.length === 0 ? (
+                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                    <>
+                                        <TableRow style={{ height: `${before}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                            const row = rows[virtualRow.index]
+                                            return (
+                                                <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
+                                                    {row.getVisibleCells().map((cell) => (
+                                                        <TableCell key={cell.id}>
+                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            )
+                                        })}
+                                        <TableRow style={{ height: `${after}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                    </>
+                                ) : (
                                     <TableRow>
-                                        <TableCell colSpan={13} className="h-24 text-center">
-                                            <div className="flex flex-col items-center justify-center text-muted-foreground">
-                                                <Box className="h-8 w-8 mb-2 opacity-20" />
-                                                <p>No stock levels found for {activeTab === 'all' ? 'any type' : activeTab}</p>
-                                            </div>
+                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                                            <Box className="h-8 w-8 mb-2 opacity-20 mx-auto" />
+                                            No stock levels found for {activeTab === 'all' ? 'any type' : activeTab}
                                         </TableCell>
                                     </TableRow>
-                                ) : (
-                                    filteredData.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={selectedIds.includes(item.id)}
-                                                    onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
-                                                />
-                                            </TableCell>
-                                            <TableCell>{item.product?.plant || "-"}</TableCell>
-                                            <TableCell>{item.product?.category || "-"}</TableCell>
-                                            <TableCell>{item.product?.brand || "-"}</TableCell>
-                                            <TableCell className="font-medium text-blue-600">
-                                                {item.product?.materialNumber}
-                                            </TableCell>
-                                            <TableCell>{item.product?.oldMaterialNo || "-"}</TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={item.product?.materialDescription || ""}>
-                                                {item.product?.materialDescription}
-                                            </TableCell>
-                                            <TableCell>{item.warehouse?.sloc}</TableCell>
-                                            <TableCell className="max-w-[150px] truncate" title={item.warehouse?.description || ""}>
-                                                {item.warehouse?.description}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono font-bold">
-                                                {item.totalStock.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono text-orange-600">
-                                                {item.minStock?.toLocaleString() || 0}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono">
-                                                {formatCurrency(calculateValuation(item.totalStock, item.product?.costSap ?? null))}
-                                                {manualRate !== "1" && manualRate !== "" && (
-                                                    <span className="block text-[10px] text-muted-foreground">
-                                                        x{manualRate}
-                                                    </span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                                                    {item.warehouse?.type || "N/A"}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <StockDialog
-                                                            stock={item}
-                                                            products={products}
-                                                            warehouses={warehouses}
-                                                            trigger={
-                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                                                    <Pencil className="mr-2 h-4 w-4" />
-                                                                    Edit
-                                                                </DropdownMenuItem>
-                                                            }
-                                                        />
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <DropdownMenuItem
-                                                                    onSelect={(e) => e.preventDefault()}
-                                                                    className="text-destructive focus:text-destructive"
-                                                                >
-                                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                                    Delete
-                                                                </DropdownMenuItem>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        This will remove the stock record for this sloc. This action cannot be undone.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                    <AlertDialogAction
-                                                                        onClick={() => handleDelete(item.id)}
-                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                    >
-                                                                        Delete
-                                                                    </AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
                                 )}
                             </TableBody>
                         </Table>
                     </div>
+                </div>
 
-                    {/* Mobile View: Cards */}
-                    <div className="md:hidden grid grid-cols-1 gap-4">
-                        {filteredData.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center p-8 text-center border rounded-lg bg-muted/20">
-                                <Box className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                                <p className="text-muted-foreground font-medium">No stock items found.</p>
-                                <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filters.</p>
-                            </div>
-                        ) : (
-                            filteredData.map((item) => (
-                                <div key={item.id} className="bg-card rounded-lg border shadow-sm overflow-hidden animate-in fade-in transition-all hover:shadow-md">
-                                    <div className="p-4 space-y-3">
-                                        <div className="flex justify-between items-start">
-                                            <div className="space-y-1 flex-1 mr-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                                                        {item.product?.materialNumber}
-                                                    </span>
-                                                    <span className="text-[10px] text-muted-foreground border px-1.5 py-0.5 rounded">
-                                                        {item.product?.category}
-                                                    </span>
-                                                </div>
-                                                <h3 className="font-semibold text-sm leading-tight text-foreground">
-                                                    {item.product?.materialDescription || "No Description"}
-                                                </h3>
-                                            </div>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <StockDialog
-                                                        stock={item}
-                                                        products={products}
-                                                        warehouses={warehouses}
-                                                        trigger={
-                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                                                <Pencil className="mr-2 h-4 w-4" />
-                                                                Edit
-                                                            </DropdownMenuItem>
-                                                        }
-                                                    />
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem
-                                                                onSelect={(e) => e.preventDefault()}
-                                                                className="text-destructive focus:text-destructive"
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Delete
-                                                            </DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Stock Item?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Are you sure you want to remove this stock record? This cannot be undone.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    onClick={() => handleDelete(item.id)}
-                                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                >
-                                                                    Delete
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3 text-xs">
-                                            <div className="space-y-1">
-                                                <p className="text-muted-foreground">Warehouse</p>
-                                                <div className="font-medium flex items-center gap-1.5">
-                                                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                                                    {item.warehouse?.sloc}
-                                                </div>
-                                                <p className="text-muted-foreground/80 truncate">{item.warehouse?.description}</p>
-                                                <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 bg-secondary rounded-sm">
-                                                    {item.warehouse?.type || "Unknown Type"}
-                                                </span>
-                                            </div>
-                                            <div className="space-y-1 text-right">
-                                                <p className="text-muted-foreground">Current Stock</p>
-                                                <div className="text-xl font-bold tracking-tight text-foreground">
-                                                    {item.totalStock.toLocaleString()}
-                                                </div>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Min: <span className="text-orange-600 font-medium">{item.minStock?.toLocaleString() || 0}</span>
-                                                </p>
-                                                <p className="text-[10px] text-muted-foreground mt-1">
-                                                    Val: <span className="font-medium text-foreground">{formatCurrency(calculateValuation(item.totalStock, item.product?.costSap ?? null))}</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-muted/30 px-4 py-2 border-t flex justify-between items-center text-xs">
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                id={`mobile-check-${item.id}`}
-                                                checked={selectedIds.includes(item.id)}
-                                                onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
-                                                className="h-3.5 w-3.5"
-                                            />
-                                            <label htmlFor={`mobile-check-${item.id}`} className="text-muted-foreground select-none">Select</label>
-                                        </div>
-                                        <div className="text-muted-foreground font-mono">
-                                            {item.product?.plant || "N/A"}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </TabsContent>
+                <div className="text-sm text-muted-foreground">
+                    Showing {filteredRows.length} of {stocks.length} records
+                </div>
 
                 <BulkActions
-                    selectedCount={selectedIds.length}
+                    selectedCount={Object.keys(rowSelection).length}
                     onDelete={handleBulkDelete}
                     onEdit={handleBulkUpdateMinStock}
                     entityName="stock item"

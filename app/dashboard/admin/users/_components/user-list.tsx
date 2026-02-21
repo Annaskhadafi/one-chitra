@@ -14,76 +14,191 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { UserRoleDialog } from "./user-role-dialog"
 
 import { User } from "@/lib/types"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Users, Shield, UserCheck, Trash2 } from "lucide-react"
+import { Users, Shield, UserCheck, Trash2, ChevronUp, ChevronDown } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
-import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser } from "@/app/actions/users"
+import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, getUsers } from "@/app/actions/users"
 import { AddUserDialog } from "./add-user-dialog"
 import { ImportUsersDialog } from "./import-users-dialog"
-import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    ColumnDef,
+    flexRender,
+    getCoreRowModel,
+    getSortedRowModel,
+    SortingState,
+    useReactTable,
+} from "@tanstack/react-table"
 
 interface UserListProps {
     users: User[]
     roles: { id: number; name: string }[]
 }
 
-export function UserList({ users, roles }: UserListProps) {
+export function UserList({ users: initialUsers, roles }: UserListProps) {
+    const queryClient = useQueryClient()
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission('users', 'create')
     const canEdit = hasResourcePermission('users', 'edit')
     const canDelete = hasResourcePermission('users', 'delete')
 
-    const [selectedIds, setSelectedIds] = useState<string[]>([])
+    const { data = initialUsers } = useQuery({
+        queryKey: ["users"],
+        queryFn: getUsers,
+        initialData: initialUsers,
+        staleTime: 60 * 1000,
+    })
+
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [rowSelection, setRowSelection] = useState({})
 
     // Stats calculation
-    const totalUsers = users.length
-    const adminCount = users.filter(u => u.role?.toLowerCase() === 'admin').length
-    const staffCount = users.filter(u => u.role?.toLowerCase() === 'staff').length
+    const totalUsers = data.length
+    const adminCount = data.filter(u => u.role?.toLowerCase() === 'admin').length
+    const staffCount = data.filter(u => u.role?.toLowerCase() === 'staff').length
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(users.map(u => u.id))
-        } else {
-            setSelectedIds([])
-        }
-    }
+    const columns = useMemo<ColumnDef<User>[]>(() => [
+        {
+            id: "select",
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Select all"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "name",
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                    className="-ml-4 h-8"
+                >
+                    User
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
+                <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                        <AvatarImage src={row.original.image || ""} />
+                        <AvatarFallback>{row.original.name?.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <span className="font-medium">{row.original.name}</span>
+                </div>
+            ),
+        },
+        {
+            accessorKey: "email",
+            header: "Email",
+        },
+        {
+            accessorKey: "role",
+            header: "Role",
+            cell: ({ row }) => <Badge variant="outline">{row.original.role}</Badge>,
+        },
+        {
+            id: "actions",
+            header: () => <div className="text-right">Actions</div>,
+            cell: ({ row }) => {
+                const user = row.original
+                return (
+                    <div className="flex justify-end items-center gap-2">
+                        {canEdit && (
+                            <UserRoleDialog
+                                userId={user.id}
+                                currentRole={user.role}
+                                roles={roles}
+                                trigger={
+                                    <Button variant="ghost" size="sm">
+                                        Edit Role
+                                    </Button>
+                                }
+                            />
+                        )}
+                        {canDelete && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => handleDelete(user.id)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                )
+            },
+        },
+    ], [canEdit, canDelete, roles])
 
-    const handleSelectOne = (checked: boolean, userId: string) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, userId])
-        } else {
-            setSelectedIds(prev => prev.filter(id => id !== userId))
-        }
-    }
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            rowSelection,
+        },
+        onSortingChange: setSorting,
+        onRowSelectionChange: setRowSelection,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+    })
+
+    const selectedIds = Object.keys(rowSelection).map(
+        (idx) => data[parseInt(idx)].id
+    )
 
     const handleBulkDelete = async () => {
         if (confirm("Are you sure you want to delete selected users?")) {
-            await bulkDeleteUsers(selectedIds)
-            setSelectedIds([])
+            const result = await bulkDeleteUsers(selectedIds)
+            if (result.success) {
+                toast.success("Users deleted")
+                setRowSelection({})
+                queryClient.invalidateQueries({ queryKey: ["users"] })
+            } else {
+                toast.error(result.error || "Failed to delete users")
+            }
         }
     }
 
     const handleBulkEditRole = async () => {
         const role = prompt("Enter new role for selected users (admin/staff/user):")
         if (role) {
-            await bulkUpdateUserRole(selectedIds, role)
-            setSelectedIds([])
+            const result = await bulkUpdateUserRole(selectedIds, role)
+            if (result.success) {
+                toast.success("Roles updated")
+                setRowSelection({})
+                queryClient.invalidateQueries({ queryKey: ["users"] })
+            } else {
+                toast.error(result.error || "Failed to update roles")
+            }
         }
     }
-
-    const router = useRouter()
 
     const handleDelete = async (userId: string) => {
         if (confirm("Are you sure you want to delete this user?")) {
             const result = await deleteUser(userId)
             if (result.success) {
                 toast.success("User deleted")
+                queryClient.invalidateQueries({ queryKey: ["users"] })
             } else {
-                toast.error("Failed to delete user")
+                toast.error(result.error || "Failed to delete user")
             }
         }
     }
@@ -132,69 +247,42 @@ export function UserList({ users, roles }: UserListProps) {
             <div className="border rounded-md">
                 <Table>
                     <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[50px]">
-                                <Checkbox
-                                    checked={selectedIds.length === users.length && users.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                />
-                            </TableHead>
-                            <TableHead>User</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Role</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {users.map((user) => (
-                            <TableRow key={user.id}>
-                                <TableCell>
-                                    <Checkbox
-                                        checked={selectedIds.includes(user.id)}
-                                        onCheckedChange={(checked) => handleSelectOne(!!checked, user.id)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-3">
-                                        <Avatar className="h-8 w-8">
-                                            <AvatarImage src={user.image || ""} />
-                                            <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
-                                        </Avatar>
-                                        <span className="font-medium">{user.name}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell>{user.email}</TableCell>
-                                <TableCell>
-                                    <Badge variant="outline">{user.role}</Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex justify-end items-center gap-2">
-                                        {canEdit && (
-                                            <UserRoleDialog
-                                                userId={user.id}
-                                                currentRole={user.role}
-                                                roles={roles}
-                                                trigger={
-                                                    <Button variant="ghost" size="sm">
-                                                        Edit Role
-                                                    </Button>
-                                                }
-                                            />
-                                        )}
-                                        {canDelete && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                onClick={() => handleDelete(user.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                </TableCell>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow key={headerGroup.id}>
+                                {headerGroup.headers.map((header) => (
+                                    <TableHead key={header.id}>
+                                        {header.isPlaceholder
+                                            ? null
+                                            : flexRender(
+                                                header.column.columnDef.header,
+                                                header.getContext()
+                                            )}
+                                    </TableHead>
+                                ))}
                             </TableRow>
                         ))}
+                    </TableHeader>
+                    <TableBody>
+                        {table.getRowModel().rows?.length ? (
+                            table.getRowModel().rows.map((row) => (
+                                <TableRow
+                                    key={row.id}
+                                    data-state={row.getIsSelected() && "selected"}
+                                >
+                                    {row.getVisibleCells().map((cell) => (
+                                        <TableCell key={cell.id}>
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                    No results.
+                                </TableCell>
+                            </TableRow>
+                        )}
                     </TableBody>
                 </Table>
             </div>

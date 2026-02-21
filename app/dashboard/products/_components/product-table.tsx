@@ -1,7 +1,6 @@
-
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
     Table,
     TableBody,
@@ -12,13 +11,13 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory } from "@/app/actions/product"
+import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory, getProducts } from "@/app/actions/product"
 import { getSetting, updateSetting, getRealtimeExchangeRate } from "@/app/actions/settings"
 import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
 import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
-import { Search, Trash2, Pencil, Package, Layers, Tag, Eye } from "lucide-react"
+import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import {
@@ -48,6 +47,17 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
 
 interface ProductTableProps {
     data: Product[]
@@ -61,12 +71,10 @@ function ImagePreview({ imageUrl, alt }: { imageUrl: string; alt: string }) {
         setImageError(true)
     }, [])
 
-    // Reset error state when imageUrl changes
     useEffect(() => {
         setImageError(false)
     }, [imageUrl])
 
-    // If image failed to load, show fallback
     if (imageError) {
         return (
             <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
@@ -94,15 +102,25 @@ function ImagePreview({ imageUrl, alt }: { imageUrl: string; alt: string }) {
     )
 }
 
-export function ProductTable({ data }: ProductTableProps) {
+export function ProductTable({ data: initialData }: ProductTableProps) {
+    const queryClient = useQueryClient()
+    const { data = initialData } = useQuery({
+        queryKey: ["products"],
+        queryFn: getProducts,
+        initialData,
+        staleTime: 60 * 1000,
+    })
+
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission('products', 'create')
     const canEdit = hasResourcePermission('products', 'edit')
     const canDelete = hasResourcePermission('products', 'delete')
 
-    const [searchTerm, setSearchTerm] = useState("")
+    const [globalFilter, setGlobalFilter] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
-    const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [sorting, setSorting] = useState<SortingState>([{ id: "materialNumber", desc: false }])
+    const [rowSelection, setRowSelection] = useState({})
+
     const [manualRate, setManualRate] = useState<number>(0)
     const [realtimeRate, setRealtimeRate] = useState<number>(0)
 
@@ -130,49 +148,232 @@ export function ProductTable({ data }: ProductTableProps) {
         }
     }
 
-    // Stats calculation
     const totalProducts = data.length
-    const categories = new Set(data.map(p => p.category)).size
-    const uniqueMaterials = new Set(data.map(p => p.materialNumber)).size
-
+    const categoriesCount = new Set(data.map(p => p.category)).size
     const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
 
-    const filteredData = data.filter(item => {
-        const matchesSearch = item.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.materialDescription && item.materialDescription.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.plant && item.plant.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.sloc && item.sloc.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.slocDescription && item.slocDescription.toLowerCase().includes(searchTerm.toLowerCase()))
+    const formatCurrency = (amount: number | string | null | undefined, currency: string = 'USD') => {
+        if (!amount) return "-"
+        const value = Number(amount)
+        if (isNaN(value)) return "-"
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
+    }
 
-        const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
+    const columns = useMemo<ColumnDef<Product>[]>(() => [
+        {
+            id: "select",
+            header: ({ table }) => (
+                <Checkbox
+                    checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+                    onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                    aria-label="Select all"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                    aria-label="Select row"
+                />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "plant",
+            header: "Plant",
+            cell: ({ row }) => <span className="font-mono text-xs">{row.original.plant || "-"}</span>,
+        },
+        {
+            id: "image",
+            header: "Image",
+            cell: ({ row }) => {
+                const item = row.original
+                return item.imageUrl ? (
+                    <ImagePreview imageUrl={item.imageUrl} alt={item.materialNumber} />
+                ) : (
+                    <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                        <Package className="h-5 w-5" />
+                    </div>
+                )
+            },
+        },
+        {
+            accessorKey: "category",
+            header: "Category",
+            cell: ({ row }) => (
+                <Badge variant="secondary" className="font-semibold">
+                    {row.original.category}
+                </Badge>
+            ),
+        },
+        {
+            accessorKey: "brand",
+            header: "Brand",
+            cell: ({ row }) => row.original.brand || "-",
+        },
+        {
+            accessorKey: "materialNumber",
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                    className="-ml-4 h-8"
+                >
+                    Material Number
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium text-blue-600">{row.original.materialNumber}</span>,
+        },
+        {
+            accessorKey: "oldMaterialNo",
+            header: "Old Material No.",
+            cell: ({ row }) => <span className="text-muted-foreground">{row.original.oldMaterialNo || "-"}</span>,
+        },
+        {
+            accessorKey: "materialDescription",
+            header: "Description",
+            cell: ({ row }) => <div className="max-w-xs truncate">{row.original.materialDescription}</div>,
+        },
+        {
+            accessorKey: "sloc",
+            header: "Sloc",
+            cell: ({ row }) => <span className="text-xs font-mono">{row.original.sloc || "-"}</span>,
+        },
+        {
+            accessorKey: "slocDescription",
+            header: "Sloc Description",
+            cell: ({ row }) => <div className="max-w-[150px] truncate text-xs">{row.original.slocDescription || "-"}</div>,
+        },
+        {
+            accessorKey: "costSap",
+            header: "Cost SAP (USD)",
+            cell: ({ row }) => formatCurrency(row.original.costSap),
+        },
+        {
+            id: "costIdr",
+            header: "Cost IDR",
+            cell: ({ row }) => {
+                const costSap = Number(row.original.costSap || 0)
+                const costIdr = costSap * manualRate
+                return formatCurrency(costIdr, 'IDR')
+            },
+        },
+        {
+            id: "actions",
+            header: () => <div className="text-right">Actions</div>,
+            cell: ({ row }) => {
+                const item = row.original
+                return (
+                    <div className="flex justify-end gap-2">
+                        <ProductDetail product={item} manualRate={manualRate} />
+                        {canEdit && (
+                            <ProductDialog
+                                product={item}
+                                trigger={
+                                    <Button variant="ghost" size="icon">
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                }
+                            />
+                        )}
 
-        return matchesSearch && matchesCategory
+                        {canDelete && (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Product</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Are you sure you want to delete {item.materialNumber}? This action cannot be undone.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                            Delete
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                    </div>
+                )
+            },
+        },
+    ], [canEdit, canDelete, manualRate])
+
+    const table = useReactTable({
+        data,
+        columns,
+        state: {
+            sorting,
+            globalFilter,
+            rowSelection,
+        },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setGlobalFilter,
+        onRowSelectionChange: setRowSelection,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        globalFilterFn: (row, columnId, filterValue) => {
+            const term = filterValue.toLowerCase()
+            const item = row.original
+            const matchesSearch = !!(
+                item.materialNumber.toLowerCase().includes(term) ||
+                (item.materialDescription && item.materialDescription.toLowerCase().includes(term)) ||
+                item.category.toLowerCase().includes(term) ||
+                (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(term)) ||
+                (item.plant && item.plant.toLowerCase().includes(term)) ||
+                (item.sloc && item.sloc.toLowerCase().includes(term)) ||
+                (item.slocDescription && item.slocDescription.toLowerCase().includes(term))
+            )
+
+            const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
+            return matchesSearch && matchesCategory
+        },
     })
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filteredData.map(p => p.id))
-        } else {
-            setSelectedIds([])
-        }
-    }
+    // Effect to trigger table filter when category changes
+    useEffect(() => {
+        table.setGlobalFilter(globalFilter)
+    }, [selectedCategory, globalFilter, table])
 
-    const handleSelectOne = (checked: boolean, productId: number) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, productId])
-        } else {
-            setSelectedIds(prev => prev.filter(id => id !== productId))
-        }
-    }
+    // Virtualization
+    const parentRef = useRef<HTMLDivElement>(null)
+    const { rows } = table.getRowModel()
+
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 53,
+        overscan: 20,
+    })
+
+    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
+        ? [
+            rowVirtualizer.getVirtualItems()[0].start,
+            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+        ]
+        : [0, 0]
+
+    const selectedIds = Object.keys(rowSelection).map(
+        (idx) => data[parseInt(idx)].id
+    )
 
     const handleBulkDelete = async () => {
         if (confirm("Are you sure you want to delete selected products?")) {
             const result = await bulkDeleteProducts(selectedIds)
             if (result.success) {
                 toast.success("Products deleted successfully")
-                setSelectedIds([])
+                setRowSelection({})
+                queryClient.invalidateQueries({ queryKey: ["products"] })
             } else {
                 toast.error(result.error)
             }
@@ -185,7 +386,8 @@ export function ProductTable({ data }: ProductTableProps) {
             const result = await bulkUpdateProductCategory(selectedIds, category)
             if (result.success) {
                 toast.success("Product categories updated successfully")
-                setSelectedIds([])
+                setRowSelection({})
+                queryClient.invalidateQueries({ queryKey: ["products"] })
             } else {
                 toast.error(result.error)
             }
@@ -197,19 +399,13 @@ export function ProductTable({ data }: ProductTableProps) {
             const result = await deleteProduct(id)
             if (result.success) {
                 toast.success("Product deleted")
+                queryClient.invalidateQueries({ queryKey: ["products"] })
             } else {
                 toast.error(result.error)
             }
         } catch (_error) {
             toast.error("Failed to delete product")
         }
-    }
-
-    const formatCurrency = (amount: number | string | null | undefined, currency: string = 'USD') => {
-        if (!amount) return "-"
-        const value = Number(amount)
-        if (isNaN(value)) return "-"
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
     }
 
     return (
@@ -243,7 +439,7 @@ export function ProductTable({ data }: ProductTableProps) {
                 </div>
                 <ScoreCard
                     title="Categories"
-                    value={categories}
+                    value={categoriesCount}
                     icon={Layers}
                     description="Unique product categories"
                     gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
@@ -259,8 +455,8 @@ export function ProductTable({ data }: ProductTableProps) {
                         <Input
                             placeholder="Search materials..."
                             className="pl-8"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            value={globalFilter ?? ""}
+                            onChange={(e) => setGlobalFilter(e.target.value)}
                         />
                     </div>
                     <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -285,118 +481,69 @@ export function ProductTable({ data }: ProductTableProps) {
                 </div>
             </div>
 
-            <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[50px]">
-                                <Checkbox
-                                    checked={selectedIds.length === filteredData.length && filteredData.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                />
-                            </TableHead>
-                            <TableHead>Plant</TableHead>
-                            <TableHead className="w-[60px]">Image</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Brand</TableHead>
-                            <TableHead>Material Number</TableHead>
-                            <TableHead>Old Material No.</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Sloc</TableHead>
-                            <TableHead>Sloc Description</TableHead>
-                            <TableHead>Cost SAP (USD)</TableHead>
-                            <TableHead>Cost IDR</TableHead>
-                            <TableHead className="w-[100px] text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredData.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={12} className="h-24 text-center">
-                                    No products found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filteredData.map((item) => {
-                                const costSap = Number(item.costSap || 0)
-                                const costIdr = costSap * manualRate
-
-                                return (
-                                    <TableRow key={item.id}>
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedIds.includes(item.id)}
-                                                onCheckedChange={(checked) => handleSelectOne(!!checked, item.id)}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">{item.plant || "-"}</TableCell>
-                                        <TableCell>
-                                            {item.imageUrl ? (
-                                                <ImagePreview imageUrl={item.imageUrl} alt={item.materialNumber} />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                                                    <Package className="h-5 w-5" />
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className="font-semibold">
-                                                {item.category}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>{item.brand || "-"}</TableCell>
-                                        <TableCell className="font-medium text-blue-600">{item.materialNumber}</TableCell>
-                                        <TableCell className="text-muted-foreground">{item.oldMaterialNo || "-"}</TableCell>
-                                        <TableCell className="max-w-xs truncate">{item.materialDescription}</TableCell>
-                                        <TableCell className="text-xs font-mono">{item.sloc || "-"}</TableCell>
-                                        <TableCell className="max-w-[150px] truncate text-xs">{item.slocDescription || "-"}</TableCell>
-                                        <TableCell>{formatCurrency(costSap)}</TableCell>
-                                        <TableCell>{formatCurrency(costIdr, 'IDR')}</TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <ProductDetail product={item} manualRate={manualRate} />
-                                                {canEdit && (
-                                                    <ProductDialog
-                                                        product={item}
-                                                        trigger={
-                                                            <Button variant="ghost" size="icon">
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                        }
-                                                    />
+            <div className="rounded-md border overflow-hidden">
+                <div
+                    ref={parentRef}
+                    className="overflow-auto h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
+                >
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder
+                                                ? null
+                                                : flexRender(
+                                                    header.column.columnDef.header,
+                                                    header.getContext()
                                                 )}
-
-                                                {canDelete && (
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Product</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Are you sure you want to delete {item.materialNumber}? This action cannot be undone.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                                    Delete
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                )}
-                                            </div>
-                                        </TableCell>
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                <>
+                                    <TableRow style={{ height: `${before}px` }} className="border-none">
+                                        <TableCell colSpan={columns.length} className="p-0" />
                                     </TableRow>
-                                )
-                            })
-                        )}
-                    </TableBody>
-                </Table>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const row = rows[virtualRow.index]
+                                        return (
+                                            <TableRow
+                                                key={row.id}
+                                                data-state={row.getIsSelected() && "selected"}
+                                            >
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(
+                                                            cell.column.columnDef.cell,
+                                                            cell.getContext()
+                                                        )}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })}
+                                    <TableRow
+                                        style={{ height: `${after}px` }}
+                                        className="border-none"
+                                    >
+                                        <TableCell colSpan={columns.length} className="p-0" />
+                                    </TableRow>
+                                </>
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                                        No entries found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
 
             {selectedIds.length > 0 && (canEdit || canDelete) && (
