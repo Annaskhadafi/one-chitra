@@ -163,7 +163,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                     .terms-label { font-weight: bold; margin-bottom: 6px; }
                     .terms-content { font-size: 9.5pt; color: #333; white-space: pre-wrap; line-height: 1.4; }
                     
-                    .bank-info { margin-top: 30px; padding-top: 15px; border-top: 1px solid #000; boarder-bottom: 1px solid #000; }
+                    .bank-info { margin-top: 30px; padding-top: 15px; border-top: 1px solid #000; border-bottom: 1px solid #000; }
                     .bank-line { border-bottom: 1px solid #000; padding-bottom: 10px; }
                     
                     .no-print { display: none !important; }

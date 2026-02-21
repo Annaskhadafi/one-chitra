@@ -265,7 +265,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 router.push("/dashboard/quotations")
             } else {
-                toast.error((result as { error?: string }).error || "Something went wrong")
+                toast.error(result.error || "Something went wrong")
             }
         } catch {
             toast.error("Failed to save quotation")
