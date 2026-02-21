@@ -436,7 +436,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 setRowSelection({})
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error(result.error)
+                toast.error((result as any).error || "Failed to delete sales orders")
             }
         }
     }
@@ -451,7 +451,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 setRowSelection({})
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error(result.error)
+                toast.error((result as any).error || "Failed to update statuses")
             }
         }
     }
@@ -496,7 +496,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             toast.success("Status updated")
             queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
         } else {
-            toast.error(result.error)
+            toast.error((result as any).error || "Failed to update status")
         }
     }
 
@@ -507,7 +507,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 toast.success("Sales order deleted")
                 queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
             } else {
-                toast.error(result.error)
+                toast.error((result as any).error || "Failed to delete sales order")
             }
         } catch {
             toast.error("Failed to delete sales order")
@@ -619,7 +619,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                     className="overflow-auto h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                        <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (

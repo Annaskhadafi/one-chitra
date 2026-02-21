@@ -391,7 +391,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                     className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                        <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id} className="bg-muted/50">
                                     {headerGroup.headers.map((header) => (

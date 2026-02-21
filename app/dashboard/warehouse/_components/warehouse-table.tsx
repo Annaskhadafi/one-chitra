@@ -278,7 +278,7 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
                     className="h-[500px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                        <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (

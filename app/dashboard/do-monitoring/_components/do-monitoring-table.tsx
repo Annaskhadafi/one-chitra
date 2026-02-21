@@ -402,7 +402,7 @@ export function DoMonitoringTable({ data: initialData }: { data: any[] }) {
                     className="overflow-auto h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                        <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (

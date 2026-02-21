@@ -4,6 +4,7 @@ import { salesOrders, salesOrderItems } from "./sales-orders";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
 import { user } from "./auth";
+import { fleetTrips } from "./fleet-trips";
 
 export const deliveries = pgTable("deliveries", {
     id: serial("id").primaryKey(),
@@ -70,6 +71,10 @@ export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     createdByUser: one(user, {
         fields: [deliveries.createdBy],
         references: [user.id],
+    }),
+    fleetTrip: one(fleetTrips, {
+        fields: [deliveries.fleetTripId],
+        references: [fleetTrips.id],
     }),
     items: many(deliveryItems),
 }));
