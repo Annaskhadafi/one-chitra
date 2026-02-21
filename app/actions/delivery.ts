@@ -71,12 +71,14 @@ export async function getSalesOrdersForDelivery() {
         orderBy: [desc(salesOrders.createdAt)],
     })
 
-    // For each SO, calculate already-delivered quantities
+    // For each SO, calculate already-delivered quantities (excluding cancelled deliveries)
     const allDeliveryItems = await db.select({
         salesOrderItemId: deliveryItems.salesOrderItemId,
         totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
     })
         .from(deliveryItems)
+        .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
+        .where(sql`${deliveries.status} != 'cancelled'`)
         .groupBy(deliveryItems.salesOrderItemId)
 
     const deliveredMap = new Map<number, number>()
