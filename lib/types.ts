@@ -28,6 +28,14 @@ export type NewSalesOrder = InferInsertModel<typeof salesOrders>
 export type SalesOrderItem = InferSelectModel<typeof salesOrderItems>
 export type NewSalesOrderItem = InferInsertModel<typeof salesOrderItems>
 
+export type SalesOrderWithRelations = SalesOrder & {
+    customer: Customer
+    createdByUser: { id: string; name: string; email: string } | null
+    items: (SalesOrderItem & {
+        product: Product | null
+    })[]
+}
+
 export type Delivery = InferSelectModel<typeof deliveries>
 export type NewDelivery = InferInsertModel<typeof deliveries>
 export type DeliveryItem = InferSelectModel<typeof deliveryItems>

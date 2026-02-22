@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { permissions, rolePermissions, roles } from "@/db/schema"
+import { rolePermissions, roles } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { checkPermission } from "@/lib/rbac"
@@ -108,22 +108,4 @@ export async function deleteRole(roleId: number) {
         console.error("Failed to delete role:", error)
         return { success: false, error: "Failed to delete role" }
     }
-}
-
-export async function getPermissionsByRoleName(roleName: string) {
-    const role = await db.query.roles.findFirst({
-        where: (roles, { ilike }) => ilike(roles.name, roleName),
-    })
-
-    if (!role) return []
-
-    const perms = await db.select({
-        resource: permissions.resource,
-        action: permissions.action,
-    })
-        .from(rolePermissions)
-        .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-        .where(eq(rolePermissions.roleId, role.id))
-
-    return perms.map(p => `${p.resource}:${p.action}`)
 }

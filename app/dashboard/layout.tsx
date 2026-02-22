@@ -11,7 +11,7 @@ import { SiteHeader } from "@/components/site-header"
 import "@/app/dashboard/theme.css"
 
 import { auth } from "@/lib/auth"
-import { getPermissionsByRoleName } from "@/app/actions/roles"
+import { getPermissionsByRoleName } from "@/lib/rbac"
 import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
 

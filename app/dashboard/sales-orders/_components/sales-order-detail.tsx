@@ -23,35 +23,8 @@ import {
 import { format } from "date-fns"
 import Link from "next/link"
 import { Pencil, Printer, Download, MapPin, Mail, Phone, Calendar, FileText } from "lucide-react"
-import type { Customer, Product } from "@/lib/types"
+import type { SalesOrderWithRelations } from "@/lib/types"
 
-interface SalesOrderWithRelations {
-    id: number
-    invoiceNumber: string | null
-    customerPo: string | null
-    customerId: number
-    salesDate: Date
-    poReceive: Date | null
-    categoryPo: string | null
-    categoryProduct: string | null
-    status: string
-    discount: string
-    shipping: string
-    createdAt: Date
-    customer: Customer
-    createdByUser: { id: string; name: string; email: string } | null
-    items: {
-        id: number
-        productId: number
-        quantity: number
-        unitPrice: string
-        discount: string
-        tax: string
-        product: Product
-    }[]
-    termsConditions?: string | null
-    notes?: string | null
-}
 
 interface SalesOrderDetailProps {
     open: boolean

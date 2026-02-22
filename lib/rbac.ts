@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { db } from "@/db"
-import { getPermissionsByRoleName } from "@/app/actions/roles"
+import { roles, permissions, rolePermissions } from "@/db/schema"
+import { eq } from "drizzle-orm"
 
 export async function checkPermission(resource: string, action: 'view' | 'create' | 'edit' | 'delete') {
     const session = await auth.api.getSession({
@@ -57,4 +58,22 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
     }
 
     return session
+}
+
+export async function getPermissionsByRoleName(roleName: string) {
+    const role = await db.query.roles.findFirst({
+        where: (roles, { ilike }) => ilike(roles.name, roleName),
+    })
+
+    if (!role) return []
+
+    const perms = await db.select({
+        resource: permissions.resource,
+        action: permissions.action,
+    })
+        .from(rolePermissions)
+        .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+        .where(eq(rolePermissions.roleId, role.id))
+
+    return perms.map(p => `${p.resource}:${p.action}`)
 }

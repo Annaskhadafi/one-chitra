@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { deleteSalesOrder, bulkDeleteSalesOrders, bulkUpdateSalesOrderStatus, getSalesOrders } from "@/app/actions/sales-order"
 import {
     Table,
@@ -37,7 +37,7 @@ import {
 import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
-import type { Customer, Product } from "@/lib/types"
+import type { SalesOrderWithRelations } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -54,34 +54,6 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
-interface SalesOrderWithRelations {
-    id: number
-    invoiceNumber: string | null
-    customerPo: string | null
-    poDocument: string | null
-    customerId: number
-    salesDate: Date
-    poReceive: Date | null
-    categoryPo: string | null
-    categoryProduct: string | null
-    status: string
-    discount: string
-    shipping: string
-    createdAt: Date
-    customer: Customer
-    createdByUser: { id: string; name: string; email: string } | null
-    termsConditions: string | null
-    notes: string | null
-    items: {
-        id: number
-        productId: number
-        quantity: number
-        unitPrice: string
-        discount: string
-        tax: string
-        product: Product
-    }[]
-}
 
 interface SalesOrderTableProps {
     data: SalesOrderWithRelations[]
@@ -158,6 +130,30 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
     }, [data])
+
+    const handleUpdateStatus = useCallback(async (id: number, status: string) => {
+        const result = await bulkUpdateSalesOrderStatus([id], status)
+        if (result.success) {
+            toast.success("Status updated")
+            queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
+        } else {
+            toast.error(('error' in result ? String(result.error) : "Failed to update status"))
+        }
+    }, [queryClient])
+
+    const handleDelete = useCallback(async (id: number) => {
+        try {
+            const result = await deleteSalesOrder(id)
+            if (result.success) {
+                toast.success("Sales order deleted")
+                queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
+            } else {
+                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
+            }
+        } catch {
+            toast.error("Failed to delete sales order")
+        }
+    }, [queryClient])
 
     const columns = useMemo<ColumnDef<SalesOrderWithRelations>[]>(() => [
         {
@@ -489,29 +485,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         document.body.removeChild(link)
     }
 
-    const handleUpdateStatus = async (id: number, status: string) => {
-        const result = await bulkUpdateSalesOrderStatus([id], status)
-        if (result.success) {
-            toast.success("Status updated")
-            queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-        } else {
-            toast.error(('error' in result ? String(result.error) : "Failed to update status"))
-        }
-    }
 
-    const handleDelete = async (id: number) => {
-        try {
-            const result = await deleteSalesOrder(id)
-            if (result.success) {
-                toast.success("Sales order deleted")
-                queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-            } else {
-                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
-            }
-        } catch {
-            toast.error("Failed to delete sales order")
-        }
-    }
 
     // Effect to trigger search when status filter changes
     useEffect(() => {
