@@ -5,7 +5,7 @@ import { useState, useMemo, useRef } from "react"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { format } from "date-fns"
+import { format, startOfMonth, endOfMonth, eachMonthOfInterval, getYear, getMonth, isSameMonth, isSameYear } from "date-fns"
 import { cn } from "@/lib/utils"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
@@ -54,9 +54,9 @@ import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizon
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
 
 import {
     useReactTable,
@@ -155,11 +155,26 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const [poPreviewDelivery, setPoPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
 
+    // Supply Chain Filters
+    const [selectedYear, setSelectedYear] = useState<string>("all")
+    const [selectedMonth, setSelectedMonth] = useState<string>("all")
+    const [selectedCategory, setSelectedCategory] = useState<string>("all")
+
     const { data = initialData, isLoading, refetch } = useQuery({
         queryKey: ["deliveries"],
         queryFn: () => getDeliveries(),
         initialData: initialData,
     })
+
+    const filteredData = useMemo(() => {
+        return data.filter(d => {
+            const date = new Date(d.scheduledDate)
+            const yearMatch = selectedYear === "all" || date.getFullYear().toString() === selectedYear
+            const monthMatch = selectedMonth === "all" || (date.getMonth() + 1).toString() === selectedMonth
+            const categoryMatch = selectedCategory === "all" || d.items.some(item => item.product?.category === selectedCategory)
+            return yearMatch && monthMatch && categoryMatch
+        })
+    }, [data, selectedYear, selectedMonth, selectedCategory])
 
     const handleUpdateStatus = async (id: number, status: string) => {
         const result = await bulkUpdateDeliveryStatus([id], status)
@@ -474,7 +489,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     ], [canEdit, canDelete, deleting])
 
     const table = useReactTable({
-        data,
+        data: filteredData,
         columns,
         state: {
             sorting,
@@ -607,23 +622,87 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         )
     }
 
+    const totalVolume = useMemo(() => {
+        return filteredData.reduce((acc, d) => acc + d.items.reduce((sum, item) => sum + item.deliveredQuantity, 0), 0)
+    }, [filteredData])
+
+    const onTimeDeliveries = useMemo(() => {
+        return filteredData.filter(d => {
+            if (!d.deliveryDate) return false
+            const scheduled = new Date(d.scheduledDate)
+            const actual = new Date(d.deliveryDate)
+            return actual <= scheduled
+        }).length
+    }, [filteredData])
+
+    const onTimeRate = filteredData.length > 0 ? Math.round((onTimeDeliveries / filteredData.length) * 100) : 0
+
+    const monthlyTrends = useMemo(() => {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const stats = months.map(m => ({ name: m, volume: 0, count: 0 }))
+
+        filteredData.forEach(d => {
+            const date = new Date(d.scheduledDate)
+            if (selectedYear === "all" || date.getFullYear().toString() === selectedYear) {
+                const monthIdx = date.getMonth()
+                stats[monthIdx].count += 1
+                stats[monthIdx].volume += d.items.reduce((sum, item) => sum + item.deliveredQuantity, 0)
+            }
+        })
+        return stats
+    }, [filteredData, selectedYear])
+
+    const categoryMix = useMemo(() => {
+        const mix: Record<string, number> = {}
+        filteredData.forEach(d => {
+            d.items.forEach(item => {
+                const cat = item.product?.category || "Unknown"
+                mix[cat] = (mix[cat] || 0) + item.deliveredQuantity
+            })
+        })
+        return Object.entries(mix).map(([name, value]) => ({ name, value }))
+    }, [filteredData])
+
+    const years = useMemo(() => {
+        const y = new Set<string>()
+        data.forEach(d => y.add(new Date(d.scheduledDate).getFullYear().toString()))
+        return Array.from(y).sort().reverse()
+    }, [data])
+
+    const categories = useMemo(() => {
+        const c = new Set<string>()
+        data.forEach(d => d.items.forEach(item => {
+            if (item.product?.category) c.add(item.product.category)
+        }))
+        return Array.from(c).sort()
+    }, [data])
+
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
                 <ScoreCard
-                    title="Total Deliveries"
-                    value={totalDeliveries}
+                    title="Total Volume"
+                    value={totalVolume.toLocaleString()}
                     icon={Truck}
-                    description="All delivery records"
+                    description="Total items delivered"
                     gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
                     iconColor="text-blue-600 dark:text-blue-400"
                     textColor="text-blue-900 dark:text-blue-100"
                 />
                 <ScoreCard
+                    title="On-Time Rate"
+                    value={`${onTimeRate}%`}
+                    icon={CalendarClock}
+                    description="Deliveries on or before schedule"
+                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
+                    iconColor="text-emerald-600 dark:text-emerald-400"
+                    textColor="text-emerald-900 dark:text-emerald-100"
+                />
+                <ScoreCard
                     title="Scheduled"
                     value={scheduled}
                     icon={CalendarClock}
-                    description="Upcoming deliveries"
+                    description="Pending scheduled"
                     gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
                     iconColor="text-amber-600 dark:text-amber-400"
                     textColor="text-amber-900 dark:text-amber-100"
@@ -639,35 +718,52 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                 />
             </div>
 
-            {data.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Delivery Status Overview</CardTitle>
-                        <CardDescription>{data.length} total deliveries</CardDescription>
+                        <CardTitle className="text-base">Monthly Volume Trend</CardTitle>
+                        <CardDescription>Item count per month ({selectedYear === "all" ? "All Years" : selectedYear})</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ResponsiveContainer width="100%" height={180}>
-                            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                                <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--card))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "8px",
-                                        color: "hsl(var(--foreground))",
-                                    }}
-                                />
-                                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <LineChart data={monthlyTrends}>
+                                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                                <YAxis tick={{ fontSize: 12 }} />
+                                <Tooltip />
+                                <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                            </LineChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
-            )}
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Product Category Mix</CardTitle>
+                        <CardDescription>Item distribution by category</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <PieChart>
+                                <Pie
+                                    data={categoryMix}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {categoryMix.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
@@ -684,23 +780,59 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                         <Download className="mr-2 h-4 w-4" />
                         Export
                     </Button>
-                    <Select
-                        value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
-                        onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
-                    >
-                        <SelectTrigger className="w-[160px]">
-                            <SelectValue placeholder="All Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            {Object.entries(statusLabels).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="icon" onClick={() => refetch()}>
-                        <RefreshCcw className="h-4 w-4" />
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Select value={selectedYear} onValueChange={setSelectedYear}>
+                            <SelectTrigger className="w-[100px]">
+                                <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Years</SelectItem>
+                                {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                            <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="Month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Months</SelectItem>
+                                {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                                    <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="Product Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Types</SelectItem>
+                                {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+
+                        <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
+
+                        <Select
+                            value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
+                            onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
+                        >
+                            <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                {Object.entries(statusLabels).map(([value, label]) => (
+                                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="icon" onClick={() => refetch()}>
+                            <RefreshCcw className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             </div>
 
