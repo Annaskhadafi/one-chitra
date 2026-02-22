@@ -73,7 +73,7 @@ export default async function DashboardLayout({
         } />
         <SidebarInset>
           <SiteHeader />
-          <div className="flex flex-1 flex-col">{children}</div>
+          <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </PermissionsProvider>
