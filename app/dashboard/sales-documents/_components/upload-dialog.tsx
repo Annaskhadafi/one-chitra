@@ -35,7 +35,11 @@ const formSchema = z.object({
     file: z.any().refine((file) => file instanceof File, "File is required"),
 })
 
-export function UploadDialog() {
+interface UploadDialogProps {
+    onSuccess?: () => void
+}
+
+export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
     const [open, setOpen] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
 
@@ -70,6 +74,7 @@ export function UploadDialog() {
                 toast.success("Document uploaded successfully")
                 setOpen(false)
                 form.reset()
+                onSuccess?.()
             } else {
                 throw new Error(docResult.error || "Failed to save document info")
             }

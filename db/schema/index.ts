@@ -38,6 +38,7 @@ export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
+export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum } from "./email";
 
 // Core Auth Table Relations
 import { user } from "./auth";

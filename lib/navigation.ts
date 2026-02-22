@@ -17,6 +17,7 @@ import {
     UsersRound,
     BarChart3,
     LayoutGrid,
+    Mail,
     type LucideIcon
 } from "lucide-react"
 
@@ -231,6 +232,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/admin/roles",
                 icon: Shield,
                 resource: "roles",
+            },
+            {
+                title: "Email Settings",
+                url: "/dashboard/settings/email",
+                icon: Mail,
+                resource: "email-settings",
             },
         ],
     },

@@ -1,8 +1,9 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins";
+import { admin, magicLink } from "better-auth/plugins";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
+import { sendMagicLinkEmail, sendTemplatedEmail } from "@/lib/email";
 
 // Ensure URL has protocol prefix
 function normalizeUrl(url?: string): string {
@@ -26,10 +27,27 @@ export const auth = betterAuth({
     }),
     emailAndPassword: {
         enabled: true,
+        sendResetPassword: async ({ user: u, url }) => {
+            await sendTemplatedEmail(u.email, "password_reset", {
+                resetUrl: url,
+                userName: u.name ?? u.email,
+                appName: "One Chitra",
+                expiresIn: "1 hour",
+            });
+        },
     },
     plugins: [
         admin({
             defaultRole: "staff",
+        }),
+        magicLink({
+            sendMagicLink: async ({ email, url }) => {
+                // Try to get user name from DB for personalisation
+                const dbUser = await db.query.user.findFirst({
+                    where: (u, { eq }) => eq(u.email, email),
+                });
+                await sendMagicLinkEmail(email, url, dbUser?.name ?? undefined);
+            },
         }),
     ],
     trustedOrigins: [
