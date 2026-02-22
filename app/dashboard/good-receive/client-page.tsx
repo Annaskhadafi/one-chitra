@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { Loader2, Search, Warehouse, Package, ArrowRight, ChevronUp, ChevronDown } from "lucide-react"
+import { Loader2, Search, Warehouse, Package, ArrowRight, ChevronUp, ChevronDown, CalendarDays, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,8 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import {
     Card,
     CardContent,
@@ -30,6 +32,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 import { fetchGoodReceiveFromSAP, processGoodReceive, type SAPGoodReceiveItem } from "@/app/actions/good-receive"
@@ -152,53 +160,61 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         {
             accessorKey: "ponumb",
             header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold uppercase tracking-wider">
                     PO Number
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-3 w-3" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-3 w-3" /> : null}
                 </Button>
             ),
+            cell: ({ row }) => <span className="font-mono text-xs">{row.getValue("ponumb")}</span>,
         },
         {
             accessorKey: "podate",
-            header: "Date",
+            header: () => <span className="text-xs font-semibold uppercase tracking-wider">Date</span>,
+            cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.getValue("podate")}</span>,
         },
         {
             accessorKey: "vendor",
-            header: "Vendor",
+            header: () => <span className="text-xs font-semibold uppercase tracking-wider">Vendor</span>,
             cell: ({ row }) => (
-                <div className="max-w-[150px] truncate" title={row.getValue("vendor")}>
+                <div className="max-w-[150px] truncate text-sm" title={row.getValue("vendor")}>
                     {row.getValue("vendor")}
                 </div>
             ),
         },
         {
             accessorKey: "materialnumb",
-            header: "Material No.",
-            cell: ({ row }) => <span className="font-mono">{row.getValue("materialnumb") || "-"}</span>,
+            header: () => <span className="text-xs font-semibold uppercase tracking-wider">Material No.</span>,
+            cell: ({ row }) => {
+                const val = row.getValue("materialnumb") as string | undefined
+                if (!val || val === "-") {
+                    return <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">No Material</Badge>
+                }
+                return <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{val}</span>
+            },
         },
         {
             accessorKey: "material",
-            header: "Description",
+            header: () => <span className="text-xs font-semibold uppercase tracking-wider">Description</span>,
             cell: ({ row }) => (
-                <div className="max-w-[200px] truncate" title={row.getValue("material")}>
+                <div className="max-w-[200px] truncate text-sm" title={row.getValue("material")}>
                     {row.getValue("material")}
                 </div>
             ),
         },
         {
             accessorKey: "poqty",
-            header: () => <div className="text-right">PO Qty</div>,
-            cell: ({ row }) => <div className="text-right">{row.getValue("poqty")}</div>,
+            header: () => <div className="text-right text-xs font-semibold uppercase tracking-wider">PO Qty</div>,
+            cell: ({ row }) => <div className="text-right text-sm tabular-nums">{row.getValue("poqty")}</div>,
         },
         {
             accessorKey: "toinvo",
-            header: () => <div className="text-right">To Inv</div>,
-            cell: ({ row }) => <div className="text-right">{row.getValue("toinvo")}</div>,
+            header: () => <div className="text-right text-xs font-semibold uppercase tracking-wider">To Inv</div>,
+            cell: ({ row }) => <div className="text-right text-sm tabular-nums text-muted-foreground">{row.getValue("toinvo")}</div>,
         },
         {
             accessorKey: "togr",
-            header: () => <div className="text-right">To GR</div>,
-            cell: ({ row }) => <div className="text-right font-medium text-primary">{row.getValue("togr")}</div>,
+            header: () => <div className="text-right text-xs font-semibold uppercase tracking-wider">To GR</div>,
+            cell: ({ row }) => <div className="text-right text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">{row.getValue("togr")}</div>,
         },
     ], [])
 
@@ -239,165 +255,269 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
     })
 
     const selectedCount = Object.keys(rowSelection).length
+    const validItemsCount = rawData.filter(itemHasMaterial).length
 
     return (
-        <div className="flex flex-col gap-6 p-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">SAP Good Receive</h1>
-                    <p className="text-muted-foreground text-sm">Synchronize incoming goods from SAP to local inventory.</p>
+        <TooltipProvider>
+            <div className="flex flex-col gap-6 p-6">
+
+                {/* Page Header */}
+                <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-3">
+                            <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2">
+                                <Warehouse className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">SAP Good Receive</h1>
+                                <p className="text-muted-foreground text-sm">Synchronize incoming goods from SAP to local inventory.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <Badge variant="outline" className="flex items-center gap-1.5 text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        SAP Connected
+                    </Badge>
                 </div>
-            </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Fetch Data from SAP</CardTitle>
-                    <CardDescription>Select a date range to retrieve Purchase Order data.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
-                    <div className="grid gap-2 w-full sm:w-auto">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
-                        <Input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="w-full sm:w-[200px]"
-                        />
-                    </div>
-                    <div className="grid gap-2 w-full sm:w-auto">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
-                        <Input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="w-full sm:w-[200px]"
-                        />
-                    </div>
-                    <Button onClick={handleFetch} disabled={isFetching} className="w-full sm:w-auto">
-                        {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                        Fetch SAP Data
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {rawData.length > 0 && (
-                <Card>
-                    <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                        <div>
-                            <CardTitle className="text-lg">PO Items List</CardTitle>
-                            <CardDescription>Found {rawData.length} items from SAP.</CardDescription>
+                {/* Fetch Card */}
+                <Card className="shadow-sm border bg-gradient-to-br from-indigo-50/50 to-background dark:from-indigo-950/20 dark:to-background">
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-indigo-500" />
+                            <CardTitle className="text-base">Fetch Data from SAP</CardTitle>
                         </div>
-                        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                            <div className="relative w-full sm:w-64">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Filter items..."
-                                    value={globalFilter}
-                                    onChange={(e) => setGlobalFilter(e.target.value)}
-                                    className="pl-9"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2 w-full sm:w-auto border rounded-lg p-1 bg-muted/30">
-                                <Select value={targetWarehouseId} onValueChange={setTargetWarehouseId}>
-                                    <SelectTrigger className="w-full sm:w-[200px] border-none bg-transparent shadow-none focus:ring-0">
-                                        <Warehouse className="mr-2 h-4 w-4 text-muted-foreground" />
-                                        <SelectValue placeholder="Target Warehouse" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {warehouses.map((w) => (
-                                            <SelectItem key={w.id} value={w.id.toString()}>
-                                                {w.sloc} - {w.description}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Button
-                                    onClick={handleProcess}
-                                    disabled={isProcessing || selectedCount === 0 || !targetWarehouseId}
-                                    className="whitespace-nowrap"
-                                >
-                                    {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Package className="mr-2 h-4 w-4" />}
-                                    Add to Stock ({selectedCount})
-                                </Button>
-                            </div>
-                        </div>
+                        <CardDescription className="text-xs">Select a date range to retrieve Purchase Order data from the SAP system.</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <div className="rounded-md border bg-card relative">
-                            <div
-                                ref={parentRef}
-                                className="h-[500px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
-                            >
-                                <Table>
-                                    <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                                        {table.getHeaderGroups().map((headerGroup) => (
-                                            <TableRow key={headerGroup.id} className="bg-muted/50">
-                                                {headerGroup.headers.map((header) => (
-                                                    <TableHead key={header.id}>
-                                                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                    </TableHead>
-                                                ))}
-                                            </TableRow>
-                                        ))}
-                                    </TableHeader>
-                                    <TableBody>
-                                        {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                            <>
-                                                <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
-                                                    <TableCell colSpan={columns.length} className="p-0" />
-                                                </TableRow>
-                                                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                    const row = rows[virtualRow.index]
-                                                    const isSelectable = itemHasMaterial(row.original)
-                                                    return (
-                                                        <TableRow
-                                                            key={row.id}
-                                                            data-state={row.getIsSelected() && "selected"}
-                                                            className={cn(
-                                                                "group transition-colors",
-                                                                !isSelectable && "opacity-50 bg-muted/30 grayscale-[0.5]"
-                                                            )}
-                                                        >
-                                                            {row.getVisibleCells().map((cell) => (
-                                                                <TableCell key={cell.id}>
-                                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                                </TableCell>
-                                                            ))}
-                                                        </TableRow>
-                                                    )
-                                                })}
-                                                <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
-                                                    <TableCell colSpan={columns.length} className="p-0" />
-                                                </TableRow>
-                                            </>
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
-                                                    {globalFilter ? "No matching items found." : "No data fetched yet."}
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
+                    <Separator />
+                    <CardContent className="pt-5">
+                        <div className="flex flex-col sm:flex-row gap-4 items-end">
+                            <div className="grid gap-1.5 w-full sm:w-auto">
+                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
+                                <div className="relative">
+                                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                    <Input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="pl-9 w-full sm:w-[200px] focus-visible:ring-indigo-500"
+                                    />
+                                </div>
                             </div>
-                        </div>
-                        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                            <div>Selected {selectedCount} of {table.getFilteredRowModel().rows.filter(r => itemHasMaterial(r.original)).length} valid items</div>
-                            <div>Total valid items: {rawData.filter(itemHasMaterial).length}</div>
+                            <div className="grid gap-1.5 w-full sm:w-auto">
+                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
+                                <div className="relative">
+                                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                    <Input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="pl-9 w-full sm:w-[200px] focus-visible:ring-indigo-500"
+                                    />
+                                </div>
+                            </div>
+                            <Button
+                                onClick={handleFetch}
+                                disabled={isFetching}
+                                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                            >
+                                {isFetching
+                                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Fetching...</>
+                                    : <><RefreshCw className="mr-2 h-4 w-4" />Fetch SAP Data</>
+                                }
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
-            )}
 
-            {!rawData.length && !isFetching && startDate && endDate && (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-xl bg-muted/20">
-                    <div className="p-4 bg-background rounded-full shadow-sm mb-4">
-                        <ArrowRight className="h-8 w-8 text-muted-foreground" />
+                {/* Stats Strip — shown after successful fetch */}
+                {rawData.length > 0 && (
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+                            <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/40 p-2">
+                                <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-muted-foreground font-medium">Total Items</p>
+                                <p className="text-xl font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">{rawData.length}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+                            <div className="rounded-lg bg-emerald-100 dark:bg-emerald-950/40 p-2">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-muted-foreground font-medium">Valid Items</p>
+                                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{validItemsCount}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+                            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/40 p-2">
+                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-muted-foreground font-medium">Selected</p>
+                                <p className="text-xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">{selectedCount}</p>
+                            </div>
+                        </div>
                     </div>
-                    <h3 className="text-lg font-semibold">No data fetched</h3>
-                    <p className="text-muted-foreground max-w-xs text-center">Click &quot;Fetch SAP Data&quot; to retrieve Purchase Order items for the selected range.</p>
-                </div>
-            )}
-        </div>
+                )}
+
+                {/* PO Items Table */}
+                {rawData.length > 0 && (
+                    <Card className="shadow-sm border">
+                        <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div>
+                                <CardTitle className="text-base">PO Items List</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Found <span className="font-semibold text-foreground">{rawData.length}</span> items from SAP.
+                                    Select valid items to add to stock.
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                                <div className="relative w-full sm:w-64">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Filter by PO, vendor, material..."
+                                        value={globalFilter}
+                                        onChange={(e) => setGlobalFilter(e.target.value)}
+                                        className="pl-9 focus-visible:ring-indigo-500"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto rounded-xl border bg-muted/30 p-1.5">
+                                    <Select value={targetWarehouseId} onValueChange={setTargetWarehouseId}>
+                                        <SelectTrigger className="w-full sm:w-[200px] border-none bg-transparent shadow-none focus:ring-0 text-sm">
+                                            <Warehouse className="mr-2 h-4 w-4 text-muted-foreground shrink-0" />
+                                            <SelectValue placeholder="Target Warehouse" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {warehouses.map((w) => (
+                                                <SelectItem key={w.id} value={w.id.toString()}>
+                                                    {w.sloc} - {w.description}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span>
+                                                <Button
+                                                    onClick={handleProcess}
+                                                    disabled={isProcessing || selectedCount === 0 || !targetWarehouseId}
+                                                    className="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                                                >
+                                                    {isProcessing
+                                                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                                                        : <><Package className="mr-2 h-4 w-4" />Add to Stock ({selectedCount})</>
+                                                    }
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" className="max-w-[200px] text-center">
+                                            {!targetWarehouseId
+                                                ? "Select a target warehouse first"
+                                                : selectedCount === 0
+                                                    ? "Select items from the table to process"
+                                                    : `Process ${selectedCount} selected item(s) into stock`
+                                            }
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="pt-0 px-0 pb-0">
+                            <div className="relative">
+                                <div
+                                    ref={parentRef}
+                                    className="h-[500px] overflow-auto relative"
+                                >
+                                    <Table>
+                                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                                            {table.getHeaderGroups().map((headerGroup) => (
+                                                <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50">
+                                                    {headerGroup.headers.map((header) => (
+                                                        <TableHead key={header.id}>
+                                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                        </TableHead>
+                                                    ))}
+                                                </TableRow>
+                                            ))}
+                                        </TableHeader>
+                                        <TableBody>
+                                            {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                                <>
+                                                    <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                        <TableCell colSpan={columns.length} className="p-0" />
+                                                    </TableRow>
+                                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                        const row = rows[virtualRow.index]
+                                                        const isSelectable = itemHasMaterial(row.original)
+                                                        return (
+                                                            <TableRow
+                                                                key={row.id}
+                                                                data-state={row.getIsSelected() && "selected"}
+                                                                className={cn(
+                                                                    "group transition-colors hover:bg-muted/30",
+                                                                    !isSelectable && "opacity-50 bg-muted/20"
+                                                                )}
+                                                            >
+                                                                {row.getVisibleCells().map((cell) => (
+                                                                    <TableCell key={cell.id}>
+                                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                                    </TableCell>
+                                                                ))}
+                                                            </TableRow>
+                                                        )
+                                                    })}
+                                                    <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                        <TableCell colSpan={columns.length} className="p-0" />
+                                                    </TableRow>
+                                                </>
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                                                        {globalFilter ? "No matching items found." : "No data fetched yet."}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                            <Separator />
+                            <div className="px-4 py-3 flex items-center justify-between text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                    Selected
+                                    <Badge variant="secondary" className="tabular-nums font-semibold">{selectedCount}</Badge>
+                                    of
+                                    <span className="font-medium text-foreground">{table.getFilteredRowModel().rows.filter(r => itemHasMaterial(r.original)).length}</span>
+                                    valid items
+                                </div>
+                                <div className="text-xs">
+                                    Total valid items: <span className="font-semibold text-foreground">{validItemsCount}</span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Empty State — dates set but no fetch yet */}
+                {!rawData.length && !isFetching && startDate && endDate && (
+                    <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl bg-indigo-50/30 dark:bg-indigo-950/10">
+                        <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-5 mb-4 shadow-sm">
+                            <ArrowRight className="h-8 w-8 text-indigo-500" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-foreground">Ready to Fetch</h3>
+                        <p className="text-muted-foreground text-sm max-w-xs text-center mt-1">
+                            Click <span className="font-medium text-indigo-600 dark:text-indigo-400">&quot;Fetch SAP Data&quot;</span> to retrieve Purchase Order items for the selected date range.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </TooltipProvider>
     )
 }

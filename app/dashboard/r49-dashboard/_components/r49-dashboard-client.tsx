@@ -154,6 +154,21 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                 </div>
             </div>
 
+            {/* Analytics Charts Grid */}
+            <div className="pb-10">
+                <R49Charts
+                    data={data?.charts || {
+                        topCustomers: [],
+                        monthlyTrend: [],
+                        materialBreakdown: [],
+                        avgPriceTrend: [],
+                        revByOrg: [],
+                        qtyVsRev: []
+                    }}
+                    years={initialFilterOptions.years}
+                />
+            </div>
+
             {/* Pivot Table Section */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-[#0052CC] px-4 py-2 flex justify-between items-center text-white">
@@ -213,21 +228,6 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                         </Pagination>
                     </div>
                 )}
-            </div>
-
-            {/* Analytics Charts Grid */}
-            <div className="pb-10">
-                <R49Charts
-                    data={data?.charts || {
-                        topCustomers: [],
-                        monthlyTrend: [],
-                        materialBreakdown: [],
-                        avgPriceTrend: [],
-                        revByOrg: [],
-                        qtyVsRev: []
-                    }}
-                    years={initialFilterOptions.years}
-                />
             </div>
         </div>
     );

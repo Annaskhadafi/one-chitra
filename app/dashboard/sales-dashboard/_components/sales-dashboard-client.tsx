@@ -219,6 +219,16 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
 
             {/* Main Content Sections */}
             <div className="flex flex-col gap-6">
+                {/* Charts Section */}
+                {data && (
+                    <DashboardCharts
+                        categoryStats={data.categoryStats}
+                        areaStats={data.areaStats}
+                        monthlyStats={data.monthlyStats}
+                        years={filters.years}
+                    />
+                )}
+
                 {/* Pivot Table Section */}
                 <Card className="border-none shadow-md overflow-hidden rounded-xl">
                     <CardHeader className="bg-[#0052CC] py-3 text-white flex flex-row items-center justify-between">
@@ -291,16 +301,6 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                         )}
                     </CardContent>
                 </Card>
-
-                {/* Charts Section */}
-                {data && (
-                    <DashboardCharts
-                        categoryStats={data.categoryStats}
-                        areaStats={data.areaStats}
-                        monthlyStats={data.monthlyStats}
-                        years={filters.years}
-                    />
-                )}
             </div>
 
             {/* Footer Brand */}
