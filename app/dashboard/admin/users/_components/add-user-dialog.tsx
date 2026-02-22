@@ -27,9 +27,11 @@ import { createUser } from "@/app/actions/users"
 
 interface AddUserDialogProps {
     roles: { id: number; name: string }[]
+    defaultRole?: string
+    trigger?: React.ReactNode
 }
 
-export function AddUserDialog({ roles }: AddUserDialogProps) {
+export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const router = useRouter()
@@ -38,7 +40,7 @@ export function AddUserDialog({ roles }: AddUserDialogProps) {
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
-    const [role, setRole] = useState("")
+    const [role, setRole] = useState(defaultRole || "")
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -77,16 +79,18 @@ export function AddUserDialog({ roles }: AddUserDialogProps) {
         setName("")
         setEmail("")
         setPassword("")
-        setRole("")
+        setRole(defaultRole || "")
     }
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add User
-                </Button>
+                {trigger || (
+                    <Button>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add User
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <form onSubmit={handleSubmit}>

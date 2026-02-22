@@ -15,7 +15,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Loader2, CheckCircle2, FileDown } from "lucide-react"
+import { Upload, CheckCircle2, FileDown } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import Papa from "papaparse"
 import { toast } from "sonner"
 import { Progress } from "@/components/ui/progress"
@@ -226,13 +227,11 @@ export function ImportDialog({
                 )}
 
                 {step === "importing" && (
-                    <div className="py-12 flex flex-col items-center justify-center space-y-4">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        <h3 className="text-lg font-medium">Importing Data...</h3>
-                        <div className="w-full max-w-xs space-y-1 text-center">
-                            <Progress value={progress} className="w-full" />
-                            <p className="text-xs text-muted-foreground">{progress}% Complete</p>
-                        </div>
+                    <div className="py-12">
+                        <ProgressLoading
+                            value={progress}
+                            message="Importing Data..."
+                        />
                     </div>
                 )}
 

@@ -4,7 +4,8 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Plus, Upload, Loader2, FileText } from "lucide-react"
+import { Plus, Upload, FileText } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -133,35 +134,43 @@ export function UploadDialog() {
                                 <FormItem>
                                     <FormLabel>File</FormLabel>
                                     <FormControl>
-                                        <div
-                                            className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                                            onClick={() => document.getElementById("file-upload")?.click()}
-                                        >
-                                            <Upload className="w-8 h-8 text-muted-foreground" />
-                                            {value ? (
-                                                <div className="flex items-center gap-2 text-sm font-medium">
-                                                    <FileText className="w-4 h-4" />
-                                                    {value.name}
+                                        <div className="space-y-4">
+                                            {isUploading ? (
+                                                <div className="py-2">
+                                                    <ProgressLoading message="Uploading file..." />
                                                 </div>
                                             ) : (
-                                                <span className="text-sm text-muted-foreground">Click or drag to upload (PDF, Excel, etc.)</span>
+                                                <div
+                                                    className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                                                    onClick={() => document.getElementById("file-upload")?.click()}
+                                                >
+                                                    <Upload className="w-8 h-8 text-muted-foreground" />
+                                                    {value ? (
+                                                        <div className="flex items-center gap-2 text-sm font-medium">
+                                                            <FileText className="w-4 h-4" />
+                                                            {value.name}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-sm text-muted-foreground">Click or drag to upload (PDF, Excel, etc.)</span>
+                                                    )}
+                                                    <Input
+                                                        id="file-upload"
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept=".pdf,.xlsx,.xls,.csv,.doc,.docx"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0]
+                                                            if (file) {
+                                                                onChange(file)
+                                                                if (!form.getValues("title")) {
+                                                                    form.setValue("title", file.name.split('.')[0])
+                                                                }
+                                                            }
+                                                        }}
+                                                        {...fieldProps}
+                                                    />
+                                                </div>
                                             )}
-                                            <Input
-                                                id="file-upload"
-                                                type="file"
-                                                className="hidden"
-                                                accept=".pdf,.xlsx,.xls,.csv,.doc,.docx"
-                                                onChange={(e) => {
-                                                    const file = e.target.files?.[0]
-                                                    if (file) {
-                                                        onChange(file)
-                                                        if (!form.getValues("title")) {
-                                                            form.setValue("title", file.name.split('.')[0])
-                                                        }
-                                                    }
-                                                }}
-                                                {...fieldProps}
-                                            />
                                         </div>
                                     </FormControl>
                                     <FormMessage />
@@ -170,14 +179,7 @@ export function UploadDialog() {
                         />
                         <div className="flex justify-end pt-4">
                             <Button type="submit" disabled={isUploading}>
-                                {isUploading ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Uploading...
-                                    </>
-                                ) : (
-                                    "Save Document"
-                                )}
+                                {isUploading ? "Uploading..." : "Save Document"}
                             </Button>
                         </div>
                     </form>

@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { Search, Loader2, RefreshCcw, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, RefreshCcw, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -236,9 +237,8 @@ export function StockSAPTable() {
 
     if (isLoading) {
         return (
-            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching Live Data from SAP...</p>
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50 px-4">
+                <ProgressLoading message="Fetching Live Data from SAP..." />
             </div>
         );
     }

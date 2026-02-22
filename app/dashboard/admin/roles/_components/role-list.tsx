@@ -13,9 +13,10 @@ import { Badge } from "@/components/ui/badge"
 import { RoleWithPermissions } from "@/lib/types"
 import { deleteRole } from "@/app/actions/roles"
 import { RoleDialog } from "./role-dialog"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
+import { AddUserDialog } from "../../users/_components/add-user-dialog"
 
 import { PermissionGroup } from "./role-dialog"
 
@@ -63,6 +64,15 @@ export function RoleList({ roles, allPermissions }: RoleListProps) {
                             </TableCell>
                             <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
+                                    <AddUserDialog
+                                        roles={roles.map(r => ({ id: r.id, name: r.name }))}
+                                        defaultRole={role.name}
+                                        trigger={
+                                            <Button variant="ghost" size="icon" title={`Add user to ${role.name}`}>
+                                                <UserPlus className="h-4 w-4" />
+                                            </Button>
+                                        }
+                                    />
                                     {canEdit && (
                                         <RoleDialog
                                             role={role}

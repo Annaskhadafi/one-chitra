@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef, useEffect } from "react"
-import { Search, Loader2, RefreshCcw, Check, ListFilter, X, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, RefreshCcw, Check, ListFilter, X, ChevronUp, ChevronDown } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -256,9 +257,8 @@ export function CompetitorTable() {
 
     if (isLoading) {
         return (
-            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching Competitor Info...</p>
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50 px-4">
+                <ProgressLoading message="Fetching Competitor Info..." />
             </div>
         )
     }

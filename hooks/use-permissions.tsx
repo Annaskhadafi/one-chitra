@@ -33,9 +33,20 @@ export function usePermissions() {
         if (permission === 'dashboard:view') return true
 
         // Admin has all permissions
-        if (context.permissions.includes("admin:view")) return true
+        const isAdmin = context.permissions.includes("admin:view") ||
+            context.permissions.includes("admin") ||
+            context.permissions.includes("superuser")
 
-        return context.permissions.includes(permission)
+        if (isAdmin) {
+            return true
+        }
+
+        const result = context.permissions.includes(permission)
+        // Log roles related permissions to help debug visibility
+        if (permission.startsWith("roles:")) {
+            console.log(`Checking permission: ${permission}, Result: ${result}, IsAdmin: ${isAdmin}`)
+        }
+        return result
     }
 
     const hasResourcePermission = (resource: string, action: 'view' | 'create' | 'edit' | 'delete') => {

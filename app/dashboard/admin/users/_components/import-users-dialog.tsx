@@ -15,12 +15,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { Loader2, Upload } from "lucide-react"
+import { Upload } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { importUsers } from "@/app/actions/users"
 
 export function ImportUsersDialog() {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
+    const [progress, setProgress] = useState(0)
     const [file, setFile] = useState<File | null>(null)
     const router = useRouter()
 
@@ -71,25 +73,30 @@ export function ImportUsersDialog() {
                             Upload a CSV file to import users. The CSV should have headers: name, email, password, role.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="file" className="text-right">
-                                CSV File
-                            </Label>
-                            <Input
-                                id="file"
-                                type="file"
-                                accept=".csv"
-                                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                                className="col-span-3"
-                                disabled={isLoading}
-                            />
+                    {isLoading ? (
+                        <div className="py-4">
+                            <ProgressLoading message="Importing Users..." />
                         </div>
-                    </div>
+                    ) : (
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="file" className="text-right">
+                                    CSV File
+                                </Label>
+                                <Input
+                                    id="file"
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                                    className="col-span-3"
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        </div>
+                    )}
                     <DialogFooter>
                         <Button type="submit" disabled={isLoading}>
-                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Import
+                            {isLoading ? "Importing..." : "Import"}
                         </Button>
                     </DialogFooter>
                 </form>

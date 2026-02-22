@@ -33,7 +33,8 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2, Copy, Calendar, Filter, ShoppingCart } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2 } from "lucide-react"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -627,8 +628,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center p-12 gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Loading quotations...</p>
+                <ProgressLoading message="Loading quotations..." />
             </div>
         )
     }
