@@ -21,6 +21,7 @@ import {
     AlertTriangle,
     ClipboardList,
     Activity,
+    Tags,
     type LucideIcon
 } from "lucide-react"
 
@@ -195,6 +196,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/customers",
                 icon: Users,
                 resource: "customers",
+            },
+            {
+                title: "Price Management",
+                url: "/dashboard/price-management",
+                icon: Tags,
+                resource: "price-management",
             },
             {
                 title: "Quotations",

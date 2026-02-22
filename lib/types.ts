@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, priceLists, priceListItems, priceHistory } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -126,4 +126,35 @@ export type ReorderAlert = Stock & {
     product: Product
     warehouse: Warehouse
     urgency: 'critical' | 'warning' | 'ok'
+}
+
+// Price Management
+export type PriceList = InferSelectModel<typeof priceLists> & {
+    customer?: Pick<Customer, 'id' | 'customerCode' | 'name'> | null
+    createdBy?: Pick<User, 'id' | 'name' | 'email'> | null
+    items?: PriceListItem[]
+}
+export type NewPriceList = InferInsertModel<typeof priceLists>
+
+export type PriceListItem = InferSelectModel<typeof priceListItems> & {
+    product?: Product | null
+    history?: PriceHistoryEntry[]
+}
+export type NewPriceListItem = InferInsertModel<typeof priceListItems>
+
+export type PriceHistoryEntry = InferSelectModel<typeof priceHistory> & {
+    changedBy?: Pick<User, 'id' | 'name' | 'email'> | null
+}
+
+export type MarginAlert = {
+    priceListItemId: number
+    productId: number
+    materialNumber: string
+    materialDescription: string | null
+    priceListName: string
+    unitPrice: number
+    costSap: number
+    currentMarginPct: number
+    marginFloor: number
+    shortfall: number
 }

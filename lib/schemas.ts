@@ -158,7 +158,29 @@ export const fleetTripSchema = z.object({
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
 })
 
-// ─── Stock Opname ─────────────────────────────────────────────────────────────
+// ─── Price Management ─────────────────────────────────────────────────────────
+
+export const priceListSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    type: z.enum(["tier", "customer", "promotional"]),
+    customerId: z.number().optional().nullable(),
+    currency: z.string(),
+    validFrom: z.date(),
+    validUntil: z.date().optional().nullable(),
+    isActive: z.boolean(),
+    notes: z.string().optional().nullable(),
+})
+
+export const priceListItemSchema = z.object({
+    priceListId: z.number().min(1, "Price list is required"),
+    productId: z.number().min(1, "Product is required"),
+    unitPrice: z.number().min(0, "Price cannot be negative"),
+    minQty: z.number().min(1),
+    maxQty: z.number().optional().nullable(),
+    discountPct: z.number().min(0).max(100),
+    marginFloor: z.number().min(0).max(100),
+    notes: z.string().optional().nullable(),
+})
 
 export const createOpnameSessionSchema = z.object({
     name: z.string().min(1, "Session name is required"),
