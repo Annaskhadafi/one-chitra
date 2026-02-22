@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Package } from "lucide-react"
+import Image from "next/image"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -45,8 +46,14 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
                 <div className="flex items-center gap-2 px-4 py-2 text-sidebar-foreground">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                        <Package className="size-4" />
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white shadow-md overflow-hidden border border-white/10 dark:bg-white">
+                        <Image
+                            src="/logo.png"
+                            alt="One Chitra Logo"
+                            width={32}
+                            height={32}
+                            className="object-contain p-1"
+                        />
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                         <span className="truncate font-semibold">One Chitra</span>
