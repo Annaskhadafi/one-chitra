@@ -55,9 +55,9 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function CompetitorActivityTab() {
-    const [data, setData] = useState<any[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+export function CompetitorActivityTab({ initialData = [] }: { initialData?: any[] }) {
+    const [data, setData] = useState<any[]>(initialData)
+    const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [startDate, setStartDate] = useState("")
@@ -69,7 +69,7 @@ export function CompetitorActivityTab() {
     const canCreate = hasResourcePermission("competitor-info-new", "create")
 
     const fetchData = async () => {
-        setIsLoading(true)
+        if (data.length === 0) setIsLoading(true)
         const result = await getCompetitorActivities()
         setData(result)
         setIsLoading(false)

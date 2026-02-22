@@ -1,12 +1,18 @@
-"use client"
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PriceCompetitorTab } from "./_components/price-competitor-tab"
 import { CompetitorActivityTab } from "./_components/competitor-activity-tab"
 import { LostSaleTab } from "./_components/lost-sale-tab"
 import { PermissionGuard } from "@/components/permission-guard"
+import { getCompetitorPrices, getCompetitorActivities, getLostSales } from "@/app/actions/competitor-new"
 
-export default function CompetitorInfoNewPage() {
+export default async function CompetitorInfoNewPage() {
+    // Pre-fetch all data on the server for faster initial load
+    const [prices, activities, lostSales] = await Promise.all([
+        getCompetitorPrices(),
+        getCompetitorActivities(),
+        getLostSales()
+    ])
+
     return (
         <PermissionGuard resource="competitor-info-new" action="view">
             <div className="flex flex-col gap-6 p-6">
@@ -24,13 +30,13 @@ export default function CompetitorInfoNewPage() {
                         <TabsTrigger value="lost-sale">Lost Sale</TabsTrigger>
                     </TabsList>
                     <TabsContent value="price" className="mt-0">
-                        <PriceCompetitorTab />
+                        <PriceCompetitorTab initialData={prices} />
                     </TabsContent>
                     <TabsContent value="activity" className="mt-0">
-                        <CompetitorActivityTab />
+                        <CompetitorActivityTab initialData={activities} />
                     </TabsContent>
                     <TabsContent value="lost-sale" className="mt-0">
-                        <LostSaleTab />
+                        <LostSaleTab initialData={lostSales} />
                     </TabsContent>
                 </Tabs>
             </div>

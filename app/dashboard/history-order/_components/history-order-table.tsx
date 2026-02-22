@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef, useEffect, useCallback } from "react"
-import { Search, RefreshCcw, Check, ListFilter, X, DollarSign, Package, ShoppingCart, Users, Settings2, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, RefreshCcw, Check, ListFilter, X, DollarSign, Package, ShoppingCart, Users, Settings2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { toast } from "sonner"
-import { getHistoryOrder, HistoryOrderItem } from "@/app/actions/history-order"
+import { getHistoryOrder, getHistoryOrderFilters, HistoryOrderItem, HistoryOrderFilters } from "@/app/actions/history-order"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
     Command,
     CommandEmpty,
@@ -55,19 +56,11 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 export function HistoryOrderTable() {
-    const { data: rawData = [], isLoading, refetch } = useQuery({
-        queryKey: ["history-orders"],
-        queryFn: async () => {
-            const result = await getHistoryOrder()
-            if (result.success && Array.isArray(result.data)) {
-                return result.data
-            }
-            throw new Error("Failed to load data")
-        },
-        staleTime: 60 * 1000,
-    })
+    const [page, setPage] = useState(1)
+    const [pageSize] = useState(50)
+    const [searchTerm, setSearchTerm] = useState("")
+    const debouncedSearch = useDebounce(searchTerm, 500)
 
-    const [globalFilter, setGlobalFilter] = useState("")
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [plantFilter, setPlantFilter] = useState<string[]>([])
     const [yearFilter, setYearFilter] = useState<string[]>([])
@@ -76,6 +69,46 @@ export function HistoryOrderTable() {
 
     const [sorting, setSorting] = useState<SortingState>([{ id: "billing_date", desc: true }])
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+
+    // Fetch Filter Options
+    const { data: filterOptions } = useQuery({
+        queryKey: ["history-order-filters"],
+        queryFn: async () => {
+            const result = await getHistoryOrderFilters()
+            if (result.success) return result.data
+            return null
+        }
+    })
+
+    const activeFilters = useMemo<HistoryOrderFilters>(() => ({
+        search: debouncedSearch,
+        customers: customerFilter,
+        plants: plantFilter,
+        matGrps: matGrpFilter,
+        years: yearFilter,
+        months: monthFilter,
+        page,
+        pageSize,
+        sortField: sorting[0]?.id || "billing_date",
+        sortOrder: sorting[0]?.desc ? "desc" : "asc",
+    }), [debouncedSearch, customerFilter, plantFilter, matGrpFilter, yearFilter, monthFilter, page, pageSize, sorting])
+
+    const { data: serverResult, isLoading, refetch, isFetching } = useQuery({
+        queryKey: ["history-orders", activeFilters],
+        queryFn: async () => {
+            const result = await getHistoryOrder(activeFilters)
+            if (result.success) return result
+            throw new Error("Failed to load data")
+        },
+        staleTime: 60 * 1000,
+    })
+
+    const rawData = serverResult?.data || []
+    const meta = serverResult?.meta
+    const totalCount = meta?.totalCount || 0
+    const pageCount = Math.ceil(totalCount / pageSize)
+    const offset = (page - 1) * pageSize
+
 
     // Save/Load column visibility from localStorage
     useEffect(() => {
@@ -164,92 +197,29 @@ export function HistoryOrderTable() {
         columns,
         state: {
             sorting,
-            globalFilter,
             columnVisibility,
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
         onColumnVisibilityChange: setColumnVisibility,
         getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, _columnId, filterValue): boolean => {
-            const term = (filterValue as string).toLowerCase()
-            const item = row.original
-
-            const matchesSearch = !!(
-                item.customer_name.toLowerCase().includes(term) ||
-                item.material_no.toLowerCase().includes(term) ||
-                item.description.toLowerCase().includes(term) ||
-                item.po_number.toLowerCase().includes(term) ||
-                item.salesman.toLowerCase().includes(term)
-            )
-
-            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.customer_name)
-            const matchesPlant = plantFilter.length === 0 || plantFilter.includes(item.plant)
-            const matchesMatGrp = matGrpFilter.length === 0 || matGrpFilter.includes(item.mat_grp_desc)
-
-            let matchesYear = true
-            let matchesMonth = true
-            if (yearFilter.length > 0 || monthFilter.length > 0) {
-                const parts = item.billing_date ? item.billing_date.split('/') : []
-                if (parts.length === 3) {
-                    if (yearFilter.length > 0) matchesYear = yearFilter.includes(parts[2])
-                    if (monthFilter.length > 0) matchesMonth = monthFilter.includes(parts[0].padStart(2, '0'))
-                } else {
-                    matchesYear = yearFilter.length === 0
-                    matchesMonth = monthFilter.length === 0
-                }
-            }
-
-            return matchesSearch && matchesCustomer && matchesPlant && matchesMatGrp && matchesYear && matchesMonth
-        },
+        manualSorting: true,
+        manualFiltering: true,
+        manualPagination: true,
     })
 
-    // Sync filter state when specific filters change
+    // Reset pagination when filters change
     useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [customerFilter, plantFilter, yearFilter, monthFilter, matGrpFilter, globalFilter, table])
+        setPage(1)
+    }, [debouncedSearch, customerFilter, plantFilter, yearFilter, monthFilter, matGrpFilter])
 
-    const filteredData = table.getFilteredRowModel().rows.map(row => row.original)
 
-    // Unique values for filters
-    const uniqueCustomers = useMemo(() => Array.from(new Set(rawData.map(item => item.customer_name))).filter(Boolean).sort(), [rawData])
-    const uniquePlants = useMemo(() => Array.from(new Set(rawData.map(item => item.plant))).filter(Boolean).sort(), [rawData])
-    const uniqueMatGrps = useMemo(() => Array.from(new Set(rawData.map(item => item.mat_grp_desc))).filter(Boolean).sort(), [rawData])
+    const scorecards = meta?.scorecards || {
+        totalRevenue: 0,
+        totalQty: 0,
+        uniqueCust: 0,
+        uniqueOrders: 0
+    }
 
-    const dateOptions = useMemo(() => {
-        const years = new Set<string>()
-        const months = new Set<string>()
-        rawData.forEach(item => {
-            if (item.billing_date) {
-                const parts = item.billing_date.split('/')
-                if (parts.length === 3) {
-                    years.add(parts[2])
-                    months.add(parts[0].padStart(2, '0'))
-                }
-            }
-        })
-        return {
-            years: Array.from(years).sort().reverse(),
-            months: Array.from(months).sort()
-        }
-    }, [rawData])
-
-    // Scorecards Data
-    const scorecards = useMemo(() => {
-        const totalRevenue = filteredData.reduce((sum, item) => sum + item.revenue, 0)
-        const totalQty = filteredData.reduce((sum, item) => sum + item.qty, 0)
-        const uniqueCust = new Set(filteredData.map(d => d.customer_name)).size
-        const uniqueOrders = new Set(filteredData.map(d => d.po_number)).size
-
-        return {
-            totalRevenue,
-            totalQty,
-            uniqueCust,
-            uniqueOrders
-        }
-    }, [filteredData])
 
     // Virtualization
     const parentRef = useRef<HTMLDivElement>(null)
@@ -275,10 +245,11 @@ export function HistoryOrderTable() {
         setYearFilter([])
         setMonthFilter([])
         setMatGrpFilter([])
-        setGlobalFilter("")
+        setSearchTerm("")
+        setPage(1)
     }
 
-    const hasActiveFilters = customerFilter.length > 0 || plantFilter.length > 0 || yearFilter.length > 0 || monthFilter.length > 0 || matGrpFilter.length > 0 || globalFilter !== ""
+    const hasActiveFilters = customerFilter.length > 0 || plantFilter.length > 0 || yearFilter.length > 0 || monthFilter.length > 0 || matGrpFilter.length > 0 || searchTerm !== ""
 
     interface FilterPopoverProps {
         title: string
@@ -333,13 +304,16 @@ export function HistoryOrderTable() {
         </Popover>
     )
 
-    if (isLoading) {
+    if (isLoading && !isFetching) {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50 px-4">
                 <ProgressLoading message="Fetching History Order..." />
             </div>
         )
     }
+
+    const chartData = meta?.charts
+
 
     return (
         <div className="space-y-6 relative">
@@ -388,7 +362,11 @@ export function HistoryOrderTable() {
                 </Card>
             </div>
 
-            <HistoryOrderCharts data={filteredData} />
+            <HistoryOrderCharts
+                topCustomers={chartData?.topCustomers || []}
+                plantStats={chartData?.plantStats || []}
+                monthlyTrend={chartData?.monthlyTrend || []}
+            />
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="relative flex-1 max-w-sm w-full">
@@ -396,46 +374,49 @@ export function HistoryOrderTable() {
                     <Input
                         placeholder="Search customer, PO, material..."
                         className="pl-8"
-                        value={globalFilter ?? ""}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    {isFetching && <RefreshCcw className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                     <FilterPopover
                         title="Customer"
-                        options={uniqueCustomers}
+                        options={filterOptions?.customers || []}
                         selectedValues={customerFilter}
                         onSelect={(val: string) => setCustomerFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setCustomerFilter([])}
                     />
                     <FilterPopover
                         title="Plant"
-                        options={uniquePlants}
+                        options={filterOptions?.plants || []}
                         selectedValues={plantFilter}
                         onSelect={(val: string) => setPlantFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setPlantFilter([])}
                     />
                     <FilterPopover
                         title="Mat Group"
-                        options={uniqueMatGrps}
+                        options={filterOptions?.matGrps || []}
                         selectedValues={matGrpFilter}
                         onSelect={(val: string) => setMatGrpFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setMatGrpFilter([])}
                     />
                     <FilterPopover
                         title="Year"
-                        options={dateOptions.years}
+                        options={filterOptions?.years || []}
                         selectedValues={yearFilter}
                         onSelect={(val: string) => setYearFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setYearFilter([])}
                     />
                     <FilterPopover
                         title="Month"
-                        options={dateOptions.months}
+                        options={filterOptions?.months || []}
                         selectedValues={monthFilter}
                         onSelect={(val: string) => setMonthFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setMonthFilter([])}
                     />
+
 
                     <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
                         <RefreshCcw className="mr-2 h-4 w-4" />
@@ -520,8 +501,32 @@ export function HistoryOrderTable() {
 
             <div className="flex items-center justify-between space-x-2 py-4">
                 <div className="text-sm text-muted-foreground">
-                    Showing {rows.length} of {rawData.length} records
+                    Showing {offset + 1}-{Math.min(offset + rawData.length, totalCount)} of {totalCount.toLocaleString()} records
                 </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1 || isFetching}
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                    </Button>
+                    <div className="text-sm font-medium">
+                        Page {page} of {pageCount || 1}
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+                        disabled={page === pageCount || pageCount === 0 || isFetching}
+                    >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+
             </div>
 
             {hasActiveFilters && (

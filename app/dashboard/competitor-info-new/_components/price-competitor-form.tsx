@@ -53,6 +53,7 @@ const formSchema = z.object({
     supplier: z.string().min(1, "Supplier is required"),
     currency: z.string().min(1, "Currency is required"),
     price: z.string().min(1, "Price is required"),
+    consultantName: z.string().optional().nullable(),
     remark: z.string().optional(),
 })
 
@@ -87,7 +88,11 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true)
         try {
-            const result = await createCompetitorPrice(values)
+            const submissionData = {
+                ...values,
+                businessConsultantId: values.businessConsultantId === "none" ? null : values.businessConsultantId
+            }
+            const result = await createCompetitorPrice(submissionData)
             if (result.success) {
                 toast.success("Record created successfully")
                 form.reset()
@@ -158,14 +163,25 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
                                 name="businessConsultantId"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Business Consultant *</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                                        <FormLabel>Business Consultant (User Sistem)</FormLabel>
+                                        <Select
+                                            onValueChange={(val) => {
+                                                field.onChange(val)
+                                                // Automatically set consultantName if a user is selected
+                                                const selectedUser = users.find(u => u.id === val)
+                                                if (selectedUser) {
+                                                    form.setValue("consultantName", selectedUser.name)
+                                                }
+                                            }}
+                                            defaultValue={field.value || undefined}
+                                        >
                                             <FormControl>
                                                 <SelectTrigger>
-                                                    <SelectValue placeholder="Pilih Consultant" />
+                                                    <SelectValue placeholder="Pilih User (Opsional)" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
+                                                <SelectItem value="none">-- Bukan User Sistem --</SelectItem>
                                                 {users.map((u) => (
                                                     <SelectItem key={u.id} value={u.id}>
                                                         {u.name}
@@ -178,6 +194,20 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
                                 )}
                             />
                         </div>
+
+                        <FormField
+                            control={form.control}
+                            name="consultantName"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Nama Consultant (Source Asli) *</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Nama consultant dari sumber data" {...field} value={field.value || ""} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
                         <FormField
                             control={form.control}

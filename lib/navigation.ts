@@ -135,12 +135,14 @@ export const navigationConfig: NavSection[] = [
                 icon: Truck,
                 resource: "fleetlist",
             },
-            {
-                title: "Competitor Info",
-                url: "/dashboard/competitor-info",
-                icon: TrendingUp,
-                resource: "competitor-info",
-            },
+            /*
+                        {
+                            title: "Competitor Info",
+                            url: "/dashboard/competitor-info",
+                            icon: TrendingUp,
+                            resource: "competitor-info",
+                        },
+            */
             {
                 title: "Competitor Info New",
                 url: "/dashboard/competitor-info-new",

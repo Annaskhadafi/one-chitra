@@ -6,6 +6,7 @@ export const competitorPrices = pgTable("competitor_prices", {
     id: uuid("id").defaultRandom().primaryKey(),
     infoDate: timestamp("info_date").notNull(),
     businessConsultantId: text("business_consultant_id").references(() => user.id),
+    consultantName: text("consultant_name"), // Storage for raw name from API or manual entry
     customerName: text("customer_name").notNull(),
     productSize: text("product_size").notNull(),
     category: text("category").notNull(), // Earthmover, Truck & Bus

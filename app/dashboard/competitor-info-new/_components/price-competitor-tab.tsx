@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { getCompetitorPrices, importCompetitorPrices } from "@/app/actions/competitor-new"
+import { getCompetitorPrices, importCompetitorPrices, syncCompetitorPricesFromApi } from "@/app/actions/competitor-new"
 import { Button } from "@/components/ui/button"
-import { Plus, Search, Loader2, Calendar, Tags, Building2, Wallet } from "lucide-react"
+import { Plus, Search, Loader2, Calendar, Tags, Building2, Wallet, RefreshCw } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { PriceCompetitorForm } from "./price-competitor-form"
 import {
@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ScoreCard } from "@/components/score-card"
 import { PriceDistributionChart } from "./competitor-new-charts"
 import { ImportDialog } from "./import-dialog"
+import { toast } from "sonner"
 import {
     Select,
     SelectContent,
@@ -54,24 +55,42 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function PriceCompetitorTab() {
-    const [data, setData] = useState<any[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+export function PriceCompetitorTab({ initialData = [] }: { initialData?: any[] }) {
+    const [data, setData] = useState<any[]>(initialData)
+    const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [startDate, setStartDate] = useState("")
     const [endDate, setEndDate] = useState("")
     const [categoryFilter, setCategoryFilter] = useState("all")
     const [brandFilter, setBrandFilter] = useState("all")
+    const [isSyncing, setIsSyncing] = useState(false)
 
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission("competitor-info-new", "create")
 
     const fetchData = async () => {
-        setIsLoading(true)
+        if (data.length === 0) setIsLoading(true)
         const result = await getCompetitorPrices()
         setData(result)
         setIsLoading(false)
+    }
+
+    const handleSync = async () => {
+        setIsSyncing(true)
+        try {
+            const result = await syncCompetitorPricesFromApi()
+            if (result.success) {
+                toast.success(`Sync complete! Added ${result.addedCount} new records, skipped ${result.skippedCount} duplicates.`)
+                fetchData()
+            } else {
+                toast.error(result.error || "Failed to sync")
+            }
+        } catch (error) {
+            toast.error("An unexpected error occurred during sync")
+        } finally {
+            setIsSyncing(false)
+        }
     }
 
     useEffect(() => {
@@ -178,10 +197,25 @@ export function PriceCompetitorTab() {
                                     templateFileName="price_competitor_template.csv"
                                 />
                                 {canCreate && (
-                                    <Button onClick={() => setIsFormOpen(true)} className="font-bold">
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Add Record
-                                    </Button>
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleSync}
+                                            disabled={isSyncing}
+                                            className="font-bold border-primary text-primary hover:bg-primary/10"
+                                        >
+                                            {isSyncing ? (
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="w-4 h-4 mr-2" />
+                                            )}
+                                            Sync from API
+                                        </Button>
+                                        <Button onClick={() => setIsFormOpen(true)} className="font-bold">
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add Record
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -268,7 +302,7 @@ export function PriceCompetitorTab() {
                                             <TableCell className="text-xs font-medium">
                                                 {format(new Date(item.infoDate), "dd MMM yyyy")}
                                             </TableCell>
-                                            <TableCell className="text-xs">{item.businessConsultant?.name || "-"}</TableCell>
+                                            <TableCell className="text-xs">{item.consultantName || item.businessConsultant?.name || "-"}</TableCell>
                                             <TableCell className="text-xs font-semibold">{item.customerName}</TableCell>
                                             <TableCell className="text-xs">{item.productSize}</TableCell>
                                             <TableCell>

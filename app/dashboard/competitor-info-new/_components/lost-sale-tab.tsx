@@ -51,9 +51,9 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function LostSaleTab() {
-    const [data, setData] = useState<any[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
+    const [data, setData] = useState<any[]>(initialData)
+    const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [startDate, setStartDate] = useState("")
@@ -65,7 +65,7 @@ export function LostSaleTab() {
     const canCreate = hasResourcePermission("competitor-info-new", "create")
 
     const fetchData = async () => {
-        setIsLoading(true)
+        if (data.length === 0) setIsLoading(true)
         const result = await getLostSales()
         setData(result)
         setIsLoading(false)
