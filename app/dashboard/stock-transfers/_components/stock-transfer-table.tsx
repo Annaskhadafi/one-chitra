@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
     Table,
     TableBody,
@@ -137,22 +137,22 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 return (
                     <div className="flex items-center gap-3">
                         <div className="flex flex-col">
-                            <span className="text-xs font-bold font-mono px-1.5 py-0.5 bg-gray-100 rounded border w-fit">
+                            <span className="text-xs font-bold font-mono px-2 py-1 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-md shadow-sm w-fit">
                                 {transfer.fromWarehouse.sloc}
                             </span>
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px] mt-1">
                                 {transfer.fromWarehouse.description}
                             </span>
                         </div>
                         <div className="flex flex-col items-center">
-                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                            <div className="h-px w-4 bg-gray-200 mt-0.5" />
+                            <ArrowRight className="h-4 w-4 text-purple-500 animate-pulse" />
+                            <div className="h-px w-4 bg-gradient-to-r from-orange-500 to-blue-500 mt-0.5" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-xs font-bold font-mono px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100 w-fit">
+                            <span className="text-xs font-bold font-mono px-2 py-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-md shadow-sm w-fit">
                                 {transfer.toWarehouse.sloc}
                             </span>
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px] mt-1">
                                 {transfer.toWarehouse.description}
                             </span>
                         </div>
@@ -167,12 +167,12 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 const transfer = row.original
                 return (
                     <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                            <Package className="h-4 w-4 text-muted-foreground" />
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-md">
+                            <Package className="h-4 w-4 text-white" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold">{transfer.items.length}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">SKUs</span>
+                            <span className="text-sm font-bold bg-gradient-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent">{transfer.items.length}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">SKUs</span>
                         </div>
                     </div>
                 )
@@ -254,10 +254,10 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
         <div className="space-y-6">
             {/* Status Chart */}
             {data.length > 0 && (
-                <Card>
+                <Card className="border-none bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 shadow-lg">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Transfer Status Overview</CardTitle>
-                        <CardDescription>{data.length} total transfers</CardDescription>
+                        <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-bold">Transfer Status Overview</CardTitle>
+                        <CardDescription className="font-medium">{data.length} total transfers</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ResponsiveContainer width="100%" height={150}>
@@ -286,16 +286,16 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-500" />
                     <Input
                         placeholder="Search reference, warehouse..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 border-purple-200 focus:border-purple-500 focus:ring-purple-500"
                     />
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px]">
+                    <SelectTrigger className="w-[160px] border-blue-200 focus:border-blue-500 focus:ring-blue-500">
                         <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -367,13 +367,13 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 </div>
 
                 {/* Footer Info */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg border border-dashed">
-                    <div className="flex gap-4">
-                        <span>Total Records: <strong>{data.length}</strong></span>
-                        <span>Filtered: <strong>{table.getFilteredRowModel().rows.length}</strong></span>
+                <div className="flex items-center justify-between text-xs bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950/30 dark:via-purple-950/30 dark:to-pink-950/30 p-3 rounded-lg border-2 border-dashed border-purple-200 dark:border-purple-800">
+                    <div className="flex gap-4 font-medium">
+                        <span className="text-blue-700 dark:text-blue-400">Total Records: <strong className="text-blue-900 dark:text-blue-300">{data.length}</strong></span>
+                        <span className="text-purple-700 dark:text-purple-400">Filtered: <strong className="text-purple-900 dark:text-purple-300">{table.getFilteredRowModel().rows.length}</strong></span>
                     </div>
-                    <div>
-                        Last updated: {format(new Date(), "HH:mm:ss")}
+                    <div className="text-pink-700 dark:text-pink-400 font-medium">
+                        Last updated: <strong>{format(new Date(), "HH:mm:ss")}</strong>
                     </div>
                 </div>
             </div>

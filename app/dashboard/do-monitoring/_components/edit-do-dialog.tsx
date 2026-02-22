@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react"
 import { updateDoMonitoringFields } from "@/app/actions/delivery"
 import { uploadFile } from "@/app/actions/upload"
+import { useQueryClient } from "@tanstack/react-query"
+import { ScanDoPreview } from "./scan-do-preview"
 import type { Delivery } from "@/lib/types"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -25,7 +26,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Upload, FileText, ExternalLink, X, Maximize2 } from "lucide-react"
+import { Upload, FileText, ExternalLink, Maximize2 } from "lucide-react"
 
 export function EditDoDialog({
     delivery,
@@ -49,6 +50,7 @@ export function EditDoDialog({
     const [isUploading, setIsUploading] = useState(false)
     const [saving, setSaving] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const queryClient = useQueryClient()
 
     // Sync state when dialog opens with selected delivery
     useEffect(() => {
@@ -76,6 +78,7 @@ export function EditDoDialog({
 
         if (res.success) {
             toast.success("DO Info updated successfully")
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
             onOpenChange(false)
         } else {
             toast.error(res.error || "Failed to update DO Info")
@@ -235,45 +238,12 @@ export function EditDoDialog({
                 </DialogFooter>
             </DialogContent>
 
-            {/* Wide File Preview Popup */}
-            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-                <DialogContent className="sm:max-w-[90vw] h-[90vh] p-0 overflow-hidden bg-slate-100 dark:bg-slate-900">
-                    <DialogHeader className="p-4 bg-background border-b flex flex-row items-center justify-between sticky top-0 z-10">
-                        <div>
-                            <DialogTitle className="text-lg">Document Preview</DialogTitle>
-                            <DialogDescription className="text-xs">
-                                Viewing scan for {delivery?.deliveryNumber}
-                            </DialogDescription>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
-                            onClick={() => setIsPreviewOpen(false)}
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </DialogHeader>
-                    <div className="w-full h-full flex items-center justify-center p-4">
-                        {scanDoDocument?.toLowerCase().endsWith('.pdf') ? (
-                            <iframe
-                                src={scanDoDocument}
-                                className="w-full h-full rounded-md shadow-lg bg-white"
-                                title="PDF Preview"
-                            />
-                        ) : (
-                            <div className="relative w-full h-full flex items-center justify-center">
-                                <Image
-                                    src={scanDoDocument}
-                                    alt="Scan DO Preview"
-                                    fill
-                                    className="object-contain rounded-md shadow-2xl transition-transform duration-300 hover:scale-105"
-                                />
-                            </div>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <ScanDoPreview
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                url={scanDoDocument}
+                deliveryNumber={delivery?.deliveryNumber}
+            />
         </Dialog>
     )
 }

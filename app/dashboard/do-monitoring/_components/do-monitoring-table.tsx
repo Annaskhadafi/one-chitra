@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useRef, useEffect } from "react"
 import { EditDoDialog } from "./edit-do-dialog"
+import { ScanDoPreview } from "./scan-do-preview"
+import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
 import { deleteDelivery, updateDoMonitoringFields, getDeliveries } from "@/app/actions/delivery"
 import {
     Table,
@@ -40,7 +42,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -85,6 +87,12 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [deleting, setDeleting] = useState<number | null>(null)
 
+    const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+    const [officialPreviewDelivery, setOfficialPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
+    const [isOfficialPreviewOpen, setIsOfficialPreviewOpen] = useState(false)
+
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
             accessorKey: "deliveryNumber",
@@ -99,12 +107,27 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 </Button>
             ),
             cell: ({ row }) => (
-                <div className="font-mono text-sm">
-                    <div className="font-medium text-blue-600 dark:text-blue-400">
-                        {row.original.deliveryNumber || "-"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        SO: {row.original.salesOrder?.invoiceNumber || "-"}
+                <div className="flex items-center gap-2">
+                    <div className="font-mono text-sm flex-1">
+                        <div className="font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                            {row.original.deliveryNumber || "-"}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 p-0"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    setOfficialPreviewDelivery(row.original)
+                                    setIsOfficialPreviewOpen(true)
+                                }}
+                                title="View Official DO"
+                            >
+                                <FileText className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            SO: {row.original.salesOrder?.invoiceNumber || "-"}
+                        </div>
                     </div>
                 </div>
             ),
@@ -164,6 +187,31 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     </Badge>
                 )
             },
+        },
+        {
+            id: "scanDo",
+            header: () => <div className="text-center w-[80px]">Scan DO</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-center w-[80px]">
+                    {row.original.scanDoDocument ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-1 px-2"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setPreviewDelivery(row.original)
+                                setIsPreviewOpen(true)
+                            }}
+                        >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span className="text-[10px] font-medium tracking-tight">Preview</span>
+                        </Button>
+                    ) : (
+                        <span className="text-muted-foreground text-[10px] italic">No file</span>
+                    )}
+                </div>
+            ),
         },
         {
             accessorKey: "invoiceNumber",
@@ -313,7 +361,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Delivery No", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Invoice No", "Invoice Date", "Customer", "Remark"]
+        const headers = ["Delivery No", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Customer", "Remark"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const d = row.original
             return [
@@ -323,6 +371,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
                 d.returnDoDate ? new Date(d.returnDoDate).toLocaleDateString("id-ID") : "",
                 d.doStatus || "Pending",
+                d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
                 d.salesOrder?.customer?.name || "",
@@ -471,6 +520,21 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 open={isEditOpen}
                 onOpenChange={setIsEditOpen}
             />
+
+            <ScanDoPreview
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                url={previewDelivery?.scanDoDocument}
+                deliveryNumber={previewDelivery?.deliveryNumber}
+            />
+
+            {officialPreviewDelivery && (
+                <DeliveryPdfPreview
+                    delivery={officialPreviewDelivery as any}
+                    open={isOfficialPreviewOpen}
+                    onClose={() => setIsOfficialPreviewOpen(false)}
+                />
+            )}
         </div>
     )
 }
