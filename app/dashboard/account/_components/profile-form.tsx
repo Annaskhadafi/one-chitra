@@ -53,7 +53,7 @@ export function ProfileForm({ user }: { user: { name: string; email: string } })
             } else {
                 toast.error(result.error || "Failed to update profile")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An unexpected error occurred")
         } finally {
             setIsLoading(false)

@@ -80,7 +80,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
         }
     };
 
-    const toggleFilter = (key: keyof typeof filters, value: any) => {
+    const toggleFilter = (key: keyof typeof filters, value: string) => {
         setFilters(prev => {
             const current = (prev[key] as string[]);
             if (current.includes(value)) {
@@ -182,7 +182,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
                                     const pages = [];
                                     const maxVisible = 5;
                                     let start = Math.max(1, filters.page - 2);
-                                    let end = Math.min(totalPages, start + maxVisible - 1);
+                                    const end = Math.min(totalPages, start + maxVisible - 1);
 
                                     if (end - start + 1 < maxVisible) {
                                         start = Math.max(1, end - maxVisible + 1);

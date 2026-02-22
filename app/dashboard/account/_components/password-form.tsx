@@ -24,7 +24,7 @@ const passwordFormSchema = z.object({
     oldPassword: z.string().min(1, "Current password is required"),
     newPassword: z.string().min(8, "New password must be at least 8 characters"),
     confirmPassword: z.string().min(1, "Please confirm your new password"),
-}).refine((data: any) => data.newPassword === data.confirmPassword, {
+}).refine((data: PasswordFormValues) => data.newPassword === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
 })
@@ -56,7 +56,7 @@ export function PasswordForm() {
             } else {
                 toast.error(result.error || "Failed to change password")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An unexpected error occurred")
         } finally {
             setIsLoading(false)

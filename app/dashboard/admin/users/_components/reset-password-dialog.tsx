@@ -30,7 +30,7 @@ import { adminResetPassword } from "@/app/actions/users"
 const resetPasswordSchema = z.object({
     password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string().min(1, "Please confirm the password"),
-}).refine((data: any) => data.password === data.confirmPassword, {
+}).refine((data: ResetPasswordValues) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
 })
@@ -67,7 +67,7 @@ export function ResetPasswordDialog({ user, open, onOpenChange }: ResetPasswordD
             } else {
                 toast.error(result.error || "Failed to reset password")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An unexpected error occurred")
         } finally {
             setIsLoading(false)

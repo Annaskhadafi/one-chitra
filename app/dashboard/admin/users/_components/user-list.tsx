@@ -15,7 +15,7 @@ import { UserRoleDialog } from "./user-role-dialog"
 import { ResetPasswordDialog } from "./reset-password-dialog"
 
 import { User } from "@/lib/types"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Users, Shield, UserCheck, Trash2, ChevronUp, ChevronDown, Key } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
@@ -57,6 +57,18 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [rowSelection, setRowSelection] = useState({})
     const [resetUser, setResetUser] = useState<User | null>(null)
+
+    const handleDelete = useCallback(async (userId: string) => {
+        if (confirm("Are you sure you want to delete this user?")) {
+            const result = await deleteUser(userId)
+            if (result.success) {
+                toast.success("User deleted")
+                queryClient.invalidateQueries({ queryKey: ["users"] })
+            } else {
+                toast.error(result.error || "Failed to delete user")
+            }
+        }
+    }, [queryClient])
 
     // Stats calculation
     const totalUsers = data.length
@@ -158,7 +170,7 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                 )
             },
         },
-    ], [canEdit, canDelete, roles])
+    ], [canEdit, canDelete, roles, handleDelete])
 
     const table = useReactTable({
         data,
@@ -204,17 +216,6 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
         }
     }
 
-    const handleDelete = async (userId: string) => {
-        if (confirm("Are you sure you want to delete this user?")) {
-            const result = await deleteUser(userId)
-            if (result.success) {
-                toast.success("User deleted")
-                queryClient.invalidateQueries({ queryKey: ["users"] })
-            } else {
-                toast.error(result.error || "Failed to delete user")
-            }
-        }
-    }
 
     return (
         <div className="space-y-6">

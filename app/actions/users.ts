@@ -5,7 +5,6 @@ import { user } from "@/db/schema"
 import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
-import { authClient } from "@/lib/auth-client"
 
 export async function createUser(data: { name: string; email: string; password: string; role: string }) {
     try {

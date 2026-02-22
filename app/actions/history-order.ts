@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
-import { desc, notIlike, isNull, isNotNull, or, and, eq, ne, gte } from "drizzle-orm"
+import { desc, notIlike, isNull, isNotNull, or, and, eq, ne, gte, SQL } from "drizzle-orm"
 import { getSetting } from "./settings"
 
 export interface HistoryOrderItem {
@@ -101,14 +101,8 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
 
         const offset = (page - 1) * pageSize;
 
-        // Base where clause: Exclude Singapore Branch
-        let whereClause = or(
-            isNull(historyOrders.customerName),
-            notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-        );
-
         // Filter logic
-        const filterArray: any[] = [
+        const filterArray: SQL[] = [
             and(
                 isNotNull(historyOrders.billingDate),
                 ne(historyOrders.billingDate, ""),

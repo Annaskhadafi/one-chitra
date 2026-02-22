@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useCallback } from "react"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { format, startOfMonth, endOfMonth, eachMonthOfInterval, getYear, getMonth, isSameMonth, isSameYear } from "date-fns"
 import { cn } from "@/lib/utils"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
@@ -56,7 +55,7 @@ import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
 
 import {
     useReactTable,
@@ -176,7 +175,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         })
     }, [data, selectedYear, selectedMonth, selectedCategory])
 
-    const handleUpdateStatus = async (id: number, status: string) => {
+    const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         const result = await bulkUpdateDeliveryStatus([id], status)
         if (result.success) {
             toast.success("Status updated")
@@ -184,9 +183,9 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         } else {
             toast.error(result.error)
         }
-    }
+    }, [refetch])
 
-    const handleUpdateDeliveryDate = async (id: number, date: Date | undefined) => {
+    const handleUpdateDeliveryDate = useCallback(async (id: number, date: Date | undefined) => {
         const result = await updateDeliveryDate(id, date || null)
         if (result.success) {
             toast.success("Delivery date updated")
@@ -194,9 +193,9 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         } else {
             toast.error(result.error)
         }
-    }
+    }, [refetch])
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = useCallback(async (id: number) => {
         setDeleting(id)
         const res = await deleteDelivery(id)
         if (res.success) {
@@ -207,7 +206,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
             toast.error(errorMsg)
         }
         setDeleting(null)
-    }
+    }, [refetch])
 
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
@@ -486,7 +485,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                 )
             },
         },
-    ], [canEdit, canDelete, deleting])
+    ], [canEdit, canDelete, deleting, handleUpdateDeliveryDate, handleUpdateStatus, handleDelete])
 
     const table = useReactTable({
         data: filteredData,
@@ -595,32 +594,8 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         document.body.removeChild(link)
     }
 
-    const totalDeliveries = data.length
     const scheduled = data.filter(d => d.status === 'scheduled').length
     const inTransit = data.filter(d => d.status === 'in_transit').length
-
-    const chartData = useMemo(() => {
-        const statusCounts: Record<string, number> = {}
-        data.forEach(d => {
-            statusCounts[d.status] = (statusCounts[d.status] || 0) + 1
-        })
-        return Object.entries(statusCounts).map(([status, count]) => ({
-            status: statusLabels[status] || status,
-            count,
-            fill: STATUS_COLORS[status] || "hsl(var(--primary))",
-        }))
-    }, [data])
-
-    const selectedCount = Object.keys(rowSelection).length
-
-    if (isLoading && !data.length) {
-        return (
-            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
-                <RefreshCcw className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching Deliveries...</p>
-            </div>
-        )
-    }
 
     const totalVolume = useMemo(() => {
         return filteredData.reduce((acc, d) => acc + d.items.reduce((sum, item) => sum + item.deliveredQuantity, 0), 0)
@@ -676,6 +651,18 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         }))
         return Array.from(c).sort()
     }, [data])
+
+    const selectedCount = Object.keys(rowSelection).length
+
+    if (isLoading && !data.length) {
+        return (
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
+                <RefreshCcw className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Fetching Deliveries...</p>
+            </div>
+        )
+    }
+
 
     return (
         <div className="space-y-6">

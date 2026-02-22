@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { signOut } from "@/lib/auth-client"
 import {
-  IconCreditCard,
   IconDotsVertical,
   IconLogout,
   IconNotification,
