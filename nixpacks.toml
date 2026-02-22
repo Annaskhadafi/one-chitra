@@ -9,7 +9,6 @@ cmds = ["npm ci"]
 
 [phases.build]
 cmds = [
-  "npm run db:push",
   "npm run build",
   # Copy static files to standalone directory (using sh-compatible syntax)
   "cp -r .next/static .next/standalone/.next/static || true",
@@ -17,7 +16,7 @@ cmds = [
 ]
 
 [start]
-cmd = "node .next/standalone/server.js"
+cmd = "npm run db:push && node .next/standalone/server.js"
 
 [variables]
 NODE_ENV = "production"
