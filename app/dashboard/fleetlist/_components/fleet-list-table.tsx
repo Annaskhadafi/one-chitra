@@ -204,7 +204,9 @@ export function FleetListTable() {
         const totalUnits = filteredData.reduce((acc, item) => acc + (parseInt(item.unit_qty) || 0), 0);
         const totalTires = filteredData.reduce((acc, item) => acc + (parseInt(item.totaltire) || 0), 0);
         const totalForecast = filteredData.reduce((acc, item) => acc + (parseInt(item.forecast) || 0), 0);
-        return { totalUnits, totalTires, totalForecast };
+        const totalSites = new Set(filteredData.map(item => item.site)).size;
+        const totalCustomers = new Set(filteredData.map(item => item.customer)).size;
+        return { totalUnits, totalTires, totalForecast, totalSites, totalCustomers };
     }, [filteredData]);
 
     const uniqueOptions = useMemo(() => {
@@ -213,6 +215,8 @@ export function FleetListTable() {
             location: Array.from(new Set(rawData.map(item => item.location))).filter(Boolean).sort(),
             customer: Array.from(new Set(rawData.map(item => item.customer))).filter(Boolean).sort(),
             tireSize: Array.from(new Set(rawData.map(item => item.tire_size))).filter(Boolean).sort(),
+            manufacture: Array.from(new Set(rawData.map(item => item.unit_manufacture))).filter(Boolean).sort(),
+            site: Array.from(new Set(rawData.map(item => item.site))).filter(Boolean).sort(),
         }
     }, [rawData])
 
@@ -343,31 +347,26 @@ export function FleetListTable() {
         <div className="space-y-6 relative">
             <FleetCharts data={filteredData} />
 
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Units</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalUnits.toLocaleString()}</div>
-                    </CardContent>
-                </Card>
-                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Tires</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalTires.toLocaleString()}</div>
-                    </CardContent>
-                </Card>
-                <Card className="bg-card/50 backdrop-blur-sm border-primary/10 transition-all hover:border-primary/30">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Forecast</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalForecast.toLocaleString()}</div>
-                    </CardContent>
-                </Card>
+            <div className="grid gap-4 md:grid-cols-5">
+                {[
+                    { title: "Total Units", value: stats.totalUnits, color: "text-blue-600", bg: "bg-blue-50" },
+                    { title: "Total Tires", value: stats.totalTires, color: "text-indigo-600", bg: "bg-indigo-50" },
+                    { title: "Forecast", value: stats.totalForecast, color: "text-purple-600", bg: "bg-purple-50" },
+                    { title: "Active Sites", value: stats.totalSites, color: "text-orange-600", bg: "bg-orange-50" },
+                    { title: "Customers", value: stats.totalCustomers, color: "text-emerald-600", bg: "bg-emerald-50" },
+                ].map((stat, i) => (
+                    <Card key={i} className="overflow-hidden border-none shadow-md transition-all hover:shadow-lg">
+                        <div className={cn("h-1 w-full", stat.color.replace("text", "bg"))} />
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-4">
+                            <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{stat.title}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-4">
+                            <div className={cn("text-2xl font-black tabular-nums", stat.color)}>
+                                {stat.value.toLocaleString()}
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -395,6 +394,16 @@ export function FleetListTable() {
                         columnId="customer"
                         title="Customer"
                         options={uniqueOptions.customer}
+                    />
+                    <FilterPopover
+                        columnId="unit_manufacture"
+                        title="Manufacture"
+                        options={uniqueOptions.manufacture}
+                    />
+                    <FilterPopover
+                        columnId="site"
+                        title="Site"
+                        options={uniqueOptions.site}
                     />
                     <FilterPopover
                         columnId="tire_size"
