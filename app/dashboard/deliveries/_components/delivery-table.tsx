@@ -2,7 +2,11 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries } from "@/app/actions/delivery"
+import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import {
@@ -46,7 +50,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -167,6 +171,16 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         }
     }
 
+    const handleUpdateDeliveryDate = async (id: number, date: Date | undefined) => {
+        const result = await updateDeliveryDate(id, date || null)
+        if (result.success) {
+            toast.success("Delivery date updated")
+            refetch()
+        } else {
+            toast.error(result.error)
+        }
+    }
+
     const handleDelete = async (id: number) => {
         setDeleting(id)
         const res = await deleteDelivery(id)
@@ -241,11 +255,50 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
             header: "Delivery Date",
             cell: ({ row }) => {
                 const date = row.original.deliveryDate
-                return date ? new Date(date).toLocaleDateString("id-ID", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                }) : "-"
+                const id = row.original.id
+
+                if (!canEdit) {
+                    return date ? new Date(date).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                    }) : "-"
+                }
+
+                return (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant={"ghost"}
+                                className={cn(
+                                    "h-8 justify-start text-left font-normal p-0 hover:bg-transparent",
+                                    !date && "text-muted-foreground"
+                                )}
+                            >
+                                {date ? (
+                                    new Date(date).toLocaleDateString("id-ID", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                    })
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        <CalendarIcon className="h-4 w-4" />
+                                        Set Date
+                                    </span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="single"
+                                selected={date ? new Date(date) : undefined}
+                                onSelect={(newDate) => handleUpdateDeliveryDate(id, newDate)}
+                                initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                )
             },
         },
         {

@@ -462,6 +462,20 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     }
 }
 
+export async function updateDeliveryDate(id: number, date: Date | null) {
+    try {
+        await checkPermission('deliveries', 'edit')
+        await db.update(deliveries)
+            .set({ deliveryDate: date, updatedAt: new Date() })
+            .where(eq(deliveries.id, id))
+        revalidatePath("/dashboard/deliveries")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update delivery date:", error)
+        return { success: false, error: "Failed to update delivery date" }
+    }
+}
+
 export async function updateDoMonitoringFields(id: number, data: {
     returnDoDate?: Date | null,
     invoiceNumber?: string | null,
