@@ -283,6 +283,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
             }
 
+            if (data.status === "delivered") {
+                await checkAndCompleteSalesOrder(tx, data.salesOrderId)
+            }
+
             revalidatePath("/dashboard/deliveries")
             return { success: true, id: newDelivery.id }
         })
@@ -410,6 +414,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 }
             }
 
+            if (data.status === "delivered") {
+                await checkAndCompleteSalesOrder(tx, data.salesOrderId)
+            }
+
             revalidatePath("/dashboard/deliveries")
             return { success: true }
         })
@@ -498,12 +506,30 @@ export async function bulkDeleteDeliveries(ids: number[]) {
 export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     try {
         await checkPermission('deliveries', 'edit')
-        await db.update(deliveries)
-            .set({ status, updatedAt: new Date() })
-            .where(inArray(deliveries.id, ids))
-        revalidatePath("/dashboard/deliveries")
-        return { success: true }
+
+        return await db.transaction(async (tx) => {
+            // Get affected sales order IDs before update
+            const affectedDeliveries = await tx.query.deliveries.findMany({
+                where: inArray(deliveries.id, ids),
+                columns: { salesOrderId: true }
+            })
+
+            await tx.update(deliveries)
+                .set({ status, updatedAt: new Date() })
+                .where(inArray(deliveries.id, ids))
+
+            if (status === "delivered") {
+                const uniqueSoIds = Array.from(new Set(affectedDeliveries.map(d => d.salesOrderId)))
+                for (const soId of uniqueSoIds) {
+                    await checkAndCompleteSalesOrder(tx, soId)
+                }
+            }
+
+            revalidatePath("/dashboard/deliveries")
+            return { success: true }
+        })
     } catch (_error) {
+        console.error("Bulk update delivery status error:", _error)
         return { success: false, error: "Failed to update delivery status" }
     }
 }
@@ -549,11 +575,72 @@ export async function updateDoMonitoringFields(id: number, data: {
             .set(updateData)
             .where(eq(deliveries.id, id))
 
+        if (data.doStatus === "Delivered") {
+            const delivery = await db.query.deliveries.findFirst({
+                where: eq(deliveries.id, id),
+                columns: { salesOrderId: true }
+            })
+            if (delivery) {
+                await db.transaction(async (tx) => {
+                    await checkAndCompleteSalesOrder(tx, delivery.salesOrderId)
+                })
+            }
+        }
+
         revalidatePath("/dashboard/deliveries")
         revalidatePath("/dashboard/do-monitoring")
         return { success: true }
     } catch (error) {
         console.error("Failed to update DO Monitoring fields:", error)
         return { success: false, error: "Failed to update DO Monitoring fields" }
+    }
+}
+
+export async function checkAndCompleteSalesOrder(tx: any, salesOrderId: number) {
+    // 1. Fetch SO with items
+    const order = await tx.query.salesOrders.findFirst({
+        where: eq(salesOrders.id, salesOrderId),
+        with: { items: true },
+    })
+
+    if (!order || order.status !== "confirmed") return
+
+    // 2. Fetch all delivered quantities for this SO
+    const deliveredItems = await tx.select({
+        salesOrderItemId: deliveryItems.salesOrderItemId,
+        totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+    })
+        .from(deliveryItems)
+        .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
+        .where(and(
+            eq(deliveries.salesOrderId, salesOrderId),
+            eq(deliveries.status, "delivered")
+        ))
+        .groupBy(deliveryItems.salesOrderItemId)
+
+
+    const deliveredMap = new Map<number, number>()
+    for (const d of deliveredItems) {
+        if (d.salesOrderItemId) {
+            deliveredMap.set(d.salesOrderItemId, Number(d.totalDelivered))
+        }
+    }
+
+    // 3. Check if all items are fully delivered
+    const isAllDelivered = order.items.every((item: any) => {
+        const delivered = deliveredMap.get(item.id) || 0
+        return delivered >= item.quantity
+    })
+
+
+    if (isAllDelivered) {
+        await tx.update(salesOrders)
+            .set({ status: "completed", updatedAt: new Date() })
+            .where(eq(salesOrders.id, salesOrderId))
+        try {
+            revalidatePath("/dashboard/sales-orders")
+        } catch (_error) {
+            // Context-specific error (handled for script environment)
+        }
     }
 }

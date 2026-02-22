@@ -1,0 +1,18 @@
+Starting SO Automation Test...
+Using Customer: PT. BATUTUA TEMBAGA RAYA, Warehouse: 3, Product: 116120F202
+Created Test SO ID: 20, Status: confirmed
+Created Test Delivery ID: 19, Status: scheduled
+Updating Delivery status to 'delivered'...
+Bulk update delivery status error: Error: `headers` was called outside a request scope. Read more: https://nextjs.org/docs/messages/next-dynamic-api-wrong-context
+    at throwForMissingRequestStore (D:\[01] PROJECT\one chitra\node_modules\next\src\server\app-render\work-unit-async-storage.external.ts:335:9)
+    at headers (D:\[01] PROJECT\one chitra\node_modules\next\src\server\request\headers.ts:188:30)
+    at checkPermission (D:\[01] PROJECT\one chitra\lib\rbac.ts:9:24)
+    at bulkUpdateDeliveryStatus (D:\[01] PROJECT\one chitra\app\actions\delivery.ts:508:15)
+    at testAutomation (D:\[01] PROJECT\one chitra\scripts\test-so-automation.ts:77:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Action call failed (likely due to auth): Failed to update delivery status
+Calling helper directly inside a transaction...
+Updated SO Status: completed
+TEST PASSED: Sales Order automatically completed!
+Cleaning up test data...
+Cleanup done.

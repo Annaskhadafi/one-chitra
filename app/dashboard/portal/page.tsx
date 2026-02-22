@@ -11,7 +11,7 @@ export default async function PortalPage() {
     const items = await getPortalItems()
 
     return (
-        <div className="space-y-0 -m-1 md:-m-6">
+        <div className="space-y-6">
             {/* Hero Section */}
             <div className="relative overflow-hidden bg-slate-950 px-6 py-16 md:py-24 text-white">
                 {/* Decorative gradients */}
