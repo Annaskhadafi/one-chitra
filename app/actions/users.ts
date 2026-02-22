@@ -5,6 +5,7 @@ import { user } from "@/db/schema"
 import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
+import { authClient } from "@/lib/auth-client"
 
 export async function createUser(data: { name: string; email: string; password: string; role: string }) {
     try {
@@ -133,9 +134,85 @@ export async function setUserRole(userId: string, role: string) {
             .set({ role })
             .where(eq(user.id, userId))
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/account')
         return { success: true }
     } catch (error) {
         console.error("Failed to update user role:", error)
         return { success: false, error: "Failed to update user role" }
+    }
+}
+
+export async function updateProfile(data: { name: string; image?: string }) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user) throw new Error("Unauthorized")
+
+        await db.update(user)
+            .set({
+                name: data.name,
+                image: data.image,
+                updatedAt: new Date()
+            })
+            .where(eq(user.id, session.user.id))
+
+        revalidatePath('/dashboard/account')
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update profile:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to update profile" }
+    }
+}
+
+export async function changePassword(data: { oldPassword: string; newPassword: string }) {
+    try {
+        const result = await auth.api.changePassword({
+            headers: await headers(),
+            body: {
+                currentPassword: data.oldPassword,
+                newPassword: data.newPassword,
+                revokeOtherSessions: true
+            }
+        })
+
+        if (result.status === false) {
+            throw new Error("Failed to change password")
+        }
+
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to change password:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to change password" }
+    }
+}
+
+export async function adminResetPassword(userId: string, newPassword: string) {
+    try {
+        const session = await auth.api.getSession({
+            headers: await headers()
+        })
+
+        if (!session?.user || session.user.role !== 'admin') {
+            throw new Error("Unauthorized. Only admins can reset passwords.")
+        }
+
+        const result = await auth.api.setPassword({
+            headers: await headers(),
+            body: {
+                userId,
+                newPassword
+            }
+        })
+
+        if (result.status === false) {
+            throw new Error("Failed to reset password")
+        }
+
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to reset password:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to reset password" }
     }
 }

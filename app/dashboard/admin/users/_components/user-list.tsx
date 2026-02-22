@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { UserRoleDialog } from "./user-role-dialog"
+import { ResetPasswordDialog } from "./reset-password-dialog"
 
 import { User } from "@/lib/types"
 import { useState, useMemo } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Users, Shield, UserCheck, Trash2, ChevronUp, ChevronDown } from "lucide-react"
+import { Users, Shield, UserCheck, Trash2, ChevronUp, ChevronDown, Key } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, getUsers } from "@/app/actions/users"
@@ -55,6 +56,7 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
 
     const [sorting, setSorting] = useState<SortingState>([])
     const [rowSelection, setRowSelection] = useState({})
+    const [resetUser, setResetUser] = useState<User | null>(null)
 
     // Stats calculation
     const totalUsers = data.length
@@ -120,16 +122,27 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                 return (
                     <div className="flex justify-end items-center gap-2">
                         {canEdit && (
-                            <UserRoleDialog
-                                userId={user.id}
-                                currentRole={user.role}
-                                roles={roles}
-                                trigger={
-                                    <Button variant="ghost" size="sm">
-                                        Edit Role
-                                    </Button>
-                                }
-                            />
+                            <>
+                                <UserRoleDialog
+                                    userId={user.id}
+                                    currentRole={user.role}
+                                    roles={roles}
+                                    trigger={
+                                        <Button variant="ghost" size="sm">
+                                            Edit Role
+                                        </Button>
+                                    }
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    onClick={() => setResetUser(user)}
+                                    title="Reset Password"
+                                >
+                                    <Key className="h-4 w-4" />
+                                </Button>
+                            </>
                         )}
                         {canDelete && (
                             <Button
@@ -295,6 +308,12 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                     entityName="user"
                 />
             )}
+
+            <ResetPasswordDialog
+                user={resetUser ? { id: resetUser.id, name: resetUser.name || '', email: resetUser.email || '' } : null}
+                open={!!resetUser}
+                onOpenChange={(open) => !open && setResetUser(null)}
+            />
         </div>
     )
 }
