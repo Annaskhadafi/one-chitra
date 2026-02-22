@@ -17,6 +17,9 @@ async function seed() {
         { name: 'Warehouse', description: 'Inventory management and RFID scanning' },
         { name: 'Sales', description: 'Create quotations and view customers' },
         { name: 'Billing', description: 'Manage invoices and exports' },
+        { name: 'Karyawan Umum', description: 'General employee role' },
+        { name: 'Central Service Admin', description: 'Central service administration' },
+        { name: 'HRGA', description: 'Human Resources and General Affairs' },
     ];
 
     for (const role of defaultRoles) {
