@@ -11,7 +11,6 @@ import {
     PieChart as PieChartIcon,
     Calendar,
     RefreshCw,
-    Loader2,
     ArrowUpRight
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,7 +38,7 @@ import {
     YAxis,
     CartesianGrid,
 } from "recharts"
-import { getHistoryOrderForSegmentation, HistoryOrderItem } from "@/app/actions/customer-segmentation"
+import { getHistoryOrderForSegmentation, CustomerRFMAggregate } from "@/app/actions/customer-segmentation"
 import {
     useReactTable,
     getCoreRowModel,
@@ -50,6 +49,7 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { cn } from "@/lib/utils"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -86,28 +86,36 @@ interface Stats {
 const COLORS = ['#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#64748b', '#f97316'];
 
 export function CustomerSegmentationClient() {
-    const [rawData, setRawData] = useState<HistoryOrderItem[]>([]);
+    const [rawData, setRawData] = useState<CustomerRFMAggregate[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSegment, setFilterSegment] = useState('All');
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState('2025-01-01');
     const [endDate, setEndDate] = useState('2025-12-31');
+    const [loadingProgress, setLoadingProgress] = useState(0);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
+        setLoadingProgress(10);
         try {
-            const result = await getHistoryOrderForSegmentation();
+            setLoadingProgress(30);
+            const result = await getHistoryOrderForSegmentation(startDate, endDate);
+            setLoadingProgress(80);
             if (result.success && Array.isArray(result.data)) {
                 setRawData(result.data);
+                setLoadingProgress(100);
             } else {
                 toast.error("Failed to load data");
             }
         } catch (_error) {
             toast.error("Failed to fetch data");
         } finally {
-            setLoading(false);
+            setTimeout(() => {
+                setLoading(false);
+                setLoadingProgress(0);
+            }, 500);
         }
-    }, []);
+    }, [startDate, endDate]);
 
     React.useEffect(() => {
         fetchData();
@@ -125,61 +133,21 @@ export function CustomerSegmentationClient() {
         const start = new Date(startDate);
         const end = new Date(endDate);
 
-        const globalFirstPurchase: Record<string, Date> = {};
-        rawData.forEach(row => {
-            const name = row.customer_name;
-            const dateParts = row.billing_date.split('/');
-            if (dateParts.length === 3) {
-                const date = new Date(parseInt(dateParts[2]), parseInt(dateParts[0]) - 1, parseInt(dateParts[1]));
-                if (name && !isNaN(date.getTime())) {
-                    if (!globalFirstPurchase[name] || date < globalFirstPurchase[name]) {
-                        globalFirstPurchase[name] = date;
-                    }
-                }
-            }
+        const list = rawData.map(c => {
+            const lastDate = new Date(c.last_date);
+            return {
+                name: c.customer_name,
+                lastDate: lastDate,
+                frequency: c.frequency,
+                monetary: c.monetary,
+                globalFirstDate: new Date(c.global_first_purchase),
+                recency: Math.max(0, Math.floor((end.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))),
+                r: 1,
+                f: 1,
+                m: 1,
+                segment: 'Needs Attention'
+            };
         });
-
-        const customers: Record<string, CustomerData> = {};
-        const filteredRows = rawData.filter(row => {
-            const dateParts = row.billing_date.split('/');
-            if (dateParts.length === 3) {
-                const date = new Date(parseInt(dateParts[2]), parseInt(dateParts[0]) - 1, parseInt(dateParts[1]));
-                return !isNaN(date.getTime()) && date >= start && date <= end;
-            }
-            return false;
-        });
-
-        filteredRows.forEach(row => {
-            const name = row.customer_name;
-            const revenue = row.revenue || 0;
-            const dateParts = row.billing_date.split('/');
-            const date = dateParts.length === 3
-                ? new Date(parseInt(dateParts[2]), parseInt(dateParts[0]) - 1, parseInt(dateParts[1]))
-                : new Date();
-
-            if (!customers[name]) {
-                customers[name] = {
-                    name,
-                    lastDate: date,
-                    frequency: 0,
-                    monetary: 0,
-                    globalFirstDate: globalFirstPurchase[name] || date,
-                    recency: 0,
-                    r: 1,
-                    f: 1,
-                    m: 1,
-                    segment: 'Needs Attention'
-                };
-            }
-            if (date > customers[name].lastDate) customers[name].lastDate = date;
-            customers[name].frequency += 1;
-            customers[name].monetary += revenue;
-        });
-
-        const list = Object.values(customers).map(c => ({
-            ...c,
-            recency: Math.max(0, Math.floor((end.getTime() - c.lastDate.getTime()) / (1000 * 60 * 60 * 24)))
-        }));
 
         const getScore = (val: number, arr: number[], reverse = false) => {
             const sorted = [...new Set(arr)].sort((a, b) => a - b);
@@ -284,8 +252,13 @@ export function CustomerSegmentationClient() {
         }
     ], [])
 
+    const filteredData = useMemo(() => {
+        if (filterSegment === 'All') return rfmData;
+        return rfmData.filter(d => d.segment === filterSegment);
+    }, [rfmData, filterSegment]);
+
     const table = useReactTable({
-        data: rfmData,
+        data: filteredData,
         columns,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
@@ -312,9 +285,12 @@ export function CustomerSegmentationClient() {
 
     if (loading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] border rounded-lg bg-card/50">
-                <Loader2 className="animate-spin text-primary mb-4" size={48} />
-                <p className="text-sm text-muted-foreground font-medium">Sinkronisasi Data...</p>
+            <div className="flex flex-col items-center justify-center min-h-[400px] border rounded-lg bg-card/50 p-8">
+                <ProgressLoading
+                    value={loadingProgress}
+                    message="Menganalisis Segmentasi Customer..."
+                    className="max-w-md"
+                />
             </div>
         );
     }

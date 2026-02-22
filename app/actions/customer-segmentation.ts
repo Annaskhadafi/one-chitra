@@ -2,27 +2,31 @@
 
 import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
-import { desc, notIlike, isNull, or } from "drizzle-orm"
+import { desc, notIlike, isNull, or, sql, and } from "drizzle-orm"
 
-export interface HistoryOrderItem {
+export interface CustomerRFMAggregate {
     customer_name: string;
-    material_no: string;
-    description: string;
-    qty: number;
-    revenue: number;
-    revenue_formatted: string;
-    billing_date: string;
-    plant: string;
-    po_number: string;
-    po_date: string;
-    mat_grp_desc: string;
-    salesman: string;
+    last_date: string;
+    frequency: number;
+    monetary: number;
+    global_first_purchase: string;
 }
 
-export async function getHistoryOrderForSegmentation() {
+export async function getHistoryOrderForSegmentation(startDate?: string, endDate?: string) {
     try {
-        // Exclude Singapore Branch per request
-        const data = await db.select()
+        // Default range if not provided
+        const start = startDate || '2025-01-01';
+        const end = endDate || '2025-12-31';
+
+        // 1. Dapatkan global first purchase per customer
+        const globalFirstPurchaseQuery = db.select({
+            customer_name: historyOrders.customerName,
+            global_first_purchase: sql<string>`MIN(CASE 
+                WHEN ${historyOrders.billingDate} IS NOT NULL AND ${historyOrders.billingDate} != '' 
+                THEN TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY') 
+                ELSE NULL 
+            END)`.as('global_first_purchase')
+        })
             .from(historyOrders)
             .where(
                 or(
@@ -30,46 +34,37 @@ export async function getHistoryOrderForSegmentation() {
                     notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
                 )
             )
-            .orderBy(desc(historyOrders.billingDate));
+            .groupBy(historyOrders.customerName)
+            .as('gf');
 
-        // Map database records to our interface keys
-        const formattedData: HistoryOrderItem[] = data.map((item) => {
-            const revenue = item.revenueInDocCurr || 0;
+        // 2. Aggregate metrics dalam range terpilih
+        const data = await db.select({
+            customer_name: historyOrders.customerName,
+            last_date: sql<string>`MAX(TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY'))`,
+            frequency: sql<number>`COUNT(*)::int`,
+            monetary: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
+            global_first_purchase: globalFirstPurchaseQuery.global_first_purchase
+        })
+            .from(historyOrders)
+            .innerJoin(globalFirstPurchaseQuery, sql`${historyOrders.customerName} = ${globalFirstPurchaseQuery.customer_name}`)
+            .where(
+                and(
+                    or(
+                        isNull(historyOrders.customerName),
+                        notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                    ),
+                    sql`TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY') BETWEEN TO_DATE(${start}, 'YYYY-MM-DD') AND TO_DATE(${end}, 'YYYY-MM-DD')`
+                )
+            )
+            .groupBy(historyOrders.customerName, globalFirstPurchaseQuery.global_first_purchase);
 
-            const revenueFormatted = new Intl.NumberFormat("id-ID", {
-                style: "currency",
-                currency: "IDR",
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0
-            }).format(revenue);
-
-            return {
-                customer_name: item.customerName || '',
-                material_no: item.materialNo || '',
-                description: item.materialDescription || '',
-                qty: item.qty || 0,
-                revenue: revenue,
-                revenue_formatted: revenueFormatted,
-                billing_date: item.billingDate || '',
-                plant: item.plant || '',
-                po_number: item.poNo || '',
-                po_date: item.poDate || '',
-                mat_grp_desc: item.matGrpDesc || '',
-                salesman: item.salesman || ''
-            };
-        });
-
-        // Sort the data chronologically descending (newest first)
-        formattedData.sort((a, b) => {
-            const dateA = new Date(a.billing_date).getTime();
-            const dateB = new Date(b.billing_date).getTime();
-
-            if (isNaN(dateA) && isNaN(dateB)) return 0;
-            if (isNaN(dateA)) return 1;
-            if (isNaN(dateB)) return -1;
-
-            return dateB - dateA;
-        });
+        const formattedData: CustomerRFMAggregate[] = data.map((item) => ({
+            customer_name: item.customer_name || 'Unknown',
+            last_date: item.last_date ? new Date(item.last_date).toISOString() : '',
+            frequency: item.frequency || 0,
+            monetary: item.monetary || 0,
+            global_first_purchase: item.global_first_purchase ? new Date(item.global_first_purchase).toISOString() : ''
+        }));
 
         return { success: true, data: formattedData };
     } catch (error) {
