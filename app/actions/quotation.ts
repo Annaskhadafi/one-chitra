@@ -407,3 +407,37 @@ export async function duplicateQuotation(id: number) {
         return { success: false, error: "Failed to duplicate quotation" }
     }
 }
+
+export async function updateQuotationStatus(id: number, status: string) {
+    try {
+        await db.update(quotations)
+            .set({
+                status,
+                updatedAt: new Date(),
+            })
+            .where(eq(quotations.id, id))
+
+        revalidatePath("/dashboard/quotations")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update quotation status:", error)
+        return { success: false, error: "Failed to update status" }
+    }
+}
+
+export async function bulkUpdateQuotationStatus(ids: number[], status: string) {
+    try {
+        await db.update(quotations)
+            .set({
+                status,
+                updatedAt: new Date(),
+            })
+            .where(inArray(quotations.id, ids))
+
+        revalidatePath("/dashboard/quotations")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to bulk update quotation status:", error)
+        return { success: false, error: "Failed to update statuses" }
+    }
+}

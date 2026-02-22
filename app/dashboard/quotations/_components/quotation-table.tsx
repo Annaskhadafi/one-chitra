@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
-import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation } from "@/app/actions/quotation"
+import { useState, useMemo, useRef, useEffect } from "react"
+import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus } from "@/app/actions/quotation"
 import {
     Table,
     TableBody,
@@ -33,12 +33,16 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2, Copy } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, XCircle, ArrowRightLeft, Send, User, ChevronUp, ChevronDown, Loader2, Copy, Calendar, Filter, ShoppingCart } from "lucide-react"
+import { ScoreCard } from "@/components/score-card"
+import { BulkActions } from "@/components/bulk-actions"
+import { usePermissions } from "@/hooks/use-permissions"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Customer, Product } from "@/lib/types"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { useQuery } from "@tanstack/react-query"
+import { useSession } from "@/lib/auth-client"
 import {
     useReactTable,
     getCoreRowModel,
@@ -63,6 +67,7 @@ interface QuotationWithRelations {
     tax: string
     shipping: string
     salesOrderId: number | null
+    createdBy: string
     createdAt: Date
     customer: Customer
     tags: string | null
@@ -75,6 +80,9 @@ interface QuotationWithRelations {
     notes: string | null
     salesPersonId: string | null
     validUntil: Date | null
+    attn: string | null
+    address: string | null
+    discountType: string
     salesPerson: { id: string; name: string; email: string } | null
     createdByUser: { id: string; name: string; email: string } | null
     items: {
@@ -145,6 +153,9 @@ function formatDate(date: Date) {
 }
 
 export function QuotationTable({ data: initialData }: QuotationTableProps) {
+    const { data: session } = useSession()
+    const currentUserId = session?.user?.id
+
     const { data: quotations = initialData, isLoading, refetch } = useQuery({
         queryKey: ["quotations"],
         queryFn: async () => {
@@ -155,18 +166,100 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         staleTime: 60 * 1000,
     })
 
+    const { hasResourcePermission } = usePermissions()
+    const canEdit = hasResourcePermission('quotations', 'edit')
+    const canDelete = hasResourcePermission('quotations', 'delete')
+    const canView = hasResourcePermission('quotations', 'view')
+
     const [sorting, setSorting] = useState<SortingState>([{ id: "quotationDate", desc: true }])
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [userFilter, setUserFilter] = useState("all")
+
+    // Set default user filter to current user once session is loaded
+    useEffect(() => {
+        if (currentUserId) {
+            setUserFilter(currentUserId)
+        }
+    }, [currentUserId])
+
+    const [monthFilter, setMonthFilter] = useState("all")
+    const [yearFilter, setYearFilter] = useState("all")
     const [rowSelection, setRowSelection] = useState({})
     const [previewQuotation, setPreviewQuotation] = useState<QuotationWithRelations | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
 
+    // Extract unique users for filter
+    const uniqueUsers = useMemo(() => {
+        const users = new Map<string, string>()
+        quotations.forEach(q => {
+            if (q.createdByUser) {
+                users.set(q.createdByUser.id, q.createdByUser.name)
+            }
+        })
+        return Array.from(users.entries()).map(([id, name]) => ({ id, name }))
+    }, [quotations])
+
+    // Generate years for filter
+    const availableYears = useMemo(() => {
+        const years = new Set<string>()
+        quotations.forEach(q => {
+            years.add(new Date(q.quotationDate).getFullYear().toString())
+        })
+        return Array.from(years).sort((a, b) => b.localeCompare(a))
+    }, [quotations])
+
+    const months = [
+        { value: "0", label: "January" },
+        { value: "1", label: "February" },
+        { value: "2", label: "March" },
+        { value: "3", label: "April" },
+        { value: "4", label: "May" },
+        { value: "5", label: "June" },
+        { value: "6", label: "July" },
+        { value: "7", label: "August" },
+        { value: "8", label: "September" },
+        { value: "9", label: "October" },
+        { value: "10", label: "November" },
+        { value: "11", label: "December" },
+    ]
+
+    // Scorecard data
+    const stats = useMemo(() => {
+        const total = quotations.length
+        const totalValue = quotations.reduce((sum, q) => sum + calculateGrandTotal(q), 0)
+        const approved = quotations.filter(q => q.status === "approved").length
+        const approvedValue = quotations.filter(q => q.status === "approved").reduce((sum, q) => sum + calculateGrandTotal(q), 0)
+        const sent = quotations.filter(q => q.status === "sent").length
+        const converted = quotations.filter(q => q.status === "converted").length
+
+        return {
+            total,
+            totalValue,
+            approved,
+            approvedValue,
+            sent,
+            converted
+        }
+    }, [quotations])
+
+    // Filtered data for charts
+    const filteredForCharts = useMemo(() => {
+        return quotations.filter(q => {
+            const date = new Date(q.quotationDate)
+            const matchesStatus = statusFilter === "all" || q.status === statusFilter
+            const matchesUser = userFilter === "all" || q.createdBy === userFilter
+            const matchesMonth = monthFilter === "all" || date.getMonth().toString() === monthFilter
+            const matchesYear = yearFilter === "all" || date.getFullYear().toString() === yearFilter
+            return matchesStatus && matchesUser && matchesMonth && matchesYear
+        })
+    }, [quotations, statusFilter, userFilter, monthFilter, yearFilter])
+
     // Chart data: status breakdown
     const chartData = useMemo(() => {
         const statusCounts: Record<string, number> = {}
-        quotations.forEach(q => {
+        filteredForCharts.forEach(q => {
             statusCounts[q.status] = (statusCounts[q.status] || 0) + 1
         })
         return Object.entries(statusCounts).map(([status, count]) => ({
@@ -174,6 +267,33 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             count,
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
+    }, [filteredForCharts])
+
+    // Chart data: Monthly trend
+    const monthlyTrendData = useMemo(() => {
+        const monthlyData: Record<string, { month: string; value: number }> = {}
+        const last6Months = Array.from({ length: 6 }).map((_, i) => {
+            const d = new Date()
+            d.setMonth(d.getMonth() - i)
+            return {
+                key: `${d.getFullYear()}-${d.getMonth()}`,
+                label: d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
+            }
+        }).reverse()
+
+        last6Months.forEach(m => {
+            monthlyData[m.key] = { month: m.label, value: 0 }
+        })
+
+        quotations.forEach(q => {
+            const date = new Date(q.quotationDate)
+            const key = `${date.getFullYear()}-${date.getMonth()}`
+            if (monthlyData[key]) {
+                monthlyData[key].value += calculateGrandTotal(q)
+            }
+        })
+
+        return Object.values(monthlyData)
     }, [quotations])
 
     const columns = useMemo<ColumnDef<QuotationWithRelations>[]>(() => [
@@ -264,10 +384,37 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             header: "Status",
             cell: ({ row }) => {
                 const status = row.original.status
-                const StatusIcon = statusIcons[status] || FileText
-                return (
+                const id = row.original.id
+                return canEdit ? (
+                    <Select
+                        defaultValue={status}
+                        onValueChange={async (value) => {
+                            const result = await updateQuotationStatus(id, value)
+                            if (result.success) {
+                                toast.success("Status updated")
+                                refetch()
+                            } else {
+                                toast.error(result.error || "Failed to update status")
+                            }
+                        }}
+                    >
+                        <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[status] === 'default' ? 'bg-primary text-primary-foreground' :
+                            statusVariants[status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                                statusVariants[status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
+                            }`}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="sent">Sent</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
+                            <SelectItem value="expired">Expired</SelectItem>
+                            <SelectItem value="converted">Converted</SelectItem>
+                        </SelectContent>
+                    </Select>
+                ) : (
                     <Badge variant={statusVariants[status] || "secondary"} className="gap-1">
-                        <StatusIcon className="h-3 w-3" />
                         {status.charAt(0).toUpperCase() + status.slice(1)}
                     </Badge>
                 )
@@ -330,38 +477,40 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                             <Copy className="h-3.5 w-3.5" />
                         )}
                     </Button>
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This will permanently delete quotation {row.original.quotationNumber} and all its items.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={async () => {
-                                        const result = await deleteQuotation(row.original.id)
-                                        if (result.success) {
-                                            toast.success("Quotation deleted")
-                                            refetch()
-                                        } else {
-                                            toast.error(result.error || "Failed to delete")
-                                        }
-                                    }}
-                                >
-                                    Delete
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </div>
+                    {canDelete && row.original.createdBy === currentUserId && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will permanently delete quotation {row.original.quotationNumber} and all its items.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={async () => {
+                                            const result = await deleteQuotation(row.original.id)
+                                            if (result.success) {
+                                                toast.success("Quotation deleted")
+                                                refetch()
+                                            } else {
+                                                toast.error(result.error || "Failed to delete")
+                                            }
+                                        }}
+                                    >
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div >
             ),
         },
     ], [refetch, isDuplicating])
@@ -392,8 +541,13 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 q.createdByUser?.name?.toLowerCase().includes(term)
             )
 
+            const date = new Date(q.quotationDate)
             const matchesStatus = statusFilter === "all" || q.status === statusFilter
-            return matchesSearch && matchesStatus
+            const matchesUser = userFilter === "all" || q.createdBy === userFilter
+            const matchesMonth = monthFilter === "all" || date.getMonth().toString() === monthFilter
+            const matchesYear = yearFilter === "all" || date.getFullYear().toString() === yearFilter
+
+            return matchesSearch && matchesStatus && matchesUser && matchesMonth && matchesYear
         },
     })
 
@@ -402,11 +556,41 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         [rowSelection]
     )
 
-    const handleBulkDelete = async () => {
-        try {
-            const result = await bulkDeleteQuotations(selectedIds)
+    const handleBulkStatusUpdate = async () => {
+        const status = prompt("Enter new status (draft/sent/approved/rejected/expired/converted):")
+        if (status) {
+            const result = await bulkUpdateQuotationStatus(selectedIds, status)
             if (result.success) {
-                toast.success(`${selectedIds.length} quotations deleted`)
+                toast.success("Statuses updated")
+                setRowSelection({})
+                refetch()
+            } else {
+                toast.error(result.error || "Failed to update statuses")
+            }
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        // Only allow deleting quotations owned by the current user
+        const ownedIds = quotations
+            .filter(q => selectedIds.includes(q.id) && q.createdBy === currentUserId)
+            .map(q => q.id)
+
+        if (ownedIds.length === 0) {
+            toast.error("You can only delete quotations you created")
+            return
+        }
+
+        if (ownedIds.length < selectedIds.length) {
+            if (!confirm(`You only have permission to delete ${ownedIds.length} of the ${selectedIds.length} selected quotations. Proceed?`)) {
+                return
+            }
+        }
+
+        try {
+            const result = await bulkDeleteQuotations(ownedIds)
+            if (result.success) {
+                toast.success(`${ownedIds.length} quotations deleted`)
                 setRowSelection({})
                 refetch()
             } else {
@@ -435,6 +619,11 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         ]
         : [0, 0]
 
+    // Use effect to handle filter changes correctly with TanStack table
+    useEffect(() => {
+        table.setGlobalFilter(globalFilter)
+    }, [statusFilter, userFilter, monthFilter, yearFilter, globalFilter, table])
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center p-12 gap-4">
@@ -446,15 +635,50 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
     return (
         <div className="space-y-4">
-            {/* Status Chart */}
-            {quotations.length > 0 && (
+            {/* Scorecards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ScoreCard
+                    title="Total Quotations"
+                    value={stats.total}
+                    icon={FileText}
+                    description="Total created quotations"
+                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50"
+                />
+                <ScoreCard
+                    title="Total Value"
+                    value={formatCurrency(stats.totalValue)}
+                    icon={ShoppingCart}
+                    description="Total potential value"
+                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50"
+                />
+                <ScoreCard
+                    title="Approved"
+                    value={stats.approved}
+                    icon={CheckCircle}
+                    description={`Value: ${formatCurrency(stats.approvedValue)}`}
+                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50"
+                />
+                <ScoreCard
+                    title="Conversion Rate"
+                    value={`${stats.total > 0 ? Math.round((stats.converted / stats.total) * 100) : 0}%`}
+                    icon={ArrowRightLeft}
+                    description={`${stats.converted} converted to SO`}
+                    gradient="from-purple-500/10 via-purple-400/5 to-pink-500/10 border-purple-200/50"
+                />
+            </div>
+
+            {/* Charts */}
+            <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Quotation Status Overview</CardTitle>
-                        <CardDescription>{quotations.length} total quotations</CardDescription>
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Filter className="h-4 w-4" />
+                            Status Distribution
+                        </CardTitle>
+                        <CardDescription>Breakdown by current status</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ResponsiveContainer width="100%" height={180}>
+                        <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
                                 <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
                                 <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
@@ -463,7 +687,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                                         backgroundColor: "hsl(var(--card))",
                                         border: "1px solid hsl(var(--border))",
                                         borderRadius: "8px",
-                                        color: "hsl(var(--foreground))",
                                     }}
                                 />
                                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
@@ -475,64 +698,138 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
-            )}
+
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            Monthly Value Trend
+                        </CardTitle>
+                        <CardDescription>Total value over last 6 months</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={monthlyTrendData}>
+                                <XAxis dataKey="month" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(val) => `Rp${val / 1000000}M`} />
+                                <Tooltip
+                                    formatter={(value: number) => formatCurrency(value)}
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                    }}
+                                />
+                                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
+            <div className="flex flex-wrap gap-3 p-4 bg-muted/30 rounded-lg border">
+                <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search by QT number, customer, subject, or user..."
+                        placeholder="Search QT number, customer, subject..."
                         value={globalFilter ?? ""}
                         onChange={(e) => setGlobalFilter(e.target.value)}
-                        className="pl-9"
+                        className="pl-9 h-9"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={(val) => {
-                    setStatusFilter(val)
-                    // Trigger table filter update
-                    table.setGlobalFilter(globalFilter)
-                }}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="sent">Sent</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                        <SelectItem value="expired">Expired</SelectItem>
-                        <SelectItem value="converted">Converted</SelectItem>
-                    </SelectContent>
-                </Select>
+
+                <div className="flex flex-wrap gap-2">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-[130px] h-9">
+                            <div className="flex items-center gap-2">
+                                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="Status" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="sent">Sent</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
+                            <SelectItem value="expired">Expired</SelectItem>
+                            <SelectItem value="converted">Converted</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={userFilter} onValueChange={setUserFilter}>
+                        <SelectTrigger className="w-fit min-w-[150px] h-9 gap-3">
+                            <div className="flex items-center gap-2">
+                                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="Created By" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Users</SelectItem>
+                            {uniqueUsers.map(u => (
+                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={monthFilter} onValueChange={setMonthFilter}>
+                        <SelectTrigger className="w-[130px] h-9">
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="Month" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Months</SelectItem>
+                            {months.map(m => (
+                                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={yearFilter} onValueChange={setYearFilter}>
+                        <SelectTrigger className="w-[110px] h-9">
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="Year" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Years</SelectItem>
+                            {availableYears.map(y => (
+                                <SelectItem key={y} value={y}>{y}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {(statusFilter !== "all" || userFilter !== "all" || monthFilter !== "all" || yearFilter !== "all" || globalFilter !== "") && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setStatusFilter("all")
+                                setUserFilter("all")
+                                setMonthFilter("all")
+                                setYearFilter("all")
+                                setGlobalFilter("")
+                            }}
+                            className="h-9 text-xs"
+                        >
+                            Reset
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Bulk Actions */}
             {selectedIds.length > 0 && (
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border">
-                    <span className="text-sm font-medium">{selectedIds.length} selected</span>
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm">
-                                <Trash2 className="mr-2 h-3 w-3" />
-                                Delete Selected
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete {selectedIds.length} quotations?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This action cannot be undone. All selected quotations and their items will be permanently deleted.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </div>
+                <BulkActions
+                    selectedCount={selectedIds.length}
+                    onDelete={handleBulkDelete}
+                    onEdit={handleBulkStatusUpdate}
+                    entityName="quotation"
+                />
             )}
 
             {/* Table */}
@@ -597,7 +894,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
             {previewQuotation && (
                 <QuotationPdfPreview
-                    quotation={previewQuotation}
+                    quotation={previewQuotation as any}
                     open={isPreviewOpen}
                     onClose={() => setIsPreviewOpen(false)}
                 />
