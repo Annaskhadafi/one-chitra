@@ -6,6 +6,10 @@ import { v4 as uuidv4 } from "uuid"
 
 export async function uploadFile(formData: FormData) {
     const uploadDirName = "uploads"
+    // IMPORTANT: In Next.js standalone mode (production), process.cwd() returns
+    // /app/.next/standalone — so uploadDir resolves to /app/.next/standalone/public/uploads
+    // In development, process.cwd() returns the project root — so it resolves to ./public/uploads
+    // The Dokploy Volume Mount MUST point container path to: /app/.next/standalone/public/uploads
     const publicDir = resolve(process.cwd(), "public")
     const uploadDir = join(publicDir, uploadDirName)
 
@@ -76,6 +80,7 @@ export async function deleteFile(url: string) {
     if (!filename) return { success: false, error: "Invalid file URL" }
 
     const uploadDirName = "uploads"
+    // Same path resolution as uploadFile — must stay consistent
     const publicDir = resolve(process.cwd(), "public")
     const filepath = join(publicDir, uploadDirName, filename)
 

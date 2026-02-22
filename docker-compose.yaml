@@ -34,6 +34,9 @@ services:
       - "3000:3000"
     depends_on:
       - postgres
+    volumes:
+      # Mount persistent VPS volume agar file upload tidak hilang saat redeploy
+      - uploads_data:/app/public/uploads
     networks:
       - codeguide-starter-fullstack-network
 
@@ -59,6 +62,9 @@ volumes:
   postgres_data:
     driver: local
   postgres_dev_data:
+    driver: local
+  # Volume persistent untuk file upload (tidak hilang saat redeploy)
+  uploads_data:
     driver: local
 
 networks:

@@ -116,12 +116,33 @@ Pastikan `DATABASE_URL` sudah di-set sebagai environment variable di Dokploy **s
 ### Error: "BETTER_AUTH_URL must be set"
 Set `BETTER_AUTH_URL` dan `NEXT_PUBLIC_BETTER_AUTH_URL` di environment variables.
 
-### Static assets tidak muncul (CSS/JS 404)
-Pastikan `nixpacks.toml` sudah include step copy static:
-```toml
-"cp -r .next/static .next/standalone/.next/static",
-"cp -r public .next/standalone/public"
-```
+### File upload hilang setelah redeploy ("File not found")
+
+**Root Cause**: File upload disimpan di dalam container filesystem yang bersifat **ephemeral** (sementara). Setiap kali `git push` memicu redeploy, container lama dihancurkan bersama semua file yang sudah di-upload.
+
+**Fix untuk Dokploy (Nixpacks)**:
+
+1. Di Dokploy dashboard, buka service aplikasi kamu
+2. Pergi ke tab **Mounts** (atau **Storage / Volumes**)
+3. Tambahkan mount baru:
+   - **Host Path**: `/mnt/data/one-chitra/uploads` (atau path VPS volume kamu)
+   - **Container Path**: `/app/.next/standalone/public/uploads` ⚠️ PENTING: path ini, bukan `/app/public/uploads`
+   - Type: **Bind Mount**
+4. Pastikan folder di VPS sudah ada dan ada permission write:
+   ```bash
+   mkdir -p /mnt/data/one-chitra/uploads
+   chmod 777 /mnt/data/one-chitra/uploads
+   ```
+5. Klik **Save** dan **Redeploy**
+
+> **Mengapa `/app/.next/standalone/public/uploads`?**  
+> Nixpacks menjalankan Next.js dalam **standalone mode**. Server berjalan dari `/app/.next/standalone/server.js`, sehingga `process.cwd()` di runtime mengembalikan `/app/.next/standalone` — bukan `/app`. Akibatnya semua file upload ditulis ke `/app/.next/standalone/public/uploads`.
+
+> **Penting**: Setelah mount dikonfigurasi di Dokploy, file upload akan ditulis ke VPS path tersebut dan **tidak akan hilang** saat redeploy karena path di luar container.
+
+**Verifikasi**: Setelah konfigurasi mount, test upload file → redeploy → cek apakah file masih ada.
+
+
 
 ### Database connection timeout
 - Cek apakah `DATABASE_URL` benar

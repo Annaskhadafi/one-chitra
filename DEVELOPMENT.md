@@ -5,7 +5,16 @@
 To ensure uploaded files are persistent across deployments on Dokploy, all file uploads MUST follow this unified rule:
 
 ### 1. Storage Location
-Files are stored in the `public/uploads` directory. On production (Dokploy), this folder is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads`.
+Files are stored in the `public/uploads` directory.
+
+| Environment | Actual Path | Notes |
+|---|---|---|
+| **Development** | `<project-root>/public/uploads` | `process.cwd()` = project root |
+| **Production (Nixpacks)** | `/app/.next/standalone/public/uploads` | `process.cwd()` = `/app/.next/standalone` in standalone mode |
+
+On production (Dokploy), the container path `/app/.next/standalone/public/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
+
+> ⚠️ **Jangan ubah path di `upload.ts` atau `route.ts`** — keduanya menggunakan `process.cwd()` yang sudah secara otomatis resolve ke path yang benar di dev maupun production.
 
 ### 2. Upload Action
 Always use the centralized `uploadFile` action. Do NOT use `fs` directly in your components or other actions.
