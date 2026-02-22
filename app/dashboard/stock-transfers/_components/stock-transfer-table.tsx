@@ -81,6 +81,11 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "transferDate", desc: true }])
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     // Chart data: status breakdown
     const chartData = useMemo(() => {
@@ -373,7 +378,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                         <span className="text-purple-700 dark:text-purple-400">Filtered: <strong className="text-purple-900 dark:text-purple-300">{table.getFilteredRowModel().rows.length}</strong></span>
                     </div>
                     <div className="text-pink-700 dark:text-pink-400 font-medium">
-                        Last updated: <strong>{format(new Date(), "HH:mm:ss")}</strong>
+                        Last updated: <strong>{mounted ? format(new Date(), "HH:mm:ss") : "--:--:--"}</strong>
                     </div>
                 </div>
             </div>
