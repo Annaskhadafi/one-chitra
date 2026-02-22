@@ -191,6 +191,12 @@ export const navigationConfig: NavSection[] = [
         title: "Reports & Analytics",
         items: [
             {
+                title: "Sales Dashboard",
+                url: "/dashboard/sales-dashboard",
+                icon: BarChart3,
+                resource: "sales-dashboard",
+            },
+            {
                 title: "Reports Hub",
                 url: "/dashboard/reports",
                 icon: BarChart3,
