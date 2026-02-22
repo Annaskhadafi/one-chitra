@@ -54,6 +54,8 @@ export function DashboardCategoryChart({ data }: { data: CategoryData }) {
                                     `${category} (${(percent * 100).toFixed(0)}%)`
                                 }
                                 labelLine={true}
+                                stroke="hsl(var(--card))"
+                                strokeWidth={2}
                             >
                                 {data.map((_entry, index) => (
                                     <Cell
@@ -70,6 +72,7 @@ export function DashboardCategoryChart({ data }: { data: CategoryData }) {
                                     borderRadius: "8px",
                                     color: "hsl(var(--foreground))",
                                 }}
+                                itemStyle={{ color: "hsl(var(--foreground))" }}
                             />
                         </PieChart>
                     </ResponsiveContainer>

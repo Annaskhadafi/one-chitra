@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useMemo, useRef, useEffect } from "react"
+import { cn } from "@/lib/utils"
+import { useMounted } from "@/hooks/use-mounted"
+import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus } from "@/app/actions/quotation"
 import {
     Table,
@@ -103,13 +106,13 @@ interface QuotationTableProps {
     data: QuotationWithRelations[]
 }
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     draft: "secondary",
-    sent: "outline",
-    approved: "default",
+    sent: "warning",
+    approved: "success",
     rejected: "destructive",
     expired: "secondary",
-    converted: "default",
+    converted: "success",
 }
 
 const statusIcons: Record<string, React.ElementType> = {
@@ -156,6 +159,10 @@ function formatDate(date: Date) {
 export function QuotationTable({ data: initialData }: QuotationTableProps) {
     const { data: session } = useSession()
     const currentUserId = session?.user?.id
+
+    const mounted = useMounted()
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+    const [successMessage, setSuccessMessage] = useState("")
 
     const { data: quotations = initialData, isLoading, refetch } = useQuery({
         queryKey: ["quotations"],
@@ -386,23 +393,31 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id
+                if (!mounted) return <Badge variant={statusVariants[status] || "secondary"}>{status}</Badge>
+
                 return canEdit ? (
                     <Select
                         defaultValue={status}
                         onValueChange={async (value) => {
                             const result = await updateQuotationStatus(id, value)
                             if (result.success) {
-                                toast.success("Status updated")
+                                setSuccessMessage(`Status kuotasi berhasil diubah menjadi ${value}`)
+                                setShowSuccessDialog(true)
                                 refetch()
                             } else {
                                 toast.error(result.error || "Failed to update status")
                             }
                         }}
                     >
-                        <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[status] === 'default' ? 'bg-primary text-primary-foreground' :
-                            statusVariants[status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                                statusVariants[status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
-                            }`}>
+                        <SelectTrigger className={cn(
+                            "h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
+                            status === "approved" && "bg-emerald-500 text-white dark:bg-emerald-600",
+                            status === "sent" && "bg-amber-500 text-white dark:bg-amber-600",
+                            status === "rejected" && "bg-destructive text-white",
+                            status === "draft" && "bg-blue-500 text-white dark:bg-blue-600",
+                            status === "expired" && "bg-slate-500 text-white dark:bg-slate-600",
+                            status === "converted" && "bg-purple-500 text-white dark:bg-purple-600"
+                        )}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -899,6 +914,12 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     onClose={() => setIsPreviewOpen(false)}
                 />
             )}
+            <SuccessAlertDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                title="Status Diperbarui"
+                description={successMessage}
+            />
         </div>
     )
 }

@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import { cn } from "@/lib/utils"
+import { useMounted } from "@/hooks/use-mounted"
+import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { deleteSalesOrder, bulkDeleteSalesOrders, bulkUpdateSalesOrderStatus, getSalesOrders } from "@/app/actions/sales-order"
 import {
     Table,
@@ -59,10 +62,10 @@ interface SalesOrderTableProps {
     data: SalesOrderWithRelations[]
 }
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     draft: "secondary",
-    confirmed: "default",
-    completed: "default",
+    confirmed: "warning",
+    completed: "success",
     cancelled: "destructive",
 }
 
@@ -91,6 +94,10 @@ function calculateGrandTotal(order: SalesOrderWithRelations) {
 
 export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
+    const mounted = useMounted()
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+    const [successMessage, setSuccessMessage] = useState("")
+
     const { data = initialData } = useQuery({
         queryKey: ["sales-orders"],
         queryFn: getSalesOrders,
@@ -134,7 +141,8 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         const result = await bulkUpdateSalesOrderStatus([id], status)
         if (result.success) {
-            toast.success("Status updated")
+            setSuccessMessage(`Status pesanan berhasil diubah menjadi ${status}`)
+            setShowSuccessDialog(true)
             queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
         } else {
             toast.error(('error' in result ? String(result.error) : "Failed to update status"))
@@ -240,7 +248,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             accessorKey: "categoryProduct",
             header: "Category",
             cell: ({ row }) => (
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800">
                     {row.original.categoryProduct || "-"}
                 </Badge>
             ),
@@ -264,15 +272,20 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             header: "Status",
             cell: ({ row }) => {
                 const order = row.original
+                if (!mounted) return <Badge variant={statusVariants[order.status] || "secondary"}>{order.status}</Badge>
+
                 return canEdit ? (
                     <Select
                         defaultValue={order.status}
                         onValueChange={(value) => handleUpdateStatus(order.id, value)}
                     >
-                        <SelectTrigger className={`h-8 w-[110px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[order.status] === 'default' ? 'bg-primary text-primary-foreground' :
-                            statusVariants[order.status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                                statusVariants[order.status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
-                            }`}>
+                        <SelectTrigger className={cn(
+                            "h-8 w-[110px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
+                            order.status === "completed" && "bg-emerald-500 text-white dark:bg-emerald-600",
+                            order.status === "confirmed" && "bg-amber-500 text-white dark:bg-amber-600",
+                            order.status === "cancelled" && "bg-destructive text-white",
+                            order.status === "draft" && "bg-slate-500 text-white dark:bg-slate-600"
+                        )}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -666,6 +679,12 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 title={`PO Preview: ${poPreviewOrder?.invoiceNumber || "Customer PO"}`}
                 editUrl={poPreviewOrder ? `/dashboard/sales-orders/${poPreviewOrder.id}/edit` : undefined}
             />
-        </div >
+            <SuccessAlertDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                title="Status Diperbarui"
+                description={successMessage}
+            />
+        </div>
     )
 }

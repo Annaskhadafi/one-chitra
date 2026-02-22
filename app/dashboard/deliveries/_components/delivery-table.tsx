@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef, useCallback } from "react"
+import { useMounted } from "@/hooks/use-mounted"
+import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -109,12 +111,12 @@ interface DeliveryTableProps {
     data: DeliveryWithRelations[]
 }
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     scheduled: "secondary",
-    ready: "outline",
-    partial: "outline",
+    ready: "warning",
+    partial: "warning",
     in_transit: "default",
-    delivered: "default",
+    delivered: "success",
     cancelled: "destructive",
 }
 
@@ -159,6 +161,10 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const [selectedMonth, setSelectedMonth] = useState<string>("all")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
 
+    const mounted = useMounted()
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+    const [successMessage, setSuccessMessage] = useState("")
+
     const { data = initialData, isLoading, refetch } = useQuery({
         queryKey: ["deliveries"],
         queryFn: () => getDeliveries(),
@@ -178,7 +184,8 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         const result = await bulkUpdateDeliveryStatus([id], status)
         if (result.success) {
-            toast.success("Status updated")
+            setSuccessMessage(`Status pengiriman berhasil diubah menjadi ${statusLabels[status] || status}`)
+            setShowSuccessDialog(true)
             refetch()
         } else {
             toast.error(result.error)
@@ -321,15 +328,21 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id
+                if (!mounted) return <Badge variant={statusVariants[status] || "secondary"}>{statusLabels[status] || status}</Badge>
+
                 return canEdit ? (
                     <Select
                         defaultValue={status}
                         onValueChange={(value) => handleUpdateStatus(id, value)}
                     >
-                        <SelectTrigger className={`h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 ${statusVariants[status] === 'default' ? 'bg-primary text-primary-foreground' :
-                            statusVariants[status] === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                                statusVariants[status] === 'destructive' ? 'bg-destructive text-destructive-foreground' : 'bg-outline'
-                            }`}>
+                        <SelectTrigger className={cn(
+                            "h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
+                            status === "delivered" && "bg-emerald-500 text-white dark:bg-emerald-600",
+                            (status === "ready" || status === "partial") && "bg-amber-500 text-white dark:bg-amber-600",
+                            status === "cancelled" && "bg-destructive text-white",
+                            status === "in_transit" && "bg-blue-500 text-white dark:bg-blue-600",
+                            status === "scheduled" && "bg-secondary text-secondary-foreground"
+                        )}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -714,10 +727,18 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                     <CardContent>
                         <ResponsiveContainer width="100%" height={250}>
                             <LineChart data={monthlyTrends}>
-                                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                                <YAxis tick={{ fontSize: 12 }} />
-                                <Tooltip />
-                                <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                        color: "hsl(var(--foreground))",
+                                    }}
+                                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                                />
+                                <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--card))" }} activeDot={{ r: 6, strokeWidth: 0 }} />
                             </LineChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -739,13 +760,23 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                                     outerRadius={80}
                                     paddingAngle={5}
                                     dataKey="value"
+                                    stroke="hsl(var(--card))"
+                                    strokeWidth={2}
                                 >
                                     {categoryMix.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
-                                <Legend />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--card))",
+                                        border: "1px solid hsl(var(--border))",
+                                        borderRadius: "8px",
+                                        color: "hsl(var(--foreground))",
+                                    }}
+                                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                                />
+                                <Legend wrapperStyle={{ fontSize: '12px', color: 'hsl(var(--foreground))' }} />
                             </PieChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -907,6 +938,12 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                 poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
                 title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
                 editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
+            />
+            <SuccessAlertDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                title="Status Diperbarui"
+                description={successMessage}
             />
         </div>
     )

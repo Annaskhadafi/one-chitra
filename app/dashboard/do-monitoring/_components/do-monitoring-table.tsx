@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { EditDoDialog } from "./edit-do-dialog"
 import { ScanDoPreview } from "./scan-do-preview"
+import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
 import { deleteDelivery, updateDoMonitoringFields, getDeliveries } from "@/app/actions/delivery"
 import {
@@ -92,6 +93,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [officialPreviewDelivery, setOfficialPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isOfficialPreviewOpen, setIsOfficialPreviewOpen] = useState(false)
+
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+    const [successMessage, setSuccessMessage] = useState("")
 
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
@@ -398,7 +402,8 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const handleUpdateStatus = async (id: number, status: string) => {
         const res = await updateDoMonitoringFields(id, { doStatus: status })
         if (res.success) {
-            toast.success("DO Status updated")
+            setSuccessMessage(`Status DO berhasil diubah menjadi ${status}`)
+            setShowSuccessDialog(true)
             queryClient.invalidateQueries({ queryKey: ["deliveries"] })
         } else {
             toast.error((res as { error?: string }).error || "Failed to update DO Status")
@@ -535,6 +540,13 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     onClose={() => setIsOfficialPreviewOpen(false)}
                 />
             )}
+
+            <SuccessAlertDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                title="Status Diperbarui"
+                description={successMessage}
+            />
         </div>
     )
 }

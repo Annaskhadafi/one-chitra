@@ -59,7 +59,7 @@ export function DashboardSalesChart({ data }: { data: MonthlySales }) {
                                     <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                             <XAxis
                                 dataKey="month"
                                 tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
@@ -81,12 +81,14 @@ export function DashboardSalesChart({ data }: { data: MonthlySales }) {
                                     borderRadius: "8px",
                                     color: "hsl(var(--foreground))",
                                 }}
+                                itemStyle={{ color: "hsl(var(--foreground))" }}
+                                labelStyle={{ color: "hsl(var(--muted-foreground))" }}
                             />
                             <Area
                                 type="monotone"
                                 dataKey="value"
-                                stroke="hsl(217, 91%, 60%)"
-                                strokeWidth={2}
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={3}
                                 fill="url(#salesGradient)"
                             />
                         </AreaChart>

@@ -532,16 +532,21 @@ export async function updateDoMonitoringFields(id: number, data: {
 }) {
     try {
         await checkPermission('deliveries', 'edit')
+
+        // Build update object dynamically to support partial updates
+        const updateData: any = {
+            updatedAt: new Date(),
+        }
+
+        if (data.returnDoDate !== undefined) updateData.returnDoDate = data.returnDoDate
+        if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber
+        if (data.invoiceDate !== undefined) updateData.invoiceDate = data.invoiceDate
+        if (data.doStatus !== undefined) updateData.doStatus = data.doStatus
+        if (data.remark !== undefined) updateData.remark = data.remark
+        if (data.scanDoDocument !== undefined) updateData.scanDoDocument = data.scanDoDocument
+
         await db.update(deliveries)
-            .set({
-                returnDoDate: data.returnDoDate,
-                invoiceNumber: data.invoiceNumber || null,
-                invoiceDate: data.invoiceDate,
-                doStatus: data.doStatus,
-                remark: data.remark || null,
-                scanDoDocument: data.scanDoDocument || null,
-                updatedAt: new Date(),
-            })
+            .set(updateData)
             .where(eq(deliveries.id, id))
 
         revalidatePath("/dashboard/deliveries")
