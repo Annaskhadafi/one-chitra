@@ -157,3 +157,17 @@ export const fleetTripSchema = z.object({
     // Linked Deliveries (Sales Orders to deliver)
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
 })
+
+// ─── Stock Opname ─────────────────────────────────────────────────────────────
+
+export const createOpnameSessionSchema = z.object({
+    name: z.string().min(1, "Session name is required"),
+    warehouseId: z.number().min(1, "Warehouse is required"),
+    notes: z.string().optional(),
+})
+
+export const updateOpnameCountSchema = z.object({
+    itemId: z.number(),
+    countedQty: z.number().min(0, "Counted qty cannot be negative"),
+    notes: z.string().optional(),
+})

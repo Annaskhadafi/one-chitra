@@ -39,6 +39,13 @@ export { competitorPrices, competitorActivities, lostSales } from "./competitor-
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
 export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum } from "./email";
+export {
+    stockOpnameSessions,
+    stockOpnameItems,
+    stockOpnameSessionsRelations,
+    stockOpnameItemsRelations,
+    stockOpnameStatusEnum,
+} from "./stock-opname";
 
 // Core Auth Table Relations
 import { user } from "./auth";

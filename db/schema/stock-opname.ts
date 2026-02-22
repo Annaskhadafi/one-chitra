@@ -1,0 +1,68 @@
+import { pgTable, serial, integer, text, varchar, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { warehouses } from "./warehouses";
+import { products } from "./products";
+import { user } from "./auth";
+
+export const stockOpnameStatusEnum = pgEnum("stock_opname_status", ["open", "closed", "cancelled"]);
+
+export const stockOpnameSessions = pgTable("stock_opname_sessions", {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 200 }).notNull(),
+    warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
+    status: stockOpnameStatusEnum("status").default("open").notNull(),
+    notes: text("notes"),
+    createdById: text("created_by_id").references(() => user.id),
+    closedById: text("closed_by_id").references(() => user.id),
+    closedAt: timestamp("closed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const stockOpnameItems = pgTable("stock_opname_items", {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id").references(() => stockOpnameSessions.id).notNull(),
+    productId: integer("product_id").references(() => products.id).notNull(),
+    systemQty: integer("system_qty").default(0).notNull(),   // qty from stockLevels at time of count
+    countedQty: integer("counted_qty"),                      // qty physically counted (null = not yet counted)
+    variance: integer("variance"),                           // countedQty - systemQty
+    notes: text("notes"),
+    countedById: text("counted_by_id").references(() => user.id),
+    countedAt: timestamp("counted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const stockOpnameSessionsRelations = relations(stockOpnameSessions, ({ one, many }) => ({
+    warehouse: one(warehouses, {
+        fields: [stockOpnameSessions.warehouseId],
+        references: [warehouses.id],
+    }),
+    createdBy: one(user, {
+        fields: [stockOpnameSessions.createdById],
+        references: [user.id],
+        relationName: "opnameCreatedBy",
+    }),
+    closedBy: one(user, {
+        fields: [stockOpnameSessions.closedById],
+        references: [user.id],
+        relationName: "opnameClosedBy",
+    }),
+    items: many(stockOpnameItems),
+}));
+
+export const stockOpnameItemsRelations = relations(stockOpnameItems, ({ one }) => ({
+    session: one(stockOpnameSessions, {
+        fields: [stockOpnameItems.sessionId],
+        references: [stockOpnameSessions.id],
+    }),
+    product: one(products, {
+        fields: [stockOpnameItems.productId],
+        references: [products.id],
+    }),
+    countedBy: one(user, {
+        fields: [stockOpnameItems.countedById],
+        references: [user.id],
+        relationName: "opnameCountedBy",
+    }),
+}));

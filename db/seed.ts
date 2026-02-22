@@ -33,7 +33,7 @@ async function seed() {
     console.log('✅ Roles seeded');
 
     // 2. Seed Permissions
-    const resources = ['inventory', 'quotations', 'deliveries', 'billing', 'reports', 'admin', 'users', 'roles'];
+    const resources = ['inventory', 'quotations', 'deliveries', 'billing', 'reports', 'admin', 'users', 'roles', 'stock-alerts', 'stock-opname', 'abc-analysis'];
     const actions = ['view', 'create', 'update', 'delete'];
 
     const allPermissions = [];
@@ -98,9 +98,11 @@ async function seed() {
         }
     }
 
-    // Warehouse: Inventory (All), Deliveries (View, Update)
+    // Warehouse: Inventory (All), Deliveries (View, Update), Stock Opname, Stock Alerts
     await assign(warehouseId, 'inventory', ['view', 'create', 'update']);
     await assign(warehouseId, 'deliveries', ['view', 'update']);
+    await assign(warehouseId, 'stock-opname', ['view', 'create', 'update']);
+    await assign(warehouseId, 'stock-alerts', ['view']);
 
     // Sales: Quotations (All), Inventory (View)
     await assign(salesId, 'quotations', ['view', 'create', 'update']);

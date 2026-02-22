@@ -18,6 +18,9 @@ import {
     BarChart3,
     LayoutGrid,
     Mail,
+    AlertTriangle,
+    ClipboardList,
+    Activity,
     type LucideIcon
 } from "lucide-react"
 
@@ -127,6 +130,18 @@ export const navigationConfig: NavSection[] = [
                 resource: "stock-movements",
             },
             {
+                title: "Reorder Alerts",
+                url: "/dashboard/stock-alerts",
+                icon: AlertTriangle,
+                resource: "stock-alerts",
+            },
+            {
+                title: "Stock Opname",
+                url: "/dashboard/stock-opname",
+                icon: ClipboardList,
+                resource: "stock-opname",
+            },
+            {
                 title: "Fleet Management",
                 url: "/dashboard/fleet-management",
                 icon: Truck,
@@ -215,6 +230,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/reports",
                 icon: BarChart3,
                 resource: "reports",
+            },
+            {
+                title: "ABC Analysis",
+                url: "/dashboard/abc-analysis",
+                icon: Activity,
+                resource: "abc-analysis",
             },
         ],
     },

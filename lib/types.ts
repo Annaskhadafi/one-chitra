@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -88,4 +88,42 @@ export type StockMovement = InferSelectModel<typeof stockMovements> & {
     product?: Product | null
     warehouse?: Warehouse | null
     recordedByUser?: User | null
+}
+
+// Stock Opname
+export type StockOpnameSession = InferSelectModel<typeof stockOpnameSessions> & {
+    warehouse?: Warehouse | null
+    createdBy?: Pick<User, 'id' | 'name' | 'email'> | null
+    closedBy?: Pick<User, 'id' | 'name' | 'email'> | null
+    items?: StockOpnameItem[]
+}
+export type NewStockOpnameSession = InferInsertModel<typeof stockOpnameSessions>
+
+export type StockOpnameItem = InferSelectModel<typeof stockOpnameItems> & {
+    product?: Product | null
+    countedBy?: Pick<User, 'id' | 'name' | 'email'> | null
+}
+export type NewStockOpnameItem = InferInsertModel<typeof stockOpnameItems>
+
+// ABC Analysis
+export type ABCProduct = {
+    productId: number
+    materialNumber: string
+    materialDescription: string | null
+    category: string
+    brand: string | null
+    totalMovementQty: number
+    totalMovementCount: number
+    cumulativePercentage: number
+    abcClass: 'A' | 'B' | 'C'
+    currentStock: number
+    minStock: number
+    isLowStock: boolean
+}
+
+// Reorder Alert
+export type ReorderAlert = Stock & {
+    product: Product
+    warehouse: Warehouse
+    urgency: 'critical' | 'warning' | 'ok'
 }
