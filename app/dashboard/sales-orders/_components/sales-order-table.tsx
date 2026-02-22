@@ -138,6 +138,30 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         }))
     }, [data])
 
+    // Chart data: revenue by category
+    const categoryChartData = useMemo(() => {
+        const catRevenue: Record<string, number> = {}
+        data.forEach(o => {
+            const cat = o.categoryProduct || "Uncategorized"
+            catRevenue[cat] = (catRevenue[cat] || 0) + calculateGrandTotal(o)
+        })
+        return Object.entries(catRevenue)
+            .map(([category, revenue]) => ({ category, revenue }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 6)
+    }, [data])
+
+    // Chart data: monthly orders count
+    const monthlyOrdersData = useMemo(() => {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+        const counts = Array(12).fill(0)
+        data.forEach(o => {
+            const month = new Date(o.salesDate).getMonth()
+            counts[month] = counts[month] + 1
+        })
+        return monthNames.map((name, i) => ({ month: name, count: counts[i] }))
+    }, [data])
+
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         const result = await bulkUpdateSalesOrderStatus([id], status)
         if (result.success) {
@@ -537,35 +561,89 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 />
             </div>
 
-            {/* Status Chart */}
+            {/* Charts Row */}
             {data.length > 0 && (
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Order Status Overview</CardTitle>
-                        <CardDescription>{data.length} total orders</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={180}>
-                            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                                <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--card))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "8px",
-                                        color: "hsl(var(--foreground))",
-                                    }}
-                                />
-                                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
+                <div className="grid gap-4 md:grid-cols-3">
+                    {/* Status Chart */}
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Order Status Overview</CardTitle>
+                            <CardDescription>{data.length} total orders</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={180}>
+                                <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                    <XAxis type="number" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                    <YAxis dataKey="status" type="category" width={80} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            color: "hsl(var(--foreground))",
+                                        }}
+                                    />
+                                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                        {chartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    {/* Revenue by Category Chart */}
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Revenue by Category</CardTitle>
+                            <CardDescription>Top categories by revenue</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={180}>
+                                <BarChart data={categoryChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                    <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} />
+                                    <YAxis dataKey="category" type="category" width={90} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            color: "hsl(var(--foreground))",
+                                        }}
+                                        formatter={(value: number) => [new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(value), "Revenue"]}
+                                    />
+                                    <Bar dataKey="revenue" fill="hsl(217, 91%, 60%)" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    {/* Monthly Orders Chart */}
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Monthly Orders</CardTitle>
+                            <CardDescription>Orders per month (all years)</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={180}>
+                                <BarChart data={monthlyOrdersData} margin={{ left: 0, right: 10 }}>
+                                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            color: "hsl(var(--foreground))",
+                                        }}
+                                    />
+                                    <Bar dataKey="count" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </div>
             )}
 
             {/* Filters */}
