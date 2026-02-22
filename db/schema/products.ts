@@ -15,6 +15,4 @@ export const products = pgTable("products", {
     imageUrl: text("image_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t) => ({
-    unq: unique().on(t.materialNumber, t.sloc),
-}));
+});

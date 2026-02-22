@@ -113,6 +113,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "deliveries",
             },
             {
+                title: "Stock Movement Log",
+                url: "/dashboard/stock-movements",
+                icon: History,
+                resource: "stock-movements",
+            },
+            {
                 title: "Fleet Management",
                 url: "/dashboard/fleet-management",
                 icon: Truck,

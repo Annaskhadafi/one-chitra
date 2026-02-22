@@ -57,6 +57,13 @@
       "when": 1771688751660,
       "tag": "0007_lucky_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771747343905,
+      "tag": "0008_careful_hiroim",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
+import { recordStockMovement } from "./stock-movement"
 
 export async function getDeliveries() {
     return await db.query.deliveries.findMany({
@@ -268,6 +269,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                                 eq(stockLevels.warehouseId, data.warehouseId),
                                 eq(stockLevels.productId, item.productId)
                             ))
+
+                        // Record Movement
+                        await recordStockMovement(tx, {
+                            productId: item.productId,
+                            warehouseId: data.warehouseId,
+                            quantity: -item.deliveredQuantity, // Negative for Out
+                            type: "DELIVERY",
+                            referenceNumber: deliveryNumber,
+                            recordedBy: userId,
+                        })
                     }
                 }
             }
@@ -283,7 +294,9 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
 export async function updateDelivery(id: number, data: z.infer<typeof deliverySchema>) {
     try {
-        await checkPermission('deliveries', 'edit')
+        const session = await getAuthenticatedSession('deliveries', 'edit')
+        const userId = session.user.id
+
         return await db.transaction(async (tx) => {
             const originalDelivery = await tx.query.deliveries.findFirst({
                 where: eq(deliveries.id, id),
@@ -309,6 +322,16 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                             eq(stockLevels.warehouseId, originalDelivery.warehouseId),
                             eq(stockLevels.productId, item.productId)
                         ))
+
+                    // Record Revert Movement
+                    await recordStockMovement(tx, {
+                        productId: item.productId,
+                        warehouseId: originalDelivery.warehouseId,
+                        quantity: item.deliveredQuantity, // Positive for Revert In
+                        type: "DELIVERY",
+                        referenceNumber: originalDelivery.deliveryNumber,
+                        recordedBy: userId,
+                    })
                 }
             }
 
@@ -373,6 +396,16 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                                 eq(stockLevels.warehouseId, data.warehouseId),
                                 eq(stockLevels.productId, item.productId)
                             ))
+
+                        // Record New Movement
+                        await recordStockMovement(tx, {
+                            productId: item.productId,
+                            warehouseId: data.warehouseId,
+                            quantity: -item.deliveredQuantity, // Negative for Out
+                            type: "DELIVERY",
+                            referenceNumber: data.deliveryNumber || originalDelivery.deliveryNumber,
+                            recordedBy: userId,
+                        })
                     }
                 }
             }
@@ -400,6 +433,9 @@ export async function deleteDelivery(id: number) {
 
         // Start transaction
         return await db.transaction(async (tx) => {
+            const session = await getAuthenticatedSession('deliveries', 'delete')
+            const userId = session.user.id
+
             // Restore stock for items if the delivery was committed (not cancelled)
             const wasCommitted = delivery.status !== "cancelled"
 
@@ -415,6 +451,16 @@ export async function deleteDelivery(id: number) {
                             eq(stockLevels.warehouseId, delivery.warehouseId),
                             eq(stockLevels.productId, item.productId)
                         ))
+
+                    // Record Revert Movement (from delete)
+                    await recordStockMovement(tx, {
+                        productId: item.productId,
+                        warehouseId: delivery.warehouseId as number,
+                        quantity: item.deliveredQuantity, // Positive for Revert In
+                        type: "DELIVERY",
+                        referenceNumber: delivery.deliveryNumber,
+                        recordedBy: userId,
+                    })
                 }
             }
 

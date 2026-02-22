@@ -4,6 +4,8 @@ import { db } from "@/db"
 import { goodReceiveManual, goodReceiveManualItems, stockLevels } from "@/db/schema"
 import { revalidatePath } from "next/cache"
 import { eq, and } from "drizzle-orm"
+import { recordStockMovement } from "./stock-movement"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 export type CreateGoodReceiveManualInput = {
     supplier: string
@@ -21,6 +23,9 @@ export type CreateGoodReceiveManualInput = {
 
 export async function createGoodReceiveManual(input: CreateGoodReceiveManualInput) {
     try {
+        const session = await getAuthenticatedSession('good-receive-manual', 'create')
+        const userId = session.user.id
+
         await db.transaction(async (tx) => {
             // 1. Create Header
             const [header] = await tx.insert(goodReceiveManual).values({
@@ -69,6 +74,16 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         valuationValue: "0",
                     })
                 }
+
+                // 4. Record Movement
+                await recordStockMovement(tx, {
+                    productId: item.productId,
+                    warehouseId: item.warehouseId,
+                    quantity: item.quantity,
+                    type: "GR_MANUAL",
+                    referenceNumber: header.poNumber,
+                    recordedBy: userId,
+                })
             }
         })
 

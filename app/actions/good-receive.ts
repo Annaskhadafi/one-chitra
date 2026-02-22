@@ -5,6 +5,8 @@ import { products, stockLevels } from "@/db/schema"
 import { eq, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { recordStockMovement } from "./stock-movement"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 const goodReceiveItemSchema = z.object({
     materialNumber: z.string(),
@@ -56,54 +58,66 @@ export async function processGoodReceive(
     warehouseId: number
 ) {
     try {
+        const session = await getAuthenticatedSession('good-receive', 'create')
+        const userId = session.user.id
         let processedCount = 0
         const errors: string[] = []
 
-        console.log(`Processing ${items.length} items for warehouse ${warehouseId}`);
+        await db.transaction(async (tx) => {
+            for (const item of items) {
+                const materialNumber = item.materialNumber.trim();
 
-        for (const item of items) {
-            const materialNumber = item.materialNumber.trim();
-
-            // Find product by material number
-            const product = await db.query.products.findFirst({
-                where: eq(products.materialNumber, materialNumber),
-            })
-
-            if (!product) {
-                console.error(`Product not found for material number: '${materialNumber}' (original: '${item.materialNumber}')`);
-                errors.push(`Product not found for material number: ${materialNumber}`)
-                continue
-            }
-
-            // Check if stock level exists
-            const existingStock = await db.query.stockLevels.findFirst({
-                where: and(
-                    eq(stockLevels.productId, product.id),
-                    eq(stockLevels.warehouseId, warehouseId)
-                ),
-            })
-
-            if (existingStock) {
-                // Update total stock
-                await db.update(stockLevels)
-                    .set({
-                        totalStock: existingStock.totalStock + item.quantity,
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(stockLevels.id, existingStock.id))
-            } else {
-                // Create new stock level
-                await db.insert(stockLevels).values({
-                    warehouseId,
-                    productId: product.id,
-                    totalStock: item.quantity,
-                    bookedStock: 0,
-                    minStock: 0,
-                    valuationValue: '0', // Default valuation
+                // Find product by material number
+                const product = await tx.query.products.findFirst({
+                    where: eq(products.materialNumber, materialNumber),
                 })
+
+                if (!product) {
+                    console.error(`Product not found for material number: '${materialNumber}' (original: '${item.materialNumber}')`);
+                    errors.push(`Product not found for material number: ${materialNumber}`)
+                    continue
+                }
+
+                // Check if stock level exists
+                const existingStock = await tx.query.stockLevels.findFirst({
+                    where: and(
+                        eq(stockLevels.productId, product.id),
+                        eq(stockLevels.warehouseId, warehouseId)
+                    ),
+                })
+
+                if (existingStock) {
+                    // Update total stock
+                    await tx.update(stockLevels)
+                        .set({
+                            totalStock: existingStock.totalStock + item.quantity,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(stockLevels.id, existingStock.id))
+                } else {
+                    // Create new stock level
+                    await tx.insert(stockLevels).values({
+                        warehouseId,
+                        productId: product.id,
+                        totalStock: item.quantity,
+                        bookedStock: 0,
+                        minStock: 0,
+                        valuationValue: '0', // Default valuation
+                    })
+                }
+
+                // Record Movement
+                await recordStockMovement(tx, {
+                    productId: product.id,
+                    warehouseId: warehouseId,
+                    quantity: item.quantity,
+                    type: "GR_SAP",
+                    recordedBy: userId,
+                })
+
+                processedCount++
             }
-            processedCount++
-        }
+        })
 
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/good-receive")
@@ -113,7 +127,6 @@ export async function processGoodReceive(
             processed: processedCount,
             errors: errors.length > 0 ? errors : undefined
         }
-
     } catch (error) {
         console.error("Error processing Good Receive:", error)
         return { success: false, error: "Failed to process Good Receive" }

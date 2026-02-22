@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -82,4 +82,10 @@ export type BillingRecordDisplay = {
     status: string
     deliveryNumber: string | null
     originalPrice: string
+}
+
+export type StockMovement = InferSelectModel<typeof stockMovements> & {
+    product?: Product | null
+    warehouse?: Warehouse | null
+    recordedByUser?: User | null
 }

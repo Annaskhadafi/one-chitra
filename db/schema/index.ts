@@ -36,6 +36,7 @@ export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
 export { historyOrders } from "./history-orders";
 export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
+export { stockMovements, stockMovementsRelations } from "./stock-movements";
 
 // Core Auth Table Relations
 import { user } from "./auth";

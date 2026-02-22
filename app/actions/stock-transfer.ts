@@ -5,6 +5,8 @@ import { stockTransfers, stockTransferItems, stockLevels, products, warehouses }
 import { eq, and, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { recordStockMovement } from "./stock-movement"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 const stockTransferItemSchema = z.object({
     productId: z.number(),
@@ -40,6 +42,8 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
             return { success: false, error: "Source and destination warehouses must be different" }
         }
 
+        const session = await getAuthenticatedSession('stock-transfers', 'create')
+        const userId = session.user.id
         const referenceNumber = `ST-${Date.now()}`
 
         return await db.transaction(async (tx) => {
@@ -111,6 +115,26 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                         valuationValue: '0',
                     })
                 }
+
+                // Record Source Movement (Out)
+                await recordStockMovement(tx, {
+                    productId: item.productId,
+                    warehouseId: data.sourceWarehouseId,
+                    quantity: -item.quantity,
+                    type: "TRANSFER_OUT",
+                    referenceNumber,
+                    recordedBy: userId,
+                })
+
+                // Record Destination Movement (In)
+                await recordStockMovement(tx, {
+                    productId: item.productId,
+                    warehouseId: data.destinationWarehouseId,
+                    quantity: item.quantity,
+                    type: "TRANSFER_IN",
+                    referenceNumber,
+                    recordedBy: userId,
+                })
 
                 // Create Item Record
                 await tx.insert(stockTransferItems).values({
