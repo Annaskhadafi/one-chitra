@@ -37,6 +37,7 @@ export { historyOrders } from "./history-orders";
 export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
+export { portalItems } from "./portal-items";
 
 // Core Auth Table Relations
 import { user } from "./auth";

@@ -16,6 +16,7 @@ import {
     History,
     UsersRound,
     BarChart3,
+    LayoutGrid,
     type LucideIcon
 } from "lucide-react"
 
@@ -40,6 +41,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard",
                 icon: Home,
                 resource: "dashboard",
+            },
+            {
+                title: "Portal",
+                url: "/dashboard/portal",
+                icon: LayoutGrid,
+                resource: "portal-items",
             },
         ],
     },

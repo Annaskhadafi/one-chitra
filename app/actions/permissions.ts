@@ -55,11 +55,13 @@ export async function syncPermissions() {
                 )
 
                 if (existing.length === 0) {
-                    await db.insert(permissions).values({
-                        resource,
-                        action,
-                        description: `Can ${action} ${resource}`,
-                    })
+                    await db.insert(permissions)
+                        .values({
+                            resource,
+                            action,
+                            description: `Can ${action} ${resource}`,
+                        })
+                        .onConflictDoNothing()
                     addedCount++
                 }
             }
