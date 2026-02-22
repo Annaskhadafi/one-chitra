@@ -197,6 +197,12 @@ export const navigationConfig: NavSection[] = [
                 resource: "sales-dashboard",
             },
             {
+                title: "Dashboard R49 Tire",
+                url: "/dashboard/r49-dashboard",
+                icon: BarChart3,
+                resource: "r49-dashboard",
+            },
+            {
                 title: "Reports Hub",
                 url: "/dashboard/reports",
                 icon: BarChart3,
