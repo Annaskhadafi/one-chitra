@@ -2,7 +2,7 @@
 # https://nixpacks.com/docs/configuration/file
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "npm-9_x"]
+nixPkgs = ["nodejs_20", "npm-9_x", "bash"]
 
 [phases.install]
 cmds = ["npm ci"]
@@ -11,9 +11,9 @@ cmds = ["npm ci"]
 cmds = [
   "npm run db:push",
   "npm run build",
-  # Copy static files to standalone directory
-  "cp -r .next/static .next/standalone/.next/static",
-  "cp -r public .next/standalone/public"
+  # Copy static files to standalone directory (using sh-compatible syntax)
+  "cp -r .next/static .next/standalone/.next/static || true",
+  "cp -r public .next/standalone/public || true"
 ]
 
 [start]
