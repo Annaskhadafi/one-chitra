@@ -112,19 +112,19 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: 'Inter', 'Segoe UI', 'Arial', sans-serif; font-size: 10pt; color: #1e293b; line-height: 1.5; -webkit-print-color-adjust: exact; }
                     .pdf-wrapper { width: 100%; max-width: 210mm; margin: 0 auto; background: white; }
-                    
-                    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #2563eb; padding-bottom: 15px; }
+
+                    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; border-bottom: 2px solid #2563eb; padding-bottom: 12px; }
+                    .logo-section { display: flex; flex-direction: column; gap: 8px; }
                     .logo-container img { height: 90px; width: auto; }
-                    
+                    .company-info { margin-top: 8px; }
+                    .company-name { font-size: 13pt; font-weight: 800; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.01em; }
+                    .company-address { font-size: 9.5pt; color: #475569; width: 85%; line-height: 1.5; }
+
                     .doc-title-container { text-align: right; }
                     .doc-title { font-size: 24pt; font-weight: 900; color: #2563eb; margin-bottom: 0; letter-spacing: -0.03em; line-height: 1; text-transform: uppercase; }
                     .doc-number { font-size: 11pt; color: #64748b; font-weight: 600; margin-top: 4px; }
 
-                    .company-info { margin-bottom: 20px; }
-                    .company-name { font-size: 13pt; font-weight: 800; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.01em; }
-                    .company-address { font-size: 9.5pt; color: #475569; width: 85%; line-height: 1.5; }
-
-                    .meta-grid { display: flex; gap: 20px; margin-bottom: 25px; background: #f8fafc; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+                    .meta-grid { display: flex; gap: 20px; margin-bottom: 25px; margin-top: 12px; background: #f8fafc; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
                     .meta-left { flex: 1.2; }
                     .meta-right { flex: 1; text-align: right; border-left: 1px solid #e2e8f0; padding-left: 20px; }
                     
@@ -210,9 +210,17 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 {/* PDF Content Area */}
                 <div className="flex justify-center p-8">
                     <div className="bg-white shadow-2xl w-full max-w-[210mm] p-[15mm] min-h-[297mm] ring-1 ring-slate-200" ref={printRef}>
-                        <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, borderBottom: '2px solid #2563eb', paddingBottom: 15 }}>
-                            <div className="logo-container">
-                                <img src="/api/uploads/Chitra-Paratama.png" alt="Logo" style={{ height: 90, width: 'auto' }} />
+                        <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, borderBottom: '2px solid #2563eb', paddingBottom: 12 }}>
+                            <div className="logo-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div className="logo-container">
+                                    <img src="/api/uploads/Chitra-Paratama.png" alt="Logo" style={{ height: 90, width: 'auto' }} />
+                                </div>
+                                <div className="company-info" style={{ marginTop: 8 }}>
+                                    <div className="company-name" style={{ fontSize: '13pt', fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>PT Chitra Paratama</div>
+                                    <div className="company-address" style={{ fontSize: '9.5pt', color: '#475569', width: '85%', lineHeight: '1.5' }}>
+                                        {quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612"}
+                                    </div>
+                                </div>
                             </div>
                             <div className="doc-title-container" style={{ textAlign: 'right' }}>
                                 <div className="doc-title" style={{ fontSize: '24pt', fontWeight: 900, color: '#2563eb', letterSpacing: '-0.03em', textTransform: 'uppercase' }}>QUOTATION</div>
@@ -220,14 +228,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             </div>
                         </div>
 
-                        <div className="company-info" style={{ marginBottom: 20 }}>
-                            <div className="company-name" style={{ fontSize: '13pt', fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>PT Chitra Paratama</div>
-                            <div className="company-address" style={{ fontSize: '9.5pt', color: '#475569', width: '85%', lineHeight: '1.5' }}>
-                                {quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612"}
-                            </div>
-                        </div>
-
-                        <div className="meta-grid" style={{ display: 'flex', gap: 20, marginBottom: 25, background: '#f8fafc', padding: '15px 20px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div className="meta-grid" style={{ display: 'flex', gap: 20, marginBottom: 25, marginTop: 12, background: '#f8fafc', padding: '15px 20px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                             <div className="meta-left" style={{ flex: 1.2 }}>
                                 <div className="meta-row" style={{ display: 'flex', marginBottom: 4, alignItems: 'baseline' }}>
                                     <div className="meta-label" style={{ width: 120, fontWeight: 700, color: '#64748b', fontSize: '8pt', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quo Date:</div>
@@ -280,8 +281,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                             <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt' }}>
                                                 <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>{item.product.materialDescription || item.product.materialNumber}</div>
                                                 <div className="item-desc" style={{ color: '#475569', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                                                    {item.description}
-                                                    {item.longDescription && `\n${item.longDescription}`}
+                                                    {item.longDescription || item.description}
                                                 </div>
                                             </td>
                                             <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>

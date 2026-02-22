@@ -61,7 +61,7 @@ interface LostSaleFormProps {
 }
 
 export function LostSaleForm({ open, onOpenChange, onSuccess }: LostSaleFormProps) {
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -91,7 +91,7 @@ export function LostSaleForm({ open, onOpenChange, onSuccess }: LostSaleFormProp
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Something went wrong")
         } finally {
             setIsSubmitting(false)

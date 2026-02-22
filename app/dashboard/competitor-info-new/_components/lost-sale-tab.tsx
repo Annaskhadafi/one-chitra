@@ -19,7 +19,7 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { Card, CardContent } from "@/components/ui/card"
 
 export function LostSaleTab() {
-    const [data, setData] = useState<any[]>([])
+    const [data, setData] = useState<Array<Record<string, unknown>>>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)

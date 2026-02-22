@@ -63,7 +63,7 @@ interface CompetitorActivityFormProps {
 }
 
 export function CompetitorActivityForm({ open, onOpenChange, onSuccess }: CompetitorActivityFormProps) {
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -95,7 +95,7 @@ export function CompetitorActivityForm({ open, onOpenChange, onSuccess }: Compet
             } else {
                 toast.error(result.error)
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Something went wrong")
         } finally {
             setIsSubmitting(false)

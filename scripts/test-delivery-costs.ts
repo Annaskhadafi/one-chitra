@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { db } from '../db';
 import { createDelivery } from '../app/actions/delivery';
 import { deliveries } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 async function main() {
     try {
@@ -44,7 +44,7 @@ async function main() {
             }))
         };
 
-        const result = await createDelivery(deliveryData as any);
+        const result = await createDelivery(deliveryData);
 
         if (result.success && 'id' in result) {
             console.log(`Delivery created with ID: ${result.id}`);

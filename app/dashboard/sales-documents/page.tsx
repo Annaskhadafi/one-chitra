@@ -23,7 +23,7 @@ export default function SalesDocumentsPage() {
     useEffect(() => {
         const fetchDocs = async () => {
             const data = await getSalesDocuments()
-            // @ts-ignore
+            // @ts-expect-error - Type mismatch between getSalesDocuments return and documents state
             setDocuments(data)
             setIsLoading(false)
         }

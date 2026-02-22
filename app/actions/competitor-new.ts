@@ -2,7 +2,6 @@
 
 import { db } from "@/db"
 import { competitorPrices, competitorActivities, lostSales } from "@/db/schema"
-import { eq, desc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
@@ -27,7 +26,7 @@ export async function getCompetitorPrices() {
     }
 }
 
-export async function createCompetitorPrice(data: any) {
+export async function createCompetitorPrice(data: Record<string, unknown>) {
     console.log("Creating competitor price...", data)
     try {
         const session = await auth.api.getSession({ headers: await headers() })
@@ -65,7 +64,7 @@ export async function getCompetitorActivities() {
     }
 }
 
-export async function createCompetitorActivity(data: any) {
+export async function createCompetitorActivity(data: Record<string, unknown>) {
     try {
         const session = await auth.api.getSession({ headers: await headers() })
         const userId = session?.user?.id
@@ -102,7 +101,7 @@ export async function getLostSales() {
     }
 }
 
-export async function createLostSale(data: any) {
+export async function createLostSale(data: Record<string, unknown>) {
     try {
         const session = await auth.api.getSession({ headers: await headers() })
         const userId = session?.user?.id

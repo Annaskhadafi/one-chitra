@@ -116,7 +116,7 @@ export function DocumentCard({ doc, onPreview }: DocumentCardProps) {
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Document</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Are you sure you want to delete "{doc.title}"? This action cannot be undone.
+                                    Are you sure you want to delete &quot;{doc.title}&quot;? This action cannot be undone.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
