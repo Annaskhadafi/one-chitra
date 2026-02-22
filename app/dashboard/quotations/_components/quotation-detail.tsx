@@ -58,6 +58,7 @@ import {
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { QuotationPdfPreview } from "./quotation-pdf-preview"
+import { ProductHistoryPopover } from "./product-history-popover"
 
 type User = typeof user.$inferSelect
 
@@ -510,7 +511,15 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                     return (
                                         <TableRow key={item.id}>
                                             <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
-                                            <TableCell className="font-mono text-sm">{item.product.materialNumber}</TableCell>
+                                            <TableCell className="font-mono text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    {item.product.materialNumber}
+                                                    <ProductHistoryPopover
+                                                        materialNo={item.product.materialNumber}
+                                                        costSap={item.product.costSap || 0}
+                                                    />
+                                                </div>
+                                            </TableCell>
                                             <TableCell>
                                                 <div className="font-medium">{item.product.materialDescription || "-"}</div>
                                                 {item.description && (

@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
+import { ProductHistoryPopover } from "./product-history-popover"
 
 type User = typeof user.$inferSelect
 
@@ -59,6 +60,7 @@ interface QuotationItemRow {
     tax: number
     costIdr?: number
     costSap?: number
+    materialNumber?: string
 }
 
 interface QuotationFormProps {
@@ -138,7 +140,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [referenceNumber, setReferenceNumber] = useState(initialData?.referenceNumber || "")
     const [adminNote, setAdminNote] = useState(initialData?.adminNote || "")
     const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
-    const [discountType, setDiscountType] = useState(initialData?.discountType === "percent" ? "percent" : "fixed")
+    const [discountType, setDiscountType] = useState<"fixed" | "percent">(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
     const [paymentTerms] = useState(initialData?.paymentTerms || "")
     const [termsConditions, setTermsConditions] = useState(
@@ -172,6 +174,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             tax: Number(item.tax),
             costIdr: Number(item.product?.costSap || 0) * 1, // Will be updated by useEffect if needed
             costSap: Number(item.product?.costSap || 0),
+            materialNumber: item.product?.materialNumber || "",
         })) || []
     )
 
@@ -217,6 +220,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 tax: 0,
                 costIdr: costIdr,
                 costSap: costSap,
+                materialNumber: product.materialNumber,
             }])
         }
         setProductOpen(false)
@@ -666,14 +670,13 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </div>
                             <div className="space-y-2">
                                 <Label className="font-semibold">Discount Type</Label>
-                                <Select value={discountType} onValueChange={setDiscountType}>
+                                <Select value={discountType} onValueChange={(v) => setDiscountType(v as "fixed" | "percent")}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="fixed">No discount</SelectItem>
                                         <SelectItem value="percent">Percentage</SelectItem>
-                                        <SelectItem value="fixed_amount">Fixed Amount</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -810,7 +813,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                 const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
                                                 return (
                                                     <TableRow key={index} className="group">
-                                                        <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
+                                                        <TableCell className="font-mono text-muted-foreground">                                                            <div className="flex flex-col items-center gap-1">
+                                                            {index + 1}
+                                                            {item.materialNumber && (
+                                                                <ProductHistoryPopover
+                                                                    materialNo={item.materialNumber}
+                                                                    costSap={item.costSap || 0}
+                                                                />
+                                                            )}
+                                                        </div></TableCell>
                                                         <TableCell>
                                                             <div className="space-y-2">
                                                                 <Textarea

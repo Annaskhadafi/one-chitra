@@ -2,7 +2,8 @@
 
 import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
-import { desc, notIlike, isNull, or } from "drizzle-orm"
+import { desc, notIlike, isNull, or, and, eq, gte } from "drizzle-orm"
+import { getSetting } from "./settings"
 
 export interface HistoryOrderItem {
     customer_name: string;
@@ -145,5 +146,78 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
     } catch (error) {
         console.error("Failed to import history orders batch:", error);
         return { success: false, error: error instanceof Error ? error.message : "Failed to import duplicate or invalid rows" };
+    }
+}
+
+export async function getProductHistoryForQuotation(materialNo: string, costSap: number) {
+    try {
+        const rateStr = await getSetting("manual_usd_rate")
+        const exchangeRate = rateStr ? Number(rateStr) : 1
+        const minPrice = costSap * exchangeRate
+
+        const threeYearsAgo = new Date()
+        threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3)
+
+        // Fetch all history for this material
+        const data = await db.select()
+            .from(historyOrders)
+            .where(eq(historyOrders.materialNo, materialNo));
+
+        // Filter and sort in JS because of string dates and complex multi-column sorting
+        const processedData = data
+            .map(item => {
+                const revenue = item.revenueInDocCurr || 0;
+                const qty = item.qty || 1;
+                const unitPrice = revenue / (qty || 1);
+
+                return {
+                    customerName: item.customerName || 'Unknown',
+                    unitPrice: unitPrice,
+                    billingDate: item.billingDate || '',
+                    poNo: item.poNo || '',
+                };
+            })
+            .filter(item => {
+                // Threshold check: unitPrice >= costSap * exchangeRate
+                if (item.unitPrice < minPrice) return false;
+
+                if (!item.billingDate) return false;
+                // Support both MM/DD/YYYY and YYYY-MM-DD
+                const itemDate = new Date(item.billingDate);
+                return !isNaN(itemDate.getTime()) && itemDate >= threeYearsAgo;
+            });
+
+        // Pick only one (latest) reference per unique customer
+        const customerMap = new Map<string, typeof processedData[0]>();
+
+        processedData.forEach(item => {
+            const existing = customerMap.get(item.customerName);
+            if (!existing) {
+                customerMap.set(item.customerName, item);
+            } else {
+                const existingDate = new Date(existing.billingDate).getTime();
+                const currentDate = new Date(item.billingDate).getTime();
+
+                // If this one is newer, OR it's the same date but higher price
+                if (currentDate > existingDate || (currentDate === existingDate && item.unitPrice > existing.unitPrice)) {
+                    customerMap.set(item.customerName, item);
+                }
+            }
+        });
+
+        const uniqueCustomerHistory = Array.from(customerMap.values());
+
+        // Sort by billingDate DESC (latest), then unitPrice DESC (highest)
+        uniqueCustomerHistory.sort((a, b) => {
+            const dateA = new Date(a.billingDate).getTime();
+            const dateB = new Date(b.billingDate).getTime();
+            if (dateB !== dateA) return dateB - dateA;
+            return b.unitPrice - a.unitPrice;
+        });
+
+        return { success: true, data: uniqueCustomerHistory.slice(0, 10) };
+    } catch (error) {
+        console.error("Failed to fetch product history for quotation:", error);
+        return { success: false, error: "Failed to fetch product history" };
     }
 }
