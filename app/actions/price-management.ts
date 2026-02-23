@@ -326,6 +326,14 @@ export async function deletePriceListItem(id: number) {
     }
 }
 
+export async function getProductsForPricing() {
+    const rows = await db.query.products.findMany({
+        columns: { id: true, materialNumber: true, materialDescription: true, costSap: true },
+        orderBy: (p, { asc }) => [asc(p.materialNumber)],
+    })
+    return rows
+}
+
 export async function getPriceHistory(priceListItemId: number) {
     return await db.query.priceHistory.findMany({
         where: eq(priceHistory.priceListItemId, priceListItemId),
