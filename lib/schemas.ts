@@ -183,11 +183,24 @@ export const priceListItemSchema = z.object({
     notes: z.string().optional().nullable(),
 })
 
+export const signatureEntrySchema = z.object({
+    name: z.string().min(1, "Participant name is required"),
+    position: z.string().min(1, "Participant position is required"),
+})
+
 export const createOpnameSessionSchema = z.object({
     name: z.string().min(1, "Session name is required"),
     warehouseId: z.number().min(1, "Warehouse is required"),
     notes: z.string().optional(),
+    opnameDate: z.date({ message: "Opname date is required" }),
+    opnameTime: z.string().regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, "Time must be in HH:MM format"),
+    location: z.string().min(1, "Location is required"),
+    signatures: z.array(signatureEntrySchema).min(1, "At least one participant signature is required"),
 })
+
+// Export TypeScript types
+export type SignatureEntry = z.infer<typeof signatureEntrySchema>
+export type CreateOpnameSessionInput = z.infer<typeof createOpnameSessionSchema>
 
 export const updateOpnameCountSchema = z.object({
     itemId: z.number(),

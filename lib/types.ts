@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, priceLists, priceListItems, priceHistory, calendarEvents } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, priceLists, priceListItems, priceHistory, calendarEvents } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -96,6 +96,7 @@ export type StockOpnameSession = InferSelectModel<typeof stockOpnameSessions> & 
     createdBy?: Pick<User, 'id' | 'name' | 'email'> | null
     closedBy?: Pick<User, 'id' | 'name' | 'email'> | null
     items?: StockOpnameItem[]
+    signatures?: StockOpnameSignature[]
 }
 export type NewStockOpnameSession = InferInsertModel<typeof stockOpnameSessions>
 
@@ -104,6 +105,16 @@ export type StockOpnameItem = InferSelectModel<typeof stockOpnameItems> & {
     countedBy?: Pick<User, 'id' | 'name' | 'email'> | null
 }
 export type NewStockOpnameItem = InferInsertModel<typeof stockOpnameItems>
+
+export type StockOpnameSignature = InferSelectModel<typeof stockOpnameSignatures>
+export type NewStockOpnameSignature = InferInsertModel<typeof stockOpnameSignatures>
+
+export type OpnamePdfReportData = {
+    session: StockOpnameSession
+    signatures: StockOpnameSignature[]
+    items: (StockOpnameItem & { product: Product })[]
+    companyLogo: string
+}
 
 // ABC Analysis
 export type ABCProduct = {

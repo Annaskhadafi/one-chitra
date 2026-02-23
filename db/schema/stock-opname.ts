@@ -12,6 +12,12 @@ export const stockOpnameSessions = pgTable("stock_opname_sessions", {
     warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
     status: stockOpnameStatusEnum("status").default("open").notNull(),
     notes: text("notes"),
+    
+    // Pre-count documentation fields
+    opnameDate: timestamp("opname_date").notNull(),
+    opnameTime: varchar("opname_time", { length: 10 }).notNull(), // HH:MM format
+    location: varchar("location", { length: 200 }).notNull(),
+    
     createdById: text("created_by_id").references(() => user.id),
     closedById: text("closed_by_id").references(() => user.id),
     closedAt: timestamp("closed_at"),
@@ -33,6 +39,15 @@ export const stockOpnameItems = pgTable("stock_opname_items", {
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const stockOpnameSignatures = pgTable("stock_opname_signatures", {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id").references(() => stockOpnameSessions.id, { onDelete: "cascade" }).notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    position: varchar("position", { length: 200 }).notNull(),
+    order: integer("order").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const stockOpnameSessionsRelations = relations(stockOpnameSessions, ({ one, many }) => ({
     warehouse: one(warehouses, {
         fields: [stockOpnameSessions.warehouseId],
@@ -49,6 +64,7 @@ export const stockOpnameSessionsRelations = relations(stockOpnameSessions, ({ on
         relationName: "opnameClosedBy",
     }),
     items: many(stockOpnameItems),
+    signatures: many(stockOpnameSignatures),
 }));
 
 export const stockOpnameItemsRelations = relations(stockOpnameItems, ({ one }) => ({
@@ -64,5 +80,12 @@ export const stockOpnameItemsRelations = relations(stockOpnameItems, ({ one }) =
         fields: [stockOpnameItems.countedById],
         references: [user.id],
         relationName: "opnameCountedBy",
+    }),
+}));
+
+export const stockOpnameSignaturesRelations = relations(stockOpnameSignatures, ({ one }) => ({
+    session: one(stockOpnameSessions, {
+        fields: [stockOpnameSignatures.sessionId],
+        references: [stockOpnameSessions.id],
     }),
 }));

@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 
 export const products = pgTable("products", {
     id: serial("id").primaryKey(),
@@ -13,6 +13,7 @@ export const products = pgTable("products", {
     slocDescription: text("sloc_description"),
     typeWarehouse: varchar("type_warehouse", { length: 50 }),
     imageUrl: text("image_url"),
+    isConsignment: boolean("is_consignment").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

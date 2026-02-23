@@ -43,8 +43,10 @@ export { calendarEvents, calendarEventTypeEnum } from "./calendar-events";
 export {
     stockOpnameSessions,
     stockOpnameItems,
+    stockOpnameSignatures,
     stockOpnameSessionsRelations,
     stockOpnameItemsRelations,
+    stockOpnameSignaturesRelations,
     stockOpnameStatusEnum,
 } from "./stock-opname";
 export {

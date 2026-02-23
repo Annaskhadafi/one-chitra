@@ -1,12 +1,12 @@
 "use server"
 
 import { db } from "@/db"
-import { stockOpnameSessions, stockOpnameItems, stockLevels, stockMovements } from "@/db/schema"
+import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements } from "@/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
-import { createOpnameSessionSchema, updateOpnameCountSchema } from "@/lib/schemas"
+import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
 
 // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -46,28 +46,53 @@ export async function getStockOpnameSession(sessionId: number) {
  * for the chosen warehouse.
  */
 export async function createStockOpnameSession(
-    data: z.infer<typeof createOpnameSessionSchema>
+    data: CreateOpnameSessionInput
 ) {
     try {
+        // Validate input using Zod schema
+        const validation = createOpnameSessionSchema.safeParse(data)
+        
+        if (!validation.success) {
+            const firstError = validation.error.errors?.[0]
+            return { success: false, error: firstError?.message || "Validation failed" }
+        }
+        
+        const validatedData = validation.data
+        
         const session = await getAuthenticatedSession("stock-opname", "create")
         const userId = session.user.id
 
         const result = await db.transaction(async (tx) => {
-            // Create the session
+            // Create the session with new pre-count documentation fields
             const [newSession] = await tx
                 .insert(stockOpnameSessions)
                 .values({
-                    name: data.name,
-                    warehouseId: data.warehouseId,
-                    notes: data.notes,
+                    name: validatedData.name,
+                    warehouseId: validatedData.warehouseId,
+                    notes: validatedData.notes,
+                    opnameDate: validatedData.opnameDate,
+                    opnameTime: validatedData.opnameTime,
+                    location: validatedData.location,
                     createdById: userId,
                     status: "open",
                 })
                 .returning()
 
+            // Insert signature entries with proper ordering
+            if (validatedData.signatures.length > 0) {
+                await tx.insert(stockOpnameSignatures).values(
+                    validatedData.signatures.map((sig, index) => ({
+                        sessionId: newSession.id,
+                        name: sig.name,
+                        position: sig.position,
+                        order: index,
+                    }))
+                )
+            }
+
             // Fetch current stock levels for this warehouse
             const currentStocks = await tx.query.stockLevels.findMany({
-                where: eq(stockLevels.warehouseId, data.warehouseId),
+                where: eq(stockLevels.warehouseId, validatedData.warehouseId),
             })
 
             if (currentStocks.length > 0) {
