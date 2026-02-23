@@ -799,54 +799,58 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                         Export
                     </Button>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Select value={selectedYear} onValueChange={setSelectedYear}>
-                            <SelectTrigger className="w-[100px]">
-                                <SelectValue placeholder="Year" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Years</SelectItem>
-                                {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                        {mounted && (
+                            <>
+                                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                    <SelectTrigger className="w-[100px]">
+                                        <SelectValue placeholder="Year" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Years</SelectItem>
+                                        {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
 
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="w-[120px]">
-                                <SelectValue placeholder="Month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Months</SelectItem>
-                                {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
-                                    <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                    <SelectTrigger className="w-[120px]">
+                                        <SelectValue placeholder="Month" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Months</SelectItem>
+                                        {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                                            <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
 
-                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                            <SelectTrigger className="w-[160px]">
-                                <SelectValue placeholder="Product Type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Types</SelectItem>
-                                {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                                    <SelectTrigger className="w-[160px]">
+                                        <SelectValue placeholder="Product Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Types</SelectItem>
+                                        {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
 
-                        <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
+                                <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
 
-                        <Select
-                            value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
-                            onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
-                        >
-                            <SelectTrigger className="w-[140px]">
-                                <SelectValue placeholder="Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                {Object.entries(statusLabels).map(([value, label]) => (
-                                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                                <Select
+                                    value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
+                                    onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
+                                >
+                                    <SelectTrigger className="w-[140px]">
+                                        <SelectValue placeholder="Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Status</SelectItem>
+                                        {Object.entries(statusLabels).map(([value, label]) => (
+                                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </>
+                        )}
                         <Button variant="outline" size="icon" onClick={() => refetch()}>
                             <RefreshCcw className="h-4 w-4" />
                         </Button>

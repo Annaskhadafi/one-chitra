@@ -72,8 +72,60 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
             <html>
             <head>
                 <title>Delivery Order ${delivery.deliveryNumber || ""}</title>
+                <style>
+                    @page { size: letter; margin: 0; }
+                    body { margin: 0; padding: 0; background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .pdf-wrapper { 
+                        font-family: Arial, sans-serif; 
+                        font-size: 10pt; 
+                        color: #000; 
+                        line-height: 1.2;
+                        width: 100%;
+                        background-color: white;
+                    }
+                    .pdf-wrapper * { box-sizing: border-box; }
+                    .pdf-wrapper .container { padding: 10mm; width: 100%; display: flex; flex-direction: column; min-height: 279mm; box-sizing: border-box; }
+                    .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 40px; }
+                    .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                    .pdf-wrapper .ship-to { width: 55%; }
+                    .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
+                    .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
+                    .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; }
+                    .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
+                    .pdf-wrapper .contact-info { font-size: 9pt; }
+                    .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
+                    .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; letter-spacing: 1px; }
+                    .pdf-wrapper .do-details { padding: 10px; font-size: 9pt; }
+                    .pdf-wrapper .do-row { display: flex; margin-bottom: 3px; }
+                    .pdf-wrapper .do-label { width: 120px; }
+                    .pdf-wrapper .do-separator { margin-right: 5px; }
+                    .pdf-wrapper .do-value { font-weight: bold; }
+                    .pdf-wrapper .items-table { width: 100%; border-collapse: collapse; margin-top: 20px; border-top: 2px solid #000; border-bottom: 2px solid #000; }
+                    .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 9pt; border-bottom: 1px solid #000; }
+                    .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 9pt; vertical-align: top; }
+                    .pdf-wrapper .col-item { width: 40px; }
+                    .pdf-wrapper .col-qty { width: 80px; text-align: center; }
+                    .pdf-wrapper .col-part { width: 120px; }
+                    .pdf-wrapper .serial-grid { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; border: 1px solid #000; }
+                    .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 4px; font-size: 8pt; text-align: center; }
+                    .pdf-wrapper .footer-section { margin-top: auto; padding-top: 20px; }
+                    .pdf-wrapper .note-section { margin-top: 20px; font-size: 9pt; }
+                    .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 5px; }
+                    .pdf-wrapper .received-condition { font-size: 9pt; line-height: 1.5; margin-bottom: 10px; }
+                    .pdf-wrapper .divider-line { border-top: 1px solid #000; margin-bottom: 15px; }
+                    .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
+                    .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; border: 0px solid transparent; padding: 5px; }
+                    .pdf-wrapper .sig-label { margin-bottom: 5px; font-weight: normal; }
+                    .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
+                    .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
+                    .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
+                    .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; width: 100%; position: absolute; bottom: 5mm; }
+                    @media print {
+                        .no-print { display: none !important; }
+                    }
+                </style>
             </head>
-            <body style="margin:0; padding:0; background-color: white;">
+            <body>
                 <div class="pdf-wrapper">
                     ${printContent.innerHTML}
                 </div>
@@ -84,6 +136,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
         printWindow.focus()
         setTimeout(() => {
             printWindow.print()
+            printWindow.close()
         }, 500)
     }
 
@@ -123,11 +176,11 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 font-size: 10pt; 
                                 color: #000; 
                                 line-height: 1.2;
-                                padding-bottom: 20mm;
+                                padding-bottom: 10mm;
                                 box-sizing: border-box;
                             }
                             .pdf-wrapper * { box-sizing: border-box; }
-                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 277mm; }
+                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 259mm; }
                             
                             .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 60px; margin-top: 20px; }
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
@@ -167,14 +220,14 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
                             .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
                             
-                            .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; position: absolute; bottom: 10mm; width: 100%; left: 0; }
+                            .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; position: absolute; bottom: 5mm; width: 100%; left: 0; }
 
                             @media print {
-                                @page { size: A4; margin: 10mm; }
+                                @page { size: letter; margin: 0; }
                                 body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; background-color: transparent !important; }
-                                .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: auto !important; padding-bottom: 25mm !important; }
-                                .pdf-wrapper .container { padding: 0 !important; }
-                                .pdf-wrapper .internal-info-footer { position: fixed; bottom: 0; }
+                                .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: 100vh !important; padding-bottom: 0 !important; }
+                                .pdf-wrapper .container { padding: 10mm !important; min-height: 259mm !important; }
+                                .pdf-wrapper .internal-info-footer { position: fixed; bottom: 5mm; }
                                 .no-print { display: none !important; }
                             }
                         ` }} />
