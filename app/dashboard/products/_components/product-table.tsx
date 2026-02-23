@@ -271,6 +271,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                         {canEdit && (
                             <ProductDialog
                                 product={item}
+                                onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })}
                                 trigger={
                                     <Button variant="ghost" size="icon">
                                         <Pencil className="h-4 w-4" />
@@ -473,9 +474,9 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     {canCreate && (
-                        <>
+                        <>  
                             <ProductCSVUpload />
-                            <ProductDialog />
+                            <ProductDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                         </>
                     )}
                 </div>

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { Loader2, Plus } from "lucide-react"
 import { createUser } from "@/app/actions/users"
 
@@ -35,6 +36,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const router = useRouter()
+    const queryClient = useQueryClient()
 
     // Form state
     const [name, setName] = useState("")
@@ -64,6 +66,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
                 toast.success("User created successfully")
                 setOpen(false)
                 resetForm()
+                queryClient.invalidateQueries({ queryKey: ["users"] })
                 router.refresh()
             } else {
                 toast.error(result.error || "Failed to create user")

@@ -38,9 +38,10 @@ interface WarehouseDialogProps {
     trigger?: React.ReactNode
     open?: boolean
     onOpenChange?: (open: boolean) => void
+    onSuccess?: () => void
 }
 
-export function WarehouseDialog({ warehouse, trigger, open, onOpenChange }: WarehouseDialogProps) {
+export function WarehouseDialog({ warehouse, trigger, open, onOpenChange, onSuccess }: WarehouseDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const isEdit = !!warehouse
@@ -65,6 +66,7 @@ export function WarehouseDialog({ warehouse, trigger, open, onOpenChange }: Ware
                 toast.success(`Warehouse ${isEdit ? "updated" : "created"}`)
                 setIsOpen(false)
                 onOpenChange?.(false)
+                onSuccess?.()
                 if (!isEdit) form.reset()
             } else {
                 toast.error(result.error)

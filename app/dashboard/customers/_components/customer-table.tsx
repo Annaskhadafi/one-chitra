@@ -143,6 +143,7 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                         {canEdit && (
                             <CustomerDialog
                                 customer={item}
+                                onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })}
                                 trigger={
                                     <Button variant="ghost" size="icon" className="h-8 w-8">
                                         <Pencil className="h-3.5 w-3.5" />
@@ -292,9 +293,9 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     {canCreate && (
-                        <>
+                        <>  
                             <CustomerCSVUpload />
-                            <CustomerDialog />
+                            <CustomerDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })} />
                         </>
                     )}
                 </div>

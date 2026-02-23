@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label"
 import { setUserRole } from "@/app/actions/users"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 
 interface UserRoleDialogProps {
     userId: string
@@ -34,6 +35,7 @@ export function UserRoleDialog({ userId, currentRole, roles, trigger }: UserRole
     const [open, setOpen] = useState(false)
     const [role, setRole] = useState(currentRole)
     const router = useRouter()
+    const queryClient = useQueryClient()
 
     async function handleSave() {
         const result = await setUserRole(userId, role)
@@ -41,6 +43,7 @@ export function UserRoleDialog({ userId, currentRole, roles, trigger }: UserRole
         if (result.success) {
             toast.success("User role updated")
             setOpen(false)
+            queryClient.invalidateQueries({ queryKey: ["users"] })
             router.refresh()
         } else {
             toast.error(result.error || "Failed to update user role")

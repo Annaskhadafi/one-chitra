@@ -129,6 +129,7 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
                 <div className="flex justify-end gap-2">
                     <WarehouseDialog
                         warehouse={row.original}
+                        onSuccess={() => refetch()}
                         trigger={
                             <Button variant="ghost" size="icon">
                                 <Pencil className="h-4 w-4" />
@@ -268,7 +269,7 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
                         Export
                     </Button>
                     <WarehouseCSVUpload onSuccess={() => refetch()} />
-                    <WarehouseDialog />
+                    <WarehouseDialog onSuccess={() => refetch()} />
                 </div>
             </div>
 

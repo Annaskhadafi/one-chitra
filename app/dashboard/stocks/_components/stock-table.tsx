@@ -256,6 +256,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                             stock={row.original}
                             products={products}
                             warehouses={warehouses}
+                            onSuccess={() => refetch()}
                             trigger={
                                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                                     <Pencil className="mr-2 h-4 w-4" />
@@ -513,8 +514,8 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                             />
                         </div>
                         <div className="flex items-center gap-2">
-                            <StockCSVUpload />
-                            <StockDialog products={products} warehouses={warehouses} />
+                            <StockCSVUpload onSuccess={() => refetch()} />
+                            <StockDialog products={products} warehouses={warehouses} onSuccess={() => refetch()} />
                         </div>
                     </div>
                 </div>
