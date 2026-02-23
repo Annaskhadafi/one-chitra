@@ -66,13 +66,23 @@ export function DocumentPreview({ doc, open, onClose }: DocumentPreviewProps) {
                     </div>
                 </div>
 
-                {/* PDF Viewer */}
-                <div className="flex-1 bg-muted/30 overflow-hidden">
-                    <iframe
-                        src={`${doc.fileUrl}#toolbar=0&view=FitH`}
-                        className="w-full h-full border-none"
-                        title={doc.title}
-                    />
+                {/* Content Viewer */}
+                <div className="flex-1 bg-muted/30 overflow-hidden relative overflow-y-auto">
+                    {doc.fileType === 'image' || doc.fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) ? (
+                        <div className="flex items-center justify-center min-h-full p-8">
+                            <img
+                                src={doc.fileUrl}
+                                alt={doc.title}
+                                className="max-w-full h-auto shadow-2xl rounded-sm ring-1 ring-black/5"
+                            />
+                        </div>
+                    ) : (
+                        <iframe
+                            src={`${doc.fileUrl}#toolbar=0&view=FitH`}
+                            className="w-full h-full border-none"
+                            title={doc.title}
+                        />
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

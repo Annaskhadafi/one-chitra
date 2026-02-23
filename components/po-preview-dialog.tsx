@@ -66,13 +66,23 @@ export function PoPreviewDialog({
                         )}
                     </div>
                 </DialogHeader>
-                <div className="flex-1 bg-muted/10 relative">
+                <div className="flex-1 bg-muted/10 relative overflow-auto">
                     {fileUrl ? (
-                        <iframe
-                            src={fileUrl}
-                            className="absolute inset-0 w-full h-full border-0"
-                            title="Customer PO Document"
-                        />
+                        fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) ? (
+                            <div className="flex items-center justify-center min-h-full p-4">
+                                <img
+                                    src={fileUrl}
+                                    alt="Customer PO Document"
+                                    className="max-w-full h-auto shadow-lg"
+                                />
+                            </div>
+                        ) : (
+                            <iframe
+                                src={fileUrl}
+                                className="absolute inset-0 w-full h-full border-0"
+                                title="Customer PO Document"
+                            />
+                        )
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center py-12 text-muted-foreground">
                             <AlertTriangle className="h-12 w-12 mb-4 opacity-20" />
