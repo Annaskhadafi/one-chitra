@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef } from "react"
 import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock, getStocks } from "@/app/actions/stock"
 import { StockDialog } from "./stock-dialog"
 import { StockCSVUpload } from "./stock-csv-upload"
@@ -301,8 +301,18 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
     ], [manualRate, products, warehouses])
 
+    // Pre-filter by tab/category/slocDesc so TanStack Table always sees changed data
+    const preFilteredData = useMemo(() => {
+        return stocks.filter(item => {
+            const matchesTab = activeTab === "all" || item.warehouse?.type === activeTab
+            const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
+            const matchesSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
+            return matchesTab && matchesCategory && matchesSlocDesc
+        })
+    }, [stocks, activeTab, filterCategory, filterSlocDesc])
+
     const table = useReactTable({
-        data: stocks,
+        data: preFilteredData,
         columns,
         state: {
             sorting,
@@ -320,7 +330,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             const term = filterValue.toLowerCase()
             const item = row.original
 
-            const matchesSearch = !!(
+            return !!(
                 item.product?.materialNumber.toLowerCase().includes(term) ||
                 item.product?.materialDescription?.toLowerCase().includes(term) ||
                 item.product?.oldMaterialNo?.toLowerCase().includes(term) ||
@@ -328,18 +338,8 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 item.warehouse?.description?.toLowerCase().includes(term) ||
                 item.warehouse?.type?.toLowerCase().includes(term)
             )
-
-            const matchesTab = activeTab === "all" || item.warehouse?.type === activeTab
-            const matchesCategory = filterCategory === "all" || item.product?.category === filterCategory
-            const matchesSlocDesc = !filterSlocDesc || item.warehouse?.description?.toLowerCase().includes(filterSlocDesc.toLowerCase())
-
-            return !!(matchesSearch && matchesTab && matchesCategory && matchesSlocDesc)
         },
     })
-
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [activeTab, filterCategory, filterSlocDesc, globalFilter, table])
 
     const { rows } = table.getRowModel()
     const filteredRows = table.getFilteredRowModel().rows
