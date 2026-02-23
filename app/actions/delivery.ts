@@ -254,15 +254,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         serialNumbers: item.serialNumbers || null,
                     })))
 
-                // Handle Stock Transfer automation for VHS/Consignment
+                // Handle Stock Transfer automation for VHS/Consignment or any delivery with destination warehouse
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, data.salesOrderId),
                     columns: { categoryPo: true }
                 })
 
-                const isVHSConsignment = order?.categoryPo === "VHS/Consignment" && data.warehouseToId
+                const isVHSConsignment = order?.categoryPo === "VHS/Consignment"
+                const hasDestination = data.warehouseToId && data.warehouseToId !== 0
 
-                if (isVHSConsignment) {
+                if (hasDestination) {
                     const referenceNumber = `ST-AUTO-${newDelivery.deliveryNumber}`
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
@@ -284,10 +285,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled
-                // For VHS/Consignment, stock will be managed by the transfer, not here
+                // If destination warehouse is set, stock will be managed by the transfer, not here
                 const isCommitted = data.status !== "cancelled"
 
-                if (isCommitted && !isVHSConsignment) {
+                if (isCommitted && !hasDestination) {
                     for (const item of data.items) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
