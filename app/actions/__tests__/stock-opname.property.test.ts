@@ -3,11 +3,19 @@
  * Feature: stock-opname-enhancement
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import * as fc from 'fast-check'
 import { db } from '@/db'
 import { stockOpnameSessions, stockOpnameSignatures, warehouses, user } from '@/db/schema'
 import { eq, inArray } from 'drizzle-orm'
+
+// Mock the RBAC module to bypass authentication in tests
+vi.mock('@/lib/rbac', () => ({
+  getAuthenticatedSession: vi.fn().mockResolvedValue({
+    user: { id: 'test-user-opname' },
+  }),
+  checkPermission: vi.fn().mockResolvedValue(true),
+}))
 
 // Test database setup
 let testWarehouseId: number
@@ -294,5 +302,176 @@ describe('Stock Opname Enhancement - Property Tests', () => {
       ),
       { numRuns: 20 }
     )
+  })
+
+  /**
+   * Property 9: Closed Session Data Integrity
+   * **Validates: Requirements 5.1**
+   * 
+   * For any closed stock opname session, the generated PDF report should only include
+   * data associated with that specific session ID and should not include data from
+   * other sessions.
+   */
+  it('Property 9: PDF data only includes items from specified session', { timeout: 120000 }, async () => {
+    const createdSessionIds: number[] = []
+    
+    try {
+      await fc.assert(
+        fc.asyncProperty(
+          sessionDataArbitrary(),
+          sessionDataArbitrary(),
+          async (sessionData1, sessionData2) => {
+            // Create two separate sessions
+            const [session1] = await db.insert(stockOpnameSessions).values({
+              name: sessionData1.name,
+              warehouseId: testWarehouseId,
+              opnameDate: sessionData1.opnameDate,
+              opnameTime: sessionData1.opnameTime,
+              location: sessionData1.location,
+              notes: sessionData1.notes ?? undefined,
+              createdById: testUserId,
+              status: 'closed',
+              closedById: testUserId,
+              closedAt: new Date(),
+            }).returning()
+
+            createdSessionIds.push(session1.id)
+
+            const [session2] = await db.insert(stockOpnameSessions).values({
+              name: sessionData2.name,
+              warehouseId: testWarehouseId,
+              opnameDate: sessionData2.opnameDate,
+              opnameTime: sessionData2.opnameTime,
+              location: sessionData2.location,
+              notes: sessionData2.notes ?? undefined,
+              createdById: testUserId,
+              status: 'closed',
+              closedById: testUserId,
+              closedAt: new Date(),
+            }).returning()
+
+            createdSessionIds.push(session2.id)
+
+            // Add signatures to both sessions
+            await db.insert(stockOpnameSignatures).values(
+              sessionData1.signatures.map((sig, index) => ({
+                sessionId: session1.id,
+                name: sig.name,
+                position: sig.position,
+                order: index,
+              }))
+            )
+
+            await db.insert(stockOpnameSignatures).values(
+              sessionData2.signatures.map((sig, index) => ({
+                sessionId: session2.id,
+                name: sig.name,
+                position: sig.position,
+                order: index,
+              }))
+            )
+
+            // Import the function to test
+            const { getOpnamePdfReportData } = await import('@/app/actions/stock-opname')
+
+            // Get PDF data for session 1
+            const result = await getOpnamePdfReportData(session1.id)
+
+            // Assertions
+            expect(result.success).toBe(true)
+            expect(result.data).toBeDefined()
+            
+            if (result.data) {
+              // Verify the session ID matches
+              expect(result.data.session.id).toBe(session1.id)
+              expect(result.data.session.name).toBe(sessionData1.name)
+              
+              // Verify signatures belong to session 1 only
+              expect(result.data.signatures).toHaveLength(sessionData1.signatures.length)
+              result.data.signatures.forEach((sig) => {
+                expect(sig.sessionId).toBe(session1.id)
+              })
+              
+              // Verify no data from session 2 is included
+              expect(result.data.session.id).not.toBe(session2.id)
+              expect(result.data.session.name).not.toBe(sessionData2.name)
+            }
+          }
+        ),
+        { numRuns: 10 }
+      )
+    } finally {
+      // Cleanup all created sessions
+      if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameSessions).where(
+          inArray(stockOpnameSessions.id, createdSessionIds)
+        )
+      }
+    }
+  })
+
+  /**
+   * Property 11: Open Session PDF Prevention
+   * **Validates: Requirements 5.4**
+   * 
+   * For any stock opname session with status "open" or "cancelled", attempting to
+   * generate a PDF report should be rejected with an appropriate error.
+   */
+  it('Property 11: Open and cancelled sessions are rejected for PDF generation', { timeout: 120000 }, async () => {
+    const createdSessionIds: number[] = []
+    
+    try {
+      await fc.assert(
+        fc.asyncProperty(
+          sessionDataArbitrary(),
+          fc.constantFrom('open', 'cancelled'),
+          async (sessionData, status) => {
+            // Create session with non-closed status
+            const [session] = await db.insert(stockOpnameSessions).values({
+              name: sessionData.name,
+              warehouseId: testWarehouseId,
+              opnameDate: sessionData.opnameDate,
+              opnameTime: sessionData.opnameTime,
+              location: sessionData.location,
+              notes: sessionData.notes ?? undefined,
+              createdById: testUserId,
+              status: status as 'open' | 'cancelled',
+            }).returning()
+
+            createdSessionIds.push(session.id)
+
+            // Add signatures
+            await db.insert(stockOpnameSignatures).values(
+              sessionData.signatures.map((sig, index) => ({
+                sessionId: session.id,
+                name: sig.name,
+                position: sig.position,
+                order: index,
+              }))
+            )
+
+            // Import the function to test
+            const { getOpnamePdfReportData } = await import('@/app/actions/stock-opname')
+
+            // Attempt to get PDF data for non-closed session
+            const result = await getOpnamePdfReportData(session.id)
+
+            // Assertions
+            expect(result.success).toBe(false)
+            expect(result.error).toBeDefined()
+            expect(result.error).toMatch(/tidak dapat|belum ditutup/i)
+            expect(result.data).toBeUndefined()
+          }
+        ),
+        { numRuns: 20 }
+      )
+    } finally {
+      // Cleanup all created sessions
+      if (createdSessionIds.length > 0) {
+        await db.delete(stockOpnameSessions).where(
+          inArray(stockOpnameSessions.id, createdSessionIds)
+        )
+      }
+    }
   })
 })

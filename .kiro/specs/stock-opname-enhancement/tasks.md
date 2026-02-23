@@ -80,24 +80,24 @@ This implementation plan breaks down the stock opname enhancement feature into d
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. PDF report data retrieval server action
-  - [-] 5.1 Implement getOpnamePdfReportData server action
+  - [x] 5.1 Implement getOpnamePdfReportData server action
     - Create function to fetch session with all relations (signatures, items, products)
     - Validate session exists and is closed
     - Return structured OpnamePdfReportData
     - Include closure timestamp and user information
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
   
-  - [~] 5.2 Write property test for closed session data integrity
+  - [x] 5.2 Write property test for closed session data integrity
     - **Property 9: Closed Session Data Integrity**
     - **Validates: Requirements 5.1**
     - Test that PDF data only includes items from specified session ID
   
-  - [~] 5.3 Write property test for open session PDF prevention
+  - [x] 5.3 Write property test for open session PDF prevention
     - **Property 11: Open Session PDF Prevention**
     - **Validates: Requirements 5.4**
     - Test that open/cancelled sessions are rejected with error
   
-  - [~] 5.4 Write unit tests for getOpnamePdfReportData
+  - [x] 5.4 Write unit tests for getOpnamePdfReportData
     - Test successful data retrieval for closed session
     - Test error for non-existent session
     - Test error for open session
@@ -105,7 +105,7 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - _Requirements: 5.1, 5.4_
 
 - [ ] 6. Pre-count form UI component
-  - [~] 6.1 Create OpnamePreCountForm component
+  - [x] 6.1 Create OpnamePreCountForm component
     - Set up react-hook-form with Zod validation
     - Add date picker field for opnameDate
     - Add time input field for opnameTime (HH:MM format)

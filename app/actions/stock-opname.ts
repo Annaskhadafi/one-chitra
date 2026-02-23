@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
 import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
+import type { OpnamePdfReportData } from "@/lib/types"
 
 // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -307,5 +308,75 @@ export async function bulkUpdateOpnameCounts(
     } catch (error) {
         console.error("Bulk update opname error:", error)
         return { success: false, error: "Gagal bulk update" }
+    }
+}
+
+// ─── Get PDF Report Data ───────────────────────────────────────────────────
+
+/**
+ * Fetch all data needed to generate a PDF report for a closed stock opname session.
+ * Validates that the session exists and is closed before returning data.
+ * 
+ * Requirements: 5.1, 5.2, 5.3, 5.4
+ */
+export async function getOpnamePdfReportData(
+    sessionId: number
+): Promise<{ success: boolean; data?: OpnamePdfReportData; error?: string }> {
+    try {
+        await getAuthenticatedSession("stock-opname", "view")
+
+        // Fetch session with all required relations
+        const session = await db.query.stockOpnameSessions.findFirst({
+            where: eq(stockOpnameSessions.id, sessionId),
+            with: {
+                warehouse: true,
+                createdBy: true,
+                closedBy: true,
+                signatures: {
+                    orderBy: (signatures, { asc }) => [asc(signatures.order)],
+                },
+                items: {
+                    with: {
+                        product: true,
+                        countedBy: true,
+                    },
+                    orderBy: (items, { asc }) => [asc(items.id)],
+                },
+            },
+        })
+
+        // Validate session exists
+        if (!session) {
+            return { success: false, error: "Sesi stock opname tidak ditemukan" }
+        }
+
+        // Validate session is closed (Requirement 5.4)
+        if (session.status !== "closed") {
+            return { success: false, error: "Tidak dapat membuat PDF untuk sesi yang belum ditutup" }
+        }
+
+        // Ensure all items have product data
+        const itemsWithProducts = session.items.filter(item => item.product !== null) as Array<typeof session.items[number] & { product: NonNullable<typeof session.items[number]['product']> }>
+
+        // Return structured data for PDF rendering
+        // Includes closure timestamp and user information (Requirements 5.2, 5.3)
+        const reportData: OpnamePdfReportData = {
+            session: {
+                ...session,
+                warehouse: session.warehouse,
+                createdBy: session.createdBy,
+                closedBy: session.closedBy,
+                items: itemsWithProducts,
+                signatures: session.signatures,
+            },
+            signatures: session.signatures,
+            items: itemsWithProducts,
+            companyLogo: "/logo.png", // Default company logo path
+        }
+
+        return { success: true, data: reportData }
+    } catch (error) {
+        console.error("Get opname PDF report data error:", error)
+        return { success: false, error: "Gagal mengambil data laporan PDF" }
     }
 }

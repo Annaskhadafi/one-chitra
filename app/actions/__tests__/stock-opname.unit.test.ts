@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import { db } from '@/db'
 import { stockOpnameSessions, stockOpnameSignatures, stockOpnameItems, warehouses, user, stockLevels, products } from '@/db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { createStockOpnameSession } from '../stock-opname'
+import { createStockOpnameSession, getOpnamePdfReportData, closeStockOpnameSession } from '../stock-opname'
 import type { CreateOpnameSessionInput } from '@/lib/schemas'
 
 // Mock the RBAC module
@@ -516,6 +516,279 @@ describe('createStockOpnameSession - Unit Tests', () => {
           expect(session!.opnameTime).toBe(time)
         }
       }
+    })
+  })
+})
+
+// ─── Unit Tests for getOpnamePdfReportData ─────────────────────────────────
+
+describe('getOpnamePdfReportData - Unit Tests', () => {
+  
+  describe('Successful data retrieval', () => {
+    
+    it('should retrieve PDF data for closed session with all required relations', async () => {
+      // Create a session
+      const input = createValidSessionInput()
+      const createResult = await createStockOpnameSession(input)
+      
+      expect(createResult.success).toBe(true)
+      expect(createResult.sessionId).toBeDefined()
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      // Close the session
+      const closeResult = await closeStockOpnameSession(createResult.sessionId, false)
+      expect(closeResult.success).toBe(true)
+      
+      // Get PDF report data
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(true)
+      expect(pdfResult.data).toBeDefined()
+      
+      if (pdfResult.data) {
+        // Verify session data
+        expect(pdfResult.data.session).toBeDefined()
+        expect(pdfResult.data.session.id).toBe(createResult.sessionId)
+        expect(pdfResult.data.session.status).toBe('closed')
+        expect(pdfResult.data.session.closedAt).toBeDefined()
+        expect(pdfResult.data.session.closedById).toBe('test-user-unit')
+        
+        // Verify warehouse relation is loaded
+        expect(pdfResult.data.session.warehouse).toBeDefined()
+        expect(pdfResult.data.session.warehouse!.id).toBe(testWarehouseId)
+        
+        // Verify closedBy user relation is loaded
+        expect(pdfResult.data.session.closedBy).toBeDefined()
+        expect(pdfResult.data.session.closedBy!.id).toBe('test-user-unit')
+        
+        // Verify signatures are loaded
+        expect(pdfResult.data.signatures).toBeDefined()
+        expect(pdfResult.data.signatures.length).toBe(2)
+        expect(pdfResult.data.signatures[0].name).toBe('John Doe')
+        expect(pdfResult.data.signatures[1].name).toBe('Jane Smith')
+        
+        // Verify items are loaded with product relations
+        expect(pdfResult.data.items).toBeDefined()
+        expect(pdfResult.data.items.length).toBeGreaterThan(0)
+        expect(pdfResult.data.items[0].product).toBeDefined()
+        expect(pdfResult.data.items[0].product.id).toBeDefined()
+        
+        // Verify company logo is included
+        expect(pdfResult.data.companyLogo).toBeDefined()
+      }
+    })
+    
+    it('should include closure metadata in PDF data', async () => {
+      // Create and close a session
+      const input = createValidSessionInput({ name: 'Session for Closure Metadata Test' })
+      const createResult = await createStockOpnameSession(input)
+      
+      expect(createResult.success).toBe(true)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      const closeResult = await closeStockOpnameSession(createResult.sessionId, false)
+      expect(closeResult.success).toBe(true)
+      
+      // Get PDF report data
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(true)
+      expect(pdfResult.data).toBeDefined()
+      
+      if (pdfResult.data) {
+        // Verify closure timestamp is present
+        expect(pdfResult.data.session.closedAt).toBeDefined()
+        expect(pdfResult.data.session.closedAt).toBeInstanceOf(Date)
+        
+        // Verify closed by user is present
+        expect(pdfResult.data.session.closedById).toBe('test-user-unit')
+        expect(pdfResult.data.session.closedBy).toBeDefined()
+        expect(pdfResult.data.session.closedBy!.name).toBe('Test User Unit')
+      }
+    })
+  })
+  
+  describe('Error handling', () => {
+    
+    it('should return error for non-existent session', async () => {
+      const nonExistentSessionId = 999999
+      
+      const result = await getOpnamePdfReportData(nonExistentSessionId)
+      
+      expect(result.success).toBe(false)
+      expect(result.error).toBeDefined()
+      expect(result.error).toMatch(/tidak ditemukan/i)
+      expect(result.data).toBeUndefined()
+    })
+    
+    it('should return error for open session', async () => {
+      // Create a session but don't close it
+      const input = createValidSessionInput({ name: 'Open Session Test' })
+      const createResult = await createStockOpnameSession(input)
+      
+      expect(createResult.success).toBe(true)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      // Try to get PDF data without closing the session
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(false)
+      expect(pdfResult.error).toBeDefined()
+      expect(pdfResult.error).toMatch(/belum ditutup/i)
+      expect(pdfResult.data).toBeUndefined()
+    })
+    
+    it('should return error for cancelled session', async () => {
+      // Create a session
+      const input = createValidSessionInput({ name: 'Cancelled Session Test' })
+      const createResult = await createStockOpnameSession(input)
+      
+      expect(createResult.success).toBe(true)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      // Manually set session status to cancelled
+      await db
+        .update(stockOpnameSessions)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(eq(stockOpnameSessions.id, createResult.sessionId))
+      
+      // Try to get PDF data for cancelled session
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(false)
+      expect(pdfResult.error).toBeDefined()
+      expect(pdfResult.error).toMatch(/belum ditutup/i)
+      expect(pdfResult.data).toBeUndefined()
+    })
+  })
+  
+  describe('Data completeness', () => {
+    
+    it('should load all required relations for PDF generation', async () => {
+      // Create a session with multiple signatures
+      const input = createValidSessionInput({
+        name: 'Complete Relations Test',
+        signatures: [
+          { name: 'Manager 1', position: 'Warehouse Manager' },
+          { name: 'Clerk 1', position: 'Inventory Clerk' },
+          { name: 'Supervisor 1', position: 'Supervisor' }
+        ]
+      })
+      
+      const createResult = await createStockOpnameSession(input)
+      expect(createResult.success).toBe(true)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      // Close the session
+      await closeStockOpnameSession(createResult.sessionId, false)
+      
+      // Get PDF report data
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(true)
+      expect(pdfResult.data).toBeDefined()
+      
+      if (pdfResult.data) {
+        // Verify all signatures are loaded in correct order
+        expect(pdfResult.data.signatures).toHaveLength(3)
+        expect(pdfResult.data.signatures[0].name).toBe('Manager 1')
+        expect(pdfResult.data.signatures[1].name).toBe('Clerk 1')
+        expect(pdfResult.data.signatures[2].name).toBe('Supervisor 1')
+        
+        // Verify items have product data
+        for (const item of pdfResult.data.items) {
+          expect(item.product).toBeDefined()
+          expect(item.product.id).toBeDefined()
+          expect(item.product.materialDescription).toBeDefined()
+        }
+        
+        // Verify session metadata
+        expect(pdfResult.data.session.opnameDate).toBeDefined()
+        expect(pdfResult.data.session.opnameTime).toBeDefined()
+        expect(pdfResult.data.session.location).toBeDefined()
+      }
+    })
+    
+    it('should include all stock items in PDF data', async () => {
+      // Create a session
+      const input = createValidSessionInput({ name: 'All Items Test' })
+      const createResult = await createStockOpnameSession(input)
+      
+      expect(createResult.success).toBe(true)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      // Get the count of items in the session
+      const itemsBeforeClose = await db.query.stockOpnameItems.findMany({
+        where: eq(stockOpnameItems.sessionId, createResult.sessionId)
+      })
+      
+      const itemCount = itemsBeforeClose.length
+      
+      // Close the session
+      await closeStockOpnameSession(createResult.sessionId, false)
+      
+      // Get PDF report data
+      const pdfResult = await getOpnamePdfReportData(createResult.sessionId)
+      
+      expect(pdfResult.success).toBe(true)
+      expect(pdfResult.data).toBeDefined()
+      
+      if (pdfResult.data) {
+        // Verify all items are included in PDF data
+        expect(pdfResult.data.items).toHaveLength(itemCount)
+        
+        // Verify each item has required fields
+        for (const item of pdfResult.data.items) {
+          expect(item.id).toBeDefined()
+          expect(item.productId).toBeDefined()
+          expect(item.systemQty).toBeDefined()
+          expect(item.product).toBeDefined()
+        }
+      }
+    })
+  })
+  
+  describe('Authentication checks', () => {
+    
+    it('should call getAuthenticatedSession with correct parameters', async () => {
+      const { getAuthenticatedSession } = await import('@/lib/rbac')
+      
+      // Create and close a session
+      const input = createValidSessionInput({ name: 'Auth Check Test' })
+      const createResult = await createStockOpnameSession(input)
+      
+      if (!createResult.sessionId) return
+      
+      createdSessionIds.push(createResult.sessionId)
+      
+      await closeStockOpnameSession(createResult.sessionId, false)
+      
+      // Clear previous calls
+      vi.clearAllMocks()
+      
+      // Get PDF report data
+      await getOpnamePdfReportData(createResult.sessionId)
+      
+      // Verify authentication was checked
+      expect(getAuthenticatedSession).toHaveBeenCalledWith('stock-opname', 'view')
     })
   })
 })
