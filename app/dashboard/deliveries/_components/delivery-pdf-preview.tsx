@@ -315,12 +315,10 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                     </div>
                                     <div className="sig-box">
                                         <div className="sig-label">Forwarder By,</div>
-                                        <div className="sig-name">CP</div>
                                         <div className="sig-placeholder">
-                                            <div className="sig-name" style={{ marginBottom: "5px" }}>
-                                                {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"}
+                                            <div className="sig-name">
+                                                ( {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"})
                                             </div>
-                                            <div className="sig-bottom-name">( Nama Driver - Vehicle No )</div>
                                         </div>
                                     </div>
                                     <div className="sig-box">
