@@ -8,10 +8,10 @@ export async function GET(
     { params }: { params: Promise<{ filename: string }> }
 ) {
     const { filename } = await params;
-    // In Next.js standalone mode, process.cwd() = /app/.next/standalone
-    // so this resolves to /app/.next/standalone/public/uploads/<filename>
-    // which matches the Dokploy Volume Mount container path
-    const filePath = join(process.cwd(), "public", "uploads", filename);
+    // Resolve upload dir: UPLOAD_DIR env var (set to /app/uploads in production)
+    // or fallback to <cwd>/public/uploads in development
+    const uploadDir = process.env.UPLOAD_DIR ?? join(process.cwd(), "public", "uploads");
+    const filePath = join(uploadDir, filename);
 
     if (!existsSync(filePath)) {
         return new NextResponse("File not found", { status: 404 });

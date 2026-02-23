@@ -4,14 +4,16 @@ import { writeFile, mkdir, unlink } from "fs/promises"
 import { join, resolve } from "path"
 import { v4 as uuidv4 } from "uuid"
 
+// Resolve the upload directory:
+// - In production (Dokploy), set UPLOAD_DIR=/app/uploads and mount volume at /app/uploads
+// - In development (no UPLOAD_DIR set), falls back to <project>/public/uploads
+function getUploadDir(): string {
+    if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR
+    return resolve(process.cwd(), "public", "uploads")
+}
+
 export async function uploadFile(formData: FormData) {
-    const uploadDirName = "uploads"
-    // IMPORTANT: In Next.js standalone mode (production), process.cwd() returns
-    // /app/.next/standalone — so uploadDir resolves to /app/.next/standalone/public/uploads
-    // In development, process.cwd() returns the project root — so it resolves to ./public/uploads
-    // The Dokploy Volume Mount MUST point container path to: /app/.next/standalone/public/uploads
-    const publicDir = resolve(process.cwd(), "public")
-    const uploadDir = join(publicDir, uploadDirName)
+    const uploadDir = getUploadDir()
 
     try {
         const file = formData.get("file") as File
@@ -79,10 +81,7 @@ export async function deleteFile(url: string) {
     const filename = url.split('/').pop()
     if (!filename) return { success: false, error: "Invalid file URL" }
 
-    const uploadDirName = "uploads"
-    // Same path resolution as uploadFile — must stay consistent
-    const publicDir = resolve(process.cwd(), "public")
-    const filepath = join(publicDir, uploadDirName, filename)
+    const filepath = join(getUploadDir(), filename)
 
     try {
         await unlink(filepath).catch(() => { /* ignore if already gone */ })

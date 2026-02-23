@@ -17,9 +17,12 @@ cmds = [
 ]
 
 [start]
-cmd = "npm run db:push && node .next/standalone/server.js"
+# mkdir ensures /app/uploads exists at startup (volume mount may not create the dir)
+cmd = "mkdir -p /app/uploads && npm run db:push && node .next/standalone/server.js"
 
 [variables]
 NODE_ENV = "production"
 HOSTNAME = "0.0.0.0"
 PORT = "3000"
+# Volume mount path for uploaded files — mount Dokploy volume at /app/uploads
+UPLOAD_DIR = "/app/uploads"
