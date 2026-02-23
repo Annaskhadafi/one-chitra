@@ -64,15 +64,23 @@ export function ScanDoPreview({
                         </Button>
                     </div>
                 </DialogHeader>
-                <div className="flex-1 w-full min-h-0 bg-muted/10 relative">
+                <div className="flex-1 w-full min-h-0 bg-muted/10 relative overflow-auto">
                     {fileUrl ? (
-                        // Use iframe for all file types (same as po-preview-dialog)
-                        // avoids Next.js Image optimization issues with /api/uploads/ paths
-                        <iframe
-                            src={fileUrl}
-                            className="absolute inset-0 w-full h-full border-none"
-                            title="Scan DO Document"
-                        />
+                        fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) || !fileUrl.toLowerCase().endsWith('.pdf') ? (
+                            <div className="flex items-center justify-center min-h-full p-4">
+                                <img
+                                    src={fileUrl}
+                                    alt="Scan DO"
+                                    className="max-w-full h-auto shadow-sm rounded-sm"
+                                />
+                            </div>
+                        ) : (
+                            <iframe
+                                src={fileUrl}
+                                className="absolute inset-0 w-full h-full border-none"
+                                title="Scan DO Document"
+                            />
+                        )
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center py-12 text-muted-foreground">
                             <AlertTriangle className="h-12 w-12 mb-4 opacity-20" />
