@@ -33,7 +33,12 @@ async function seed() {
     console.log('✅ Roles seeded');
 
     // 2. Seed Permissions
-    const resources = ['inventory', 'quotations', 'deliveries', 'billing', 'reports', 'admin', 'users', 'roles', 'stock-alerts', 'stock-opname', 'abc-analysis', 'price-management'];
+    const resources = [
+        'inventory', 'quotations', 'deliveries', 'billing', 'reports', 'admin', 'users', 'roles',
+        'stock-alerts', 'stock-opname', 'abc-analysis', 'price-management',
+        // Security management resources
+        'security',
+    ];
     const actions = ['view', 'create', 'update', 'delete'];
 
     const allPermissions = [];

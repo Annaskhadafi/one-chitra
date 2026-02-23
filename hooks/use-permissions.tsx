@@ -42,10 +42,6 @@ export function usePermissions() {
         }
 
         const result = context.permissions.includes(permission)
-        // Log roles related permissions to help debug visibility
-        if (permission.startsWith("roles:")) {
-            console.log(`Checking permission: ${permission}, Result: ${result}, IsAdmin: ${isAdmin}`)
-        }
         return result
     }
 

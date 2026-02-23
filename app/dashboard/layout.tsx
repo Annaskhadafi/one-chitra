@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 import { db } from "@/db"
+import { redirect } from "next/navigation"
 
 import {
   SidebarInset,
@@ -29,6 +30,11 @@ export default async function DashboardLayout({
   const session = await auth.api.getSession({
     headers: await headers()
   })
+
+  // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
+  if (!session?.user?.id) {
+    redirect("/sign-in")
+  }
 
   // Fetch permissions based on role
   let permissions: string[] = []

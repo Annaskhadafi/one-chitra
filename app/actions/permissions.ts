@@ -5,8 +5,10 @@ import { permissions } from "@/db/schema"
 import { navigationConfig } from "@/lib/navigation"
 import { revalidatePath } from "next/cache"
 import { eq, and } from "drizzle-orm"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 export async function getAllPermissions() {
+    await getAuthenticatedSession("roles", "view")
     // Auto-sync permissions when fetching to ensure they are up to date
     await syncPermissions()
 

@@ -23,6 +23,9 @@ import {
     Activity,
     Tags,
     CalendarDays,
+    Lock,
+    ScrollText,
+    MonitorSmartphone,
     type LucideIcon
 } from "lucide-react"
 
@@ -254,20 +257,43 @@ export const navigationConfig: NavSection[] = [
         ],
     },
     {
-        title: "Admin",
+        title: "Security",
         items: [
             {
-                title: "User Management",
-                url: "/dashboard/admin/users",
-                icon: Users,
-                resource: "users",
+                title: "Security Overview",
+                url: "/dashboard/security",
+                icon: Lock,
+                resource: "security",
             },
             {
-                title: "Role Management",
-                url: "/dashboard/admin/roles",
-                icon: Shield,
-                resource: "roles",
+                title: "User Management",
+                url: "/dashboard/security/users",
+                icon: Users,
+                resource: "security",
             },
+            {
+                title: "Roles & Permissions",
+                url: "/dashboard/security/roles",
+                icon: Shield,
+                resource: "security",
+            },
+            {
+                title: "Audit Logs",
+                url: "/dashboard/security/audit-logs",
+                icon: ScrollText,
+                resource: "security",
+            },
+            {
+                title: "Sessions",
+                url: "/dashboard/security/sessions",
+                icon: MonitorSmartphone,
+                resource: "security",
+            },
+        ],
+    },
+    {
+        title: "Admin",
+        items: [
             {
                 title: "Email Settings",
                 url: "/dashboard/settings/email",

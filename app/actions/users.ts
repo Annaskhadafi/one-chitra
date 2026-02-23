@@ -5,6 +5,8 @@ import { user } from "@/db/schema"
 import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
+import { getAuthenticatedSession } from "@/lib/rbac"
+import { headers } from "next/headers"
 
 export async function createUser(data: { name: string; email: string; password: string; role: string }) {
     try {
@@ -31,12 +33,14 @@ export async function createUser(data: { name: string; email: string; password: 
 }
 
 export async function getUsers() {
+    await getAuthenticatedSession("users", "view")
     return await db.select().from(user).orderBy(user.createdAt)
 }
 
 
 export async function deleteUser(userId: string) {
     try {
+        await getAuthenticatedSession("users", "delete")
         await db.delete(user).where(eq(user.id, userId))
         revalidatePath('/dashboard/admin/users')
         return { success: true }
@@ -104,6 +108,7 @@ export async function importUsers(formData: FormData) {
 
 export async function bulkDeleteUsers(userIds: string[]) {
     try {
+        await getAuthenticatedSession("users", "delete")
         await db.delete(user).where(inArray(user.id, userIds))
         revalidatePath('/dashboard/admin/users')
         return { success: true }
@@ -116,6 +121,7 @@ export async function bulkDeleteUsers(userIds: string[]) {
 
 export async function bulkUpdateUserRole(userIds: string[], role: string) {
     try {
+        await getAuthenticatedSession("users", "edit")
         await db.update(user)
             .set({ role })
             .where(inArray(user.id, userIds))
@@ -129,6 +135,7 @@ export async function bulkUpdateUserRole(userIds: string[], role: string) {
 
 export async function setUserRole(userId: string, role: string) {
     try {
+        await getAuthenticatedSession("users", "edit")
         await db.update(user)
             .set({ role })
             .where(eq(user.id, userId))

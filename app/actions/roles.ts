@@ -4,7 +4,7 @@ import { db } from "@/db"
 import { rolePermissions, roles } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { checkPermission } from "@/lib/rbac"
+import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 
 
 import { InferSelectModel } from "drizzle-orm"
@@ -14,16 +14,17 @@ export type RoleWithPermissions = InferSelectModel<typeof roles> & {
 }
 
 export async function getRoles() {
+    await getAuthenticatedSession("roles", "view")
     return await db.select().from(roles).orderBy(roles.id)
 }
 
 export async function getRoleStats() {
-    // This could count users per role if we had a proper FK
-    // For now just return role list
-    return await getRoles()
+    await getAuthenticatedSession("roles", "view")
+    return await db.select().from(roles).orderBy(roles.id)
 }
 
 export async function getRoleWithPermissions(roleId: number) {
+    await getAuthenticatedSession("roles", "view")
     const role = await db.query.roles.findFirst({
         where: eq(roles.id, roleId),
     })
