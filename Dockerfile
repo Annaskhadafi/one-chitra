@@ -34,6 +34,11 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# Salin logo ke /images/ agar tidak tertimpa saat volume uploads di-mount saat runtime
+RUN mkdir -p public/images && \
+    cp public/uploads/Chitra-Paratama.png public/images/Chitra-Paratama.png 2>/dev/null || true && \
+    chown -R nextjs:nodejs public/images
+
 # Buat folder uploads dengan permission yang benar agar persistent volume bisa di-write
 RUN mkdir -p public/uploads && chown -R nextjs:nodejs public/uploads
 

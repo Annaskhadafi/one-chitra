@@ -57,6 +57,8 @@ export const auth = betterAuth({
         "http://localhost:3003",
         "http://localhost:3004",
         "http://localhost:3005",
+        "https://satu.chitraparatama.com",
         baseURL,
-    ].filter(Boolean),
+        process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
+    ].filter(Boolean) as string[],
 });
