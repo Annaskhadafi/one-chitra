@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, stockLevels, products } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
 import { eq, desc, and, sql, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -237,6 +237,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     costOthers: data.costOthers ? String(data.costOthers) : "0",
 
                     warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
                     shippingAddress: data.shippingAddress || null,
                     notes: data.notes || null,
                 })
@@ -252,6 +253,33 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         deliveredQuantity: item.deliveredQuantity,
                         serialNumbers: item.serialNumbers || null,
                     })))
+
+                // Handle Stock Transfer automation for VHS/Consignment
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, data.salesOrderId),
+                    columns: { categoryPo: true }
+                })
+
+                if (order?.categoryPo === "VHS/Consignment" && data.warehouseToId) {
+                    const referenceNumber = `ST-AUTO-${newDelivery.deliveryNumber}`
+                    const [transfer] = await tx.insert(stockTransfers).values({
+                        referenceNumber,
+                        deliveryId: newDelivery.id,
+                        fromWarehouseId: data.warehouseId,
+                        toWarehouseId: data.warehouseToId,
+                        receivedStatus: "Scheduled",
+                        transferDate: new Date(data.scheduledDate),
+                        notes: `Automated transfer from delivery ${newDelivery.deliveryNumber}`,
+                    }).returning()
+
+                    await tx.insert(stockTransferItems).values(
+                        data.items.map(item => ({
+                            transferId: transfer.id,
+                            productId: item.productId,
+                            quantity: item.deliveredQuantity,
+                        }))
+                    )
+                }
 
                 // Deduct stock for all statuses EXCEPT cancelled
                 const isCommitted = data.status !== "cancelled"
@@ -365,11 +393,68 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     costOthers: data.costOthers ? String(data.costOthers) : "0",
 
                     warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
                     shippingAddress: data.shippingAddress || null,
                     notes: data.notes || null,
                     updatedAt: new Date(),
                 })
                 .where(eq(deliveries.id, id))
+
+            // Sync automated Stock Transfer
+            const order = await tx.query.salesOrders.findFirst({
+                where: eq(salesOrders.id, data.salesOrderId),
+                columns: { categoryPo: true }
+            })
+
+            if (order?.categoryPo === "VHS/Consignment" && data.warehouseToId) {
+                const existingTransfer = await tx.query.stockTransfers.findFirst({
+                    where: eq(stockTransfers.deliveryId, id)
+                })
+
+                if (existingTransfer) {
+                    await tx.update(stockTransfers)
+                        .set({
+                            fromWarehouseId: data.warehouseId,
+                            toWarehouseId: data.warehouseToId,
+                            transferDate: new Date(data.scheduledDate),
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(stockTransfers.id, existingTransfer.id))
+
+                    // Update items
+                    await tx.delete(stockTransferItems).where(eq(stockTransferItems.transferId, existingTransfer.id))
+                    await tx.insert(stockTransferItems).values(
+                        data.items.map(item => ({
+                            transferId: existingTransfer.id,
+                            productId: item.productId,
+                            quantity: item.deliveredQuantity,
+                        }))
+                    )
+                } else {
+                    // Create if not exists
+                    const referenceNumber = `ST-AUTO-${data.deliveryNumber || originalDelivery.deliveryNumber}`
+                    const [transfer] = await tx.insert(stockTransfers).values({
+                        referenceNumber,
+                        deliveryId: id,
+                        fromWarehouseId: data.warehouseId,
+                        toWarehouseId: data.warehouseToId,
+                        receivedStatus: "Scheduled",
+                        transferDate: new Date(data.scheduledDate),
+                        notes: `Automated transfer from delivery ${data.deliveryNumber || originalDelivery.deliveryNumber}`,
+                    }).returning()
+
+                    await tx.insert(stockTransferItems).values(
+                        data.items.map(item => ({
+                            transferId: transfer.id,
+                            productId: item.productId,
+                            quantity: item.deliveredQuantity,
+                        }))
+                    )
+                }
+            } else {
+                // If no longer VHS or no destination, remove existing automated transfer if any
+                await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+            }
 
             // Replace items
             await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))

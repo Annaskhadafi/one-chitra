@@ -67,6 +67,7 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                 fromWarehouseId: data.sourceWarehouseId,
                 toWarehouseId: data.destinationWarehouseId,
                 status: "completed",
+                receivedStatus: "Received", // Manual creation defaults to Received for now, or we can make it an option
                 notes: data.notes,
                 transferDate: data.transferDate,
             }).returning()
@@ -179,16 +180,129 @@ export async function checkTransferStockAvailability(warehouseId: number, items:
     return results
 }
 
+export async function updateStockTransferStatus(id: number, data: {
+    receivedStatus: "Scheduled" | "Received" | "Rejected";
+    postingDocumentNo?: string;
+    batchNo?: string;
+    notes?: string;
+}) {
+    try {
+        const session = await getAuthenticatedSession('stock-transfers', 'edit')
+        const userId = session.user.id
+
+        return await db.transaction(async (tx) => {
+            const transfer = await tx.query.stockTransfers.findFirst({
+                where: eq(stockTransfers.id, id),
+                with: { items: true }
+            })
+
+            if (!transfer) throw new Error("Transfer not found")
+            if (transfer.receivedStatus === "Received") throw new Error("Transfer already received")
+
+            await tx.update(stockTransfers)
+                .set({
+                    receivedStatus: data.receivedStatus,
+                    postingDocumentNo: data.postingDocumentNo,
+                    batchNo: data.batchNo,
+                    notes: data.notes || transfer.notes,
+                    status: data.receivedStatus === "Received" ? "completed" : transfer.status,
+                    updatedAt: new Date(),
+                })
+                .where(eq(stockTransfers.id, id))
+
+            // If status changed to Received, move the stock
+            if (data.receivedStatus === "Received") {
+                for (const item of transfer.items) {
+                    // 1. Deduct from source
+                    const sourceStock = await tx.query.stockLevels.findFirst({
+                        where: and(
+                            eq(stockLevels.warehouseId, transfer.fromWarehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        )
+                    })
+
+                    if (!sourceStock || sourceStock.totalStock < item.quantity) {
+                        throw new Error(`Insufficient stock for product ID ${item.productId} in source warehouse`)
+                    }
+
+                    await tx.update(stockLevels)
+                        .set({
+                            totalStock: sourceStock.totalStock - item.quantity,
+                            updatedAt: new Date()
+                        })
+                        .where(eq(stockLevels.id, sourceStock.id))
+
+                    // 2. Add to destination
+                    const destStock = await tx.query.stockLevels.findFirst({
+                        where: and(
+                            eq(stockLevels.warehouseId, transfer.toWarehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        )
+                    })
+
+                    if (destStock) {
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: destStock.totalStock + item.quantity,
+                                updatedAt: new Date()
+                            })
+                            .where(eq(stockLevels.id, destStock.id))
+                    } else {
+                        await tx.insert(stockLevels).values({
+                            warehouseId: transfer.toWarehouseId,
+                            productId: item.productId,
+                            totalStock: item.quantity,
+                            minStock: 0,
+                            valuationValue: '0',
+                        })
+                    }
+
+                    // 3. Record Movement logs
+                    // Record Source Movement (Out)
+                    await recordStockMovement(tx, {
+                        productId: item.productId,
+                        warehouseId: transfer.fromWarehouseId,
+                        quantity: -item.quantity,
+                        type: "TRANSFER_OUT",
+                        referenceNumber: transfer.referenceNumber as string,
+                        recordedBy: userId,
+                    })
+
+                    // Record Destination Movement (In)
+                    await recordStockMovement(tx, {
+                        productId: item.productId,
+                        warehouseId: transfer.toWarehouseId,
+                        quantity: item.quantity,
+                        type: "TRANSFER_IN",
+                        referenceNumber: transfer.referenceNumber as string,
+                        recordedBy: userId,
+                    })
+                }
+            }
+
+            return { success: true }
+        })
+    } catch (error: any) {
+        console.error("Update stock transfer status error:", error)
+        return { success: false, error: error.message || "Failed to update status" }
+    } finally {
+        revalidatePath("/dashboard/stock-transfers")
+        revalidatePath("/dashboard/inventory")
+    }
+}
+
 export async function getStockTransferStats() {
     const transfers = await db.query.stockTransfers.findMany()
 
     const totalTransfers = transfers.length
-    const completedTransfers = transfers.filter(t => t.status === "completed").length
-    const pendingTransfers = transfers.filter(t => t.status === "pending").length
+    const receivedTransfers = transfers.filter(t => t.receivedStatus === "Received").length
+    const scheduledTransfers = transfers.filter(t => t.receivedStatus === "Scheduled").length
+    const rejectedTransfers = transfers.filter(t => t.receivedStatus === "Rejected").length
 
     return {
         totalTransfers,
-        completedTransfers,
-        pendingTransfers,
+        receivedTransfers,
+        scheduledTransfers,
+        rejectedTransfers,
     }
 }

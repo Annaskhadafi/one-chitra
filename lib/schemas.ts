@@ -99,6 +99,7 @@ export const deliverySchema = z.object({
     costOthers: z.number().min(0).default(0),
 
     warehouseId: z.number().min(1, "Warehouse is required"),
+    warehouseToId: z.number().optional().nullable(),
     shippingAddress: z.string().optional().nullable(),
     notes: z.string().optional().nullable(),
     items: z.array(deliveryItemSchema).min(1, "At least one item is required"),
@@ -197,7 +198,7 @@ export const updateOpnameCountSchema = z.object({
 export const calendarEventSchema = z.object({
     title: z.string().min(1, "Title is required"),
     description: z.string().optional(),
-    startDate: z.date({ required_error: "Start date is required" }),
+    startDate: z.date({ message: "Start date is required" }),
     endDate: z.date().optional().nullable(),
     allDay: z.boolean().default(false),
     type: z.enum(["marketing", "reminder"]).default("marketing"),

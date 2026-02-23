@@ -2,13 +2,18 @@ import { pgTable, serial, integer, varchar, timestamp, text } from "drizzle-orm/
 import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
+import { deliveries } from "./deliveries";
 
 export const stockTransfers = pgTable("stock_transfers", {
     id: serial("id").primaryKey(),
     referenceNumber: varchar("reference_number", { length: 50 }).unique(),
+    deliveryId: integer("delivery_id").references(() => deliveries.id),
     fromWarehouseId: integer("from_warehouse_id").references(() => warehouses.id).notNull(),
     toWarehouseId: integer("to_warehouse_id").references(() => warehouses.id).notNull(),
-    status: varchar("status", { length: 20 }).default("pending").notNull(),
+    status: varchar("status", { length: 20 }).default("pending").notNull(), // DEPRECATED: use receivedStatus
+    receivedStatus: varchar("received_status", { length: 20 }).default("Scheduled").notNull(), // Scheduled, Received, Rejected
+    postingDocumentNo: varchar("posting_document_no", { length: 100 }),
+    batchNo: varchar("batch_no", { length: 100 }),
     notes: text("notes"),
     transferDate: timestamp("transfer_date").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

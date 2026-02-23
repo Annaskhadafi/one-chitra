@@ -24,7 +24,8 @@ import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
-import { getStockTransfers } from "@/app/actions/stock-transfer"
+import { getStockTransfers, updateStockTransferStatus } from "@/app/actions/stock-transfer"
+import { toast } from "sonner"
 import {
     useReactTable,
     getCoreRowModel,
@@ -56,6 +57,9 @@ interface Transfer {
     fromWarehouseId: number
     toWarehouseId: number
     status: string
+    receivedStatus: "Scheduled" | "Received" | "Rejected"
+    postingDocumentNo: string | null
+    batchNo: string | null
     notes: string | null
     transferDate: Date
     createdAt: Date
@@ -65,9 +69,9 @@ interface Transfer {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-    pending: "hsl(43, 96%, 56%)",
-    completed: "hsl(160, 84%, 39%)",
-    cancelled: "hsl(346, 77%, 49%)",
+    Scheduled: "hsl(43, 96%, 56%)",
+    Received: "hsl(160, 84%, 39%)",
+    Rejected: "hsl(346, 77%, 49%)",
 }
 
 export function StockTransferTable({ data: initialData }: { data: Transfer[] }) {
@@ -91,10 +95,11 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     const chartData = useMemo(() => {
         const statusCounts: Record<string, number> = {}
         data.forEach(t => {
-            statusCounts[t.status] = (statusCounts[t.status] || 0) + 1
+            const status = t.receivedStatus || "Scheduled"
+            statusCounts[status] = (statusCounts[status] || 0) + 1
         })
         return Object.entries(statusCounts).map(([status, count]) => ({
-            status: status.charAt(0).toUpperCase() + status.slice(1),
+            status: status,
             count,
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
@@ -184,28 +189,65 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             }
         },
         {
-            accessorKey: "status",
-            header: "Status",
+            accessorKey: "postingDocumentNo",
+            header: "Doc Posting",
+            cell: ({ row }) => <span className="font-mono text-xs">{row.original.postingDocumentNo || "-"}</span>,
+        },
+        {
+            accessorKey: "batchNo",
+            header: "Batch No",
+            cell: ({ row }) => <span className="font-mono text-xs">{row.original.batchNo || "-"}</span>,
+        },
+        {
+            accessorKey: "receivedStatus",
+            header: "Received Status",
             cell: ({ row }) => {
-                const status = row.original.status
+                const transfer = row.original
+                const status = transfer.receivedStatus
+
+                const handleStatusChange = async (newStatus: "Scheduled" | "Received" | "Rejected") => {
+                    if (newStatus === status) return
+
+                    const promise = updateStockTransferStatus(transfer.id, {
+                        receivedStatus: newStatus
+                    })
+
+                    toast.promise(promise, {
+                        loading: "Updating status...",
+                        success: (res) => {
+                            if (res.success) return "Status updated"
+                            throw new Error(res.error)
+                        },
+                        error: (err) => err.message || "Failed to update"
+                    })
+                }
+
                 return (
-                    <Badge
-                        variant="outline"
-                        className={cn(
-                            "capitalize px-2.5 py-0.5 border-transparent",
-                            status === "completed" && "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
-                            status === "pending" && "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
-                            status === "cancelled" && "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
-                        )}
-                    >
-                        <div className={cn(
-                            "mr-1.5 h-1.5 w-1.5 rounded-full animate-pulse",
-                            status === "completed" && "bg-emerald-600",
-                            status === "pending" && "bg-amber-600",
-                            status === "cancelled" && "bg-rose-600",
-                        )} />
-                        {status}
-                    </Badge>
+                    <Select value={status} onValueChange={(val: any) => handleStatusChange(val)} disabled={status === "Received"}>
+                        <SelectTrigger
+                            className={cn(
+                                "h-8 w-[130px] border-transparent font-medium",
+                                status === "Received" && "bg-emerald-50 text-emerald-700 border-emerald-100",
+                                status === "Scheduled" && "bg-amber-50 text-amber-700 border-amber-100",
+                                status === "Rejected" && "bg-rose-50 text-rose-700 border-rose-100",
+                            )}
+                        >
+                            <div className="flex items-center gap-1.5">
+                                <div className={cn(
+                                    "h-1.5 w-1.5 rounded-full",
+                                    status === "Received" && "bg-emerald-600",
+                                    status === "Scheduled" && "bg-amber-600 animate-pulse",
+                                    status === "Rejected" && "bg-rose-600",
+                                )} />
+                                <SelectValue />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Scheduled">Scheduled</SelectItem>
+                            <SelectItem value="Received">Received</SelectItem>
+                            <SelectItem value="Rejected">Rejected</SelectItem>
+                        </SelectContent>
+                    </Select>
                 )
             }
         },
@@ -233,7 +275,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 t.fromWarehouse.description?.toLowerCase().includes(term) ||
                 t.toWarehouse.description?.toLowerCase().includes(term) ||
                 t.notes?.toLowerCase().includes(term))
-            const matchesStatus = statusFilter === "all" || t.status === statusFilter
+            const matchesStatus = statusFilter === "all" || t.receivedStatus === statusFilter
             return matchesSearch && matchesStatus
         }
     })
@@ -305,9 +347,9 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        <SelectItem value="Scheduled">Scheduled</SelectItem>
+                        <SelectItem value="Received">Received</SelectItem>
+                        <SelectItem value="Rejected">Rejected</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

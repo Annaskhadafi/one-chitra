@@ -30,6 +30,7 @@ export const deliveries = pgTable("deliveries", {
     costMaintenance: decimal("cost_maintenance", { precision: 15, scale: 2 }).default("0"),
     costOthers: decimal("cost_others", { precision: 15, scale: 2 }).default("0"),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
+    warehouseToId: integer("warehouse_to_id").references(() => warehouses.id),
     shippingAddress: text("shipping_address"),
     notes: text("notes"),
     // DO Monitoring Fields
@@ -67,6 +68,12 @@ export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     warehouse: one(warehouses, {
         fields: [deliveries.warehouseId],
         references: [warehouses.id],
+        relationName: "deliveryOrigin"
+    }),
+    warehouseTo: one(warehouses, {
+        fields: [deliveries.warehouseToId],
+        references: [warehouses.id],
+        relationName: "deliveryDestination"
     }),
     createdByUser: one(user, {
         fields: [deliveries.createdBy],

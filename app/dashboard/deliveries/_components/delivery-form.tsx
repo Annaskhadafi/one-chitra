@@ -72,6 +72,7 @@ interface SalesOrderForDelivery {
     poDocument: string | null
     customerId: number
     salesDate: Date
+    categoryPo: string | null
     status: string
     customer: Customer
     warehouseId: number | null
@@ -113,6 +114,7 @@ interface DeliveryFormProps {
         vehicleNumber: string | null
         vehicleType: string | null
         warehouseId: number | null
+        warehouseToId?: number | null
         shippingAddress: string | null
         notes: string | null
         // Internal Cost Breakdown
@@ -207,6 +209,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || "")
     const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || "")
     const [warehouseId, setWarehouseId] = useState<number>(initialData?.warehouseId || 0)
+    const [warehouseToId, setWarehouseToId] = useState<number>(initialData?.warehouseToId || 0)
     const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
     const [notes, setNotes] = useState(initialData?.notes || "")
 
@@ -264,6 +267,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [vehicleTypeOpen, setVehicleTypeOpen] = useState(false)
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState("")
     const [saving, setSaving] = useState(false)
+    const [whToOpen, setWhToOpen] = useState(false)
+
+    // Filtered warehouses for VHS/Consignment (To Warehouse)
+    const vhsWarehouses = useMemo(() =>
+        warehouses.filter(w => w.type === "VHS" || w.type === "CONSIGNMENT"),
+        [warehouses]
+    )
 
     // Selected SO
     const selectedSO = useMemo(() =>
@@ -383,6 +393,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             return
         }
 
+        if (selectedSO?.categoryPo === "VHS/Consignment" && (!warehouseToId || warehouseToId === 0)) {
+            toast.error("Please select a Destination Warehouse for VHS/Consignment orders")
+            return
+        }
+
         if (isExternal && !vendorName) {
             toast.error("Vendor Name is required for external delivery")
             return
@@ -430,6 +445,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             costOthers: !isExternal ? Number(costOthers) : 0,
 
             warehouseId,
+            warehouseToId: selectedSO?.categoryPo === "VHS/Consignment" ? warehouseToId : null,
             shippingAddress: shippingAddress || undefined,
             notes: notes || undefined,
             items: items.map(item => ({
@@ -453,7 +469,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             toast.error(errorMsg)
         }
         setSaving(false)
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -944,6 +960,68 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     </PopoverContent>
                                 </Popover>
                             </div>
+
+                            {selectedSO?.categoryPo === "VHS/Consignment" && (
+                                <div className="space-y-2">
+                                    <Label className="flex justify-between">
+                                        <span>Destination Warehouse (To)</span>
+                                        <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">VHS/Consignment</Badge>
+                                    </Label>
+                                    <Popover open={whToOpen} onOpenChange={setWhToOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                className={cn(
+                                                    "w-full justify-between border-blue-200 bg-blue-50/10",
+                                                    !warehouseToId && "text-muted-foreground"
+                                                )}
+                                            >
+                                                {warehouseToId
+                                                    ? warehouses.find(w => w.id === warehouseToId)?.sloc +
+                                                    (warehouses.find(w => w.id === warehouseToId)?.description
+                                                        ? ` - ${warehouses.find(w => w.id === warehouseToId)?.description}`
+                                                        : "")
+                                                    : "Select Destination..."}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[350px] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Search destination warehouse..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No VHS/Consignment warehouses found.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {vhsWarehouses.map(wh => (
+                                                            <CommandItem
+                                                                key={wh.id}
+                                                                value={`${wh.sloc} ${wh.description || ""}`}
+                                                                onSelect={() => {
+                                                                    setWarehouseToId(wh.id)
+                                                                    setWhToOpen(false)
+                                                                }}
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4",
+                                                                        warehouseToId === wh.id ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-mono font-medium">{wh.sloc}</span>
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                                                        {wh.description}
+                                                                    </span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label>Shipping Address</Label>
