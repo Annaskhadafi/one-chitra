@@ -291,6 +291,45 @@ export async function updateStockTransferStatus(id: number, data: {
     }
 }
 
+export async function updateStockTransfer(id: number, data: {
+    postingDocumentNo?: string;
+    batchNo?: string;
+    notes?: string;
+    receivedStatus?: "Scheduled" | "Received" | "Rejected";
+}) {
+    try {
+        await getAuthenticatedSession('stock-transfers', 'edit')
+
+        const transfer = await db.query.stockTransfers.findFirst({
+            where: eq(stockTransfers.id, id),
+        })
+
+        if (!transfer) {
+            return { success: false, error: "Transfer not found" }
+        }
+
+        if (transfer.receivedStatus === "Received" && data.receivedStatus && data.receivedStatus !== "Received") {
+            return { success: false, error: "Cannot change status of received transfer" }
+        }
+
+        await db.update(stockTransfers)
+            .set({
+                postingDocumentNo: data.postingDocumentNo ?? transfer.postingDocumentNo,
+                batchNo: data.batchNo ?? transfer.batchNo,
+                notes: data.notes ?? transfer.notes,
+                receivedStatus: data.receivedStatus ?? transfer.receivedStatus,
+                updatedAt: new Date(),
+            })
+            .where(eq(stockTransfers.id, id))
+
+        revalidatePath("/dashboard/stock-transfers")
+        return { success: true }
+    } catch (error: any) {
+        console.error("Update stock transfer error:", error)
+        return { success: false, error: error.message || "Failed to update transfer" }
+    }
+}
+
 export async function getStockTransferStats() {
     const transfers = await db.query.stockTransfers.findMany()
 

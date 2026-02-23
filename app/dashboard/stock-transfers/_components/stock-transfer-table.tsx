@@ -19,12 +19,12 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil } from "lucide-react"
 import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
-import { getStockTransfers, updateStockTransferStatus } from "@/app/actions/stock-transfer"
+import { getStockTransfers, updateStockTransfer } from "@/app/actions/stock-transfer"
 import { toast } from "sonner"
 import {
     useReactTable,
@@ -38,6 +38,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { useRef } from "react"
+import { EditTransferDialog } from "./edit-transfer-dialog"
 
 interface TransferItem {
     id: number
@@ -86,6 +87,8 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     const [statusFilter, setStatusFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "transferDate", desc: true }])
     const [mounted, setMounted] = useState(false)
+    const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
+    const [editDialogOpen, setEditDialogOpen] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -208,7 +211,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 const handleStatusChange = async (newStatus: "Scheduled" | "Received" | "Rejected") => {
                     if (newStatus === status) return
 
-                    const promise = updateStockTransferStatus(transfer.id, {
+                    const promise = updateStockTransfer(transfer.id, {
                         receivedStatus: newStatus
                     })
 
@@ -248,6 +251,26 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                             <SelectItem value="Rejected">Rejected</SelectItem>
                         </SelectContent>
                     </Select>
+                )
+            }
+        },
+        {
+            id: "actions",
+            header: "Actions",
+            cell: ({ row }) => {
+                const transfer = row.original
+                return (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                            setEditingTransfer(transfer)
+                            setEditDialogOpen(true)
+                        }}
+                        className="h-8 w-8 p-0"
+                    >
+                        <Pencil className="h-4 w-4" />
+                    </Button>
                 )
             }
         },
@@ -299,6 +322,12 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
 
     return (
         <div className="space-y-6">
+            <EditTransferDialog
+                transfer={editingTransfer}
+                open={editDialogOpen}
+                onOpenChange={setEditDialogOpen}
+            />
+
             {/* Status Chart */}
             {data.length > 0 && (
                 <Card className="border-none bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 shadow-lg">
