@@ -114,7 +114,7 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - Add session name and notes fields
     - _Requirements: 1.1, 1.2, 1.3_
   
-  - [~] 6.2 Implement dynamic signature entry list
+  - [ ] 6.2 Implement dynamic signature entry list
     - Create signature entry sub-component with name and position fields
     - Add "Add Participant" button to append new signature entry
     - Add remove button for each signature entry
@@ -122,12 +122,12 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - Display validation error when no signatures present
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6_
   
-  - [~] 6.3 Write property test for signature removal before save
+  - [ ] 6.3 Write property test for signature removal before save
     - **Property 3: Signature Entry Removal Before Save**
     - **Validates: Requirements 2.4**
     - Test that removing signatures updates form state correctly
   
-  - [~] 6.4 Write unit tests for OpnamePreCountForm
+  - [ ] 6.4 Write unit tests for OpnamePreCountForm
     - Test that all required fields render
     - Test add signature functionality
     - Test remove signature functionality
@@ -135,7 +135,7 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - Test form submission with valid data
     - _Requirements: 1.1, 2.1, 2.4, 2.6_
   
-  - [~] 6.5 Integrate form with createStockOpnameSession action
+  - [ ] 6.5 Integrate form with createStockOpnameSession action
     - Wire up form submission to server action
     - Handle loading states
     - Display success/error messages
@@ -146,14 +146,14 @@ This implementation plan breaks down the stock opname enhancement feature into d
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. PDF report preview component
-  - [~] 8.1 Create OpnamePdfPreview component structure
+  - [ ] 8.1 Create OpnamePdfPreview component structure
     - Set up dialog/modal component with open/close props
     - Fetch report data using getOpnamePdfReportData on mount
     - Handle loading and error states
     - Add print button triggering window.print()
     - _Requirements: 3.1, 3.10_
   
-  - [~] 8.2 Implement PDF report header section
+  - [ ] 8.2 Implement PDF report header section
     - Add company logo image (with fallback)
     - Display "STOCK OPNAME REPORT" title
     - Show session name, date, time, location
@@ -161,12 +161,12 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - Add print-specific CSS styles
     - _Requirements: 3.2, 3.3_
   
-  - [~] 8.3 Implement participants list section
+  - [ ] 8.3 Implement participants list section
     - Display all signatures from session
     - Format as bulleted list with name and position
     - _Requirements: 3.4_
   
-  - [~] 8.4 Implement stock variance table
+  - [ ] 8.4 Implement stock variance table
     - Create table with columns: Product Name, System Quantity, Physical Quantity, Variance, Notes
     - Render one row per stock opname item
     - Calculate and display variance (physical - system)
@@ -174,45 +174,45 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - Style table for print readability
     - _Requirements: 3.5, 3.6, 3.7, 4.1, 4.2, 4.3_
   
-  - [~] 8.5 Write property test for PDF required sections
+  - [ ] 8.5 Write property test for PDF required sections
     - **Property 5: PDF Report Required Sections**
     - **Validates: Requirements 3.2, 3.3, 3.4, 3.5, 3.8**
     - Test that all required sections are present in rendered output
   
-  - [~] 8.6 Write property test for PDF item completeness
+  - [ ] 8.6 Write property test for PDF item completeness
     - **Property 6: PDF Report Item Completeness**
     - **Validates: Requirements 3.6**
     - Test that PDF contains exactly N rows for N items
   
-  - [~] 8.7 Write property test for variance calculation
+  - [ ] 8.7 Write property test for variance calculation
     - **Property 7: Variance Calculation Correctness**
     - **Validates: Requirements 3.7**
     - Test that variance equals physical minus system quantity for all items
     - Use fast-check with integer generators (100+ runs)
   
-  - [~] 8.8 Write property test for consignment identification
+  - [ ] 8.8 Write property test for consignment identification
     - **Property 8: Consignment Item Identification**
     - **Validates: Requirements 4.1, 4.2**
     - Test that consignment products display visual indicator
   
-  - [~] 8.9 Implement signature section at bottom
+  - [ ] 8.9 Implement signature section at bottom
     - Display horizontal layout of signature placeholders
     - Show name and position for each signature
     - Add signature lines
     - Include note about consignment indicator
     - _Requirements: 3.8, 3.9_
   
-  - [~] 8.10 Add closure metadata display
+  - [ ] 8.10 Add closure metadata display
     - Display "Closed by: {user} on {timestamp}"
     - Format timestamp appropriately
     - _Requirements: 5.2, 5.3_
   
-  - [~] 8.11 Write property test for closure metadata
+  - [ ] 8.11 Write property test for closure metadata
     - **Property 10: PDF Report Closure Metadata**
     - **Validates: Requirements 5.2, 5.3**
     - Test that closure timestamp and user are displayed
   
-  - [~] 8.12 Write unit tests for OpnamePdfPreview
+  - [ ] 8.12 Write unit tests for OpnamePdfPreview
     - Test component renders with valid session data
     - Test error display for open session
     - Test consignment indicator appears for consignment items
@@ -221,67 +221,67 @@ This implementation plan breaks down the stock opname enhancement feature into d
     - _Requirements: 3.1, 3.10, 4.2, 5.4_
 
 - [ ] 9. Integration and wiring
-  - [~] 9.1 Add PDF preview button to session detail page
+  - [ ] 9.1 Add PDF preview button to session detail page
     - Add "Generate PDF Report" button (only visible when session is closed)
     - Wire button to open OpnamePdfPreview modal
     - Pass session ID to modal component
     - _Requirements: 3.1_
   
-  - [~] 9.2 Update session creation flow to use new form
+  - [ ] 9.2 Update session creation flow to use new form
     - Replace or enhance existing session creation UI with OpnamePreCountForm
     - Ensure warehouse list is passed as prop
     - Handle navigation after successful creation
     - _Requirements: 1.1, 2.1_
   
-  - [~] 9.3 Add consignment flag to product management UI
+  - [ ] 9.3 Add consignment flag to product management UI
     - Add checkbox or toggle for isConsignment in product form
     - Display consignment status in product list
     - _Requirements: 4.1_
   
-  - [~] 9.4 Write integration tests for complete flow
+  - [ ] 9.4 Write integration tests for complete flow
     - Test end-to-end session creation with signatures
     - Test end-to-end PDF generation for closed session
     - Test that consignment products flow through correctly
     - _Requirements: 1.4, 2.5, 3.1, 4.1_
 
 - [ ] 10. Data immutability and audit trail
-  - [~] 10.1 Implement report data immutability logic
+  - [ ] 10.1 Implement report data immutability logic
     - Ensure PDF data is fetched based on closedAt timestamp
     - Add logic to prevent modifications to closed sessions
     - Document immutability guarantees in code comments
     - _Requirements: 5.5_
   
-  - [~] 10.2 Write property test for report data immutability
+  - [ ] 10.2 Write property test for report data immutability
     - **Property 12: Report Data Immutability**
     - **Validates: Requirements 5.5**
     - Test that PDF reflects data at closure time even after modifications
   
-  - [~] 10.3 Write unit tests for audit trail features
+  - [ ] 10.3 Write unit tests for audit trail features
     - Test that closedById and closedAt are set correctly
     - Test that closed sessions cannot be modified
     - Test that PDF data matches closure timestamp
     - _Requirements: 5.2, 5.3, 5.5_
 
 - [ ] 11. Final checkpoint and polish
-  - [~] 11.1 Add print-specific CSS styles
+  - [ ] 11.1 Add print-specific CSS styles
     - Create @media print styles for PDF layout
     - Hide unnecessary UI elements in print view
     - Ensure proper page breaks
     - Test in multiple browsers
   
-  - [~] 11.2 Error handling and user feedback
+  - [ ] 11.2 Error handling and user feedback
     - Add user-friendly error messages for all validation failures
     - Add loading indicators for async operations
     - Add success notifications for session creation
     - Test error scenarios
   
-  - [~] 11.3 Accessibility improvements
+  - [ ] 11.3 Accessibility improvements
     - Add proper ARIA labels to form fields
     - Ensure keyboard navigation works
     - Test with screen readers
     - Add focus management for modal
   
-  - [~] 11.4 Final integration testing
+  - [ ] 11.4 Final integration testing
     - Run all property-based tests
     - Run all unit tests
     - Perform manual testing checklist from design document

@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -55,7 +55,16 @@ export function CreateSessionDialog({ warehouses }: CreateSessionDialogProps) {
             name: "",
             warehouseId: 0,
             notes: "",
+            opnameDate: new Date(),
+            opnameTime: new Date().toTimeString().slice(0, 5),
+            location: "",
+            signatures: [{ name: "", position: "" }],
         },
+    })
+
+    const { fields, append, remove } = useFieldArray({
+        control: form.control,
+        name: "signatures",
     })
 
     async function onSubmit(values: FormValues) {
@@ -83,7 +92,7 @@ export function CreateSessionDialog({ warehouses }: CreateSessionDialogProps) {
                     Buat Sesi Opname
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Buat Sesi Stock Opname</DialogTitle>
                     <DialogDescription>
@@ -136,6 +145,112 @@ export function CreateSessionDialog({ warehouses }: CreateSessionDialogProps) {
                                 </FormItem>
                             )}
                         />
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="opnameDate"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Tanggal Opname</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                type="date"
+                                                value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                                                onChange={(e) => field.onChange(new Date(e.target.value))}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="opnameTime"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Waktu</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                type="time"
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+                        <FormField
+                            control={form.control}
+                            name="location"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Lokasi</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            placeholder="Cth: Gudang Utama"
+                                            {...field}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <FormLabel>Peserta / Tanda Tangan</FormLabel>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => append({ name: "", position: "" })}
+                                >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Tambah
+                                </Button>
+                            </div>
+                            {fields.map((field, index) => (
+                                <div key={field.id} className="flex gap-2 items-start">
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                        <FormField
+                                            control={form.control}
+                                            name={`signatures.${index}.name`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl>
+                                                        <Input placeholder="Nama" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name={`signatures.${index}.position`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl>
+                                                        <Input placeholder="Jabatan" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                    {fields.length > 1 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => remove(index)}
+                                            className="mt-0"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                         <FormField
                             control={form.control}
                             name="notes"
