@@ -10,9 +10,10 @@ cmds = ["npm ci"]
 [phases.build]
 cmds = [
   "npm run build",
-  # Copy static files to standalone directory (using sh-compatible syntax)
-  "cp -r .next/static .next/standalone/.next/static || true",
-  "cp -r public .next/standalone/public || true"
+  # Copy static files to standalone directory
+  # Use 'source/.' syntax to copy CONTENTS (avoids double-nesting if dest already exists)
+  "mkdir -p .next/standalone/.next/static && cp -r .next/static/. .next/standalone/.next/static/",
+  "mkdir -p .next/standalone/public && cp -r public/. .next/standalone/public/"
 ]
 
 [start]
