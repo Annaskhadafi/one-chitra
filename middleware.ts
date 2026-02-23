@@ -19,7 +19,7 @@ type Session = {
 const PUBLIC_ROUTES = ["/sign-in", "/sign-up", "/api/auth", "/api/health"]
 
 // Routes that should be completely public (static files etc.)
-const PUBLIC_PREFIXES = ["/_next", "/favicon", "/logo", "/public"]
+const PUBLIC_PREFIXES = ["/_next", "/favicon", "/logo", "/public", "/brand"]
 
 function isPublicRoute(pathname: string): boolean {
     if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true
@@ -41,8 +41,13 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
+        // Use internal localhost URL — avoids reverse proxy issues where
+        // request.nextUrl.origin may return 0.0.0.0 or an unreachable remote URL
+        const port = process.env.PORT ?? "3000"
+        const internalBaseURL = `http://localhost:${port}`
+
         const { data: session } = await betterFetch<Session>("/api/auth/get-session", {
-            baseURL: request.nextUrl.origin,
+            baseURL: internalBaseURL,
             headers: {
                 cookie: request.headers.get("cookie") ?? "",
             },
