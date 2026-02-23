@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, priceLists, priceListItems, priceHistory } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, priceLists, priceListItems, priceHistory, calendarEvents } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -157,4 +157,31 @@ export type MarginAlert = {
     currentMarginPct: number
     marginFloor: number
     shortfall: number
+}
+
+export type CalendarEvent = InferSelectModel<typeof calendarEvents>
+export type NewCalendarEvent = InferInsertModel<typeof calendarEvents>
+
+export type CalendarEventWithRelations = CalendarEvent & {
+    customer?: { id: number; name: string; email: string | null } | null
+    createdByUser?: { id: string; name: string } | null
+}
+
+/** Unified event shape consumed by FullCalendar */
+export type FCEvent = {
+    id: string
+    title: string
+    start: string
+    end?: string
+    allDay: boolean
+    backgroundColor: string
+    borderColor: string
+    textColor: string
+    extendedProps: {
+        eventType: "marketing" | "reminder" | "birthday" | "national_holiday" | "joint_leave"
+        description?: string
+        customerId?: number
+        customerName?: string
+        dbId?: number
+    }
 }

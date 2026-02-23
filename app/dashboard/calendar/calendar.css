@@ -1,0 +1,134 @@
+/* FullCalendar theme overrides to match shadcn/ui design system */
+
+/* Toolbar */
+.fc .fc-toolbar.fc-header-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 1rem 1rem 0.75rem;
+}
+
+.fc .fc-toolbar-title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Buttons */
+.fc .fc-button {
+    background-color: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 0.375rem 0.75rem;
+    box-shadow: none;
+    transition: background-color 0.15s;
+}
+
+.fc .fc-button:hover:not(:disabled) {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border-color: hsl(var(--border));
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+/* Add Event custom button */
+.fc .fc-addEvent-button {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+.fc .fc-addEvent-button:hover:not(:disabled) {
+    background-color: hsl(var(--primary) / 0.9);
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+/* Calendar grid */
+.fc .fc-scrollgrid {
+    border-color: hsl(var(--border));
+}
+
+.fc .fc-scrollgrid td,
+.fc .fc-scrollgrid th {
+    border-color: hsl(var(--border));
+}
+
+.fc .fc-col-header-cell {
+    background-color: hsl(var(--muted) / 0.5);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+    padding: 0.5rem 0;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: 50%;
+    width: 1.75rem;
+    height: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.fc .fc-day-today {
+    background-color: hsl(var(--primary) / 0.04) !important;
+}
+
+.fc .fc-daygrid-day-number {
+    font-size: 0.8125rem;
+    color: hsl(var(--foreground));
+    padding: 0.375rem 0.5rem;
+}
+
+/* Events */
+.fc .fc-event {
+    border-radius: 4px;
+    border: none;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 1px 4px;
+    cursor: pointer;
+}
+
+.fc .fc-event:hover {
+    filter: brightness(0.9);
+}
+
+/* More events link */
+.fc .fc-daygrid-more-link {
+    font-size: 0.75rem;
+    color: hsl(var(--primary));
+    font-weight: 500;
+}
+
+/* Time grid */
+.fc .fc-timegrid-slot {
+    height: 2.5rem;
+}
+
+/* Weekend column subtle tint */
+.fc .fc-day-sat,
+.fc .fc-day-sun {
+    background-color: hsl(var(--muted) / 0.15);
+}
+
+/* Responsive: hide week/day buttons on small screens */
+@media (max-width: 640px) {
+    .fc .fc-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .fc .fc-toolbar-chunk:last-child {
+        display: none;
+    }
+}

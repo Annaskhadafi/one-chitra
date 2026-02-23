@@ -22,6 +22,7 @@ import {
     ClipboardList,
     Activity,
     Tags,
+    CalendarDays,
     type LucideIcon
 } from "lucide-react"
 
@@ -214,6 +215,12 @@ export const navigationConfig: NavSection[] = [
                 url: "/dashboard/sales-documents",
                 icon: FileText,
                 resource: "sales-documents",
+            },
+            {
+                title: "Marketing Calendar",
+                url: "/dashboard/calendar",
+                icon: CalendarDays,
+                resource: "calendar-events",
             },
         ],
     },

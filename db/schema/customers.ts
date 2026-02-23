@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, timestamp, date } from "drizzle-orm/pg-core";
 
 export const customers = pgTable("customers", {
     id: serial("id").primaryKey(),
@@ -6,6 +6,7 @@ export const customers = pgTable("customers", {
     name: varchar("name", { length: 255 }).notNull(),
     contactName: varchar("contact_name", { length: 255 }),
     email: varchar("email", { length: 255 }),
+    birthday: date("birthday"),
     address1: text("address_1"),
     address2: text("address_2"),
     address3: text("address_3"),

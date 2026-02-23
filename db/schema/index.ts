@@ -39,6 +39,7 @@ export { competitorPrices, competitorActivities, lostSales } from "./competitor-
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
 export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum } from "./email";
+export { calendarEvents, calendarEventTypeEnum } from "./calendar-events";
 export {
     stockOpnameSessions,
     stockOpnameItems,

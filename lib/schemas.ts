@@ -193,3 +193,16 @@ export const updateOpnameCountSchema = z.object({
     countedQty: z.number().min(0, "Counted qty cannot be negative"),
     notes: z.string().optional(),
 })
+
+export const calendarEventSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    description: z.string().optional(),
+    startDate: z.date({ required_error: "Start date is required" }),
+    endDate: z.date().optional().nullable(),
+    allDay: z.boolean().default(false),
+    type: z.enum(["marketing", "reminder"]).default("marketing"),
+    color: z.string().default("#3b82f6"),
+    relatedCustomerId: z.number().optional().nullable(),
+    emailReminderAt: z.date().optional().nullable(),
+    emailReminderTo: z.string().email().optional().nullable().or(z.literal("")),
+})

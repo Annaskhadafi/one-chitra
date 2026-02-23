@@ -71,6 +71,13 @@
       "when": 1771799363914,
       "tag": "0009_flowery_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771812914129,
+      "tag": "0010_large_thunderbolt",
+      "breakpoints": true
     }
   ]
 }
