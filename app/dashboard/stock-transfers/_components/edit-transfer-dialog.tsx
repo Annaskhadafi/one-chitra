@@ -106,7 +106,6 @@ export function EditTransferDialog({ transfer, open, onOpenChange }: EditTransfe
                         <Select
                             value={formData.receivedStatus}
                             onValueChange={(value: any) => setFormData({ ...formData, receivedStatus: value })}
-                            disabled={transfer.receivedStatus === "Received"}
                         >
                             <SelectTrigger>
                                 <SelectValue />
@@ -117,11 +116,6 @@ export function EditTransferDialog({ transfer, open, onOpenChange }: EditTransfe
                                 <SelectItem value="Rejected">Rejected</SelectItem>
                             </SelectContent>
                         </Select>
-                        {transfer.receivedStatus === "Received" && (
-                            <p className="text-xs text-muted-foreground">
-                                Cannot change status of received transfer
-                            </p>
-                        )}
                     </div>
 
                     <div className="space-y-2">

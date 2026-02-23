@@ -308,10 +308,7 @@ export async function updateStockTransfer(id: number, data: {
             return { success: false, error: "Transfer not found" }
         }
 
-        if (transfer.receivedStatus === "Received" && data.receivedStatus && data.receivedStatus !== "Received") {
-            return { success: false, error: "Cannot change status of received transfer" }
-        }
-
+        // Allow manual status change without automatic stock movement
         await db.update(stockTransfers)
             .set({
                 postingDocumentNo: data.postingDocumentNo ?? transfer.postingDocumentNo,
