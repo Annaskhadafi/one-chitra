@@ -127,9 +127,9 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 box-sizing: border-box;
                             }
                             .pdf-wrapper * { box-sizing: border-box; }
-                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; }
+                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 277mm; }
                             
-                            .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 40px; }
+                            .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 60px; margin-top: 20px; }
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                             .pdf-wrapper .ship-to { width: 55%; }
                             .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
@@ -156,11 +156,12 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 4px; font-size: 8pt; text-align: center; }
                             .pdf-wrapper .serial-grid td { border: 1px solid #000; padding: 4px; font-size: 8pt; height: 25px; text-align: center; vertical-align: middle; }
                             
-                            .pdf-wrapper .note-section { margin-top: 60px; font-size: 9pt; }
+                            .pdf-wrapper .footer-section { margin-top: auto; padding-top: 40px; }
+                            .pdf-wrapper .note-section { margin-top: 20px; font-size: 9pt; }
                             .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 5px; }
-                            .pdf-wrapper .received-condition { margin-top: 40px; font-size: 9pt; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 20px; }
+                            .pdf-wrapper .received-condition { margin-top: 15px; font-size: 9pt; border-top: 1px solid #000; padding-top: 5px; text-align: center; }
                             
-                            .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-top: 10px; font-size: 9pt; }
+                            .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; }
                             .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 120px; justify-content: space-between; text-align: center; }
                             .pdf-wrapper .sig-label { margin-bottom: 10px; }
                             .pdf-wrapper .sig-name { margin-top: auto; }
@@ -300,27 +301,29 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 )}
                             </div>
 
-                            <div className="received-condition">
-                                Received in good Condition ( Materials in 100% New Condition )
-                            </div>
-
-                            <div className="signature-grid">
-                                <div className="sig-box">
-                                    <div className="sig-label">Delivery by,</div>
-                                    <div className="sig-name">PT.Chitra Paratama</div>
-                                    <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
-                                </div>
-                                <div className="sig-box">
-                                    <div className="sig-label">Forwarder / Driver,</div>
-                                    <div className="sig-name">
-                                        {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+                            <div className="footer-section">
+                                <div className="signature-grid">
+                                    <div className="sig-box">
+                                        <div className="sig-label">Delivery by,</div>
+                                        <div className="sig-name">PT.Chitra Paratama</div>
+                                        <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
                                     </div>
-                                    <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                    <div className="sig-box">
+                                        <div className="sig-label">Forwarder / Driver,</div>
+                                        <div className="sig-name">
+                                            {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+                                        </div>
+                                        <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                    </div>
+                                    <div className="sig-box" style={{ textAlign: "right" }}>
+                                        <div className="sig-label">Received by,</div>
+                                        <div className="sig-name">{customer?.name}</div>
+                                        <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                    </div>
                                 </div>
-                                <div className="sig-box" style={{ textAlign: "right" }}>
-                                    <div className="sig-label">Received by,</div>
-                                    <div className="sig-name">{customer?.name}</div>
-                                    <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+
+                                <div className="received-condition">
+                                    Received in good Condition ( Materials in 100% New Condition )
                                 </div>
                             </div>
                         </div>
