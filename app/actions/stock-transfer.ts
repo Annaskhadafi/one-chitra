@@ -30,6 +30,15 @@ export async function getStockTransfers() {
                 with: {
                     product: true
                 }
+            },
+            delivery: {
+                with: {
+                    salesOrder: {
+                        with: {
+                            customer: true
+                        }
+                    }
+                }
             }
         },
         orderBy: [desc(stockTransfers.createdAt)],

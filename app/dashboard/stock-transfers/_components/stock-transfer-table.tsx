@@ -19,7 +19,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil } from "lucide-react"
+import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil, FileText } from "lucide-react"
 import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
@@ -39,6 +39,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { useRef } from "react"
 import { EditTransferDialog } from "./edit-transfer-dialog"
+import { TransferPreviewDialog } from "./transfer-preview-dialog"
 
 interface TransferItem {
     id: number
@@ -55,6 +56,7 @@ interface TransferItem {
 interface Transfer {
     id: number
     referenceNumber: string | null
+    deliveryId: number | null
     fromWarehouseId: number
     toWarehouseId: number
     status: string
@@ -67,6 +69,16 @@ interface Transfer {
     fromWarehouse: { id: number; sloc: string; description: string | null }
     toWarehouse: { id: number; sloc: string; description: string | null }
     items: TransferItem[]
+    delivery?: {
+        id: number
+        deliveryNumber: string | null
+        salesOrder: {
+            invoiceNumber: string | null
+            customer: {
+                name: string
+            }
+        }
+    } | null
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -89,6 +101,8 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     const [mounted, setMounted] = useState(false)
     const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
+    const [previewTransfer, setPreviewTransfer] = useState<Transfer | null>(null)
+    const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -197,6 +211,18 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             cell: ({ row }) => <span className="font-mono text-xs">{row.original.postingDocumentNo || "-"}</span>,
         },
         {
+            id: "deliveryNumber",
+            header: "Nomor DO",
+            cell: ({ row }) => {
+                const transfer = row.original
+                return transfer.delivery?.deliveryNumber ? (
+                    <span className="font-mono text-xs font-medium text-blue-600">{transfer.delivery.deliveryNumber}</span>
+                ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                )
+            },
+        },
+        {
             accessorKey: "batchNo",
             header: "Batch No",
             cell: ({ row }) => <span className="font-mono text-xs">{row.original.batchNo || "-"}</span>,
@@ -260,17 +286,34 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             cell: ({ row }) => {
                 const transfer = row.original
                 return (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            setEditingTransfer(transfer)
-                            setEditDialogOpen(true)
-                        }}
-                        className="h-8 w-8 p-0"
-                    >
-                        <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setEditingTransfer(transfer)
+                                setEditDialogOpen(true)
+                            }}
+                            className="h-8 w-8 p-0"
+                            title="Edit Transfer"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </Button>
+                        {transfer.delivery && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setPreviewTransfer(transfer)
+                                    setPreviewDialogOpen(true)
+                                }}
+                                className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                title="Preview DO"
+                            >
+                                <FileText className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                 )
             }
         },
@@ -326,6 +369,12 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 transfer={editingTransfer}
                 open={editDialogOpen}
                 onOpenChange={setEditDialogOpen}
+            />
+            
+            <TransferPreviewDialog
+                transfer={previewTransfer}
+                open={previewDialogOpen}
+                onOpenChange={setPreviewDialogOpen}
             />
 
             {/* Status Chart */}

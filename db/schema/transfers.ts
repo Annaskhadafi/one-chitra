@@ -38,6 +38,10 @@ export const stockTransfersRelations = relations(stockTransfers, ({ one, many })
         references: [warehouses.id],
         relationName: "transfersTo"
     }),
+    delivery: one(deliveries, {
+        fields: [stockTransfers.deliveryId],
+        references: [deliveries.id],
+    }),
     items: many(stockTransferItems),
 }));
 
