@@ -149,28 +149,31 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             if (data.categoryPo === "VHS/Consignment" && data.warehouseId) {
                 const mainWarehouseId = 4 // Central Warehouse (Jakarta)
 
-                // 1. Create Stock Transfer from MAIN to Consignment Warehouse
-                const transferRef = `ST-AUTO-${Date.now()}`
-                const [transfer] = await tx.insert(stockTransfers).values({
-                    referenceNumber: transferRef,
-                    fromWarehouseId: mainWarehouseId,
-                    toWarehouseId: data.warehouseId,
-                    status: "completed",
-                    notes: `Automatic transfer for Consignment SO: ${invoiceNumber}`,
-                    transferDate: new Date(),
-                }).returning()
-
-                // 2. Create Delivery record (Scheduled)
+                // 1. Create Delivery record (Scheduled)
                 const deliveryNumber = `DN-AUTO-${Date.now()}`
                 const [delivery] = await tx.insert(deliveries).values({
                     deliveryNumber,
                     salesOrderId: newOrder.id,
                     warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseId, // Same for consignment
                     scheduledDate: new Date(data.salesDate),
                     status: "scheduled",
                     deliveryType: "full",
                     isExternal: false,
                     notes: `Automatic delivery for Consignment SO: ${invoiceNumber}`,
+                }).returning()
+
+                // 2. Create Stock Transfer from MAIN to Consignment Warehouse
+                const transferRef = `ST-AUTO-${Date.now()}`
+                const [transfer] = await tx.insert(stockTransfers).values({
+                    referenceNumber: transferRef,
+                    deliveryId: delivery.id,
+                    fromWarehouseId: mainWarehouseId,
+                    toWarehouseId: data.warehouseId,
+                    status: "completed",
+                    receivedStatus: "Received",
+                    notes: `Automatic transfer for Consignment SO: ${invoiceNumber}`,
+                    transferDate: new Date(),
                 }).returning()
 
                 if (data.items.length > 0) {
