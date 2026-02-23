@@ -54,7 +54,7 @@ export default function Home() {
 
   if (isPending) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background" suppressHydrationWarning>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -65,7 +65,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900" suppressHydrationWarning>
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>

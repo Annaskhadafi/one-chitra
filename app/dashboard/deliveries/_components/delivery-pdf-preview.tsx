@@ -154,17 +154,18 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
 
                             .pdf-wrapper .serial-grid { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; border: 1px solid #000; }
                             .pdf-wrapper .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 4px; font-size: 8pt; text-align: center; }
-                            .pdf-wrapper .serial-grid td { border: 1px solid #000; padding: 4px; font-size: 8pt; height: 25px; text-align: center; vertical-align: middle; }
-                            
-                            .pdf-wrapper .footer-section { margin-top: auto; padding-top: 40px; }
+                            .pdf-wrapper .footer-section { margin-top: auto; padding-top: 20px; }
                             .pdf-wrapper .note-section { margin-top: 20px; font-size: 9pt; }
                             .pdf-wrapper .note-label { font-weight: bold; margin-bottom: 5px; }
-                            .pdf-wrapper .received-condition { margin-top: 15px; font-size: 9pt; border-top: 1px solid #000; padding-top: 5px; text-align: center; }
+                            .pdf-wrapper .received-condition { font-size: 9pt; line-height: 1.5; margin-bottom: 10px; }
+                            .pdf-wrapper .divider-line { border-top: 1px solid #000; margin-bottom: 15px; }
                             
-                            .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; }
-                            .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 120px; justify-content: space-between; text-align: center; }
-                            .pdf-wrapper .sig-label { margin-bottom: 10px; }
-                            .pdf-wrapper .sig-name { margin-top: auto; }
+                            .pdf-wrapper .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
+                            .pdf-wrapper .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; border: 0px solid transparent; padding: 5px; }
+                            .pdf-wrapper .sig-label { margin-bottom: 5px; font-weight: normal; }
+                            .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
+                            .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
+                            .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
                             
                             .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; position: absolute; bottom: 10mm; width: 100%; left: 0; }
 
@@ -186,12 +187,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                     <span className="ship-to-label">Ship To:</span>
                                     <div className="customer-name">{customer?.name}</div>
                                     <div className="site-info" style={{ fontWeight: "normal" }}>
-                                        Site : {address || delivery.shippingAddress || "-"}
-                                    </div>
-                                    <div className="contact-info" style={{ marginTop: "10px" }}>
-                                        <div>PIC: {customer?.contactName || "-"}</div>
-                                        <div>Email : {customer?.email || "-"}</div>
-                                        <div>HP : -</div>
+                                        ATTN : {address || delivery.shippingAddress || "-"}
                                     </div>
                                 </div>
 
@@ -302,28 +298,38 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             </div>
 
                             <div className="footer-section">
+                                <div className="received-condition">
+                                    <div>Received in good Condition ( Materials in 100%New Condition )</div>
+                                    <div>Return requests must be submitted within 14 days of the delivery date.we are unable to process any returns beyond this period</div>
+                                </div>
+
+                                <div className="divider-line" />
+
                                 <div className="signature-grid">
                                     <div className="sig-box">
                                         <div className="sig-label">Delivery by,</div>
                                         <div className="sig-name">PT.Chitra Paratama</div>
-                                        <div style={{ marginTop: "20px" }}>( {delivery.createdByUser?.name || "          "} )</div>
+                                        <div className="sig-placeholder">
+                                            <div className="sig-bottom-name">( {delivery.createdByUser?.name || "          "} )</div>
+                                        </div>
                                     </div>
                                     <div className="sig-box">
-                                        <div className="sig-label">Forwarder / Driver,</div>
-                                        <div className="sig-name">
-                                            {delivery.driverName || "-"} {delivery.vehicleNumber ? ` - ${delivery.vehicleNumber}` : ""}
+                                        <div className="sig-label">Forwarder By,</div>
+                                        <div className="sig-name">CP</div>
+                                        <div className="sig-placeholder">
+                                            <div className="sig-name" style={{ marginBottom: "5px" }}>
+                                                {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"}
+                                            </div>
+                                            <div className="sig-bottom-name">( Nama Driver - Vehicle No )</div>
                                         </div>
-                                        <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
                                     </div>
-                                    <div className="sig-box" style={{ textAlign: "right" }}>
+                                    <div className="sig-box">
                                         <div className="sig-label">Received by,</div>
                                         <div className="sig-name">{customer?.name}</div>
-                                        <div style={{ marginTop: "20px" }}>( Name, Sign & stamp )</div>
+                                        <div className="sig-placeholder">
+                                            <div className="sig-bottom-name">( Name ,Sign & stamp )</div>
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div className="received-condition">
-                                    Received in good Condition ( Materials in 100% New Condition )
                                 </div>
                             </div>
                         </div>
