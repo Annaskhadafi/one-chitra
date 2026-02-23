@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Apply security headers to all routes
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -31,6 +32,14 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
+        ],
+      },
+      {
+        // Allow /api/uploads/* to be embedded in iframes within the same origin
+        // This is needed for document/image preview dialogs
+        source: "/api/uploads/:filename*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
         ],
       },
     ];
