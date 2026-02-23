@@ -54,7 +54,7 @@ export default function SignInPage() {
 
                     <div className="relative z-10 w-40 h-auto">
                         {/* Logo used as icon/branding */}
-                        <img src="/images/Chitra-Paratama.png" alt="One Chitra" className="w-full h-auto brightness-0 invert drop-shadow-md" />
+                        <img src="/brand/Chitra-Paratama.png" alt="One Chitra" className="w-full h-auto brightness-0 invert drop-shadow-md" />
                     </div>
 
                     <div className="relative z-10 mt-auto pb-4 pt-16">
@@ -69,7 +69,7 @@ export default function SignInPage() {
                 <div className="w-full md:w-[55%] lg:w-[52%] px-8 py-10 md:py-16 md:px-14 lg:px-20 flex flex-col justify-center bg-white">
                     <div className="mb-10 lg:mb-12">
                         <div className="flex items-center gap-3 mb-6">
-                            <img src="/images/Chitra-Paratama.png" alt="One Chitra Logo" className="h-10 md:h-12 w-auto object-contain" />
+                            <img src="/brand/Chitra-Paratama.png" alt="One Chitra Logo" className="h-10 md:h-12 w-auto object-contain" />
                             <h1 className="text-3xl md:text-3xl lg:text-4xl font-extrabold tracking-tight text-gray-900">
                                 One Chitra
                             </h1>

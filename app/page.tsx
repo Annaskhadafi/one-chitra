@@ -78,7 +78,7 @@ export default function Home() {
 
           <div className="relative z-10 w-40 h-auto">
             {/* Logo used as icon/branding */}
-            <img src="/images/Chitra-Paratama.png" alt="One Chitra" className="w-full h-auto brightness-0 invert drop-shadow-md" />
+            <img src="/brand/Chitra-Paratama.png" alt="One Chitra" className="w-full h-auto brightness-0 invert drop-shadow-md" />
           </div>
 
           <div className="relative z-10 mt-auto pb-4 pt-16">
