@@ -260,7 +260,9 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     columns: { categoryPo: true }
                 })
 
-                if (order?.categoryPo === "VHS/Consignment" && data.warehouseToId) {
+                const isVHSConsignment = order?.categoryPo === "VHS/Consignment" && data.warehouseToId
+
+                if (isVHSConsignment) {
                     const referenceNumber = `ST-AUTO-${newDelivery.deliveryNumber}`
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
@@ -282,9 +284,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled
+                // For VHS/Consignment, stock will be managed by the transfer, not here
                 const isCommitted = data.status !== "cancelled"
 
-                if (isCommitted) {
+                if (isCommitted && !isVHSConsignment) {
                     for (const item of data.items) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
@@ -340,9 +343,15 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             }
 
             // Revert stock if it was previously committed (not cancelled)
+            // Check if original was VHS/Consignment
+            const originalOrder = await tx.query.salesOrders.findFirst({
+                where: eq(salesOrders.id, originalDelivery.salesOrderId),
+                columns: { categoryPo: true }
+            })
+            const originalWasVHS = originalOrder?.categoryPo === "VHS/Consignment" && originalDelivery.warehouseToId
             const originalWasCommitted = originalDelivery.status !== "cancelled"
 
-            if (originalWasCommitted && originalDelivery.warehouseId) {
+            if (originalWasCommitted && originalDelivery.warehouseId && !originalWasVHS) {
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
                         .set({
@@ -471,9 +480,15 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     })))
 
                 // Apply new stock deduction if now committed (not cancelled)
+                // For VHS/Consignment, stock will be managed by the transfer
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, data.salesOrderId),
+                    columns: { categoryPo: true }
+                })
+                const isVHSConsignment = order?.categoryPo === "VHS/Consignment" && data.warehouseToId
                 const isCommitted = data.status !== "cancelled"
 
-                if (isCommitted) {
+                if (isCommitted && !isVHSConsignment) {
                     for (const item of data.items) {
                         await tx.update(stockLevels)
                             .set({
@@ -530,9 +545,15 @@ export async function deleteDelivery(id: number) {
             const userId = session.user.id
 
             // Restore stock for items if the delivery was committed (not cancelled)
+            // Check if it was VHS/Consignment
+            const order = await tx.query.salesOrders.findFirst({
+                where: eq(salesOrders.id, delivery.salesOrderId),
+                columns: { categoryPo: true }
+            })
+            const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
             const wasCommitted = delivery.status !== "cancelled"
 
-            if (wasCommitted && delivery.warehouseId) {
+            if (wasCommitted && delivery.warehouseId && !wasVHS) {
                 for (const item of delivery.items) {
                     await tx.update(stockLevels)
                         .set({
