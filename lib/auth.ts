@@ -12,7 +12,26 @@ function normalizeUrl(url?: string): string {
     return `https://${url}`;
 }
 
-const baseURL = normalizeUrl(process.env.BETTER_AUTH_URL);
+// Use BETTER_AUTH_URL; if it's still localhost but NEXT_PUBLIC var is production, prefer that
+function resolveBaseURL(): string {
+    const primary = process.env.BETTER_AUTH_URL;
+    const fallback = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+
+    const primaryNorm = normalizeUrl(primary);
+    const fallbackNorm = normalizeUrl(fallback);
+
+    // If primary is localhost but fallback is a real domain, use fallback
+    if (
+        (primaryNorm.includes("localhost") || !primary) &&
+        fallback &&
+        !fallbackNorm.includes("localhost")
+    ) {
+        return fallbackNorm;
+    }
+    return primaryNorm;
+}
+
+const baseURL = resolveBaseURL();
 
 export const auth = betterAuth({
     baseURL,
