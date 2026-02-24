@@ -119,7 +119,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
-    const [customerId, setCustomerId] = useState<number>(initialData?.customerId || 0)
+    const [customerId, setCustomerId] = useState<number | undefined>(initialData?.customerId || undefined)
     const [quotationDate, setQuotationDate] = useState(
         initialData
             ? new Date(initialData.quotationDate).toISOString().split("T")[0]

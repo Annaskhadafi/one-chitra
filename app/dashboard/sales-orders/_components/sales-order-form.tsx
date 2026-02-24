@@ -102,7 +102,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     // Form State
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
     const [customerPo, setCustomerPo] = useState(initialData?.customerPo || "")
-    const [customerId, setCustomerId] = useState<number>(initialData?.customerId || 0)
+    const [customerId, setCustomerId] = useState<number | undefined>(initialData?.customerId || undefined)
     const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
     const [salesDate, setSalesDate] = useState(
         initialData

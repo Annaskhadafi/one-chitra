@@ -192,7 +192,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     }, [])
 
     // Form state
-    const [salesOrderId, setSalesOrderId] = useState<number>(initialData?.salesOrderId || 0)
+    const [salesOrderId, setSalesOrderId] = useState<number | undefined>(initialData?.salesOrderId || undefined)
     const [scheduledDate, setScheduledDate] = useState(
         initialData?.scheduledDate
             ? new Date(initialData.scheduledDate).toISOString().slice(0, 10)
@@ -208,8 +208,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [driverName, setDriverName] = useState(initialData?.driverName || "")
     const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || "")
     const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || "")
-    const [warehouseId, setWarehouseId] = useState<number>(initialData?.warehouseId || 0)
-    const [warehouseToId, setWarehouseToId] = useState<number>(initialData?.warehouseToId || 0)
+    const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
+    const [warehouseToId, setWarehouseToId] = useState<number | undefined>(initialData?.warehouseToId || undefined)
     const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
     const [notes, setNotes] = useState(initialData?.notes || "")
 
