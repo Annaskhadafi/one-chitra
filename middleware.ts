@@ -41,10 +41,16 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-        // Use internal localhost URL — avoids reverse proxy issues where
-        // request.nextUrl.origin may return 0.0.0.0 or an unreachable remote URL
+        // Determine the base URL for internal session check:
+        // 1. Use BETTER_AUTH_URL env var (works in production/Dokploy)
+        // 2. Fall back to localhost with PORT (for local dev)
+        // NOTE: DO NOT use request.nextUrl.origin — on Dokploy it resolves to
+        // an internal 0.0.0.0 or unreachable address behind the reverse proxy.
         const port = process.env.PORT ?? "3000"
-        const internalBaseURL = `http://localhost:${port}`
+        const envBaseURL = process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_BETTER_AUTH_URL
+        const internalBaseURL = envBaseURL
+            ? (envBaseURL.startsWith("http") ? envBaseURL : `https://${envBaseURL}`)
+            : `http://localhost:${port}`
 
         const { data: session } = await betterFetch<Session>("/api/auth/get-session", {
             baseURL: internalBaseURL,
@@ -60,7 +66,9 @@ export async function middleware(request: NextRequest) {
         }
 
         return NextResponse.next()
-    } catch {
+    } catch (err) {
+        // Log the error so we can debug in production logs
+        console.error("[middleware] Session check failed:", err)
         // If session check fails, redirect to sign-in for safety
         const signInUrl = new URL("/sign-in", request.url)
         signInUrl.searchParams.set("callbackUrl", pathname)
