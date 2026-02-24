@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
-import { eq, desc, and, sql } from "drizzle-orm"
+import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
@@ -951,6 +951,7 @@ export async function getLogisticsCosts() {
 
         return costs
     } catch (_error) {
+        const error = _error as Error;
         console.error("Failed to fetch logistics costs:", error)
         return []
     }
