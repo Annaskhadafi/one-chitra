@@ -204,12 +204,19 @@ export async function generateDeliveryNumber() {
 }
 
 export async function createDelivery(data: z.infer<typeof deliverySchema>) {
+    console.log("[CREATE DELIVERY] Starting...")
     try {
+        console.log("[CREATE DELIVERY] Getting session...")
         const session = await getAuthenticatedSession('deliveries', 'create')
         const userId = session.user.id
+        console.log("[CREATE DELIVERY] User ID:", userId)
+        
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
+        console.log("[CREATE DELIVERY] Delivery Number:", deliveryNumber)
 
         return await db.transaction(async (tx) => {
+            console.log("[CREATE DELIVERY] Starting transaction...")
+            
             const [newDelivery] = await tx.insert(deliveries)
                 .values({
                     deliveryNumber,
@@ -242,8 +249,11 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     notes: data.notes || null,
                 })
                 .returning()
+            
+            console.log("[CREATE DELIVERY] Delivery created, ID:", newDelivery.id)
 
             if (data.items.length > 0) {
+                console.log("[CREATE DELIVERY] Inserting items...")
                 await tx.insert(deliveryItems)
                     .values(data.items.map(item => ({
                         deliveryId: newDelivery.id,
@@ -253,8 +263,11 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         deliveredQuantity: item.deliveredQuantity,
                         serialNumbers: item.serialNumbers || null,
                     })))
+                
+                console.log("[CREATE DELIVERY] Items inserted")
 
                 // Handle Stock Transfer automation for VHS/Consignment or any delivery with destination warehouse
+                console.log("[CREATE DELIVERY] Checking for stock transfer...")
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, data.salesOrderId),
                     columns: { categoryPo: true }
@@ -264,6 +277,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 const isCancelled = data.status === "cancelled"
 
                 if (hasDestination && !isCancelled) {
+                    console.log("[CREATE DELIVERY] Creating stock transfer...")
                     const referenceNumber = `ST-AUTO-${newDelivery.deliveryNumber}`
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
@@ -282,12 +296,14 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             quantity: item.deliveredQuantity,
                         }))
                     )
+                    console.log("[CREATE DELIVERY] Stock transfer created")
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled
                 const isCommitted = data.status !== "cancelled"
 
                 if (isCommitted) {
+                    console.log("[CREATE DELIVERY] Deducting stock...")
                     const movementType = hasDestination ? "TRANSFER_OUT" : "DELIVERY"
 
                     for (const item of data.items) {
@@ -313,21 +329,28 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             recordedBy: userId,
                         })
                     }
+                    console.log("[CREATE DELIVERY] Stock deducted")
                 }
             }
 
             if (data.status === "delivered") {
+                console.log("[CREATE DELIVERY] Checking SO completion...")
                 await checkAndCompleteSalesOrder(tx, data.salesOrderId)
+                console.log("[CREATE DELIVERY] SO check completed")
             }
 
             try {
                 revalidatePath("/dashboard/deliveries")
             } catch (_e) { }
+            
+            console.log("[CREATE DELIVERY] Transaction completed successfully")
             return { success: true, id: newDelivery.id }
         })
     } catch (error) {
-        console.error("Failed to create delivery:", error)
-        return { success: false, error: "Failed to create delivery" }
+        console.error("[CREATE DELIVERY] Error:", error)
+        return { success: false, error: "Failed to create delivery: " + (error instanceof Error ? error.message : "Unknown error") }
+    }
+}
     }
 }
 

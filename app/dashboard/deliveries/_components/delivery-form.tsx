@@ -348,21 +348,33 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Check stock
     const handleCheckStock = useCallback(async () => {
+        console.log("🔍 Check Stock clicked")
+        console.log("warehouseId:", warehouseId)
+        console.log("items:", items)
+        
         if (!warehouseId || items.length === 0) {
+            console.log("❌ Check Stock validation failed")
             toast.error("Please select a warehouse and add items first")
             return
         }
+        
         setCheckingStock(true)
+        console.log("📦 Checking stock availability...")
+        
         try {
             const results = await checkStockAvailability(
                 warehouseId,
                 items.map(item => ({ productId: item.productId, quantity: item.deliveredQuantity }))
             )
+            console.log("✅ Stock check results:", results)
             setStockResults(results)
-        } catch {
-            toast.error("Failed to check stock")
+            toast.success("Stock availability checked!")
+        } catch (error) {
+            console.error("❌ Stock check error:", error)
+            toast.error("Failed to check stock: " + (error instanceof Error ? error.message : "Unknown error"))
+        } finally {
+            setCheckingStock(false)
         }
-        setCheckingStock(false)
     }, [warehouseId, items])
 
     // Get stock status for a product
@@ -468,21 +480,27 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
         console.log("🚀 Delivery Payload:", payload)
 
-        const result = isEdit
-            ? await updateDelivery(initialData.id, payload)
-            : await createDelivery(payload)
+        try {
+            const result = isEdit
+                ? await updateDelivery(initialData.id, payload)
+                : await createDelivery(payload)
 
-        console.log("📦 Delivery Result:", result)
+            console.log("📦 Delivery Result:", result)
 
-        if (result.success) {
-            toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
-            router.push("/dashboard/deliveries")
-        } else {
-            const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
-            console.error("❌ Delivery Error:", errorMsg, result)
-            toast.error(errorMsg)
+            if (result.success) {
+                toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
+                router.push("/dashboard/deliveries")
+            } else {
+                const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
+                console.error("❌ Delivery Error:", errorMsg, result)
+                toast.error(errorMsg)
+            }
+        } catch (error) {
+            console.error("❌ Delivery Exception:", error)
+            toast.error("Error: " + (error instanceof Error ? error.message : "Unknown error occurred"))
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
     }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, totalInternalCost])
 
     const handleCreateDriver = async (name: string) => {
@@ -804,20 +822,50 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
                                                         {/* Serial Number Input Section for TYRE */}
                                                         {isTyre && item.deliveredQuantity > 0 && (
-                                                            <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
-                                                                <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
-                                                                    Enter {item.deliveredQuantity} Serial Number(s)
-                                                                </Label>
-                                                                <div className="grid grid-cols-1 gap-2">
-                                                                    {item.serialNumbers.map((sn, snIdx) => (
-                                                                        <Input
-                                                                            key={snIdx}
-                                                                            placeholder={`SN #${snIdx + 1}`}
-                                                                            value={sn}
-                                                                            onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                            className="h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500"
-                                                                        />
-                                                                    ))}
+                                                            <div className="mt-4 space-y-3">
+                                                                {/* Info Alert */}
+                                                                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-900">
+                                                                    <div className="flex items-start gap-2">
+                                                                        <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                                                        <div className="flex-1 text-xs text-blue-800 dark:text-blue-200">
+                                                                            <p className="font-semibold mb-1">Serial Number Wajib Diisi</p>
+                                                                            <p className="mb-2">Setiap ban harus memiliki serial number yang UNIK dan BERBEDA.</p>
+                                                                            <div className="bg-white dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800 font-mono text-[11px]">
+                                                                                <p className="text-blue-600 dark:text-blue-400 font-semibold mb-1">Contoh Format:</p>
+                                                                                <p>SN-001</p>
+                                                                                <p>SN-002</p>
+                                                                                <p>SN-003</p>
+                                                                                <p className="text-blue-500 mt-1">... dan seterusnya</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                {/* Serial Number Inputs */}
+                                                                <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
+                                                                    <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
+                                                                        Enter {item.deliveredQuantity} Serial Number(s)
+                                                                    </Label>
+                                                                    <div className="grid grid-cols-1 gap-2">
+                                                                        {item.serialNumbers.map((sn, snIdx) => (
+                                                                            <Input
+                                                                                key={snIdx}
+                                                                                placeholder={`Contoh: SN-${String(snIdx + 1).padStart(3, '0')}`}
+                                                                                value={sn}
+                                                                                onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                                className={cn(
+                                                                                    "h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500",
+                                                                                    !sn.trim() && "border-red-300 bg-red-50 dark:bg-red-950/20"
+                                                                                )}
+                                                                            />
+                                                                        ))}
+                                                                    </div>
+                                                                    {item.serialNumbers.some(sn => !sn.trim()) && (
+                                                                        <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+                                                                            <XCircle className="h-3 w-3" />
+                                                                            Semua serial number harus diisi!
+                                                                        </p>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         )}
