@@ -158,6 +158,12 @@ export const navigationConfig: NavSection[] = [
                 icon: CreditCard,
                 resource: "billing",
             },
+            {
+                title: "Logistics Cost Log",
+                url: "/dashboard/logistics-costs",
+                icon: BarChart3,
+                resource: "logistics-costs",
+            },
         ],
     },
     {

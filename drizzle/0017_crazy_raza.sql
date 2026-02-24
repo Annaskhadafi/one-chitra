@@ -1,0 +1,1 @@
+ALTER TABLE "stock_levels" ADD COLUMN "draft_booked_stock" integer DEFAULT 0 NOT NULL;

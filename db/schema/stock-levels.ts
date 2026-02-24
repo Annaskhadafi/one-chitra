@@ -1,4 +1,4 @@
- import { pgTable, serial, integer, timestamp, unique, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, timestamp, unique, numeric } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
@@ -8,6 +8,7 @@ export const stockLevels = pgTable("stock_levels", {
     warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
     productId: integer("product_id").references(() => products.id).notNull(),
     valuationValue: numeric("valuation_value", { precision: 20, scale: 2 }).default("0").notNull(),
+    draftBookedStock: integer("draft_booked_stock").default(0).notNull(),
     bookedStock: integer("booked_stock").default(0).notNull(),
     totalStock: integer("total_stock").default(0).notNull(),
     minStock: integer("min_stock").default(0).notNull(),

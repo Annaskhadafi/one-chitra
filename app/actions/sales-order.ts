@@ -107,8 +107,8 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                     status: data.status,
                     termsConditions: data.termsConditions || null,
                     notes: data.notes || null,
-                    discount: data.discount.toString(),
-                    shipping: data.shipping.toString(),
+                    discount: String(data.discount),
+                    shipping: String(data.shipping),
                 })
                 .returning()
 
@@ -118,44 +118,49 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                         salesOrderId: newOrder.id,
                         productId: item.productId,
                         quantity: item.quantity,
-                        unitPrice: item.unitPrice.toString(),
-                        discount: item.discount.toString(),
-                        tax: item.tax.toString(),
+                        unitPrice: String(item.unitPrice),
+                        discount: String(item.discount),
+                        tax: String(item.tax),
                     })))
 
                 // Book stock if warehouse is selected
                 if (data.warehouseId) {
+                    const isDraft = data.status === "draft"
                     for (const item of data.items) {
+                        if (!item.productId) continue
+
+                        const setValues: any = { updatedAt: new Date() }
+                        if (isDraft) {
+                            setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
+                        } else {
+                            setValues.bookedStock = sql`${stockLevels.bookedStock} + ${item.quantity}`
+                        }
+
                         await tx.insert(stockLevels)
                             .values({
                                 warehouseId: data.warehouseId,
                                 productId: item.productId,
-                                bookedStock: item.quantity,
+                                draftBookedStock: isDraft ? item.quantity : 0,
+                                bookedStock: isDraft ? 0 : item.quantity,
                                 totalStock: 0,
                                 minStock: 0,
                             })
                             .onConflictDoUpdate({
                                 target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: {
-                                    bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
-                                    updatedAt: new Date(),
-                                },
+                                set: setValues,
                             })
                     }
                 }
             }
-
-            // Removed legacy VHS/Consignment automation. 
-            // Delivery and Stock Transfer creation is now handled through the Delivery creation process.
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
             revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to create sales order:", error)
-        return { success: false, error: "Failed to create sales order" }
+        return { success: false, error: `Failed to create sales order: ${error.message || error}` }
     }
 }
 
@@ -175,12 +180,19 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
 
             // Revert original booked stock if it had a warehouse
             if (originalOrder.warehouseId) {
+                const wasDraft = originalOrder.status === "draft"
                 for (const item of originalOrder.items) {
+                    if (!item.productId) continue
+
+                    const setValues: any = { updatedAt: new Date() }
+                    if (wasDraft) {
+                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                    } else {
+                        setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                    }
+
                     await tx.update(stockLevels)
-                        .set({
-                            bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
-                            updatedAt: new Date(),
-                        })
+                        .set(setValues)
                         .where(and(
                             eq(stockLevels.warehouseId, originalOrder.warehouseId),
                             eq(stockLevels.productId, item.productId)
@@ -236,35 +248,43 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             // Insert new items
-            if (itemsToInsert.length > 0) {
+            if (data.items.length > 0) {
                 await tx.insert(salesOrderItems)
                     .values(itemsToInsert.map(item => ({
                         salesOrderId: id,
                         productId: item.productId,
                         quantity: item.quantity,
-                        unitPrice: item.unitPrice.toString(),
-                        discount: item.discount.toString(),
-                        tax: item.tax.toString(),
+                        unitPrice: String(item.unitPrice),
+                        discount: String(item.discount),
+                        tax: String(item.tax),
                     })))
             }
 
             // Apply new booked stock if warehouse is selected
             if (data.warehouseId) {
+                const isDraft = data.status === "draft"
                 for (const item of data.items) {
+                    if (!item.productId) continue
+
+                    const setValues: any = { updatedAt: new Date() }
+                    if (isDraft) {
+                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
+                    } else {
+                        setValues.bookedStock = sql`${stockLevels.bookedStock} + ${item.quantity}`
+                    }
+
                     await tx.insert(stockLevels)
                         .values({
                             warehouseId: data.warehouseId,
                             productId: item.productId,
-                            bookedStock: item.quantity,
+                            draftBookedStock: isDraft ? item.quantity : 0,
+                            bookedStock: isDraft ? 0 : item.quantity,
                             totalStock: 0,
                             minStock: 0,
                         })
                         .onConflictDoUpdate({
                             target: [stockLevels.warehouseId, stockLevels.productId],
-                            set: {
-                                bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
-                                updatedAt: new Date(),
-                            },
+                            set: setValues,
                         })
                 }
             }
@@ -292,12 +312,19 @@ export async function deleteSalesOrder(id: number) {
         return await db.transaction(async (tx) => {
             // 1. Revert booked stock for SO items (Booked Stock only)
             if (order.warehouseId) {
+                const wasDraft = order.status === "draft"
                 for (const item of order.items) {
+                    if (!item.productId) continue
+
+                    const setValues: any = { updatedAt: new Date() }
+                    if (wasDraft) {
+                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                    } else {
+                        setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                    }
+
                     await tx.update(stockLevels)
-                        .set({
-                            bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
-                            updatedAt: new Date(),
-                        })
+                        .set(setValues)
                         .where(and(
                             eq(stockLevels.warehouseId, order.warehouseId),
                             eq(stockLevels.productId, item.productId)
@@ -385,12 +412,19 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
 
                 // 1. Revert booked stock
                 if (order.warehouseId) {
+                    const wasDraft = order.status === "draft"
                     for (const item of order.items) {
+                        if (!item.productId) continue
+
+                        const setValues: any = { updatedAt: new Date() }
+                        if (wasDraft) {
+                            setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                        } else {
+                            setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                        }
+
                         await tx.update(stockLevels)
-                            .set({
-                                bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
-                                updatedAt: new Date(),
-                            })
+                            .set(setValues)
                             .where(and(
                                 eq(stockLevels.warehouseId, order.warehouseId),
                                 eq(stockLevels.productId, item.productId)
@@ -448,17 +482,116 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
         return { success: false, error: "Failed to bulk delete sales orders" }
     }
 }
-
 export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) {
     try {
         await checkPermission('sales-orders', 'edit')
-        await db.update(salesOrders)
-            .set({ status, updatedAt: new Date() })
-            .where(inArray(salesOrders.id, ids))
-        revalidatePath("/dashboard/sales-orders")
-        return { success: true }
-    } catch (_error) {
-        console.error("Bulk update SO status error:", _error)
+
+        return await db.transaction(async (tx) => {
+            const session = await getAuthenticatedSession('sales-orders', 'edit')
+            const userId = session.user.id
+
+            for (const id of ids) {
+                const originalOrder = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, id),
+                    with: { items: true }
+                })
+
+                if (!originalOrder) continue
+
+                // Check for stock transition if status changed from draft to something else
+                if (originalOrder.status === "draft" && status !== "draft" && originalOrder.warehouseId) {
+                    for (const item of originalOrder.items) {
+                        if (!item.productId) continue
+                        await tx.update(stockLevels)
+                            .set({
+                                draftBookedStock: sql`${stockLevels.draftBookedStock} - ${item.quantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, originalOrder.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                } else if (originalOrder.status !== "draft" && status === "draft" && originalOrder.warehouseId) {
+                    // Reversed transition: Confirmed -> Draft
+                    for (const item of originalOrder.items) {
+                        if (!item.productId) continue
+                        await tx.update(stockLevels)
+                            .set({
+                                draftBookedStock: sql`${stockLevels.draftBookedStock} + ${item.quantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, originalOrder.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+
+                await tx.update(salesOrders)
+                    .set({ status, updatedAt: new Date() })
+                    .where(eq(salesOrders.id, id))
+            }
+
+            revalidatePath("/dashboard/sales-orders")
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Bulk update SO status error:", error)
         return { success: false, error: "Failed to update sales order status" }
+    }
+}
+
+export async function releaseExpiredDraftBookings() {
+    try {
+        const oneMonthAgo = new Date()
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+
+        const expiredDrafts = await db.query.salesOrders.findMany({
+            where: and(
+                eq(salesOrders.status, "draft"),
+                sql`${salesOrders.createdAt} < ${oneMonthAgo}`
+            ),
+            with: { items: true }
+        })
+
+        if (expiredDrafts.length === 0) return { success: true, released: 0 }
+
+        return await db.transaction(async (tx) => {
+            for (const order of expiredDrafts) {
+                if (order.warehouseId) {
+                    for (const item of order.items) {
+                        if (!item.productId) continue
+                        await tx.update(stockLevels)
+                            .set({
+                                draftBookedStock: sql`${stockLevels.draftBookedStock} - ${item.quantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, order.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+                    }
+                }
+
+                // Update status to 'cancelled' or similar to mark as expired
+                await tx.update(salesOrders)
+                    .set({
+                        status: "cancelled",
+                        notes: sql`concat(${salesOrders.notes}, '\nAuto-cancelled due to draft expiration (1 month)')`,
+                        updatedAt: new Date()
+                    })
+                    .where(eq(salesOrders.id, order.id))
+            }
+
+            revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/inventory")
+            return { success: true, released: expiredDrafts.length }
+        })
+    } catch (error) {
+        console.error("Failed to release expired draft bookings:", error)
+        return { success: false, error: "Failed to release expired draft bookings" }
     }
 }

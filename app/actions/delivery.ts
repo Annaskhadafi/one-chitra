@@ -923,3 +923,36 @@ export async function checkAndCompleteSalesOrder(tx: any, salesOrderId: number) 
         }
     }
 }
+
+export async function getLogisticsCosts() {
+    try {
+        await checkPermission('deliveries', 'view')
+
+        const costs = await db.select({
+            id: deliveries.id,
+            deliveryNumber: deliveries.deliveryNumber,
+            deliveryDate: deliveries.deliveryDate,
+            scheduledDate: deliveries.scheduledDate,
+            driverName: deliveries.driverName,
+            vehicleNumber: deliveries.vehicleNumber,
+            vendorName: deliveries.vendorName,
+            isExternal: deliveries.isExternal,
+            shippingCost: deliveries.shippingCost,
+            costGasoline: deliveries.costGasoline,
+            costToll: deliveries.costToll,
+            costParking: deliveries.costParking,
+            costMeals: deliveries.costMeals,
+            costMaintenance: deliveries.costMaintenance,
+            costOthers: deliveries.costOthers,
+            invoiceNumber: deliveries.invoiceNumber,
+        })
+            .from(deliveries)
+            .where(isNotNull(deliveries.deliveryNumber))
+            .orderBy(desc(deliveries.createdAt))
+
+        return costs
+    } catch (error) {
+        console.error("Failed to fetch logistics costs:", error)
+        return []
+    }
+}
