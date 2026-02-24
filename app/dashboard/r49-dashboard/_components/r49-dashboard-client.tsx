@@ -55,6 +55,7 @@ export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientP
         sortOrder: 'desc' as const
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isPending, startTransition] = useTransition();

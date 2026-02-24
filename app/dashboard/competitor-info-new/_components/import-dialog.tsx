@@ -30,6 +30,7 @@ interface ImportDialogProps {
     title: string
     description: string
     requiredFields: ImportField[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onImport: (data: any[]) => Promise<{ success: boolean; count?: number; error?: string }>
     templateData: Record<string, string>[]
     templateFileName: string

@@ -54,7 +54,7 @@ export function EditTransferDialog({ transfer, open, onOpenChange }: EditTransfe
         setIsSubmitting(true)
         try {
             const result = await updateStockTransfer(transfer.id, formData)
-            
+
             if (result.success) {
                 toast.success("Transfer updated successfully")
                 onOpenChange(false)
@@ -105,7 +105,7 @@ export function EditTransferDialog({ transfer, open, onOpenChange }: EditTransfe
                         <Label htmlFor="receivedStatus">Received Status</Label>
                         <Select
                             value={formData.receivedStatus}
-                            onValueChange={(value: any) => setFormData({ ...formData, receivedStatus: value })}
+                            onValueChange={(value: "Scheduled" | "Received" | "Rejected") => setFormData({ ...formData, receivedStatus: value })}
                         >
                             <SelectTrigger>
                                 <SelectValue />

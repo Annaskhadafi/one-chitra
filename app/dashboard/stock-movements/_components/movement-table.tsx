@@ -34,12 +34,32 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { format } from "date-fns"
 import type { StockMovement, Warehouse } from "@/lib/types"
 
+interface StockMovementWithRelations {
+    id: number
+    createdAt: string | Date
+    type: string
+    quantity: number
+    referenceNumber?: string | null
+    warehouseId: number
+    product?: {
+        materialNumber: string
+        materialDescription?: string | null
+    } | null
+    warehouse?: {
+        description?: string | null
+        sloc: string
+    } | null
+    recordedByUser?: {
+        name?: string | null
+    } | null
+}
+
 interface MovementTableProps {
-    data: any[] // StockMovement with relations
+    data: StockMovementWithRelations[]
     warehouses: Warehouse[]
 }
 
-const TYPE_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" | "success" | "warning"; icon: any }> = {
+const TYPE_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" | "success" | "warning"; icon: React.ElementType }> = {
     GR_SAP: { label: "GR SAP", variant: "success", icon: ArrowDown },
     GR_MANUAL: { label: "GR Manual", variant: "success", icon: ArrowDown },
     DELIVERY: { label: "Delivery", variant: "destructive", icon: ArrowUp },
@@ -54,7 +74,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
     const [filterType, setFilterType] = useState("all")
     const [filterWarehouse, setFilterWarehouse] = useState("all")
 
-    const columns = useMemo<ColumnDef<any>[]>(() => [
+    const columns = useMemo<ColumnDef<StockMovementWithRelations>[]>(() => [
         {
             accessorKey: "createdAt",
             header: ({ column }) => (
@@ -117,7 +137,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
         {
             accessorKey: "referenceNumber",
             header: "Reference",
-            cell: ({ row }) => row.original.referenceNumber || "-",
+            cell: ({ row }) => row.original.referenceNumber ?? undefined,
         },
         {
             accessorKey: "recordedByUser.name",

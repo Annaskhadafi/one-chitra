@@ -376,7 +376,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         quantity: item.deliveredQuantity, // Positive for Revert In
                         type: originalMovementType,
                         referenceNumber: originalDelivery.deliveryNumber ?? undefined,
-                        recordedBy: userId,
+                        recordedBy: userId || undefined,
                     })
                 }
             }

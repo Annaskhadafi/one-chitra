@@ -269,7 +269,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 }
 
                 return (
-                    <Select value={status} onValueChange={(val: any) => handleStatusChange(val)}>
+                    <Select value={status} onValueChange={(val: "Scheduled" | "Received" | "Rejected") => handleStatusChange(val)}>
                         <SelectTrigger
                             className={cn(
                                 "h-8 w-[130px] border-transparent font-medium",

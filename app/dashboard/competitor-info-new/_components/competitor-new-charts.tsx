@@ -13,17 +13,24 @@ import {
     PieChart,
     Pie,
     Cell,
-    LineChart,
-    Line,
 } from "recharts"
+
+interface DashboardData {
+    pivotTable: { customerName: string | null; groupRevenue: unknown; year: string; revenue: number }[];
+    customerOrder: { customerName: string | null; totalRevenue: number }[];
+    totalCustomers: number;
+    categoryStats: { category: string | null; revenue: number }[];
+    areaStats: { area: string | null; revenue: number }[];
+    monthlyStats: { month: string; revenue: number }[];
+}
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#16a34a', '#ca8a04', '#4b5563']
 
-export function PriceDistributionChart({ data }: { data: any[] }) {
+export function PriceDistributionChart({ data }: { data: { brand: string }[] }) {
     if (!data || data.length === 0) return null
 
     // Brand distribution
-    const brandCounts = data.reduce((acc: any, item: any) => {
+    const brandCounts = data.reduce((acc: Record<string, number>, item) => {
         acc[item.brand] = (acc[item.brand] || 0) + 1
         return acc
     }, {})
@@ -68,10 +75,10 @@ export function PriceDistributionChart({ data }: { data: any[] }) {
     )
 }
 
-export function ActivityImpactChart({ data }: { data: any[] }) {
+export function ActivityImpactChart({ data }: { data: { businessImpact: string }[] }) {
     if (!data || data.length === 0) return null
 
-    const impactCounts = data.reduce((acc: any, item: any) => {
+    const impactCounts = data.reduce((acc: Record<string, number>, item) => {
         acc[item.businessImpact] = (acc[item.businessImpact] || 0) + 1
         return acc
     }, {})
@@ -107,10 +114,10 @@ export function ActivityImpactChart({ data }: { data: any[] }) {
     )
 }
 
-export function LostSaleReasonChart({ data }: { data: any[] }) {
+export function LostSaleReasonChart({ data }: { data: { reason: string }[] }) {
     if (!data || data.length === 0) return null
 
-    const reasonCounts = data.reduce((acc: any, item: any) => {
+    const reasonCounts = data.reduce((acc: Record<string, number>, item) => {
         acc[item.reason] = (acc[item.reason] || 0) + 1
         return acc
     }, {})

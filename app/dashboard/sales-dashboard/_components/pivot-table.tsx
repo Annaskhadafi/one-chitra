@@ -10,8 +10,9 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { Loader2, PlusSquare, MinusSquare, ArrowUpDown } from "lucide-react"
+import { Loader2, PlusSquare, MinusSquare, ArrowUpDown, Search } from "lucide-react"
 import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
+import { cn } from "@/lib/utils"
 
 interface PivotData {
     customerName: string | null;
@@ -147,12 +148,11 @@ export function PivotTable({
                                         {formattedYears.map((year) => {
                                             const totalForYear = groupKeys.reduce((sum, g) => sum + (row.groups[g][year] || 0), 0)
                                             const isSortedYear = sortByYear === year
-                                            
                                             return (
                                                 <div key={year} className={cn(
                                                     "bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-lg p-3 border transition-all",
-                                                    isSortedYear 
-                                                        ? "border-purple-400 dark:border-purple-600 ring-2 ring-purple-200 dark:ring-purple-800" 
+                                                    isSortedYear
+                                                        ? "border-purple-400 dark:border-purple-600 ring-2 ring-purple-200 dark:ring-purple-800"
                                                         : "border-gray-200/50 dark:border-gray-700/50"
                                                 )}>
                                                     <div className="flex items-center justify-between mb-2">

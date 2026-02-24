@@ -3,6 +3,7 @@
 import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
 import { sql, and, isNotNull, ne, or, notIlike, desc, asc } from "drizzle-orm"
+import { type SQL } from "drizzle-orm"
 
 export interface SalesDashboardFilters {
     years?: string[];
@@ -99,7 +100,7 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             salesman = [],
             customers = [],
             revTypes = [],
-            areas = [],
+            _areas = [],
             page = 1,
             pageSize = 30,
             sortByYear = '', // If empty, sort by Total overall
@@ -108,7 +109,7 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
 
         const offset = (page - 1) * pageSize;
 
-        const filterArray: any[] = [
+        const filterArray: (SQL | undefined)[] = [
             and(
                 isNotNull(historyOrders.billingDate),
                 ne(historyOrders.billingDate, ""),

@@ -2,7 +2,8 @@
 
 import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
-import { sql, and, isNotNull, ne, or, notIlike, desc, asc, ilike, inArray, eq } from "drizzle-orm"
+import { sql, and, isNotNull, ne, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
+import { type SQL } from "drizzle-orm"
 
 export interface R49DashboardFilters {
     years?: string[];
@@ -67,7 +68,7 @@ export async function getR49DashboardFilters() {
 
 
 export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
-    let topCustomersQuery: any = null;
+    let topCustomersQuery: ReturnType<typeof db.select> | null = null;
     try {
         const {
             years = [],
@@ -82,7 +83,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
 
         const offset = (page - 1) * pageSize;
 
-        const filterArray: any[] = [
+        const filterArray: (SQL | undefined)[] = [
             and(
                 isNotNull(historyOrders.billingDate),
                 ne(historyOrders.billingDate, ""),
@@ -214,7 +215,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
                 }
             }
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to fetch R49 dashboard data:", error);
         if (topCustomersQuery) {
             // Error logging preserved for telemetry in production if needed, or removed

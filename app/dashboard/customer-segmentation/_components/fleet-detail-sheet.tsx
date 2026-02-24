@@ -62,8 +62,13 @@ interface FleetDetailSheetProps {
     fleetData: FleetItem[]
 }
 
+interface Product {
+    materialNumber?: string | null
+    materialDescription?: string | null
+}
+
 interface GroupedStock {
-    product: any
+    product: Product
     matchScore: number
     totalStock: number
     warehouses: Array<{ name: string; stock: number }>
@@ -86,10 +91,10 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
     // Normalize tire size untuk matching yang lebih baik
     const normalizeTireSize = (tireSize: string): string[] => {
         if (!tireSize) return []
-        
+
         // Hapus whitespace dan convert ke lowercase
         const cleaned = tireSize.trim().toLowerCase()
-        
+
         // Generate berbagai variasi format
         const variations: string[] = [
             cleaned,
@@ -97,16 +102,16 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
             cleaned.replace(/\s+/g, " "), // Spasi normal: "27.00 r 49"
             cleaned.replace(/([a-z])/g, " $1 ").trim(), // Spasi sebelum/sesudah huruf: "27.00 r 49"
         ]
-        
+
         // Ekstrak angka dan huruf untuk matching lebih fleksibel
         const numbers = cleaned.match(/\d+\.?\d*/g)?.join(" ") || ""
         const letters = cleaned.match(/[a-z]+/gi)?.join(" ") || ""
-        
+
         if (numbers && letters) {
             variations.push(`${numbers} ${letters}`)
             variations.push(`${numbers}${letters}`)
         }
-        
+
         return [...new Set(variations)]
     }
 
@@ -127,7 +132,7 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
             })
 
             const results = fuse.search(variant)
-            
+
             results.forEach(result => {
                 const id = result.item.id
                 if (!allMatches.has(id) || (result.score && result.score < allMatches.get(id).matchScore)) {
@@ -147,7 +152,7 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
     // Group matching stocks by product
     const getGroupedMatchingStocks = (tireSize: string): GroupedStock[] => {
         const matchingStocks = getMatchingStocks(tireSize)
-        
+
         // Group by product (materialNumber)
         const grouped = matchingStocks.reduce((acc, stock) => {
             const key = stock.product?.materialNumber || 'unknown'
@@ -191,22 +196,22 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
     // Filter fleet data berdasarkan tire size, status, dan site yang dipilih
     const filteredFleetData = React.useMemo(() => {
         let filtered = fleetData
-        
+
         // Filter by status
         if (selectedStatus !== "all") {
             filtered = filtered.filter(item => item.status === selectedStatus)
         }
-        
+
         // Filter by site
         if (selectedSite !== "all") {
             filtered = filtered.filter(item => item.site === selectedSite)
         }
-        
+
         // Filter by tire size
         if (selectedTireSize !== "all") {
             filtered = filtered.filter(item => item.tire_size === selectedTireSize)
         }
-        
+
         return filtered
     }, [fleetData, selectedTireSize, selectedStatus, selectedSite])
 
@@ -234,195 +239,195 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
                         <ProgressLoading message="Loading warehouse data..." />
                     </div>
                 ) : (
-                <div className="mt-6 space-y-6">
-                    {/* Filters */}
-                    <div className="flex flex-col gap-3 p-4 bg-muted/50 rounded-lg border">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Filter className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-semibold">Filters:</span>
+                    <div className="mt-6 space-y-6">
+                        {/* Filters */}
+                        <div className="flex flex-col gap-3 p-4 bg-muted/50 rounded-lg border">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Filter className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm font-semibold">Filters:</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {/* Status Filter */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Status</label>
+                                    <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Status</SelectItem>
+                                            {uniqueStatuses.map((status) => (
+                                                <SelectItem key={status} value={status}>
+                                                    {status}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Site Filter */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Site</label>
+                                    <Select value={selectedSite} onValueChange={setSelectedSite}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select site" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Sites</SelectItem>
+                                            {uniqueSites.map((site) => (
+                                                <SelectItem key={site} value={site}>
+                                                    {site}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Tire Size Filter */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tire Size</label>
+                                    <Select value={selectedTireSize} onValueChange={setSelectedTireSize}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select tire size" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Tire Sizes</SelectItem>
+                                            {uniqueTireSizes.map((size) => (
+                                                <SelectItem key={size} value={size}>
+                                                    {size}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            {/* Active Filters Badge */}
+                            {(selectedStatus !== "all" || selectedTireSize !== "all" || selectedSite !== "all") && (
+                                <div className="flex items-center gap-2 pt-2 border-t">
+                                    <span className="text-xs text-muted-foreground">Showing:</span>
+                                    <Badge variant="secondary">
+                                        {filteredFleetData.length} fleet(s)
+                                    </Badge>
+                                </div>
+                            )}
                         </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {/* Status Filter */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Status</label>
-                                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Status</SelectItem>
-                                        {uniqueStatuses.map((status) => (
-                                            <SelectItem key={status} value={status}>
-                                                {status}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
 
-                            {/* Site Filter */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Site</label>
-                                <Select value={selectedSite} onValueChange={setSelectedSite}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select site" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Sites</SelectItem>
-                                        {uniqueSites.map((site) => (
-                                            <SelectItem key={site} value={site}>
-                                                {site}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Tire Size Filter */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Tire Size</label>
-                                <Select value={selectedTireSize} onValueChange={setSelectedTireSize}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select tire size" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Tire Sizes</SelectItem>
-                                        {uniqueTireSizes.map((size) => (
-                                            <SelectItem key={size} value={size}>
-                                                {size}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        {/* Stats Cards */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-medium">Total Units</CardTitle>
+                                    <Truck className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.totalUnits}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-medium">Total Tires</CardTitle>
+                                    <Gauge className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.totalTires}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-medium">Forecast</CardTitle>
+                                    <Package className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.totalForecast}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-medium">Sites</CardTitle>
+                                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.uniqueSites}</div>
+                                </CardContent>
+                            </Card>
                         </div>
 
-                        {/* Active Filters Badge */}
-                        {(selectedStatus !== "all" || selectedTireSize !== "all" || selectedSite !== "all") && (
-                            <div className="flex items-center gap-2 pt-2 border-t">
-                                <span className="text-xs text-muted-foreground">Showing:</span>
-                                <Badge variant="secondary">
-                                    {filteredFleetData.length} fleet(s)
-                                </Badge>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Stats Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs font-medium">Total Units</CardTitle>
-                                <Truck className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.totalUnits}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs font-medium">Total Tires</CardTitle>
-                                <Gauge className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.totalTires}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs font-medium">Forecast</CardTitle>
-                                <Package className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.totalForecast}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs font-medium">Sites</CardTitle>
-                                <MapPin className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.uniqueSites}</div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Fleet List Table */}
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Site</TableHead>
-                                    <TableHead>Location</TableHead>
-                                    <TableHead>Model</TableHead>
-                                    <TableHead>Tire Size</TableHead>
-                                    <TableHead className="text-right">Unit Qty</TableHead>
-                                    <TableHead className="text-right">Total Tire</TableHead>
-                                    <TableHead>Status</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredFleetData.length === 0 ? (
+                        {/* Fleet List Table */}
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                            No fleet data found for selected tire size.
-                                        </TableCell>
+                                        <TableHead>Site</TableHead>
+                                        <TableHead>Location</TableHead>
+                                        <TableHead>Model</TableHead>
+                                        <TableHead>Tire Size</TableHead>
+                                        <TableHead className="text-right">Unit Qty</TableHead>
+                                        <TableHead className="text-right">Total Tire</TableHead>
+                                        <TableHead>Status</TableHead>
                                     </TableRow>
-                                ) : (
-                                    filteredFleetData.map((item) => {
-                                    const matchingStocks = getGroupedMatchingStocks(item.tire_size)
-                                    return (
-                                        <React.Fragment key={item.id_fleet_list}>
-                                            <TableRow>
-                                                <TableCell className="font-medium">{item.site}</TableCell>
-                                                <TableCell>{item.location}</TableCell>
-                                                <TableCell>
-                                                    <div className="text-sm">
-                                                        <div className="font-medium">{item.unit_manufacture}</div>
-                                                        <div className="text-muted-foreground">{item.model}</div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">{item.tire_size}</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">{item.unit_qty}</TableCell>
-                                                <TableCell className="text-right">{item.totaltire}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={item.status === 'Active' ? 'default' : 'secondary'}>
-                                                        {item.status}
-                                                    </Badge>
-                                                </TableCell>
-                                            </TableRow>
-                                            {matchingStocks.length > 0 && (
-                                                <TableRow className="bg-muted/30">
-                                                    <TableCell colSpan={7}>
-                                                        <div className="py-3">
-                                                            <div className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                                                                <Package className="h-3 w-3" />
-                                                                Matching Stock Items:
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredFleetData.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                                No fleet data found for selected tire size.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        filteredFleetData.map((item) => {
+                                            const matchingStocks = getGroupedMatchingStocks(item.tire_size)
+                                            return (
+                                                <React.Fragment key={item.id_fleet_list}>
+                                                    <TableRow>
+                                                        <TableCell className="font-medium">{item.site}</TableCell>
+                                                        <TableCell>{item.location}</TableCell>
+                                                        <TableCell>
+                                                            <div className="text-sm">
+                                                                <div className="font-medium">{item.unit_manufacture}</div>
+                                                                <div className="text-muted-foreground">{item.model}</div>
                                                             </div>
-                                                            <div className="space-y-2">
-                                                                {matchingStocks.map((groupedStock, idx) => (
-                                                                    <StockItemCollapsible
-                                                                        key={idx}
-                                                                        groupedStock={groupedStock}
-                                                                    />
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </React.Fragment>
-                                    )
-                                })
-                                )}
-                            </TableBody>
-                        </Table>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline">{item.tire_size}</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">{item.unit_qty}</TableCell>
+                                                        <TableCell className="text-right">{item.totaltire}</TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={item.status === 'Active' ? 'default' : 'secondary'}>
+                                                                {item.status}
+                                                            </Badge>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    {matchingStocks.length > 0 && (
+                                                        <TableRow className="bg-muted/30">
+                                                            <TableCell colSpan={7}>
+                                                                <div className="py-3">
+                                                                    <div className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                                                                        <Package className="h-3 w-3" />
+                                                                        Matching Stock Items:
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        {matchingStocks.map((groupedStock, idx) => (
+                                                                            <StockItemCollapsible
+                                                                                key={idx}
+                                                                                groupedStock={groupedStock}
+                                                                            />
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </React.Fragment>
+                                            )
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </div>
-                </div>
                 )}
             </SheetContent>
         </Sheet>

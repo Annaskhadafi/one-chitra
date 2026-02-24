@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { getStockOpnameSession } from "@/app/actions/stock-opname"
 import { OpnameDetailView } from "../_components/opname-detail-view"
+import Link from "next/link"
 
 interface Props {
     params: Promise<{ id: string }>
@@ -24,7 +25,7 @@ export default async function StockOpnameDetailPage({ params }: Props) {
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <a href="/dashboard/stock-opname" className="hover:underline">Stock Opname</a>
+                    <Link href="/dashboard/stock-opname" className="hover:underline">Stock Opname</Link>
                     <span>/</span>
                     <span className="text-foreground font-medium">{session.name}</span>
                 </div>

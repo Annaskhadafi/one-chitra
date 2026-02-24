@@ -70,7 +70,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                         <XAxis type="number" hide />
                         <YAxis dataKey="label" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#172B4D' }} width={100} />
-                        <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
                         <Bar dataKey="value" fill="#0052CC" radius={[0, 4, 4, 0]} barSize={20} />
                     </BarChart>
                 </ResponsiveContainer>
@@ -83,7 +83,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                        <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
                         <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} />
                     </AreaChart>
                 </ResponsiveContainer>
@@ -105,7 +105,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                         </Pie>
-                        <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
                         <Legend wrapperStyle={{ fontSize: 9 }} />
                     </PieChart>
                 </ResponsiveContainer>
@@ -118,7 +118,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                        <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
                         <Line type="monotone" dataKey="value" stroke="#E21870" strokeWidth={2} dot={{ r: 4 }} />
                     </LineChart>
                 </ResponsiveContainer>
@@ -131,7 +131,7 @@ export function R49Charts({ data, years }: R49ChartsProps) {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                         <YAxis tickFormatter={formatCurrency} axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                        <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                        <Tooltip formatter={(v: number) => formatCurrency(v)} />
                         <Bar dataKey="value" fill="#172B4D" radius={[4, 4, 0, 0]} barSize={30} />
                     </BarChart>
                 </ResponsiveContainer>

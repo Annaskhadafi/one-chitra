@@ -46,7 +46,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
     const categoryChartData = useMemo(() => {
         const cats = Array.from(new Set(categoryStats.map(s => s.category).filter(Boolean)));
         return cats.map(cat => {
-            const row: any = { name: cat };
+            const row: Record<string, string | number> = { name: cat! };
             sortedYears.forEach(year => {
                 row[year] = categoryStats.find(s => s.category === cat && s.year === year)?.revenue || 0;
             });
@@ -58,7 +58,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
     const areaChartData = useMemo(() => {
         const areas = Array.from(new Set(areaStats.map(s => s.area).filter(Boolean)));
         return areas.map(area => {
-            const row: any = { name: area };
+            const row: Record<string, string | number> = { name: area! };
             sortedYears.forEach(year => {
                 row[year] = areaStats.find(s => s.area === area && s.year === year)?.revenue || 0;
             });
@@ -71,7 +71,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
     const monthlyChartData = useMemo(() => {
         return monthNames.map((name, idx) => {
             const monthNum = (idx + 1).toString().padStart(2, '0');
-            const row: any = { name };
+            const row: Record<string, string | number> = { name };
             sortedYears.forEach(year => {
                 row[year] = monthlyStats.find(s => s.month === monthNum && s.year === year)?.revenue || 0;
             });
@@ -99,7 +99,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
-                            <Tooltip formatter={(val: any) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
+                            <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={10} wrapperStyle={{ fontSize: '10px', paddingTop: '0px', paddingBottom: '20px' }} />
                             {sortedYears.map(year => (
                                 <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} />
@@ -120,7 +120,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748B' }} />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
-                            <Tooltip formatter={(val: any) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
+                            <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={10} wrapperStyle={{ fontSize: '10px', paddingTop: '0px', paddingBottom: '20px' }} />
                             {sortedYears.map(year => (
                                 <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} />
@@ -141,7 +141,7 @@ export function DashboardCharts({ categoryStats, areaStats, monthlyStats, years 
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748B', fontWeight: 600 }} />
                             <YAxis tickFormatter={formatRevenue} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748B' }} />
-                            <Tooltip formatter={(val: any) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
+                            <Tooltip formatter={(val: number) => formatRevenue(val)} cursor={{ fill: '#F1F5F9' }} />
                             <Legend verticalAlign="top" iconType="rect" iconSize={12} wrapperStyle={{ fontSize: '12px', paddingBottom: '30px' }} />
                             {sortedYears.map(year => (
                                 <Bar key={year} dataKey={year} fill={YEAR_COLORS[year] || "#CBD5E1"} radius={[2, 2, 0, 0]} />

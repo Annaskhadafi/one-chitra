@@ -29,6 +29,20 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 
+interface PriceCompetitor {
+    id: string | number
+    infoDate: Date | string
+    customerName: string
+    productSize: string
+    category: string
+    brand: string
+    currency: string
+    price: string
+    remark?: string | null
+    consultantName?: string | null
+    businessConsultant?: { name?: string | null } | null
+}
+
 const PRICE_COMPETITOR_FIELDS = [
     { key: "infoDate", label: "Info Date (YYYY-MM-DD)" },
     { key: "customerName", label: "Customer Name" },
@@ -55,8 +69,8 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function PriceCompetitorTab({ initialData = [] }: { initialData?: any[] }) {
-    const [data, setData] = useState<any[]>(initialData)
+export function PriceCompetitorTab({ initialData = [] }: { initialData?: PriceCompetitor[] }) {
+    const [data, setData] = useState<PriceCompetitor[]>(initialData)
     const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)

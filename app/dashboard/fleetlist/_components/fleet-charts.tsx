@@ -110,7 +110,7 @@ export function FleetCharts({ data }: FleetChartsProps) {
         }));
     }, [data]);
 
-    const totalUnits = useMemo(() => statusData.reduce((acc: number, curr: any) => acc + curr.value, 0), [statusData]);
+    const totalUnits = useMemo(() => statusData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0), [statusData]);
 
     // 3. Manufacturer Share (Treemap)
     const treemapData = useMemo(() => {
@@ -223,8 +223,9 @@ export function FleetCharts({ data }: FleetChartsProps) {
                                     width="85%"
                                 >
                                     <Label
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                         content={(props: any) => {
-                                            const { x, y, width, height, value, name, payload } = props;
+                                            const { x = 0, y = 0, width = 0, height = 0, value, name, payload } = props;
                                             if (height < 15) return null;
                                             return (
                                                 <text
@@ -237,7 +238,7 @@ export function FleetCharts({ data }: FleetChartsProps) {
                                                     style={{ fontSize: '8px', textShadow: '0px 1px 1px rgba(0,0,0,0.3)' }}
                                                 >
                                                     <tspan x={x + width / 2} dy="-0.2em">{name}</tspan>
-                                                    <tspan x={x + width / 2} dy="1em" style={{ fontSize: '7px', fontWeight: 500, opacity: 0.9 }}>{value.toLocaleString()} ({payload.percentage}%)</tspan>
+                                                    <tspan x={x + width / 2} dy="1em" style={{ fontSize: '7px', fontWeight: 500, opacity: 0.9 }}>{value != null ? value.toLocaleString() : ''} ({payload?.percentage ?? 0}%)</tspan>
                                                 </text>
                                             )
                                         }}
@@ -330,8 +331,8 @@ export function FleetCharts({ data }: FleetChartsProps) {
     )
 }
 
-function CustomTreemapContent(props: any) {
-    const { x, y, width, height, index, name, percentage } = props;
+function CustomTreemapContent(props: { x?: number; y?: number; width?: number; height?: number; index?: number; name?: string; percentage?: number }) {
+    const { x = 0, y = 0, width = 0, height = 0, index = 0, name, percentage } = props;
     const colors = [
         "hsl(217, 91%, 60%)",
         "hsl(199, 89%, 48%)",

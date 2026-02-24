@@ -7,6 +7,10 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import Papa from "papaparse"
 import { and, eq } from "drizzle-orm"
+import { type SQLiteTableWithColumns } from "drizzle-orm/sqlite-core"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type InferInsertModel<T extends SQLiteTableWithColumns<any>> = T["$inferInsert"]
 
 // --- Price Competitor ---
 
@@ -28,7 +32,7 @@ export async function getCompetitorPrices() {
     }
 }
 
-export async function createCompetitorPrice(data: Record<string, any>) {
+export async function createCompetitorPrice(data: InferInsertModel<typeof competitorPrices>) {
     console.log("Creating competitor price...", data)
     try {
         const session = await auth.api.getSession({ headers: await headers() })
@@ -41,7 +45,7 @@ export async function createCompetitorPrice(data: Record<string, any>) {
         await db.insert(competitorPrices).values({
             ...data,
             createdById: userId,
-        } as any)
+        })
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true }
     } catch (error) {
@@ -75,10 +79,10 @@ export async function createCompetitorActivity(data: Record<string, unknown>) {
         const userId = session?.user?.id
         if (!userId) return { success: false, error: "Unauthorized" }
 
-        await db.insert(competitorActivities).values({
-            ...data,
-            createdById: userId,
-        } as any)
+        await db.insert(competitorActivities).values(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            { ...(data as any), createdById: userId }
+        )
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true }
     } catch (error) {
@@ -112,10 +116,10 @@ export async function createLostSale(data: Record<string, unknown>) {
         const userId = session?.user?.id
         if (!userId) return { success: false, error: "Unauthorized" }
 
-        await db.insert(lostSales).values({
-            ...data,
-            createdById: userId,
-        } as any)
+        await db.insert(lostSales).values(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            { ...(data as any), createdById: userId }
+        )
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true }
     } catch (error) {
@@ -125,7 +129,7 @@ export async function createLostSale(data: Record<string, unknown>) {
 }
 // --- Bulk Imports ---
 
-export async function importCompetitorPrices(data: any[]) {
+export async function importCompetitorPrices(data: InferInsertModel<typeof competitorPrices>[]) {
     try {
         const session = await auth.api.getSession({ headers: await headers() })
         const userId = session?.user?.id
@@ -139,7 +143,7 @@ export async function importCompetitorPrices(data: any[]) {
             infoDate: item.infoDate ? new Date(item.infoDate) : new Date(),
         }))
 
-        await db.insert(competitorPrices).values(values as any)
+        await db.insert(competitorPrices).values(values)
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true, count: values.length }
     } catch (error) {
@@ -148,7 +152,7 @@ export async function importCompetitorPrices(data: any[]) {
     }
 }
 
-export async function importCompetitorActivities(data: any[]) {
+export async function importCompetitorActivities(data: InferInsertModel<typeof competitorActivities>[]) {
     try {
         const session = await auth.api.getSession({ headers: await headers() })
         const userId = session?.user?.id
@@ -162,7 +166,7 @@ export async function importCompetitorActivities(data: any[]) {
             infoDate: item.infoDate ? new Date(item.infoDate) : new Date(),
         }))
 
-        await db.insert(competitorActivities).values(values as any)
+        await db.insert(competitorActivities).values(values)
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true, count: values.length }
     } catch (error) {
@@ -171,7 +175,7 @@ export async function importCompetitorActivities(data: any[]) {
     }
 }
 
-export async function importLostSales(data: any[]) {
+export async function importLostSales(data: InferInsertModel<typeof lostSales>[]) {
     try {
         const session = await auth.api.getSession({ headers: await headers() })
         const userId = session?.user?.id
@@ -185,7 +189,7 @@ export async function importLostSales(data: any[]) {
             offeringDate: item.offeringDate ? new Date(item.offeringDate) : new Date(),
         }))
 
-        await db.insert(lostSales).values(values as any)
+        await db.insert(lostSales).values(values)
         revalidatePath("/dashboard/competitor-info-new")
         return { success: true, count: values.length }
     } catch (error) {
@@ -220,7 +224,7 @@ export async function syncCompetitorPricesFromApi() {
         let addedCount = 0
         let skippedCount = 0
 
-        for (const item of data as any[]) {
+        for (const item of data as { [key: string]: string | undefined }[]) {
             const customerName = item['Nama Customer'] || ''
             const productSize = item['Size Tire'] || ''
             const brand = item['Brand'] || ''
@@ -275,7 +279,7 @@ export async function syncCompetitorPricesFromApi() {
                 consultantName: bcRawName || null,
                 businessConsultantId: bc?.id || null,
                 createdById: userId,
-            } as any)
+            })
 
             addedCount++
         }

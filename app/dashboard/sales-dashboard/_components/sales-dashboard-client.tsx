@@ -7,9 +7,6 @@ import { Button } from "@/components/ui/button"
 import { PivotTable } from "./pivot-table"
 import { DashboardCharts } from "./dashboard-charts"
 import {
-    Select,
-    SelectContent,
-    SelectItem,
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select"
@@ -45,6 +42,15 @@ interface SalesDashboardClientProps {
     }
 }
 
+interface DashboardData {
+    pivotTable: { customerName: string | null; groupRevenue: string; year: string; revenue: number }[];
+    customerOrder: { customerName: string | null; totalRevenue: number }[];
+    totalCustomers: number;
+    categoryStats: { category: string | null; year: string; revenue: number }[];
+    areaStats: { area: string | null; year: string; revenue: number }[];
+    monthlyStats: { month: string; year: string; revenue: number }[];
+}
+
 export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardClientProps) {
     const [filters, setFilters] = useState({
         years: initialFilterOptions.years.slice(0, 5),
@@ -59,21 +65,22 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
         sortOrder: 'desc' as 'asc' | 'desc'
     });
 
-    const [data, setData] = useState<any>(null);
+    const [data, setData] = useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         const result = await getSalesDashboardData(filters);
-        if (result.success) {
-            setData(result.data);
+        if (result.success && result.data) {
+            setData(result.data as DashboardData);
         }
         setIsLoading(false);
     }, [filters]);
 
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        fetchData()
+    }, [fetchData])
 
     const handleReset = () => {
         setFilters({

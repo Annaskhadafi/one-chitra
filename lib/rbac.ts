@@ -39,10 +39,10 @@ export async function checkPermission(resource: string, action: 'view' | 'create
         return true
     }
 
-    const permissions = await getPermissionsByRoleName(dbUser.role)
+    const userPermissions = await getPermissionsByRoleName(dbUser.role)
     const requiredPermission = `${resource}:${action}`
 
-    if (!permissions.includes(requiredPermission)) {
+    if (!userPermissions.includes(requiredPermission)) {
         throw new Error(`Permission denied: Missing ${requiredPermission}`)
     }
 
@@ -62,7 +62,7 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
         // Fallback for scripts if no session is available via headers
         console.log("Session lookup skipped: No request context detected (running in script)");
         // In a real script, we might want to mock a session here if needed
-        return { user: { id: "QtRav31w2URDoLREkWt1DSzj3hXuFnh0" } } as any; // Admin ID from earlier check
+        return { user: { id: "QtRav31w2URDoLREkWt1DSzj3hXuFnh0" } } as { user: { id: string } }; // Admin ID from earlier check
     }
 
     if (!session?.user?.id) {
@@ -78,7 +78,7 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
 
 export async function getPermissionsByRoleName(roleName: string) {
     const role = await db.query.roles.findFirst({
-        where: (roles, { ilike }) => ilike(roles.name, roleName),
+        where: (r, { ilike }) => ilike(r.name, roleName),
     })
 
     if (!role) return []

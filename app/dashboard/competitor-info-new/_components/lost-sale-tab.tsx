@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { getLostSales, importLostSales } from "@/app/actions/competitor-new"
 import { Button } from "@/components/ui/button"
 import { Plus, Search, Loader2, Frown, DollarSign, TrendingDown, Users } from "lucide-react"
@@ -51,29 +51,41 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
-    const [data, setData] = useState<any[]>(initialData)
+interface LostSale {
+    id: string;
+    offeringDate: Date | string;
+    productType: string;
+    customerName: string;
+    productDetail: string;
+    totalOffering: string | number;
+    reason: string;
+    businessConsultant?: {
+        name: string | null;
+    } | null;
+}
+
+export function LostSaleTab({ initialData = [] }: { initialData?: LostSale[] }) {
+    const [data, setData] = useState<LostSale[]>(initialData)
     const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [startDate, setStartDate] = useState("")
     const [endDate, setEndDate] = useState("")
     const [reasonFilter, setReasonFilter] = useState("all")
-    const [typeFilter, setTypeFilter] = useState("all")
 
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission("competitor-info-new", "create")
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         if (data.length === 0) setIsLoading(true)
         const result = await getLostSales()
-        setData(result)
+        setData(result as LostSale[])
         setIsLoading(false)
-    }
+    }, [data.length])
 
     useEffect(() => {
         fetchData()
-    }, [])
+    }, [fetchData])
 
     const productTypes = useMemo(() => {
         return Array.from(new Set(data.map(item => item.productType))).sort()
@@ -90,7 +102,6 @@ export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
                 item.reason.toLowerCase().includes(searchQuery.toLowerCase())
 
             const matchesReason = reasonFilter === "all" || item.reason === reasonFilter
-            const matchesType = typeFilter === "all" || item.productType === typeFilter
 
             let matchesDate = true
             if (startDate || endDate) {
@@ -99,9 +110,9 @@ export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
                 if (endDate && itemDate > endOfDay(new Date(endDate))) matchesDate = false
             }
 
-            return matchesSearch && matchesReason && matchesType && matchesDate
+            return matchesSearch && matchesReason && matchesDate
         })
-    }, [data, searchQuery, reasonFilter, typeFilter, startDate, endDate])
+    }, [data, searchQuery, reasonFilter, startDate, endDate])
 
     const stats = useMemo(() => {
         const total = filteredData.length
@@ -110,11 +121,11 @@ export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
             return sum + (isNaN(val) ? 0 : val)
         }, 0)
 
-        const reasonCounts = filteredData.reduce((acc: any, item) => {
+        const reasonCounts = filteredData.reduce((acc: Record<string, number>, item) => {
             acc[item.reason] = (acc[item.reason] || 0) + 1
             return acc
         }, {})
-        const topReason = Object.entries(reasonCounts).sort((a: any, b: any) => b[1] - a[1])[0]?.[0] || "-"
+        const topReason = Object.entries(reasonCounts).sort((a: [string, number], b: [string, number]) => b[1] - a[1])[0]?.[0] || "-"
         const uniqueCustomers = new Set(filteredData.map(item => item.customerName)).size
 
         return { total, potentialValue, topReason, uniqueCustomers }
@@ -256,7 +267,7 @@ export function LostSaleTab({ initialData = [] }: { initialData?: any[] }) {
                                         </TableCell>
                                     </TableRow>
                                 ) : filteredData.length > 0 ? (
-                                    filteredData.map((item) => (
+                                    filteredData.map((item: LostSale) => (
                                         <TableRow key={item.id} className="hover:bg-muted/30 transition-colors group">
                                             <TableCell className="text-xs font-medium">
                                                 {format(new Date(item.offeringDate), "dd MMM yyyy")}

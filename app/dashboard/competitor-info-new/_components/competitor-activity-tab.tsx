@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { getCompetitorActivities, importCompetitorActivities } from "@/app/actions/competitor-new"
 import { Button } from "@/components/ui/button"
 import { Plus, Search, Loader2, Activity, Zap, TrendingUp, Users } from "lucide-react"
@@ -55,29 +55,46 @@ const TEMPLATE_DATA = [
     }
 ]
 
-export function CompetitorActivityTab({ initialData = [] }: { initialData?: any[] }) {
-    const [data, setData] = useState<any[]>(initialData)
+interface CompetitorActivity {
+    id: string;
+    infoDate: Date | string;
+    competitorName: string;
+    customerName: string;
+    location: string;
+    activityType: string;
+    marketResponse: string;
+    businessImpact: string;
+    description: string | null;
+    industryCategory: string;
+    businessConsultant?: {
+        name: string | null;
+    } | null;
+}
+
+export function CompetitorActivityTab({ initialData = [] }: { initialData?: CompetitorActivity[] }) {
+    const [data, setData] = useState<CompetitorActivity[]>(initialData)
     const [isLoading, setIsLoading] = useState(initialData.length === 0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [startDate, setStartDate] = useState("")
     const [endDate, setEndDate] = useState("")
     const [impactFilter, setImpactFilter] = useState("all")
-    const [responseFilter, setResponseFilter] = useState("all")
+    const [responseFilter] = useState<string>("all") // Changed as per instruction
 
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission("competitor-info-new", "create")
 
-    const fetchData = async () => {
+    // Memoize fetchData
+    const fetchData = useCallback(async () => {
         if (data.length === 0) setIsLoading(true)
-        const result = await getCompetitorActivities()
-        setData(result)
+        const result = await getCompetitorActivities() // Reverted to original function
+        setData(result as CompetitorActivity[]) // Reverted to original type
         setIsLoading(false)
-    }
+    }, [data.length])
 
     useEffect(() => {
         fetchData()
-    }, [])
+    }, [fetchData])
 
     const filteredData = useMemo(() => {
         return data.filter(item => {

@@ -71,13 +71,13 @@ export function replaceTemplateVariables(template: string, data: TemplateData): 
 }
 
 export async function getEmailTemplate(
-    type: string
+    type: "magic_link" | "notification" | "welcome" | "password_reset" | "order_confirmation" | "delivery_update" | "custom"
 ): Promise<(typeof emailTemplates.$inferSelect) | null> {
     const templates = await db
         .select()
         .from(emailTemplates)
         .where(and(
-            eq(emailTemplates.type, type as any),
+            eq(emailTemplates.type, type),
             eq(emailTemplates.isActive, true)
         ))
         .limit(1);
@@ -91,13 +91,13 @@ export async function sendEmail(
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
         const smtpConfig = config || (await getActiveSmtpConfig());
-        
+
         if (!smtpConfig) {
             return { success: false, error: "No active SMTP configuration found" };
         }
 
         const transporter = createTransporter(smtpConfig);
-        
+
         const to = Array.isArray(options.to) ? options.to.join(", ") : options.to;
 
         const info = await transporter.sendMail({
@@ -119,23 +119,23 @@ export async function sendEmail(
 
 export async function sendTemplatedEmail(
     to: string | string[],
-    templateType: string,
+    templateType: "magic_link" | "notification" | "welcome" | "password_reset" | "order_confirmation" | "delivery_update" | "custom",
     data: TemplateData,
     customSubject?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
         const template = await getEmailTemplate(templateType);
-        
+
         if (!template) {
             return { success: false, error: `Template '${templateType}' not found` };
         }
 
-        const subject = customSubject 
+        const subject = customSubject
             ? replaceTemplateVariables(customSubject, data)
             : replaceTemplateVariables(template.subject, data);
-        
+
         const html = replaceTemplateVariables(template.htmlContent, data);
-        const text = template.textContent 
+        const text = template.textContent
             ? replaceTemplateVariables(template.textContent, data)
             : undefined;
 
