@@ -23,6 +23,10 @@ export async function recordStockMovement(
         type: StockMovementType
         referenceNumber?: string
         recordedBy?: string
+        customerId?: number
+        fromWarehouseId?: number
+        toWarehouseId?: number
+        notes?: string
     }
 ) {
     try {
@@ -33,6 +37,10 @@ export async function recordStockMovement(
             type: data.type,
             referenceNumber: data.referenceNumber,
             recordedBy: data.recordedBy,
+            customerId: data.customerId,
+            fromWarehouseId: data.fromWarehouseId,
+            toWarehouseId: data.toWarehouseId,
+            notes: data.notes,
         })
         return { success: true }
     } catch (error) {
@@ -47,6 +55,9 @@ export async function getStockMovements() {
             product: true,
             warehouse: true,
             recordedByUser: true,
+            customer: true,
+            fromWarehouse: true,
+            toWarehouse: true,
         },
         orderBy: [desc(stockMovements.createdAt)],
     })

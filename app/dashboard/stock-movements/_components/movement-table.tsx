@@ -41,11 +41,26 @@ interface StockMovementWithRelations {
     quantity: number
     referenceNumber?: string | null
     warehouseId: number
+    customerId?: number | null
+    fromWarehouseId?: number | null
+    toWarehouseId?: number | null
+    notes?: string | null
     product?: {
         materialNumber: string
         materialDescription?: string | null
     } | null
     warehouse?: {
+        description?: string | null
+        sloc: string
+    } | null
+    customer?: {
+        name?: string | null
+    } | null
+    fromWarehouse?: {
+        description?: string | null
+        sloc: string
+    } | null
+    toWarehouse?: {
         description?: string | null
         sloc: string
     } | null
@@ -106,7 +121,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
             cell: ({ row }) => (
                 <div className="flex flex-col">
                     <span className="font-medium text-blue-600">{row.original.product?.materialNumber}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={row.original.product?.materialDescription}>
+                    <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={row.original.product?.materialDescription ?? undefined}>
                         {row.original.product?.materialDescription}
                     </span>
                 </div>
@@ -121,6 +136,26 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                     <span className="text-xs text-muted-foreground">{row.original.warehouse?.sloc}</span>
                 </div>
             ),
+        },
+        {
+            accessorKey: "customer.name",
+            header: "Customer",
+            cell: ({ row }) => row.original.customer?.name ?? "-",
+        },
+        {
+            id: "transfer",
+            header: "From → To",
+            cell: ({ row }) => {
+                const from = row.original.fromWarehouse
+                const to = row.original.toWarehouse
+                if (!from && !to) return "-"
+                return (
+                    <div className="flex flex-col text-xs">
+                        {from && <span className="text-orange-600">From: {from.description} ({from.sloc})</span>}
+                        {to && <span className="text-green-600">To: {to.description} ({to.sloc})</span>}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "quantity",

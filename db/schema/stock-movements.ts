@@ -3,6 +3,7 @@ import { relations } from "drizzle-orm";
 import { products } from "./products";
 import { warehouses } from "./warehouses";
 import { user } from "./auth";
+import { customers } from "./customers";
 
 export const stockMovements = pgTable("stock_movements", {
     id: serial("id").primaryKey(),
@@ -12,6 +13,11 @@ export const stockMovements = pgTable("stock_movements", {
     type: varchar("type", { length: 50 }).notNull(), // GR_SAP, GR_MANUAL, DELIVERY, TRANSFER_IN, TRANSFER_OUT, ADJUSTMENT
     referenceNumber: varchar("reference_number", { length: 100 }),
     recordedBy: text("recorded_by").references(() => user.id),
+    // Additional context fields
+    customerId: integer("customer_id"),
+    fromWarehouseId: integer("from_warehouse_id"),
+    toWarehouseId: integer("to_warehouse_id"),
+    notes: text("notes"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -27,5 +33,17 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
     recordedByUser: one(user, {
         fields: [stockMovements.recordedBy],
         references: [user.id],
+    }),
+    customer: one(customers, {
+        fields: [stockMovements.customerId],
+        references: [customers.id],
+    }),
+    fromWarehouse: one(warehouses, {
+        fields: [stockMovements.fromWarehouseId],
+        references: [warehouses.id],
+    }),
+    toWarehouse: one(warehouses, {
+        fields: [stockMovements.toWarehouseId],
+        references: [warehouses.id],
     }),
 }));

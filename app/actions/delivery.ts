@@ -270,7 +270,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 console.log("[CREATE DELIVERY] Checking for stock transfer...")
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, data.salesOrderId),
-                    columns: { categoryPo: true }
+                    columns: { categoryPo: true, customerId: true }
                 })
 
                 const hasDestination = data.warehouseToId && data.warehouseToId !== 0
@@ -296,7 +296,43 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             quantity: item.deliveredQuantity,
                         }))
                     )
-                    console.log("[CREATE DELIVERY] Stock transfer created")
+                    
+                    // Add stock to destination warehouse and record TRANSFER_IN movement
+                    for (const item of data.items) {
+                        // Add to destination warehouse stock
+                        await tx.insert(stockLevels)
+                            .values({
+                                warehouseId: data.warehouseToId as number,
+                                productId: item.productId,
+                                totalStock: item.deliveredQuantity,
+                                bookedStock: 0,
+                                draftBookedStock: 0,
+                                minStock: 0,
+                            })
+                            .onConflictDoUpdate({
+                                target: [stockLevels.warehouseId, stockLevels.productId],
+                                set: {
+                                    totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
+                                    updatedAt: new Date()
+                                },
+                            })
+
+                        // Record TRANSFER_IN movement for destination warehouse
+                        await recordStockMovement(tx, {
+                            productId: item.productId,
+                            warehouseId: data.warehouseToId as number,
+                            quantity: item.deliveredQuantity, // Positive for IN
+                            type: "TRANSFER_IN",
+                            referenceNumber: referenceNumber,
+                            recordedBy: userId,
+                            customerId: order?.customerId ?? undefined,
+                            fromWarehouseId: data.warehouseId ?? undefined,
+                            toWarehouseId: data.warehouseToId ?? undefined,
+                            notes: `Transfer IN dari ${newDelivery.deliveryNumber}`,
+                        })
+                    }
+                    
+                    console.log("[CREATE DELIVERY] Stock transfer created with TRANSFER_IN movements")
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled
@@ -319,7 +355,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                                 eq(stockLevels.productId, item.productId)
                             ))
 
-                        // Record Movement
+                        // Record Movement with customer and warehouse info
                         await recordStockMovement(tx, {
                             productId: item.productId,
                             warehouseId: data.warehouseId,
@@ -327,6 +363,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             type: movementType,
                             referenceNumber: deliveryNumber,
                             recordedBy: userId,
+                            customerId: order?.customerId ?? undefined,
+                            fromWarehouseId: hasDestination ? (data.warehouseId ?? undefined) : undefined,
+                            toWarehouseId: hasDestination ? (data.warehouseToId ?? undefined) : undefined,
+                            notes: hasDestination ? `Transfer OUT ke warehouse tujuan` : `Delivery ke customer`,
                         })
                     }
                     console.log("[CREATE DELIVERY] Stock deducted")
@@ -397,7 +437,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         quantity: item.deliveredQuantity, // Positive for Revert In
                         type: originalMovementType,
                         referenceNumber: originalDelivery.deliveryNumber ?? undefined,
-                        recordedBy: userId || undefined,
+                        recordedBy: userId ?? undefined,
                     })
                 }
             }
@@ -532,7 +572,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                             warehouseId: data.warehouseId,
                             quantity: -item.deliveredQuantity, // Negative for Out
                             type: movementType,
-                            referenceNumber: data.deliveryNumber || originalDelivery.deliveryNumber,
+                            referenceNumber: data.deliveryNumber ?? originalDelivery.deliveryNumber ?? undefined,
                             recordedBy: userId,
                         })
                     }
@@ -600,7 +640,7 @@ export async function deleteDelivery(id: number) {
                         warehouseId: delivery.warehouseId as number,
                         quantity: item.deliveredQuantity, // Positive for Revert In
                         type: movementType,
-                        referenceNumber: delivery.deliveryNumber,
+                        referenceNumber: delivery.deliveryNumber ?? undefined,
                         recordedBy: userId,
                     })
                 }
@@ -674,7 +714,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                             warehouseId: delivery.warehouseId as number,
                             quantity: item.deliveredQuantity,
                             type: movementType,
-                            referenceNumber: delivery.deliveryNumber,
+                            referenceNumber: delivery.deliveryNumber ?? undefined,
                             recordedBy: userId,
                         })
                     }
@@ -747,7 +787,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                                 warehouseId: delivery.warehouseId as number,
                                 quantity: item.deliveredQuantity,
                                 type: movementType,
-                                referenceNumber: delivery.deliveryNumber,
+                                referenceNumber: delivery.deliveryNumber ?? undefined,
                                 recordedBy: userId,
                             })
                         }
@@ -778,7 +818,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                                 warehouseId: delivery.warehouseId as number,
                                 quantity: -item.deliveredQuantity,
                                 type: movementType,
-                                referenceNumber: delivery.deliveryNumber,
+                                referenceNumber: delivery.deliveryNumber ?? undefined,
                                 recordedBy: userId,
                             })
                         }
@@ -824,7 +864,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
             return { success: true }
         })
     } catch (_error) {
-        console.error("Bulk update delivery status error:", error)
+        console.error("Bulk update delivery status error:", _error)
         return { success: false, error: "Failed to update delivery status" }
     }
 }
@@ -840,7 +880,7 @@ export async function updateDeliveryDate(id: number, date: Date | null) {
         } catch (_e) { }
         return { success: true }
     } catch (_error) {
-        console.error("Failed to update delivery date:", error)
+        console.error("Failed to update delivery date:", _error)
         return { success: false, error: "Failed to update delivery date" }
     }
 }
@@ -857,7 +897,7 @@ export async function updateDoMonitoringFields(id: number, data: {
         await checkPermission('deliveries', 'edit')
 
         // Build update object dynamically to support partial updates
-        const updateData: Partial<typeof deliveries.$inferUpdate> = {
+        const updateData: Partial<typeof deliveries.$inferInsert> = {
             updatedAt: new Date(),
         }
 
@@ -890,7 +930,7 @@ export async function updateDoMonitoringFields(id: number, data: {
         } catch (_e) { }
         return { success: true }
     } catch (_error) {
-        console.error("Failed to update DO Monitoring fields:", error)
+        console.error("Failed to update DO Monitoring fields:", _error)
         return { success: false, error: "Failed to update DO Monitoring fields" }
     }
 }

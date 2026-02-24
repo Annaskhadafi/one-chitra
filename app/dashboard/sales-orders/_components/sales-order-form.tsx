@@ -120,6 +120,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     const [categoryOpen, setCategoryOpen] = useState(false)
     const [poDocument, setPoDocument] = useState(initialData?.poDocument || "")
     const [isUploading, setIsUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState(0)
 
     useEffect(() => {
         getSalesOrderCategories().then(fetched => {
@@ -174,21 +175,40 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         if (!file) return
 
         setIsUploading(true)
+        setUploadProgress(0)
         const formData = new FormData()
         formData.append("file", file)
 
         try {
+            // Simulate progress for better UX
+            const progressInterval = setInterval(() => {
+                setUploadProgress(prev => {
+                    if (prev >= 90) {
+                        clearInterval(progressInterval)
+                        return 90
+                    }
+                    return prev + 10
+                })
+            }, 100)
+
             const result = await uploadFile(formData)
+            
+            clearInterval(progressInterval)
+            setUploadProgress(100)
+
             if (result.success && result.url) {
                 setPoDocument(result.url)
-                toast.success("PO Document uploaded successfully")
+                toast.success("PO Document berhasil diupload")
             } else {
-                toast.error(result.error || "Failed to upload document")
+                toast.error(result.error || "Gagal upload dokumen")
             }
         } catch (error) {
-            toast.error("An error occurred during upload")
+            toast.error("Terjadi kesalahan saat upload")
         } finally {
-            setIsUploading(false)
+            setTimeout(() => {
+                setIsUploading(false)
+                setUploadProgress(0)
+            }, 500)
         }
     }
 
@@ -521,7 +541,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     htmlFor="po-upload"
                                     className="flex items-center justify-center w-full px-4 py-2 border border-input rounded-md cursor-pointer bg-background hover:bg-muted font-medium text-sm transition-colors"
                                 >
-                                    {isUploading ? "Uploading..." : "Choose File"}
+                                    {isUploading ? `Uploading... ${uploadProgress}%` : "Choose File"}
                                 </Label>
                                 {poDocument && (
                                     <Button
@@ -537,7 +557,15 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Button>
                                 )}
                             </div>
-                            {poDocument && (
+                            {isUploading && (
+                                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                    <div 
+                                        className="bg-blue-600 h-2 transition-all duration-300 ease-out"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            )}
+                            {poDocument && !isUploading && (
                                 <p className="text-xs text-green-600 font-medium truncate mt-1">
                                     Document attached.
                                 </p>
