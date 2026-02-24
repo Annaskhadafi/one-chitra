@@ -442,6 +442,36 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 </div>
             </div>
 
+            {/* Validation Alert */}
+            {(!customerId || items.length === 0) && (
+                <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+                    <CardContent className="pt-6">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2">
+                                    Form Tidak Lengkap - Tidak Bisa Submit
+                                </h3>
+                                <ul className="space-y-1 text-sm text-red-800 dark:text-red-200">
+                                    {!customerId && (
+                                        <li className="flex items-center gap-2">
+                                            <XCircle className="h-4 w-4" />
+                                            <span>Customer belum dipilih - Pilih customer terlebih dahulu</span>
+                                        </li>
+                                    )}
+                                    {items.length === 0 && (
+                                        <li className="flex items-center gap-2">
+                                            <XCircle className="h-4 w-4" />
+                                            <span>Belum ada produk - Tambahkan minimal 1 produk</span>
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Quotation Header Fields */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
