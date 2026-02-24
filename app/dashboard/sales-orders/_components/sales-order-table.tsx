@@ -171,7 +171,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
             if (previousOrders) {
                 queryClient.setQueryData<SalesOrderWithRelations[]>(["sales-orders"], (old) =>
-                    old?.map(order => ids.includes(order.id) ? { ...order, status: status as any } : order)
+                    old?.map(order => ids.includes(order.id) ? { ...order, status: status as SalesOrderWithRelations['status'] } : order)
                 )
             }
 

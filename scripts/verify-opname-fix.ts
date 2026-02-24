@@ -8,9 +8,10 @@ async function verifyFix() {
         console.log("Successfully fetched sessions count:", result.length);
         console.log("Verification PASSED: getStockOpnameSessions is working correctly.");
         process.exit(0);
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const error = err as Error;
         console.error("Verification FAILED: getStockOpnameSessions still throwing error.");
-        console.error(err.message);
+        console.error(error.message);
         process.exit(1);
     }
 }

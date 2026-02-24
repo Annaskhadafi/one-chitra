@@ -24,7 +24,7 @@ interface PortalCardProps {
 export function PortalCard({ item, isAdmin, onEdit, onDelete }: PortalCardProps) {
     const mounted = useMounted()
     // Dynamically get Lucide icon
-    const IconComponent = (LucideIcons as any)[item.icon] || LucideIcons.Globe
+    const IconComponent = (LucideIcons as Record<string, React.ComponentType<{ size?: number; className?: string }>>)[item.icon] || LucideIcons.Globe
 
     return (
         <Card className="group relative overflow-hidden transition-all duration-500 hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] border-none bg-card/40 backdrop-blur-md hover:-translate-y-2 rounded-3xl">

@@ -10,9 +10,10 @@ async function checkConstraints() {
             JOIN pg_class t ON t.oid = c.conrelid 
             WHERE t.relname = 'stock_levels'
         `);
-        res.rows.forEach((r: any) => console.log(` - ${r.conname}`));
-    } catch (err: any) {
-        console.error("Error:", err.message);
+        res.rows.forEach((r: { conname: string }) => console.log(` - ${r.conname}`));
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Error:", error.message);
     } finally {
         process.exit(0);
     }

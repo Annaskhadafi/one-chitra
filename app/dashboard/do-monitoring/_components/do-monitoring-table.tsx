@@ -575,7 +575,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
             {officialPreviewDelivery && (
                 <DeliveryPdfPreview
-                    delivery={officialPreviewDelivery as any}
+                    delivery={officialPreviewDelivery as Parameters<typeof DeliveryPdfPreview>[0]['delivery']}
                     open={isOfficialPreviewOpen}
                     onClose={() => setIsOfficialPreviewOpen(false)}
                 />

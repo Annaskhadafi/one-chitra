@@ -42,8 +42,9 @@ async function checkUser() {
             }
         }
 
-    } catch (err: any) {
-        console.error("Error:", err.message);
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Error:", error.message);
     } finally {
         process.exit(0);
     }

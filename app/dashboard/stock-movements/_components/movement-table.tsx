@@ -93,7 +93,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                 const config = TYPE_CONFIG[type] || { label: type, variant: "outline", icon: Box }
                 const Icon = config.icon
                 return (
-                    <Badge variant={config.variant as any} className="flex w-fit items-center gap-1">
+                    <Badge variant={config.variant as "default" | "secondary" | "destructive" | "outline"} className="flex w-fit items-center gap-1">
                         <Icon className="h-3 w-3" />
                         {config.label}
                     </Badge>

@@ -31,11 +31,12 @@ async function fixStockLevelsSchema() {
         console.log("Unique constraint added successfully.");
 
         console.log("Stock levels schema fix completed.");
-    } catch (err: any) {
-        if (err.message.includes('already exists')) {
+    } catch (err: unknown) {
+        const error = err as Error;
+        if (error.message.includes('already exists')) {
             console.log("Constraint already exists, skipping...");
         } else {
-            console.error("Error fixing stock_levels schema:", err.message);
+            console.error("Error fixing stock_levels schema:", error.message);
         }
     } finally {
         process.exit(0);

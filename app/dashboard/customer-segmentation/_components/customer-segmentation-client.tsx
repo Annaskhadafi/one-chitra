@@ -99,7 +99,7 @@ export function CustomerSegmentationClient() {
     const [endDate, setEndDate] = useState('2025-12-31');
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [selectedFleetData, setSelectedFleetData] = useState<any[]>([]);
+    const [selectedFleetData, setSelectedFleetData] = useState<Array<{ customer: string; [key: string]: unknown }>>([]);
     const [fleetSheetOpen, setFleetSheetOpen] = useState(false);
 
     // Fetch fleet data
@@ -369,7 +369,7 @@ export function CustomerSegmentationClient() {
     ], [getMatchingFleets, handleFleetClick])
 
     const filteredData = useMemo(() => {
-        let data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
+        const data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
         // Sort by revenue (monetary) descending by default
         return data.sort((a, b) => b.monetary - a.monetary);
     }, [rfmData, filterSegment]);

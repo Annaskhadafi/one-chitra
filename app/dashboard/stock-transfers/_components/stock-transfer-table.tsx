@@ -92,7 +92,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     const queryClient = useQueryClient()
     const { data: transfers = initialData } = useQuery<Transfer[]>({
         queryKey: ["stock-transfers"],
-        queryFn: getStockTransfers as any, // Cast to any if necessary to match Transfer[]
+        queryFn: getStockTransfers as () => Promise<Transfer[]>,
         initialData: initialData,
         staleTime: 60 * 1000,
     })

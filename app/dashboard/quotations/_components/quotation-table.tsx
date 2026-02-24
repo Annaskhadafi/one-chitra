@@ -909,7 +909,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
             {previewQuotation && (
                 <QuotationPdfPreview
-                    quotation={previewQuotation as any}
+                    quotation={previewQuotation as Parameters<typeof QuotationPdfPreview>[0]['quotation']}
                     open={isPreviewOpen}
                     onClose={() => setIsPreviewOpen(false)}
                 />

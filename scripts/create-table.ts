@@ -17,9 +17,10 @@ async function createTable() {
             )
         `);
         console.log("Table created successfully (or already exists).");
-    } catch (error: any) {
+    } catch (err: unknown) {
+        const error = err as Error;
         console.error("ERROR IN CREATE TABLE:", error.message);
-        if (error.stack) console.error("STACK:", error.stack);
+        if ('stack' in error) console.error("STACK:", error.stack);
         process.exit(1);
     }
 }

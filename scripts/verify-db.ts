@@ -19,7 +19,8 @@ async function verify() {
             limit: 1
         });
         console.log("Rel Result:", relResult);
-    } catch (error: any) {
+    } catch (err: unknown) {
+        const error = err as Error & { code?: string; detail?: string; hint?: string };
         console.error("FULL ERROR NAME:", error.name);
         console.error("FULL ERROR MESSAGE:", error.message);
         if (error.code) console.error("ERROR CODE:", error.code);

@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { createSalesOrder } from '../app/actions/sales-order';
 import { db } from '../db';
-import { customers, products, warehouses } from '../db/schema';
 
 async function diagnose() {
     try {
@@ -26,7 +25,7 @@ async function diagnose() {
             customerId: customer.id,
             warehouseId: warehouse.id,
             salesDate: new Date().toISOString().split('T')[0],
-            status: "draft" as any,
+            status: "draft" as "draft" | "confirmed" | "delivered" | "cancelled",
             items: [
                 {
                     productId: product.id,
@@ -50,12 +49,13 @@ async function diagnose() {
         if (result.success) {
             console.log("SUCCESS: createSalesOrder worked.");
         } else {
-            console.error("FAILURE: createSalesOrder failed with error:", result.error);
+            console.error("FAILURE: createSalesOrder failed with error:", 'error' in result ? result.error : 'Unknown error');
         }
 
-    } catch (err: any) {
-        console.error("CRASH: diagnostic script crashed:", err.message);
-        console.error(err.stack);
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("CRASH: diagnostic script crashed:", error.message);
+        console.error(error.stack);
     } finally {
         process.exit(0);
     }

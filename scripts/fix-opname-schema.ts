@@ -27,13 +27,14 @@ async function fixSchema() {
             try {
                 await client.query(query);
                 console.log(`Executed: ${query.substring(0, 50)}...`);
-            } catch (err: any) {
-                if (err.code === '42701') {
+            } catch (err: unknown) {
+                const error = err as { code?: string; message?: string };
+                if (error.code === '42701') {
                     console.log(`Column already exists, skipping...`);
-                } else if (err.code === '42710') {
+                } else if (error.code === '42710') {
                     console.log(`Constraint already exists, skipping...`);
                 } else {
-                    console.error(`Error executing query: ${query}`, err.message);
+                    console.error(`Error executing query: ${query}`, error.message);
                 }
             }
         }

@@ -85,7 +85,7 @@ export function PortalDialog({ open, onOpenChange, item, onSuccess }: PortalDial
         e.preventDefault()
         setLoading(true)
         try {
-            const res = await upsertPortalItem(formData as any)
+            const res = await upsertPortalItem(formData as Parameters<typeof upsertPortalItem>[0])
             if (res.success) {
                 toast.success(item ? "Item updated" : "Item created")
                 onSuccess()
@@ -175,7 +175,7 @@ export function PortalDialog({ open, onOpenChange, item, onSuccess }: PortalDial
                                 </SelectTrigger>
                                 <SelectContent>
                                     {COMMON_ICONS.map(icon => {
-                                        const Icon = (LucideIcons as any)[icon]
+                                        const Icon = (LucideIcons as Record<string, React.ComponentType<{ size?: number }>>)[icon]
                                         return (
                                             <SelectItem key={icon} value={icon}>
                                                 <div className="flex items-center gap-2">
