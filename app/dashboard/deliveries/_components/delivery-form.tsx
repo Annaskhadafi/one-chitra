@@ -451,19 +451,24 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             })),
         }
 
+        console.log("🚀 Delivery Payload:", payload)
+
         const result = isEdit
             ? await updateDelivery(initialData.id, payload)
             : await createDelivery(payload)
+
+        console.log("📦 Delivery Result:", result)
 
         if (result.success) {
             toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
             router.push("/dashboard/deliveries")
         } else {
             const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
+            console.error("❌ Delivery Error:", errorMsg, result)
             toast.error(errorMsg)
         }
         setSaving(false)
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, totalInternalCost])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -955,68 +960,68 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 </Popover>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label className="flex justify-between">
-                                    <span>Destination Warehouse (To)</span>
-                                    {selectedSO?.categoryPo === "VHS/Consignment" && (
-                                        <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">VHS/Consignment</Badge>
-                                    )}
-                                </Label>
-                                <Popover open={whToOpen} onOpenChange={setWhToOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            className={cn(
-                                                "w-full justify-between",
-                                                selectedSO?.categoryPo === "VHS/Consignment" && "border-blue-200 bg-blue-50/10",
-                                                !warehouseToId && "text-muted-foreground"
-                                            )}
-                                        >
-                                            {warehouseToId
-                                                ? warehouses.find(w => w.id === warehouseToId)?.sloc +
-                                                (warehouses.find(w => w.id === warehouseToId)?.description
-                                                    ? ` - ${warehouses.find(w => w.id === warehouseToId)?.description}`
-                                                    : "")
-                                                : "Select Destination..."}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[350px] p-0" align="start">
-                                        <Command>
-                                            <CommandInput placeholder="Search destination warehouse..." />
-                                            <CommandList>
-                                                <CommandEmpty>No warehouses found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {warehouses.map(wh => (
-                                                        <CommandItem
-                                                            key={wh.id}
-                                                            value={`${wh.sloc} ${wh.description || ""}`}
-                                                            onSelect={() => {
-                                                                setWarehouseToId(wh.id)
-                                                                setWhToOpen(false)
-                                                            }}
-                                                        >
-                                                            <Check
-                                                                className={cn(
-                                                                    "mr-2 h-4 w-4",
-                                                                    warehouseToId === wh.id ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            <div className="flex flex-col">
-                                                                <span className="font-mono font-medium">{wh.sloc}</span>
-                                                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                                                    {wh.description}
-                                                                </span>
-                                                            </div>
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                            {/* Only show Destination Warehouse for VHS/Consignment */}
+                            {selectedSO?.categoryPo === "VHS/Consignment" && (
+                                <div className="space-y-2">
+                                    <Label className="flex justify-between">
+                                        <span>Destination Warehouse (To)</span>
+                                        <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">Required</Badge>
+                                    </Label>
+                                    <Popover open={whToOpen} onOpenChange={setWhToOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                className={cn(
+                                                    "w-full justify-between border-blue-200 bg-blue-50/10",
+                                                    !warehouseToId && "text-muted-foreground"
+                                                )}
+                                            >
+                                                {warehouseToId
+                                                    ? warehouses.find(w => w.id === warehouseToId)?.sloc +
+                                                    (warehouses.find(w => w.id === warehouseToId)?.description
+                                                        ? ` - ${warehouses.find(w => w.id === warehouseToId)?.description}`
+                                                        : "")
+                                                    : "Select Destination..."}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[350px] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Search destination warehouse..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No warehouses found.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {warehouses.map(wh => (
+                                                            <CommandItem
+                                                                key={wh.id}
+                                                                value={`${wh.sloc} ${wh.description || ""}`}
+                                                                onSelect={() => {
+                                                                    setWarehouseToId(wh.id)
+                                                                    setWhToOpen(false)
+                                                                }}
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4",
+                                                                        warehouseToId === wh.id ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-mono font-medium">{wh.sloc}</span>
+                                                                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                                                        {wh.description}
+                                                                    </span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label>Shipping Address</Label>
