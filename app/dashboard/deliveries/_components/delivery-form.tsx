@@ -374,25 +374,36 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Submit
     const handleSubmit = useCallback(async () => {
+        console.log("🔍 Starting validation...")
+        console.log("salesOrderId:", salesOrderId)
+        console.log("warehouseId:", warehouseId)
+        console.log("items:", items)
+        console.log("selectedSO:", selectedSO)
+        
         if (!salesOrderId) {
+            console.log("❌ Validation failed: No Sales Order")
             toast.error("Please select a Sales Order")
             return
         }
         if (!warehouseId) {
+            console.log("❌ Validation failed: No Warehouse")
             toast.error("Please select a Warehouse")
             return
         }
         if (items.length === 0) {
+            console.log("❌ Validation failed: No items")
             toast.error("No items to deliver")
             return
         }
 
         if (selectedSO?.categoryPo === "VHS/Consignment" && (!warehouseToId || warehouseToId === 0)) {
+            console.log("❌ Validation failed: VHS/Consignment needs destination warehouse")
             toast.error("Please select a Destination Warehouse for VHS/Consignment orders")
             return
         }
 
         if (isExternal && !vendorName) {
+            console.log("❌ Validation failed: External delivery needs vendor name")
             toast.error("Vendor Name is required for external delivery")
             return
         }
@@ -401,17 +412,21 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         for (const item of items) {
             if (item.productCategory === "TYRE") {
                 if (item.serialNumbers.some(sn => !sn.trim())) {
+                    console.log("❌ Validation failed: Missing serial numbers for", item.productName)
                     toast.error(`Please enter all serial numbers for ${item.productName}`)
                     return
                 }
                 // Check for duplicates within the same item
                 const uniqueSNs = new Set(item.serialNumbers)
                 if (uniqueSNs.size !== item.serialNumbers.length) {
+                    console.log("❌ Validation failed: Duplicate serial numbers for", item.productName)
                     toast.error(`Duplicate serial numbers found for ${item.productName}`)
                     return
                 }
             }
         }
+        
+        console.log("✅ All validations passed!")
 
         setSaving(true)
         const payload = {
