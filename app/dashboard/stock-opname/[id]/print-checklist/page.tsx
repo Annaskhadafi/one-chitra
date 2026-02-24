@@ -20,167 +20,166 @@ export default async function PrintChecklistPage({ params }: Props) {
     const items = session.items ?? []
     const signatures = session.signatures ?? []
 
+    const styles = `
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            
+            .print-checklist table {
+                page-break-inside: auto;
+            }
+            
+            .print-checklist tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+            
+            .print-checklist thead {
+                display: table-header-group;
+            }
+        }
+        
+        .print-checklist {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #000;
+            background: white;
+            padding: 20px;
+            max-width: 210mm;
+            margin: 0 auto;
+        }
+        
+        .print-checklist .page-header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .print-checklist .company-name {
+            font-size: 16pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .print-checklist .document-title {
+            font-size: 14pt;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0 10px 0;
+            text-transform: uppercase;
+        }
+        
+        .print-checklist .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+            font-size: 9pt;
+        }
+        
+        .print-checklist .info-item {
+            display: flex;
+        }
+        
+        .print-checklist .info-label {
+            font-weight: bold;
+            min-width: 120px;
+        }
+        
+        .print-checklist .info-value {
+            flex: 1;
+        }
+        
+        .print-checklist table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 9pt;
+        }
+        
+        .print-checklist th,
+        .print-checklist td {
+            border: 1px solid #000;
+            padding: 6px 4px;
+            text-align: left;
+        }
+        
+        .print-checklist th {
+            background-color: #e0e0e0;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .print-checklist .col-no { width: 30px; text-align: center; }
+        .print-checklist .col-material { width: 100px; }
+        .print-checklist .col-desc { width: auto; }
+        .print-checklist .col-category { width: 80px; }
+        .print-checklist .col-qty { width: 60px; text-align: right; }
+        .print-checklist .col-counted { width: 80px; }
+        .print-checklist .col-notes { width: 100px; }
+        
+        .print-checklist .text-right { text-align: right; }
+        .print-checklist .text-center { text-align: center; }
+        
+        .print-checklist .signature-section {
+            margin-top: 30px;
+            page-break-inside: avoid;
+        }
+        
+        .print-checklist .signature-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .print-checklist .signature-table td {
+            border: 1px solid transparent;
+            padding: 10px;
+            vertical-align: top;
+            width: 20%;
+        }
+        
+        .print-checklist .sig-label {
+            text-align: center;
+            font-weight: bold;
+            font-size: 9pt;
+            margin-bottom: 10px;
+        }
+        
+        .print-checklist .sig-line {
+            height: 60px;
+            border-bottom: 1px solid #000;
+            margin: 10px 0;
+        }
+        
+        .print-checklist .sig-name {
+            text-align: center;
+            font-weight: bold;
+            font-size: 9pt;
+            margin-top: 5px;
+        }
+        
+        .print-checklist .footer-note {
+            margin-top: 15px;
+            font-size: 8pt;
+            color: #666;
+            font-style: italic;
+        }
+    `
+
     return (
-        <html>
-            <head>
-                <title>Checklist Stock Opname - {session.name}</title>
-                <style dangerouslySetInnerHTML={{ __html: `
-                    @page {
-                        size: A4;
-                        margin: 15mm;
-                    }
-                    
-                    * {
-                        margin: 0;
-                        padding: 0;
-                        box-sizing: border-box;
-                    }
-                    
-                    body {
-                        font-family: Arial, sans-serif;
-                        font-size: 10pt;
-                        line-height: 1.4;
-                        color: #000;
-                    }
-                    
-                    .page-header {
-                        border-bottom: 2px solid #000;
-                        padding-bottom: 10px;
-                        margin-bottom: 15px;
-                    }
-                    
-                    .company-name {
-                        font-size: 16pt;
-                        font-weight: bold;
-                        margin-bottom: 5px;
-                    }
-                    
-                    .document-title {
-                        font-size: 14pt;
-                        font-weight: bold;
-                        text-align: center;
-                        margin: 15px 0 10px 0;
-                        text-transform: uppercase;
-                    }
-                    
-                    .info-grid {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr;
-                        gap: 8px;
-                        margin-bottom: 15px;
-                        font-size: 9pt;
-                    }
-                    
-                    .info-item {
-                        display: flex;
-                    }
-                    
-                    .info-label {
-                        font-weight: bold;
-                        min-width: 120px;
-                    }
-                    
-                    .info-value {
-                        flex: 1;
-                    }
-                    
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-bottom: 20px;
-                        font-size: 9pt;
-                    }
-                    
-                    th, td {
-                        border: 1px solid #000;
-                        padding: 6px 4px;
-                        text-align: left;
-                    }
-                    
-                    th {
-                        background-color: #e0e0e0;
-                        font-weight: bold;
-                        text-align: center;
-                    }
-                    
-                    .col-no { width: 30px; text-align: center; }
-                    .col-material { width: 100px; }
-                    .col-desc { width: auto; }
-                    .col-category { width: 80px; }
-                    .col-qty { width: 60px; text-align: right; }
-                    .col-counted { width: 80px; }
-                    .col-notes { width: 100px; }
-                    
-                    .text-right { text-align: right; }
-                    .text-center { text-align: center; }
-                    
-                    .signature-section {
-                        margin-top: 30px;
-                        page-break-inside: avoid;
-                    }
-                    
-                    .signature-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 20px;
-                    }
-                    
-                    .signature-table td {
-                        border: 1px solid transparent;
-                        padding: 10px;
-                        vertical-align: top;
-                        width: 20%;
-                    }
-                    
-                    .sig-label {
-                        text-align: center;
-                        font-weight: bold;
-                        font-size: 9pt;
-                        margin-bottom: 10px;
-                    }
-                    
-                    .sig-line {
-                        height: 60px;
-                        border-bottom: 1px solid #000;
-                        margin: 10px 0;
-                    }
-                    
-                    .sig-name {
-                        text-align: center;
-                        font-weight: bold;
-                        font-size: 9pt;
-                        margin-top: 5px;
-                    }
-                    
-                    .footer-note {
-                        margin-top: 15px;
-                        font-size: 8pt;
-                        color: #666;
-                        font-style: italic;
-                    }
-                    
-                    @media print {
-                        body {
-                            print-color-adjust: exact;
-                            -webkit-print-color-adjust: exact;
-                        }
-                        
-                        table {
-                            page-break-inside: auto;
-                        }
-                        
-                        tr {
-                            page-break-inside: avoid;
-                            page-break-after: auto;
-                        }
-                        
-                        thead {
-                            display: table-header-group;
-                        }
-                    }
-                `}} />
-            </head>
-            <body>
+        <>
+            <style dangerouslySetInnerHTML={{ __html: styles }} />
+
+            <div className="print-checklist">
                 <div className="page-header">
                     <div>
                         <div className="company-name">PT. CHITRA PARATAMA</div>
@@ -306,13 +305,13 @@ export default async function PrintChecklistPage({ params }: Props) {
                         minute: '2-digit'
                     })}
                 </div>
+            </div>
 
-                <script dangerouslySetInnerHTML={{ __html: `
-                    window.onload = function() {
-                        window.print();
-                    }
-                `}} />
-            </body>
-        </html>
+            <script dangerouslySetInnerHTML={{ __html: `
+                window.addEventListener('load', function() {
+                    window.print();
+                });
+            `}} />
+        </>
     )
 }
