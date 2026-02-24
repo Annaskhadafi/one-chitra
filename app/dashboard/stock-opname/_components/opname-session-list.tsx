@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock } from "lucide-react"
+import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
@@ -12,6 +12,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+import { deleteStockOpnameSession } from "@/app/actions/stock-opname"
 import type { StockOpnameSession } from "@/lib/types"
 
 interface OpnameSessionListProps {
@@ -39,6 +52,9 @@ const statusConfig = {
 export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
     const [search, setSearch] = useState("")
     const [filterStatus, setFilterStatus] = useState("all")
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [sessionToDelete, setSessionToDelete] = useState<number | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const filtered = sessions.filter((s) => {
         const q = search.toLowerCase()
@@ -49,6 +65,33 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
         const matchStatus = filterStatus === "all" || s.status === filterStatus
         return matchSearch && matchStatus
     })
+
+    const handleDeleteClick = (e: React.MouseEvent, sessionId: number) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setSessionToDelete(sessionId)
+        setDeleteDialogOpen(true)
+    }
+
+    const handleDeleteConfirm = async () => {
+        if (!sessionToDelete) return
+        
+        setIsDeleting(true)
+        try {
+            const result = await deleteStockOpnameSession(sessionToDelete)
+            if (result.success) {
+                toast.success("Sesi stock opname berhasil dihapus")
+                setDeleteDialogOpen(false)
+                setSessionToDelete(null)
+            } else {
+                toast.error(result.error || "Gagal menghapus sesi")
+            }
+        } catch (error) {
+            toast.error("Terjadi kesalahan saat menghapus sesi")
+        } finally {
+            setIsDeleting(false)
+        }
+    }
 
     if (sessions.length === 0) {
         return (
@@ -99,50 +142,62 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                         const progress = totalItems > 0 ? Math.round((countedItems / totalItems) * 100) : 0
 
                         return (
-                            <Link
+                            <div
                                 key={session.id}
-                                href={`/dashboard/stock-opname/${session.id}`}
                                 className="group rounded-xl border bg-card p-5 flex items-center gap-4 hover:bg-muted/30 transition-colors"
                             >
-                                <div className="flex-none w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                                    <ClipboardList className="h-5 w-5 text-muted-foreground" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <p className="font-semibold truncate">{session.name}</p>
-                                        <Badge className={`text-xs gap-1 ${cfg.className}`}>
-                                            <StatusIcon className="h-3 w-3" />
-                                            {cfg.label}
-                                        </Badge>
+                                <Link
+                                    href={`/dashboard/stock-opname/${session.id}`}
+                                    className="flex items-center gap-4 flex-1 min-w-0"
+                                >
+                                    <div className="flex-none w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                                        <ClipboardList className="h-5 w-5 text-muted-foreground" />
                                     </div>
-                                    <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
-                                        <span>Warehouse: <strong className="text-foreground">{session.warehouse?.sloc ?? "-"}</strong></span>
-                                        <span>Dibuat: <strong className="text-foreground">{new Date(session.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</strong></span>
-                                        {session.closedAt && (
-                                            <span>Ditutup: {new Date(session.closedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="font-semibold truncate">{session.name}</p>
+                                            <Badge className={`text-xs gap-1 ${cfg.className}`}>
+                                                <StatusIcon className="h-3 w-3" />
+                                                {cfg.label}
+                                            </Badge>
+                                        </div>
+                                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
+                                            <span>Warehouse: <strong className="text-foreground">{session.warehouse?.sloc ?? "-"}</strong></span>
+                                            <span>Dibuat: <strong className="text-foreground">{new Date(session.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</strong></span>
+                                            {session.closedAt && (
+                                                <span>Ditutup: {new Date(session.closedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                            )}
+                                        </div>
+                                        {totalItems > 0 && (
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
+                                                    <div
+                                                        className="h-full rounded-full bg-emerald-500 transition-all"
+                                                        style={{ width: `${progress}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {countedItems}/{totalItems} dihitung
+                                                    {variantItems > 0 && (
+                                                        <span className="text-amber-600 ml-2">
+                                                            · {variantItems} selisih
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
-                                    {totalItems > 0 && (
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
-                                                <div
-                                                    className="h-full rounded-full bg-emerald-500 transition-all"
-                                                    style={{ width: `${progress}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-xs text-muted-foreground">
-                                                {countedItems}/{totalItems} dihitung
-                                                {variantItems > 0 && (
-                                                    <span className="text-amber-600 ml-2">
-                                                        · {variantItems} selisih
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                                <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                            </Link>
+                                    <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                </Link>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="flex-none text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => handleDeleteClick(e, session.id)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
                         )
                     })
                 )}
@@ -150,6 +205,27 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
             <p className="text-xs text-muted-foreground">
                 {filtered.length} dari {sessions.length} sesi
             </p>
+
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus Sesi Stock Opname?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tindakan ini tidak dapat dibatalkan. Semua data hitungan dan item terkait akan dihapus permanen.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteConfirm}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? "Menghapus..." : "Hapus"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

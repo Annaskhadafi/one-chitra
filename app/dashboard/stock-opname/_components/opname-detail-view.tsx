@@ -55,8 +55,11 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     const [editingId, setEditingId] = useState<number | null>(null)
     const [editValue, setEditValue] = useState<string>("")
     const [editNotes, setEditNotes] = useState<string>("")
-    const [isCancelling, setIsCancelling] = useState(false)
-    const [isClosing, setIsClosing] = useState(false)
+    const [search, setSearch] = useState("")
+    const [filterStatus, setFilterStatus] = useState("all")
+    const [saving, setSaving] = useState(false)
+    const [closing, setClosing] = useState(false)
+    const [applyAdjustments, setApplyAdjustments] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
 
     async function handlePrintPdf(mode: 'checklist' | 'report' = 'report') {
@@ -80,13 +83,8 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         try {
             const uploadResult = await uploadFile(formData)
             if (uploadResult.success && uploadResult.url) {
-                const updateResult = await updateSessionDocument(session.id, uploadResult.url)
-                if (updateResult.success) {
-                    toast.success("Dokumen hasil audit berhasil diunggah")
-                    router.refresh()
-                } else {
-                    toast.error("Gagal menyimpan link dokumen")
-                }
+                toast.success("Dokumen hasil audit berhasil diunggah")
+                router.refresh()
             } else {
                 toast.error(uploadResult.error || "Gagal mengunggah file")
             }
@@ -172,16 +170,6 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         }
     }
 
-    async function handlePrintPdf() {
-        if (session.status !== "closed") {
-            toast.error("Hanya sesi yang sudah ditutup yang bisa dicetak")
-            return
-        }
-
-        // Open PDF in new window
-        window.open(`/dashboard/stock-opname/${session.id}/pdf`, '_blank')
-    }
-
     return (
         <div className="flex flex-col gap-4">
             {/* Toolbar */}
@@ -212,7 +200,11 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                 <div className="flex gap-2">
                     {/* Print Checklist Button - for open sessions */}
                     {session.status === "open" && (
-                        <Button variant="outline" size="sm" onClick={() => handlePrintPdf('checklist')}>
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => window.open(`/dashboard/stock-opname/${session.id}/print-checklist`, '_blank')}
+                        >
                             <FileText className="h-4 w-4 mr-1" />
                             Cetak Checklist
                         </Button>

@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements } from "@/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
@@ -29,6 +29,7 @@ export async function getStockOpnameSession(sessionId: number) {
             warehouse: true,
             createdBy: true,
             closedBy: true,
+            signatures: true,
             items: {
                 with: {
                     product: true,
@@ -261,6 +262,35 @@ export async function cancelStockOpnameSession(sessionId: number) {
     } catch (error) {
         console.error("Cancel opname session error:", error)
         return { success: false, error: "Gagal membatalkan sesi" }
+    }
+}
+
+// ─── Delete Session ─────────────────────────────────────────────────────────
+
+export async function deleteStockOpnameSession(sessionId: number) {
+    try {
+        await getAuthenticatedSession("stock-opname", "delete")
+
+        const opnameSession = await db.query.stockOpnameSessions.findFirst({
+            where: eq(stockOpnameSessions.id, sessionId),
+        })
+
+        if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
+
+        await db.transaction(async (tx) => {
+            // Delete related items and signatures (cascade should handle this, but explicit is safer)
+            await tx.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, sessionId))
+            await tx.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, sessionId))
+            
+            // Delete the session
+            await tx.delete(stockOpnameSessions).where(eq(stockOpnameSessions.id, sessionId))
+        })
+
+        revalidatePath("/dashboard/stock-opname")
+        return { success: true }
+    } catch (error) {
+        console.error("Delete opname session error:", error)
+        return { success: false, error: "Gagal menghapus sesi" }
     }
 }
 
