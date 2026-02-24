@@ -18,6 +18,15 @@ export const stockOpnameSessions = pgTable("stock_opname_sessions", {
     opnameTime: varchar("opname_time", { length: 10 }).notNull(), // HH:MM format
     location: varchar("location", { length: 200 }).notNull(),
     
+    // Document fields for audit documentation
+    documentUrl: varchar("document_url", { length: 500 }),
+    documentTitle: varchar("document_title", { length: 200 }),
+    documentFileName: varchar("document_file_name", { length: 200 }),
+    documentFileType: varchar("document_file_type", { length: 100 }),
+    documentFileSize: integer("document_file_size"),
+    documentUploadedAt: timestamp("document_uploaded_at"),
+    documentUploadedBy: text("document_uploaded_by").references(() => user.id),
+    
     createdById: text("created_by_id").references(() => user.id),
     closedById: text("closed_by_id").references(() => user.id),
     closedAt: timestamp("closed_at"),

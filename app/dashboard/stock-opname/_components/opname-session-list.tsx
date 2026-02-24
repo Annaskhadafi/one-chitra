@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react"
+import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2, FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { deleteStockOpnameSession } from "@/app/actions/stock-opname"
+import { StockOpnameDocumentPreview } from "./stock-opname-document-preview"
 import type { StockOpnameSession } from "@/lib/types"
 
 interface OpnameSessionListProps {
@@ -55,6 +56,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [sessionToDelete, setSessionToDelete] = useState<number | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [previewSession, setPreviewSession] = useState<StockOpnameSession | null>(null)
 
     const filtered = sessions.filter((s) => {
         const q = search.toLowerCase()
@@ -189,6 +191,21 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                     </div>
                                     <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                                 </Link>
+                                {session.documentUrl && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="flex-none text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            setPreviewSession(session)
+                                        }}
+                                        title="Dokumen Hasil Audit Lapangan (Sudah TTD)"
+                                    >
+                                        <FileText className="h-4 w-4" />
+                                    </Button>
+                                )}
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -226,6 +243,13 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            
+            {/* Document Preview */}
+            <StockOpnameDocumentPreview 
+                session={previewSession}
+                open={!!previewSession}
+                onClose={() => setPreviewSession(null)}
+            />
         </div>
     )
 }
