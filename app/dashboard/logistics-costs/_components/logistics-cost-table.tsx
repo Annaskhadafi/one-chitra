@@ -31,15 +31,34 @@ import { Download, Search } from "lucide-react"
 import { format } from "date-fns"
 import { formatCurrency } from "@/lib/utils"
 
+interface LogisticsCost {
+    id: number
+    deliveryNumber: string | null
+    deliveryDate: Date | null
+    scheduledDate: Date | null
+    driverName: string | null
+    vehicleNumber: string | null
+    vendorName: string | null
+    isExternal: boolean | null
+    shippingCost: string | null
+    costGasoline: string | null
+    costToll: string | null
+    costParking: string | null
+    costMeals: string | null
+    costMaintenance: string | null
+    costOthers: string | null
+    invoiceNumber: string | null
+}
+
 interface LogisticsCostTableProps {
-    data: any[]
+    data: LogisticsCost[]
 }
 
 export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [globalFilter, setGlobalFilter] = useState("")
 
-    const columns = useMemo<ColumnDef<any>[]>(
+    const columns = useMemo<ColumnDef<LogisticsCost>[]>(
         () => [
             {
                 accessorKey: "deliveryNumber",

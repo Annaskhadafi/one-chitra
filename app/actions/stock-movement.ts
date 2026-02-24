@@ -15,7 +15,7 @@ export type StockMovementType =
     | "ADJUSTMENT"
 
 export async function recordStockMovement(
-    tx: any, // Using any for transaction object to allow both db and tx
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
     data: {
         productId: number
         warehouseId: number

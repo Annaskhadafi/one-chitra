@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { stockTransfers, stockTransferItems, stockLevels, products, warehouses } from "@/db/schema"
-import { eq, and, desc, inArray } from "drizzle-orm"
+import { stockTransfers, stockTransferItems, stockLevels } from "@/db/schema"
+import { eq, and, desc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
@@ -294,9 +294,10 @@ export async function updateStockTransferStatus(id: number, data: {
 
             return { success: true }
         })
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Update stock transfer status error:", error)
-        return { success: false, error: error.message || "Failed to update status" }
+        const message = error instanceof Error ? error.message : "Failed to update status"
+        return { success: false, error: message }
     } finally {
         try {
             revalidatePath("/dashboard/stock-transfers")
@@ -335,9 +336,10 @@ export async function updateStockTransfer(id: number, data: {
 
         revalidatePath("/dashboard/stock-transfers")
         return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Update stock transfer error:", error)
-        return { success: false, error: error.message || "Failed to update transfer" }
+        const message = error instanceof Error ? error.message : "Failed to update transfer"
+        return { success: false, error: message }
     }
 }
 

@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
-import { eq, desc, and, sql, inArray } from "drizzle-orm"
+import { eq, desc, and, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { deliverySchema } from "@/lib/schemas"
@@ -260,7 +260,6 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     columns: { categoryPo: true }
                 })
 
-                const isVHSConsignment = order?.categoryPo === "VHS/Consignment"
                 const hasDestination = data.warehouseToId && data.warehouseToId !== 0
                 const isCancelled = data.status === "cancelled"
 
@@ -323,7 +322,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
-            } catch (e) { }
+            } catch (_e) { }
             return { success: true, id: newDelivery.id }
         })
     } catch (error) {
@@ -353,7 +352,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 where: eq(salesOrders.id, originalDelivery.salesOrderId),
                 columns: { categoryPo: true }
             })
-            const originalWasVHS = originalOrder?.categoryPo === "VHS/Consignment" && originalDelivery.warehouseToId
+            const originalWasVHS = (originalOrder?.categoryPo === "VHS" || originalOrder?.categoryPo === "CONSIGNMENT") && originalDelivery.warehouseToId
             const originalWasCommitted = originalDelivery.status !== "cancelled"
 
             if (originalWasCommitted && originalDelivery.warehouseId) {
@@ -376,7 +375,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         warehouseId: originalDelivery.warehouseId,
                         quantity: item.deliveredQuantity, // Positive for Revert In
                         type: originalMovementType,
-                        referenceNumber: originalDelivery.deliveryNumber,
+                        referenceNumber: originalDelivery.deliveryNumber ?? undefined,
                         recordedBy: userId,
                     })
                 }
@@ -428,7 +427,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     await tx.update(stockTransfers)
                         .set({
                             fromWarehouseId: data.warehouseId,
-                            toWarehouseId: data.warehouseToId,
+                            toWarehouseId: data.warehouseToId as number,
                             transferDate: new Date(data.scheduledDate),
                             updatedAt: new Date(),
                         })
@@ -445,7 +444,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     )
                 } else {
                     // Create if not exists
-                    const referenceNumber = `ST-AUTO-${data.deliveryNumber || originalDelivery.deliveryNumber}`
+                    const referenceNumber = `ST-AUTO-${data.deliveryNumber || originalDelivery.deliveryNumber || ""}`
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
                         deliveryId: id,
@@ -453,7 +452,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         toWarehouseId: data.warehouseToId as number,
                         receivedStatus: "Scheduled",
                         transferDate: new Date(data.scheduledDate),
-                        notes: `Automated transfer from delivery ${data.deliveryNumber || originalDelivery.deliveryNumber}`,
+                        notes: `Automated transfer from delivery ${data.deliveryNumber || originalDelivery.deliveryNumber || ""}`,
                     }).returning()
 
                     await tx.insert(stockTransferItems).values(
@@ -525,7 +524,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
             try {
                 revalidatePath("/dashboard/deliveries")
-            } catch (e) { }
+            } catch (_e) { }
             return { success: true }
         })
     } catch (error) {
@@ -602,7 +601,7 @@ export async function deleteDelivery(id: number) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
-            } catch (e) { }
+            } catch (_e) { }
             return { success: true }
         })
     } catch (error) {
@@ -674,7 +673,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
-            } catch (e) { }
+            } catch (_e) { }
             return { success: true }
         })
     } catch (error) {
@@ -800,10 +799,10 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
-            } catch (e) { }
+            } catch (_e) { }
             return { success: true }
         })
-    } catch (error) {
+    } catch (_error) {
         console.error("Bulk update delivery status error:", error)
         return { success: false, error: "Failed to update delivery status" }
     }
@@ -817,9 +816,9 @@ export async function updateDeliveryDate(id: number, date: Date | null) {
             .where(eq(deliveries.id, id))
         try {
             revalidatePath("/dashboard/deliveries")
-        } catch (e) { }
+        } catch (_e) { }
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         console.error("Failed to update delivery date:", error)
         return { success: false, error: "Failed to update delivery date" }
     }
@@ -837,7 +836,7 @@ export async function updateDoMonitoringFields(id: number, data: {
         await checkPermission('deliveries', 'edit')
 
         // Build update object dynamically to support partial updates
-        const updateData: any = {
+        const updateData: Partial<typeof deliveries.$inferUpdate> = {
             updatedAt: new Date(),
         }
 
@@ -867,15 +866,15 @@ export async function updateDoMonitoringFields(id: number, data: {
         try {
             revalidatePath("/dashboard/deliveries")
             revalidatePath("/dashboard/do-monitoring")
-        } catch (e) { }
+        } catch (_e) { }
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         console.error("Failed to update DO Monitoring fields:", error)
         return { success: false, error: "Failed to update DO Monitoring fields" }
     }
 }
 
-export async function checkAndCompleteSalesOrder(tx: any, salesOrderId: number) {
+export async function checkAndCompleteSalesOrder(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], salesOrderId: number) {
     // 1. Fetch SO with items
     const order = await tx.query.salesOrders.findFirst({
         where: eq(salesOrders.id, salesOrderId),
@@ -906,7 +905,7 @@ export async function checkAndCompleteSalesOrder(tx: any, salesOrderId: number) 
     }
 
     // 3. Check if all items are fully delivered
-    const isAllDelivered = order.items.every((item: any) => {
+    const isAllDelivered = order.items.every((item) => {
         const delivered = deliveredMap.get(item.id) || 0
         return delivered >= item.quantity
     })
@@ -951,7 +950,7 @@ export async function getLogisticsCosts() {
             .orderBy(desc(deliveries.createdAt))
 
         return costs
-    } catch (error) {
+    } catch (_error) {
         console.error("Failed to fetch logistics costs:", error)
         return []
     }

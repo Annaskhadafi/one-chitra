@@ -1,13 +1,11 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels, customers, user, products, deliveries, deliveryItems, stockTransfers, stockTransferItems } from "@/db/schema"
+import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers } from "@/db/schema"
 import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 
@@ -129,7 +127,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                     for (const item of data.items) {
                         if (!item.productId) continue
 
-                        const setValues: any = { updatedAt: new Date() }
+                        const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                         if (isDraft) {
                             setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
                         } else {
@@ -158,9 +156,10 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to create sales order:", error)
-        return { success: false, error: `Failed to create sales order: ${error.message || error}` }
+        const message = error instanceof Error ? error.message : String(error)
+        return { success: false, error: `Failed to create sales order: ${message}` }
     }
 }
 
@@ -184,7 +183,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 for (const item of originalOrder.items) {
                     if (!item.productId) continue
 
-                    const setValues: any = { updatedAt: new Date() }
+                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (wasDraft) {
                         setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
                     } else {
@@ -266,7 +265,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 for (const item of data.items) {
                     if (!item.productId) continue
 
-                    const setValues: any = { updatedAt: new Date() }
+                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (isDraft) {
                         setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
                     } else {
@@ -316,7 +315,7 @@ export async function deleteSalesOrder(id: number) {
                 for (const item of order.items) {
                     if (!item.productId) continue
 
-                    const setValues: any = { updatedAt: new Date() }
+                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (wasDraft) {
                         setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
                     } else {
@@ -416,7 +415,7 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
                     for (const item of order.items) {
                         if (!item.productId) continue
 
-                        const setValues: any = { updatedAt: new Date() }
+                        const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                         if (wasDraft) {
                             setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
                         } else {
@@ -487,9 +486,6 @@ export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) 
         await checkPermission('sales-orders', 'edit')
 
         return await db.transaction(async (tx) => {
-            const session = await getAuthenticatedSession('sales-orders', 'edit')
-            const userId = session.user.id
-
             for (const id of ids) {
                 const originalOrder = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, id),
