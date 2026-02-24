@@ -297,54 +297,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         }))
                     )
 
-                    // Add stock to destination warehouse and record TRANSFER_IN movement
-                    for (const item of data.items) {
-                        // Add to destination warehouse stock (manual upsert for compatibility)
-                        const existingDestStock = await tx.query.stockLevels.findFirst({
-                            where: and(
-                                eq(stockLevels.warehouseId, data.warehouseToId as number),
-                                eq(stockLevels.productId, item.productId)
-                            )
-                        })
+                    // NOTE: Stock ke destination warehouse akan ditambah saat transfer di-mark "Received"
+                    // Tidak ada perubahan stock destination di sini untuk menghindari double count.
 
-                        if (existingDestStock) {
-                            await tx.update(stockLevels)
-                                .set({
-                                    totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                                    updatedAt: new Date(),
-                                })
-                                .where(and(
-                                    eq(stockLevels.warehouseId, data.warehouseToId as number),
-                                    eq(stockLevels.productId, item.productId)
-                                ))
-                        } else {
-                            await tx.insert(stockLevels)
-                                .values({
-                                    warehouseId: data.warehouseToId as number,
-                                    productId: item.productId,
-                                    totalStock: item.deliveredQuantity,
-                                    bookedStock: 0,
-                                    draftBookedStock: 0,
-                                    minStock: 0,
-                                })
-                        }
-
-                        // Record TRANSFER_IN movement for destination warehouse
-                        await recordStockMovement(tx, {
-                            productId: item.productId,
-                            warehouseId: data.warehouseToId as number,
-                            quantity: item.deliveredQuantity, // Positive for IN
-                            type: "TRANSFER_IN",
-                            referenceNumber: referenceNumber,
-                            recordedBy: userId,
-                            customerId: order?.customerId ?? undefined,
-                            fromWarehouseId: data.warehouseId ?? undefined,
-                            toWarehouseId: data.warehouseToId ?? undefined,
-                            notes: `Transfer IN dari ${newDelivery.deliveryNumber}`,
-                        })
-                    }
-
-                    console.log("[CREATE DELIVERY] Stock transfer created with TRANSFER_IN movements")
+                    console.log("[CREATE DELIVERY] Stock transfer created (Scheduled, awaiting Received confirmation)")
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled

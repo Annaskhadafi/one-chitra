@@ -219,12 +219,14 @@ export async function updateStockTransferStatus(id: number, data: {
                 })
                 .where(eq(stockTransfers.id, id))
 
-            // If status changed to Received, move the stock
-            if (data.receivedStatus === "Received") {
-                const isAutomated = transfer.deliveryId !== null
+            const isAutomated = transfer.deliveryId !== null
+            const referenceNumber = transfer.referenceNumber as string
 
+            // === RECEIVED: Tambah stock ke destination ===
+            if (data.receivedStatus === "Received") {
                 for (const item of transfer.items) {
-                    // 1. Deduct from source (Only for manual transfers)
+                    // Deduct dari source HANYA untuk manual transfer
+                    // Automated transfer sudah deduct stock saat delivery dibuat
                     if (!isAutomated) {
                         const sourceStock = await tx.query.stockLevels.findFirst({
                             where: and(
@@ -244,18 +246,19 @@ export async function updateStockTransferStatus(id: number, data: {
                             })
                             .where(eq(stockLevels.id, sourceStock.id))
 
-                        // Record Source Movement (Out)
                         await recordStockMovement(tx, {
                             productId: item.productId,
                             warehouseId: transfer.fromWarehouseId,
                             quantity: -item.quantity,
                             type: "TRANSFER_OUT",
-                            referenceNumber: transfer.referenceNumber as string,
+                            referenceNumber,
                             recordedBy: userId,
+                            fromWarehouseId: transfer.fromWarehouseId,
+                            toWarehouseId: transfer.toWarehouseId,
                         })
                     }
 
-                    // 2. Add to destination (For BOTH manual and automated)
+                    // Tambah ke destination (untuk semua jenis transfer)
                     const destStock = await tx.query.stockLevels.findFirst({
                         where: and(
                             eq(stockLevels.warehouseId, transfer.toWarehouseId),
@@ -280,14 +283,58 @@ export async function updateStockTransferStatus(id: number, data: {
                         })
                     }
 
-                    // Record Destination Movement (In)
+                    // Catat TRANSFER_IN ke destination
                     await recordStockMovement(tx, {
                         productId: item.productId,
                         warehouseId: transfer.toWarehouseId,
                         quantity: item.quantity,
                         type: "TRANSFER_IN",
-                        referenceNumber: transfer.referenceNumber as string,
+                        referenceNumber,
                         recordedBy: userId,
+                        fromWarehouseId: transfer.fromWarehouseId,
+                        toWarehouseId: transfer.toWarehouseId,
+                    })
+                }
+            }
+
+            // === REJECTED: Kembalikan stock ke source (hanya jika dari Scheduled) ===
+            if (data.receivedStatus === "Rejected" && transfer.receivedStatus === "Scheduled") {
+                for (const item of transfer.items) {
+                    const sourceStock = await tx.query.stockLevels.findFirst({
+                        where: and(
+                            eq(stockLevels.warehouseId, transfer.fromWarehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        )
+                    })
+
+                    if (sourceStock) {
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sourceStock.totalStock + item.quantity,
+                                updatedAt: new Date()
+                            })
+                            .where(eq(stockLevels.id, sourceStock.id))
+                    } else {
+                        await tx.insert(stockLevels).values({
+                            warehouseId: transfer.fromWarehouseId,
+                            productId: item.productId,
+                            totalStock: item.quantity,
+                            minStock: 0,
+                            valuationValue: '0',
+                        })
+                    }
+
+                    // Catat ADJUSTMENT = stok kembali ke source karena ditolak
+                    await recordStockMovement(tx, {
+                        productId: item.productId,
+                        warehouseId: transfer.fromWarehouseId,
+                        quantity: item.quantity,
+                        type: "ADJUSTMENT",
+                        referenceNumber,
+                        recordedBy: userId,
+                        fromWarehouseId: transfer.fromWarehouseId,
+                        toWarehouseId: transfer.toWarehouseId,
+                        notes: `Revert stok karena transfer ${referenceNumber} ditolak`,
                     })
                 }
             }
