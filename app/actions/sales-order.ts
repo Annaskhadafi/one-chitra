@@ -122,31 +122,56 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                     })))
 
                 // Book stock if warehouse is selected
+                // Note: Sales Order can be created even without stock availability (pre-order scenario)
                 if (data.warehouseId) {
                     const isDraft = data.status === "draft"
                     for (const item of data.items) {
                         if (!item.productId) continue
 
-                        const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
-                        if (isDraft) {
-                            setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
-                        } else {
-                            setValues.bookedStock = sql`${stockLevels.bookedStock} + ${item.quantity}`
-                        }
+                        // Check if stock level record exists
+                        const existing = await tx.query.stockLevels.findFirst({
+                            where: and(
+                                eq(stockLevels.warehouseId, data.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            )
+                        })
 
-                        await tx.insert(stockLevels)
-                            .values({
-                                warehouseId: data.warehouseId,
-                                productId: item.productId,
-                                draftBookedStock: isDraft ? item.quantity : 0,
-                                bookedStock: isDraft ? 0 : item.quantity,
-                                totalStock: 0,
-                                minStock: 0,
-                            })
-                            .onConflictDoUpdate({
-                                target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: setValues,
-                            })
+                        if (existing) {
+                            // Update existing record - just book the quantity
+                            if (isDraft) {
+                                await tx.update(stockLevels)
+                                    .set({
+                                        draftBookedStock: sql`${stockLevels.draftBookedStock} + ${item.quantity}`,
+                                        updatedAt: new Date()
+                                    })
+                                    .where(and(
+                                        eq(stockLevels.warehouseId, data.warehouseId),
+                                        eq(stockLevels.productId, item.productId)
+                                    ))
+                            } else {
+                                await tx.update(stockLevels)
+                                    .set({
+                                        bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
+                                        updatedAt: new Date()
+                                    })
+                                    .where(and(
+                                        eq(stockLevels.warehouseId, data.warehouseId),
+                                        eq(stockLevels.productId, item.productId)
+                                    ))
+                            }
+                        } else {
+                            // Create new stock level record with booked quantity
+                            // This allows pre-orders even when stock doesn't exist yet
+                            await tx.insert(stockLevels)
+                                .values({
+                                    warehouseId: data.warehouseId,
+                                    productId: item.productId,
+                                    draftBookedStock: isDraft ? item.quantity : 0,
+                                    bookedStock: isDraft ? 0 : item.quantity,
+                                    totalStock: 0, // No physical stock yet
+                                    minStock: 0,
+                                })
+                        }
                     }
                 }
             }
@@ -183,19 +208,27 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 for (const item of originalOrder.items) {
                     if (!item.productId) continue
 
-                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (wasDraft) {
-                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                        await tx.update(stockLevels)
+                            .set({
+                                draftBookedStock: sql`${stockLevels.draftBookedStock} - ${item.quantity}`,
+                                updatedAt: new Date()
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, originalOrder.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
                     } else {
-                        setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                        await tx.update(stockLevels)
+                            .set({
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                                updatedAt: new Date()
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, originalOrder.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
                     }
-
-                    await tx.update(stockLevels)
-                        .set(setValues)
-                        .where(and(
-                            eq(stockLevels.warehouseId, originalOrder.warehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        ))
                 }
             }
 
@@ -265,26 +298,41 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 for (const item of data.items) {
                     if (!item.productId) continue
 
-                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (isDraft) {
-                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} + ${item.quantity}`
+                        await tx.insert(stockLevels)
+                            .values({
+                                warehouseId: data.warehouseId,
+                                productId: item.productId,
+                                draftBookedStock: item.quantity,
+                                bookedStock: 0,
+                                totalStock: 0,
+                                minStock: 0,
+                            })
+                            .onConflictDoUpdate({
+                                target: [stockLevels.warehouseId, stockLevels.productId],
+                                set: {
+                                    draftBookedStock: sql`${stockLevels.draftBookedStock} + ${item.quantity}`,
+                                    updatedAt: new Date()
+                                },
+                            })
                     } else {
-                        setValues.bookedStock = sql`${stockLevels.bookedStock} + ${item.quantity}`
+                        await tx.insert(stockLevels)
+                            .values({
+                                warehouseId: data.warehouseId,
+                                productId: item.productId,
+                                draftBookedStock: 0,
+                                bookedStock: item.quantity,
+                                totalStock: 0,
+                                minStock: 0,
+                            })
+                            .onConflictDoUpdate({
+                                target: [stockLevels.warehouseId, stockLevels.productId],
+                                set: {
+                                    bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
+                                    updatedAt: new Date()
+                                },
+                            })
                     }
-
-                    await tx.insert(stockLevels)
-                        .values({
-                            warehouseId: data.warehouseId,
-                            productId: item.productId,
-                            draftBookedStock: isDraft ? item.quantity : 0,
-                            bookedStock: isDraft ? 0 : item.quantity,
-                            totalStock: 0,
-                            minStock: 0,
-                        })
-                        .onConflictDoUpdate({
-                            target: [stockLevels.warehouseId, stockLevels.productId],
-                            set: setValues,
-                        })
                 }
             }
 
@@ -315,19 +363,27 @@ export async function deleteSalesOrder(id: number) {
                 for (const item of order.items) {
                     if (!item.productId) continue
 
-                    const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                     if (wasDraft) {
-                        setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                        await tx.update(stockLevels)
+                            .set({
+                                draftBookedStock: sql`${stockLevels.draftBookedStock} - ${item.quantity}`,
+                                updatedAt: new Date()
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, order.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
                     } else {
-                        setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                        await tx.update(stockLevels)
+                            .set({
+                                bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                                updatedAt: new Date()
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, order.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
                     }
-
-                    await tx.update(stockLevels)
-                        .set(setValues)
-                        .where(and(
-                            eq(stockLevels.warehouseId, order.warehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        ))
                 }
             }
 
@@ -415,19 +471,27 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
                     for (const item of order.items) {
                         if (!item.productId) continue
 
-                        const setValues: Partial<typeof stockLevels.$inferInsert> = { updatedAt: new Date() }
                         if (wasDraft) {
-                            setValues.draftBookedStock = sql`${stockLevels.draftBookedStock} - ${item.quantity}`
+                            await tx.update(stockLevels)
+                                .set({
+                                    draftBookedStock: sql`${stockLevels.draftBookedStock} - ${item.quantity}`,
+                                    updatedAt: new Date()
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, order.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
                         } else {
-                            setValues.bookedStock = sql`${stockLevels.bookedStock} - ${item.quantity}`
+                            await tx.update(stockLevels)
+                                .set({
+                                    bookedStock: sql`${stockLevels.bookedStock} - ${item.quantity}`,
+                                    updatedAt: new Date()
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, order.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
                         }
-
-                        await tx.update(stockLevels)
-                            .set(setValues)
-                            .where(and(
-                                eq(stockLevels.warehouseId, order.warehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            ))
                     }
                 }
 
