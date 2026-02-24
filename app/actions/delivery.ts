@@ -351,8 +351,6 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
         return { success: false, error: "Failed to create delivery: " + (error instanceof Error ? error.message : "Unknown error") }
     }
 }
-    }
-}
 
 export async function updateDelivery(id: number, data: z.infer<typeof deliverySchema>) {
     try {
