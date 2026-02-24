@@ -5,7 +5,8 @@ import { join, resolve } from "path"
 import { v4 as uuidv4 } from "uuid"
 
 // Resolve the upload directory:
-// - In production (Dokploy), set UPLOAD_DIR=/app/uploads and mount volume at /app/uploads
+// - In production (Dokploy), set UPLOAD_DIR=/app/.next/standalone/public/uploads
+//   and mount volume: /mnt/data/one-chitra/uploads -> /app/.next/standalone/public/uploads
 // - In development (no UPLOAD_DIR set), falls back to <project>/public/uploads
 function getUploadDir(): string {
     if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR

@@ -48,6 +48,7 @@ export function EditDoDialog({
     const [remark, setRemark] = useState(delivery?.remark || "")
     const [scanDoDocument, setScanDoDocument] = useState(delivery?.scanDoDocument || "")
     const [isUploading, setIsUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState(0)
     const [saving, setSaving] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const queryClient = useQueryClient()
@@ -96,21 +97,43 @@ export function EditDoDialog({
         }
 
         setIsUploading(true)
+        setUploadProgress(0)
         const formData = new FormData()
         formData.append('file', file)
 
         try {
+            // Start progress animation
+            const progressInterval = setInterval(() => {
+                setUploadProgress(prev => {
+                    if (prev >= 85) {
+                        clearInterval(progressInterval)
+                        return 85 // Stop at 85% until actual upload completes
+                    }
+                    return prev + 15
+                })
+            }, 150)
+
             const result = await uploadFile(formData)
+            
+            // Clear interval and complete progress
+            clearInterval(progressInterval)
+
             if (result.success && result.url) {
+                setUploadProgress(100)
                 setScanDoDocument(result.url)
-                toast.success("Document uploaded successfully")
+                toast.success("Document berhasil diupload")
             } else {
-                toast.error(result.error || "Failed to upload document")
+                setUploadProgress(0)
+                toast.error(result.error || "Gagal upload dokumen")
             }
         } catch (_error) {
-            toast.error("An error occurred during upload")
+            setUploadProgress(0)
+            toast.error("Terjadi kesalahan saat upload")
         } finally {
-            setIsUploading(false)
+            setTimeout(() => {
+                setIsUploading(false)
+                setUploadProgress(0)
+            }, 1000) // Give user time to see 100%
         }
     }
 
@@ -194,10 +217,18 @@ export function EditDoDialog({
                                     ) : (
                                         <Upload className="h-4 w-4" />
                                     )}
-                                    {isUploading ? "Uploading..." : "Upload Scan DO"}
+                                    {isUploading ? `Uploading... ${uploadProgress}%` : "Upload Scan DO"}
                                 </Label>
                             </div>
-                            {scanDoDocument && (
+                            {isUploading && (
+                                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                    <div 
+                                        className="bg-blue-600 h-2 transition-all duration-300 ease-out"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            )}
+                            {scanDoDocument && !isUploading && (
                                 <div className="flex items-center justify-between p-2 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 text-sm">
                                     <div className="flex items-center gap-2 truncate text-blue-700 dark:text-blue-300">
                                         <FileText className="h-4 w-4 flex-shrink-0" />

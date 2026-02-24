@@ -180,35 +180,38 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         formData.append("file", file)
 
         try {
-            // Simulate progress for better UX
+            // Start progress animation
             const progressInterval = setInterval(() => {
                 setUploadProgress(prev => {
-                    if (prev >= 90) {
+                    if (prev >= 85) {
                         clearInterval(progressInterval)
-                        return 90
+                        return 85 // Stop at 85% until actual upload completes
                     }
-                    return prev + 10
+                    return prev + 15
                 })
-            }, 100)
+            }, 150)
 
             const result = await uploadFile(formData)
             
+            // Clear interval and complete progress
             clearInterval(progressInterval)
-            setUploadProgress(100)
 
             if (result.success && result.url) {
+                setUploadProgress(100)
                 setPoDocument(result.url)
                 toast.success("PO Document berhasil diupload")
             } else {
+                setUploadProgress(0)
                 toast.error(result.error || "Gagal upload dokumen")
             }
         } catch (error) {
+            setUploadProgress(0)
             toast.error("Terjadi kesalahan saat upload")
         } finally {
             setTimeout(() => {
                 setIsUploading(false)
                 setUploadProgress(0)
-            }, 500)
+            }, 1000) // Give user time to see 100%
         }
     }
 
