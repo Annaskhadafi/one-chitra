@@ -13,6 +13,7 @@ Fitur ini menambahkan kolom Fleet List di halaman Customer Segmentation yang mel
 ### 2. Fleet Detail Sheet
 Ketika tombol Fleet List diklik, akan muncul sheet yang menampilkan:
 - **Filter Status**: Dropdown untuk memfilter fleet berdasarkan status (default: Active)
+- **Filter Site**: Dropdown untuk memfilter fleet berdasarkan site tertentu
 - **Filter Tire Size**: Dropdown untuk memfilter fleet berdasarkan tire size tertentu
 - **Statistics Cards**: Total Units, Total Tires, Forecast, dan Sites (dinamis berdasarkan filter)
 - **Fleet List Table**: Daftar fleet dengan informasi:
@@ -41,7 +42,7 @@ Di dalam Fleet Detail Sheet, setiap fleet item akan menampilkan:
   - Material Description
   - Material Number
   - Total Stock (dari semua warehouse)
-  - Match Score (persentase kecocokan)
+  - Match Score (persentase kecocokan) - hanya menampilkan yang > 60%
   - Detail per warehouse (dalam collapsible)
 
 ## Teknologi yang Digunakan
@@ -129,7 +130,7 @@ const fuse = new Fuse(stockData, {
 - **Normalisasi otomatis**: Mengenali berbagai format (dengan/tanpa spasi)
 - **Multiple variations**: Mencoba semua variasi format untuk hasil maksimal
 - Mengambil hasil terbaik dari semua variasi
-- Filter hasil dengan score < 0.6
+- **Filter dengan score < 0.4** (match > 60%) untuk hasil yang lebih akurat
 - Menampilkan top 5 hasil terurut berdasarkan match score
 
 ## Fitur Terbaru
@@ -147,10 +148,16 @@ const fuse = new Fuse(stockData, {
 
 ### 3. Filter Tire Size
 - Dropdown filter untuk memfilter fleet berdasarkan tire size tertentu
-- Bisa dikombinasikan dengan filter Status
+- Bisa dikombinasikan dengan filter Status dan Site
 - Statistics cards update otomatis sesuai kombinasi filter
 
-### 4. Grouped Stock Display dengan Collapsible Warehouse Details
+### 4. Filter Site
+- Dropdown filter untuk memfilter fleet berdasarkan site tertentu
+- Menampilkan semua unique sites dari fleet data
+- Bisa dikombinasikan dengan filter Status dan Tire Size
+- Statistics cards update otomatis sesuai kombinasi filter
+
+### 5. Grouped Stock Display dengan Collapsible Warehouse Details
 - Stock items sekarang di-grouping berdasarkan product (tidak ada duplikasi product)
 - Menampilkan total stock dari semua warehouse
 - Collapsible component untuk melihat detail stock per warehouse:
@@ -178,7 +185,12 @@ const fuse = new Fuse(stockData, {
 - User mendapat feedback visual bahwa data sedang dimuat
 - Mencegah kebingungan saat data belum muncul
 
-### 6. Improved Customer Name Normalization
+### 6. Loading Progress Bar
+- Menampilkan loading progress bar saat memuat data warehouse
+- User mendapat feedback visual bahwa data sedang dimuat
+- Mencegah kebingungan saat data belum muncul
+
+### 7. Improved Customer Name Normalization
 - Normalisasi otomatis menghapus prefix PT/CV/TBK
 - Menghapus punctuation dan normalize spasi
 - Matching lebih akurat untuk nama perusahaan dengan format berbeda
@@ -201,7 +213,9 @@ const fuse = new Fuse(stockData, {
 5. Klik tombol "View X Fleet(s)" untuk customer yang memiliki fleet data
 6. Sheet akan terbuka menampilkan:
    - Filter Status (default: Active) - ubah ke "All Status" untuk melihat semua
-   - Filter Tire Size (opsional) untuk memfilter fleet berdasarkan tire size
+   - Filter Site - pilih site tertentu atau "All Sites" untuk melihat semua
+   - Filter Tire Size - pilih tire size tertentu atau "All Tire Sizes" untuk melihat semua
+   - Semua filter bisa dikombinasikan untuk hasil yang lebih spesifik
    - Detail fleet dan matching stock items (grouped by product)
    - Klik pada stock item untuk expand dan melihat detail per warehouse
 7. Sistem otomatis mencocokkan tire size dengan stock, mendukung berbagai format

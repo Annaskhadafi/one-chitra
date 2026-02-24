@@ -72,6 +72,7 @@ interface GroupedStock {
 export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailSheetProps) {
     const [selectedTireSize, setSelectedTireSize] = React.useState<string>("all")
     const [selectedStatus, setSelectedStatus] = React.useState<string>("Active")
+    const [selectedSite, setSelectedSite] = React.useState<string>("all")
 
     const { data: stockData = [], isLoading: isLoadingStock } = useQuery({
         queryKey: ["stocks"],
@@ -139,7 +140,7 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
         })
 
         return Array.from(allMatches.values())
-            .filter(item => item.matchScore < 0.6)
+            .filter(item => item.matchScore < 0.4) // Score < 0.4 = match > 60%
             .sort((a, b) => (a.matchScore || 0) - (b.matchScore || 0))
     }
 
@@ -181,7 +182,13 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
         return Array.from(statuses).sort()
     }, [fleetData])
 
-    // Filter fleet data berdasarkan tire size dan status yang dipilih
+    // Get unique sites untuk filter
+    const uniqueSites = React.useMemo(() => {
+        const sites = new Set(fleetData.map(item => item.site).filter(Boolean))
+        return Array.from(sites).sort()
+    }, [fleetData])
+
+    // Filter fleet data berdasarkan tire size, status, dan site yang dipilih
     const filteredFleetData = React.useMemo(() => {
         let filtered = fleetData
         
@@ -190,13 +197,18 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
             filtered = filtered.filter(item => item.status === selectedStatus)
         }
         
+        // Filter by site
+        if (selectedSite !== "all") {
+            filtered = filtered.filter(item => item.site === selectedSite)
+        }
+        
         // Filter by tire size
         if (selectedTireSize !== "all") {
             filtered = filtered.filter(item => item.tire_size === selectedTireSize)
         }
         
         return filtered
-    }, [fleetData, selectedTireSize, selectedStatus])
+    }, [fleetData, selectedTireSize, selectedStatus, selectedSite])
 
     const stats = useMemo(() => {
         const totalUnits = filteredFleetData.reduce((acc, item) => acc + (parseInt(item.unit_qty) || 0), 0)
@@ -224,50 +236,76 @@ export function FleetDetailSheet({ open, onOpenChange, fleetData }: FleetDetailS
                 ) : (
                 <div className="mt-6 space-y-6">
                     {/* Filters */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 bg-muted/50 rounded-lg border">
-                        <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        
-                        {/* Status Filter */}
-                        <div className="flex items-center gap-2 flex-1">
-                            <span className="text-sm font-medium whitespace-nowrap">Status:</span>
-                            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                                <SelectTrigger className="w-[150px]">
-                                    <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    {uniqueStatuses.map((status) => (
-                                        <SelectItem key={status} value={status}>
-                                            {status}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    <div className="flex flex-col gap-3 p-4 bg-muted/50 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-semibold">Filters:</span>
                         </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {/* Status Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Status</SelectItem>
+                                        {uniqueStatuses.map((status) => (
+                                            <SelectItem key={status} value={status}>
+                                                {status}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        {/* Tire Size Filter */}
-                        <div className="flex items-center gap-2 flex-1">
-                            <span className="text-sm font-medium whitespace-nowrap">Tire Size:</span>
-                            <Select value={selectedTireSize} onValueChange={setSelectedTireSize}>
-                                <SelectTrigger className="w-[150px]">
-                                    <SelectValue placeholder="Select tire size" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Tire Sizes</SelectItem>
-                                    {uniqueTireSizes.map((size) => (
-                                        <SelectItem key={size} value={size}>
-                                            {size}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {/* Site Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Site</label>
+                                <Select value={selectedSite} onValueChange={setSelectedSite}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select site" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Sites</SelectItem>
+                                        {uniqueSites.map((site) => (
+                                            <SelectItem key={site} value={site}>
+                                                {site}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Tire Size Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Tire Size</label>
+                                <Select value={selectedTireSize} onValueChange={setSelectedTireSize}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select tire size" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Tire Sizes</SelectItem>
+                                        {uniqueTireSizes.map((size) => (
+                                            <SelectItem key={size} value={size}>
+                                                {size}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                         {/* Active Filters Badge */}
-                        {(selectedStatus !== "all" || selectedTireSize !== "all") && (
-                            <Badge variant="secondary" className="ml-auto">
-                                {filteredFleetData.length} fleet(s)
-                            </Badge>
+                        {(selectedStatus !== "all" || selectedTireSize !== "all" || selectedSite !== "all") && (
+                            <div className="flex items-center gap-2 pt-2 border-t">
+                                <span className="text-xs text-muted-foreground">Showing:</span>
+                                <Badge variant="secondary">
+                                    {filteredFleetData.length} fleet(s)
+                                </Badge>
+                            </div>
                         )}
                     </div>
 
