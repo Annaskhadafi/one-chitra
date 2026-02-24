@@ -102,7 +102,6 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         queryKey: ["sales-orders"],
         queryFn: getSalesOrders,
         initialData,
-        staleTime: 60 * 1000,
     })
 
     const { hasResourcePermission } = usePermissions()

@@ -33,7 +33,31 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
     // Filter logic
     const filteredConfig = navigationConfig.map(section => ({
         ...section,
-        items: section.items.filter(item => hasResourcePermission(item.resource, 'view'))
+        items: section.items.map(item => {
+            // If item has sub-items, filter them
+            if (item.items && item.items.length > 0) {
+                const filteredSubItems = item.items.filter(subItem =>
+                    hasResourcePermission(subItem.resource, 'view')
+                )
+                return {
+                    ...item,
+                    items: filteredSubItems
+                }
+            }
+            // Regular item
+            return item
+        }).filter(item => {
+            // Keep item if:
+            // 1. It has sub-items and at least one is accessible
+            // 2. It has NO sub-items and is itself accessible
+            if (item.items && item.items.length > 0) {
+                return true
+            }
+            if (item.items && item.items.length === 0) {
+                return false // Parent with no accessible children
+            }
+            return hasResourcePermission(item.resource, 'view')
+        })
     })).filter(section => section.items.length > 0)
 
     // Fallback user if not provided (though layout should provide it)

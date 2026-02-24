@@ -94,7 +94,6 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
         queryKey: ["stock-transfers"],
         queryFn: getStockTransfers as () => Promise<Transfer[]>,
         initialData: initialData,
-        staleTime: 60 * 1000,
     })
 
     // Mutations

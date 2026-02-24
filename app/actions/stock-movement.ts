@@ -62,3 +62,27 @@ export async function getStockMovements() {
         orderBy: [desc(stockMovements.createdAt)],
     })
 }
+
+export async function clearStockMovements() {
+    try {
+        const session = await getAuthenticatedSession()
+        const dbUser = await db.query.user.findFirst({
+            where: (u, { eq }) => eq(u.id, session.user.id),
+        })
+
+        if (!dbUser || (dbUser.role.toLowerCase() !== "admin" && dbUser.role.toLowerCase() !== "superuser")) {
+            throw new Error("Only Admin can clear logs")
+        }
+
+        await db.delete(stockMovements)
+
+        revalidatePath("/dashboard/stock-movements")
+        revalidatePath("/dashboard/inventory")
+
+        return { success: true }
+    } catch (error) {
+        console.error("Error clearing stock movements:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to clear movements" }
+    }
+}
+

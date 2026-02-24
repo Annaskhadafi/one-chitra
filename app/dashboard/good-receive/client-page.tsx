@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2, Search, Warehouse, Package, ArrowRight, ChevronUp, ChevronDown, CalendarDays, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
@@ -58,6 +59,7 @@ interface GoodReceiveClientProps {
 }
 
 export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps) {
+    const router = useRouter()
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [rawData, setRawData] = useState<SAPGoodReceiveItem[]>([])
@@ -126,6 +128,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                 if (result.errors) {
                     toast.warning(`Some items had errors: ${result.errors.length}`)
                 }
+                router.refresh()
                 setRowSelection({})
             } else {
                 toast.error(result.error || "Failed to process items")

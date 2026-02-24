@@ -985,3 +985,35 @@ export async function getLogisticsCosts() {
         return []
     }
 }
+
+export async function clearLogisticsCosts() {
+    try {
+        const session = await getAuthenticatedSession()
+        const dbUser = await db.query.user.findFirst({
+            where: (u, { eq }) => eq(u.id, session.user.id),
+        })
+
+        if (!dbUser || (dbUser.role.toLowerCase() !== "admin" && dbUser.role.toLowerCase() !== "superuser")) {
+            throw new Error("Only Admin can clear logs")
+        }
+
+        await db.update(deliveries)
+            .set({
+                shippingCost: "0",
+                costGasoline: "0",
+                costToll: "0",
+                costParking: "0",
+                costMeals: "0",
+                costMaintenance: "0",
+                costOthers: "0",
+            })
+            .where(isNotNull(deliveries.deliveryNumber))
+
+        revalidatePath("/dashboard/logistics-costs")
+        return { success: true }
+    } catch (error) {
+        console.error("Error clearing logistics costs:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to clear costs" }
+    }
+}
+

@@ -2,9 +2,12 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef, useEffect } from "react"
-import { Search, History, ChevronUp, ChevronDown, ListFilter, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft } from "lucide-react"
+import { Search, History, ChevronUp, ChevronDown, ListFilter, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { usePermissions } from "@/hooks/use-permissions"
+import { clearStockMovements } from "@/app/actions/stock-movement"
+import { toast } from "sonner"
 import {
     Table,
     TableBody,
@@ -88,6 +91,21 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [filterType, setFilterType] = useState("all")
     const [filterWarehouse, setFilterWarehouse] = useState("all")
+    const { permissions } = usePermissions()
+    const isAdmin = permissions.includes("admin") || permissions.includes("superuser") || permissions.includes("admin:view")
+
+    const handleClearLogs = async () => {
+        if (!confirm("Apakah Anda yakin ingin menghapus SELURUH log pergerakan stok? Aksi ini tidak dapat dibatalkan.")) {
+            return
+        }
+
+        const result = await clearStockMovements()
+        if (result.success) {
+            toast.success("Log pergerakan stok berhasil dibersihkan")
+        } else {
+            toast.error(result.error || "Gagal membersihkan log")
+        }
+    }
 
     const columns = useMemo<ColumnDef<StockMovementWithRelations>[]>(() => [
         {
@@ -287,6 +305,17 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                 }}>
                     Reset Filters
                 </Button>
+
+                {isAdmin && (
+                    <Button
+                        variant="destructive"
+                        onClick={handleClearLogs}
+                        className="flex items-center gap-2"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Clear All Logs
+                    </Button>
+                )}
             </div>
 
             <div className="rounded-md border bg-card overflow-hidden">

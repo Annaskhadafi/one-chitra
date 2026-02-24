@@ -190,7 +190,7 @@ export async function checkTransferStockAvailability(warehouseId: number, items:
 }
 
 export async function updateStockTransferStatus(id: number, data: {
-    receivedStatus: "Scheduled" | "Received" | "Rejected";
+    receivedStatus?: "Scheduled" | "Received" | "Rejected";
     postingDocumentNo?: string;
     batchNo?: string;
     notes?: string;
@@ -206,15 +206,23 @@ export async function updateStockTransferStatus(id: number, data: {
             })
 
             if (!transfer) throw new Error("Transfer not found")
-            if (transfer.receivedStatus === "Received") throw new Error("Transfer already received")
 
+            const oldStatus = transfer.receivedStatus
+            const newStatus = data.receivedStatus ?? oldStatus
+
+            // Safeguard: Once Received, cannot go back
+            if (oldStatus === "Received" && newStatus !== "Received") {
+                throw new Error("Cannot change status once Received")
+            }
+
+            // Update internal fields and status
             await tx.update(stockTransfers)
                 .set({
-                    receivedStatus: data.receivedStatus,
-                    postingDocumentNo: data.postingDocumentNo,
-                    batchNo: data.batchNo,
-                    notes: data.notes || transfer.notes,
-                    status: data.receivedStatus === "Received" ? "completed" : transfer.status,
+                    receivedStatus: newStatus,
+                    postingDocumentNo: data.postingDocumentNo ?? transfer.postingDocumentNo,
+                    batchNo: data.batchNo ?? transfer.batchNo,
+                    notes: data.notes ?? transfer.notes,
+                    status: newStatus === "Received" ? "completed" : transfer.status,
                     updatedAt: new Date(),
                 })
                 .where(eq(stockTransfers.id, id))
@@ -222,11 +230,10 @@ export async function updateStockTransferStatus(id: number, data: {
             const isAutomated = transfer.deliveryId !== null
             const referenceNumber = transfer.referenceNumber as string
 
-            // === RECEIVED: Tambah stock ke destination ===
-            if (data.receivedStatus === "Received") {
+            // === RECEIVED: Transition to Received ===
+            if (oldStatus !== "Received" && newStatus === "Received") {
                 for (const item of transfer.items) {
-                    // Deduct dari source HANYA untuk manual transfer
-                    // Automated transfer sudah deduct stock saat delivery dibuat
+                    // 1. Deduct from source ONLY if manual
                     if (!isAutomated) {
                         const sourceStock = await tx.query.stockLevels.findFirst({
                             where: and(
@@ -246,6 +253,7 @@ export async function updateStockTransferStatus(id: number, data: {
                             })
                             .where(eq(stockLevels.id, sourceStock.id))
 
+                        // Record TRANSFER_OUT
                         await recordStockMovement(tx, {
                             productId: item.productId,
                             warehouseId: transfer.fromWarehouseId,
@@ -258,7 +266,7 @@ export async function updateStockTransferStatus(id: number, data: {
                         })
                     }
 
-                    // Tambah ke destination (untuk semua jenis transfer)
+                    // 2. Add to destination
                     const destStock = await tx.query.stockLevels.findFirst({
                         where: and(
                             eq(stockLevels.warehouseId, transfer.toWarehouseId),
@@ -283,7 +291,7 @@ export async function updateStockTransferStatus(id: number, data: {
                         })
                     }
 
-                    // Catat TRANSFER_IN ke destination
+                    // 3. Record TRANSFER_IN
                     await recordStockMovement(tx, {
                         productId: item.productId,
                         warehouseId: transfer.toWarehouseId,
@@ -297,8 +305,8 @@ export async function updateStockTransferStatus(id: number, data: {
                 }
             }
 
-            // === REJECTED: Kembalikan stock ke source (hanya jika dari Scheduled) ===
-            if (data.receivedStatus === "Rejected" && transfer.receivedStatus === "Scheduled") {
+            // === REJECTED: Transition to Rejected (only from Scheduled) ===
+            if (oldStatus === "Scheduled" && newStatus === "Rejected") {
                 for (const item of transfer.items) {
                     const sourceStock = await tx.query.stockLevels.findFirst({
                         where: and(
@@ -324,7 +332,7 @@ export async function updateStockTransferStatus(id: number, data: {
                         })
                     }
 
-                    // Catat ADJUSTMENT = stok kembali ke source karena ditolak
+                    // Record ADJUSTMENT
                     await recordStockMovement(tx, {
                         productId: item.productId,
                         warehouseId: transfer.fromWarehouseId,
@@ -342,8 +350,8 @@ export async function updateStockTransferStatus(id: number, data: {
             return { success: true }
         })
     } catch (error: unknown) {
-        console.error("Update stock transfer status error:", error)
-        const message = error instanceof Error ? error.message : "Failed to update status"
+        console.error("Update stock transfer error:", error)
+        const message = error instanceof Error ? error.message : "Failed to update transfer"
         return { success: false, error: message }
     } finally {
         try {
@@ -353,42 +361,16 @@ export async function updateStockTransferStatus(id: number, data: {
     }
 }
 
+
 export async function updateStockTransfer(id: number, data: {
     postingDocumentNo?: string;
     batchNo?: string;
     notes?: string;
     receivedStatus?: "Scheduled" | "Received" | "Rejected";
 }) {
-    try {
-        await getAuthenticatedSession('stock-transfers', 'edit')
-
-        const transfer = await db.query.stockTransfers.findFirst({
-            where: eq(stockTransfers.id, id),
-        })
-
-        if (!transfer) {
-            return { success: false, error: "Transfer not found" }
-        }
-
-        // Allow manual status change without automatic stock movement
-        await db.update(stockTransfers)
-            .set({
-                postingDocumentNo: data.postingDocumentNo ?? transfer.postingDocumentNo,
-                batchNo: data.batchNo ?? transfer.batchNo,
-                notes: data.notes ?? transfer.notes,
-                receivedStatus: data.receivedStatus ?? transfer.receivedStatus,
-                updatedAt: new Date(),
-            })
-            .where(eq(stockTransfers.id, id))
-
-        revalidatePath("/dashboard/stock-transfers")
-        return { success: true }
-    } catch (error: unknown) {
-        console.error("Update stock transfer error:", error)
-        const message = error instanceof Error ? error.message : "Failed to update transfer"
-        return { success: false, error: message }
-    }
+    return await updateStockTransferStatus(id, data)
 }
+
 
 export async function getStockTransferStats() {
     const transfers = await db.query.stockTransfers.findMany()

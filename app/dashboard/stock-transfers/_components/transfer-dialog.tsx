@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -52,6 +53,7 @@ interface TransferDialogProps {
 }
 
 export function TransferDialog({ warehouses, products }: TransferDialogProps) {
+    const router = useRouter()
     const [open, setOpen] = useState(false)
 
     const form = useForm({
@@ -79,6 +81,7 @@ export function TransferDialog({ warehouses, products }: TransferDialogProps) {
 
             if (result.success) {
                 toast.success("Stock transferred successfully")
+                router.refresh()
                 setOpen(false)
                 form.reset()
             } else if (!result.success && 'error' in result) {

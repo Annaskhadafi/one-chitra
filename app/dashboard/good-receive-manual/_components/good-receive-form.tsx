@@ -98,6 +98,7 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
             const result = await createGoodReceiveManual(values)
             if (result.success) {
                 toast.success("Good receive created successfully")
+                router.refresh()
                 router.push("/dashboard/good-receive-manual")
             } else {
                 toast.error(result.error || "Failed to create good receive")

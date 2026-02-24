@@ -108,7 +108,6 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         queryKey: ["products"],
         queryFn: getProducts,
         initialData,
-        staleTime: 60 * 1000,
     })
 
     // Mutations

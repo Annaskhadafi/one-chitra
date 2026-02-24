@@ -174,44 +174,57 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         const file = e.target.files?.[0]
         if (!file) return
 
+        // 20MB limit check on client side
+        if (file.size > 20 * 1024 * 1024) {
+            toast.error("File terlalu besar. Maksimal 20MB.")
+            return
+        }
+
         setIsUploading(true)
         setUploadProgress(0)
         const formData = new FormData()
         formData.append("file", file)
 
         try {
-            // Start progress animation
+            // Start realistic progress animation
             const progressInterval = setInterval(() => {
                 setUploadProgress(prev => {
-                    if (prev >= 85) {
+                    // Slower progress after 70%
+                    const increment = prev > 70 ? 2 : 10;
+                    if (prev >= 90) {
                         clearInterval(progressInterval)
-                        return 85 // Stop at 85% until actual upload completes
+                        return 90 // Stop at 90% until server responds
                     }
-                    return prev + 15
+                    return prev + increment
                 })
-            }, 150)
+            }, 200)
 
             const result = await uploadFile(formData)
-            
-            // Clear interval and complete progress
+
+            // Clear interval
             clearInterval(progressInterval)
 
             if (result.success && result.url) {
                 setUploadProgress(100)
                 setPoDocument(result.url)
                 toast.success("PO Document berhasil diupload")
+
+                // Hide progress bar after success
+                setTimeout(() => {
+                    setIsUploading(false)
+                    setUploadProgress(0)
+                }, 1500)
             } else {
                 setUploadProgress(0)
+                setIsUploading(false)
+                console.error("[Upload] Error details:", result.error)
                 toast.error(result.error || "Gagal upload dokumen")
             }
         } catch (error) {
             setUploadProgress(0)
-            toast.error("Terjadi kesalahan saat upload")
-        } finally {
-            setTimeout(() => {
-                setIsUploading(false)
-                setUploadProgress(0)
-            }, 1000) // Give user time to see 100%
+            setIsUploading(false)
+            console.error("[Upload] Exception:", error)
+            toast.error("Terjadi kesalahan koneksi saat upload")
         }
     }
 
@@ -259,7 +272,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         console.log("🔍 SO Submit clicked")
         console.log("customerId:", customerId)
         console.log("items:", items)
-        
+
         if (!customerId) {
             console.log("❌ No customer selected")
             toast.error("Please select a customer")
@@ -309,6 +322,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
 
             if (result.success) {
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
+                router.refresh()
                 router.push("/dashboard/sales-orders")
             } else {
                 // @ts-expect-error - result type union doesn't always have error
@@ -562,7 +576,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                             </div>
                             {isUploading && (
                                 <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                    <div 
+                                    <div
                                         className="bg-blue-600 h-2 transition-all duration-300 ease-out"
                                         style={{ width: `${uploadProgress}%` }}
                                     />

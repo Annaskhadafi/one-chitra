@@ -59,7 +59,6 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
         queryKey: ["warehouses"],
         queryFn: getWarehouses,
         initialData,
-        staleTime: 60 * 1000,
     })
 
     // Mutations

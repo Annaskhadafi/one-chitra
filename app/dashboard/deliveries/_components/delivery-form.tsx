@@ -351,16 +351,16 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         console.log("🔍 Check Stock clicked")
         console.log("warehouseId:", warehouseId)
         console.log("items:", items)
-        
+
         if (!warehouseId || items.length === 0) {
             console.log("❌ Check Stock validation failed")
             toast.error("Please select a warehouse and add items first")
             return
         }
-        
+
         setCheckingStock(true)
         console.log("📦 Checking stock availability...")
-        
+
         try {
             const results = await checkStockAvailability(
                 warehouseId,
@@ -391,7 +391,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         console.log("warehouseId:", warehouseId)
         console.log("items:", items)
         console.log("selectedSO:", selectedSO)
-        
+
         if (!salesOrderId) {
             console.log("❌ Validation failed: No Sales Order")
             toast.error("Please select a Sales Order")
@@ -437,7 +437,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 }
             }
         }
-        
+
         console.log("✅ All validations passed!")
 
         setSaving(true)
@@ -489,6 +489,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
             if (result.success) {
                 toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
+                router.refresh()
                 router.push("/dashboard/deliveries")
             } else {
                 const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
@@ -581,9 +582,9 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                         className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
                         title={
                             !salesOrderId ? "Please select a Sales Order" :
-                            !warehouseId ? "Please select a Warehouse" :
-                            items.length === 0 ? "No items to deliver" :
-                            "Click to create delivery"
+                                !warehouseId ? "Please select a Warehouse" :
+                                    items.length === 0 ? "No items to deliver" :
+                                        "Click to create delivery"
                         }
                     >
                         {saving ? (
@@ -840,7 +841,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                
+
                                                                 {/* Serial Number Inputs */}
                                                                 <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
                                                                     <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">

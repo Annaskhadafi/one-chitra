@@ -22,6 +22,8 @@ export async function uploadFile(formData: FormData) {
             return { success: false, error: "No file uploaded" }
         }
 
+        console.log(`[Upload] File received: ${file.name}, size: ${(file.size / 1024 / 1024).toFixed(2)} MB, type: ${file.type}`)
+
         const bytes = await file.arrayBuffer()
         const buffer = Buffer.from(bytes)
 

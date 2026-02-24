@@ -27,9 +27,12 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { Download, Search } from "lucide-react"
+import { Download, Search, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { formatCurrency } from "@/lib/utils"
+import { usePermissions } from "@/hooks/use-permissions"
+import { clearLogisticsCosts } from "@/app/actions/delivery"
+import { toast } from "sonner"
 
 interface LogisticsCost {
     id: number
@@ -57,6 +60,21 @@ interface LogisticsCostTableProps {
 export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [globalFilter, setGlobalFilter] = useState("")
+    const { permissions } = usePermissions()
+    const isAdmin = permissions.includes("admin") || permissions.includes("superuser") || permissions.includes("admin:view")
+
+    const handleClearCosts = async () => {
+        if (!confirm("Apakah Anda yakin ingin menghapus/me-nolkan SEMUA log biaya logistik? Aksi ini tidak dapat dibatalkan.")) {
+            return
+        }
+
+        const result = await clearLogisticsCosts()
+        if (result.success) {
+            toast.success("Log biaya logistik berhasil dibersihkan")
+        } else {
+            toast.error(result.error || "Gagal membersihkan log")
+        }
+    }
 
     const columns = useMemo<ColumnDef<LogisticsCost>[]>(
         () => [
@@ -86,37 +104,37 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
             {
                 accessorKey: "shippingCost",
                 header: "Ext. Cost",
-                cell: ({ row }) => formatCurrency(row.original.shippingCost || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.shippingCost || 0)),
             },
             {
                 accessorKey: "costGasoline",
                 header: "Gas",
-                cell: ({ row }) => formatCurrency(row.original.costGasoline || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costGasoline || 0)),
             },
             {
                 accessorKey: "costToll",
                 header: "Toll",
-                cell: ({ row }) => formatCurrency(row.original.costToll || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costToll || 0)),
             },
             {
                 accessorKey: "costParking",
                 header: "Parking",
-                cell: ({ row }) => formatCurrency(row.original.costParking || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costParking || 0)),
             },
             {
                 accessorKey: "costMeals",
                 header: "Meals",
-                cell: ({ row }) => formatCurrency(row.original.costMeals || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costMeals || 0)),
             },
             {
                 accessorKey: "costMaintenance",
                 header: "Maint.",
-                cell: ({ row }) => formatCurrency(row.original.costMaintenance || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costMaintenance || 0)),
             },
             {
                 accessorKey: "costOthers",
                 header: "Others",
-                cell: ({ row }) => formatCurrency(row.original.costOthers || 0),
+                cell: ({ row }) => formatCurrency(Number(row.original.costOthers || 0)),
             },
             {
                 id: "total_internal",
@@ -250,10 +268,23 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                         className="pl-8"
                     />
                 </div>
-                <Button onClick={exportToCSV} variant="outline" className="flex items-center gap-2">
-                    <Download className="h-4 w-4" />
-                    Export CSV
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button onClick={exportToCSV} variant="outline" className="flex items-center gap-2">
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                    </Button>
+
+                    {isAdmin && (
+                        <Button
+                            variant="destructive"
+                            onClick={handleClearCosts}
+                            className="flex items-center gap-2"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            Clear Costs Log
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className="rounded-md border bg-card overflow-hidden">

@@ -50,7 +50,6 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
         queryKey: ["customers"],
         queryFn: getCustomers,
         initialData: initialCustomers,
-        staleTime: 60 * 1000,
     })
 
     // Mutations
