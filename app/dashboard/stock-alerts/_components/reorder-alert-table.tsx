@@ -20,6 +20,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
+import { cn } from "@/lib/utils"
 import type { ReorderAlert } from "@/lib/types"
 
 interface ReorderAlertTableProps {
@@ -88,101 +90,212 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-muted/40">
-                            <TableHead className="w-10">#</TableHead>
-                            <TableHead>Material No.</TableHead>
-                            <TableHead>Deskripsi</TableHead>
-                            <TableHead>Kategori</TableHead>
-                            <TableHead>Warehouse</TableHead>
-                            <TableHead className="text-right">Stok Saat Ini</TableHead>
-                            <TableHead className="text-right">Min Stock</TableHead>
-                            <TableHead className="text-right">Kekurangan</TableHead>
-                            <TableHead>Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
+            <ResponsiveTableWrapper
+                mobileView={
+                    <div className="space-y-2">
                         {filtered.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                            <div className="text-center py-16 text-muted-foreground">
+                                <div className="mx-auto w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
+                                    <AlertTriangle className="h-8 w-8" />
+                                </div>
+                                <p className="font-medium">
                                     {data.length === 0
-                                        ? "Tidak ada produk di bawah minimum stok."
-                                        : "Tidak ada hasil sesuai filter."}
-                                </TableCell>
-                            </TableRow>
+                                        ? "Tidak ada produk di bawah minimum stok"
+                                        : "Tidak ada hasil sesuai filter"}
+                                </p>
+                            </div>
                         ) : (
                             filtered.map((row, i) => {
                                 const shortage = row.minStock - row.totalStock
+                                const isCritical = row.urgency === "critical"
+                                
                                 return (
-                                    <TableRow
+                                    <div
                                         key={row.id}
-                                        className={
-                                            row.urgency === "critical"
-                                                ? "bg-red-50/50 dark:bg-red-950/10"
-                                                : "bg-amber-50/30 dark:bg-amber-950/10"
-                                        }
+                                        className={cn(
+                                            "relative overflow-hidden rounded-lg border-2 transition-all active:scale-[0.98]",
+                                            isCritical
+                                                ? "bg-gradient-to-br from-red-50 to-red-100/50 border-red-300 dark:from-red-950/30 dark:to-red-900/20 dark:border-red-800"
+                                                : "bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-300 dark:from-amber-950/30 dark:to-amber-900/20 dark:border-amber-800"
+                                        )}
                                     >
-                                        <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
-                                        <TableCell className="font-mono text-sm font-medium">
-                                            {row.product?.materialNumber ?? "-"}
-                                        </TableCell>
-                                        <TableCell className="text-sm">
-                                            {row.product?.materialDescription ?? "-"}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="text-xs">
-                                                {row.product?.category ?? "-"}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-sm">
-                                            {row.warehouse?.sloc}
-                                            {row.warehouse?.description && (
-                                                <span className="text-muted-foreground text-xs ml-1">
-                                                    ({row.warehouse.description})
-                                                </span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right font-bold">
-                                            <span
-                                                className={
-                                                    row.totalStock === 0
-                                                        ? "text-red-600 dark:text-red-400"
-                                                        : "text-amber-600 dark:text-amber-400"
-                                                }
-                                            >
-                                                {row.totalStock}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-right text-muted-foreground">
-                                            {row.minStock}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <span className="font-semibold text-rose-600">
-                                                -{shortage}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            {row.urgency === "critical" ? (
-                                                <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 gap-1 border-red-200">
-                                                    <XCircle className="h-3 w-3" />
-                                                    Critical
-                                                </Badge>
+                                        {/* Status Badge - Top Right */}
+                                        <div className="absolute top-3 right-3 z-10">
+                                            {isCritical ? (
+                                                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-600 text-white shadow-lg">
+                                                    <XCircle className="h-4 w-4" />
+                                                    <span className="text-xs font-bold">CRITICAL</span>
+                                                </div>
                                             ) : (
-                                                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 gap-1 border-amber-200">
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Warning
-                                                </Badge>
+                                                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-600 text-white shadow-lg">
+                                                    <AlertTriangle className="h-4 w-4" />
+                                                    <span className="text-xs font-bold">WARNING</span>
+                                                </div>
                                             )}
-                                        </TableCell>
-                                    </TableRow>
+                                        </div>
+
+                                        <div className="p-4 space-y-4">
+                                            {/* Header */}
+                                            <div className="pr-24">
+                                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm mb-2">
+                                                    <span className="text-xs font-semibold text-muted-foreground">#{i + 1}</span>
+                                                </div>
+                                                <h3 className="font-mono text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">
+                                                    {row.product?.materialNumber ?? "-"}
+                                                </h3>
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed">
+                                                    {row.product?.materialDescription ?? "-"}
+                                                </p>
+                                            </div>
+
+                                            {/* Info Grid */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Kategori</div>
+                                                    <div className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold">
+                                                        {row.product?.category ?? "-"}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Warehouse</div>
+                                                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                                                        {row.warehouse?.sloc}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Stock Stats */}
+                                            <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 border-2 border-gray-200/50 dark:border-gray-700/50">
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-muted-foreground mb-2 font-medium">Stok Saat Ini</div>
+                                                        <div className={cn(
+                                                            "text-2xl font-black tabular-nums",
+                                                            row.totalStock === 0
+                                                                ? "text-red-600 dark:text-red-400"
+                                                                : "text-amber-600 dark:text-amber-400"
+                                                        )}>
+                                                            {row.totalStock}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-center border-x border-gray-200 dark:border-gray-700">
+                                                        <div className="text-xs text-muted-foreground mb-2 font-medium">Min Stock</div>
+                                                        <div className="text-2xl font-black text-gray-600 dark:text-gray-400 tabular-nums">
+                                                            {row.minStock}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-muted-foreground mb-2 font-medium">Kekurangan</div>
+                                                        <div className="text-2xl font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                                                            -{shortage}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )
                             })
                         )}
-                    </TableBody>
-                </Table>
-            </div>
+                    </div>
+                }
+            >
+                <div className="rounded-xl border overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/40">
+                                <TableHead className="w-10">#</TableHead>
+                                <TableHead>Material No.</TableHead>
+                                <TableHead>Deskripsi</TableHead>
+                                <TableHead>Kategori</TableHead>
+                                <TableHead>Warehouse</TableHead>
+                                <TableHead className="text-right">Stok Saat Ini</TableHead>
+                                <TableHead className="text-right">Min Stock</TableHead>
+                                <TableHead className="text-right">Kekurangan</TableHead>
+                                <TableHead>Status</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filtered.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                                        {data.length === 0
+                                            ? "Tidak ada produk di bawah minimum stok."
+                                            : "Tidak ada hasil sesuai filter."}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filtered.map((row, i) => {
+                                    const shortage = row.minStock - row.totalStock
+                                    return (
+                                        <TableRow
+                                            key={row.id}
+                                            className={
+                                                row.urgency === "critical"
+                                                    ? "bg-red-50/50 dark:bg-red-950/10"
+                                                    : "bg-amber-50/30 dark:bg-amber-950/10"
+                                            }
+                                        >
+                                            <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
+                                            <TableCell className="font-mono text-sm font-medium">
+                                                {row.product?.materialNumber ?? "-"}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {row.product?.materialDescription ?? "-"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-xs">
+                                                    {row.product?.category ?? "-"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {row.warehouse?.sloc}
+                                                {row.warehouse?.description && (
+                                                    <span className="text-muted-foreground text-xs ml-1">
+                                                        ({row.warehouse.description})
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold">
+                                                <span
+                                                    className={
+                                                        row.totalStock === 0
+                                                            ? "text-red-600 dark:text-red-400"
+                                                            : "text-amber-600 dark:text-amber-400"
+                                                    }
+                                                >
+                                                    {row.totalStock}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="text-right text-muted-foreground">
+                                                {row.minStock}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <span className="font-semibold text-rose-600">
+                                                    -{shortage}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.urgency === "critical" ? (
+                                                    <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 gap-1 border-red-200">
+                                                        <XCircle className="h-3 w-3" />
+                                                        Critical
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 gap-1 border-amber-200">
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Warning
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </ResponsiveTableWrapper>
             <p className="text-xs text-muted-foreground">
                 Menampilkan {filtered.length} dari {data.length} alert
             </p>

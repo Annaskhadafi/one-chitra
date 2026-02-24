@@ -14,6 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 import { getCompetitorInfo, CompetitorItem } from "@/app/actions/competitor"
 
@@ -314,56 +315,144 @@ export function CompetitorTable() {
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card">
-                <div
-                    ref={parentRef}
-                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
-                >
-                    <Table>
-                        <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id} className="bg-muted/50">
-                                    {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </TableHead>
-                                    ))}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                <>
-                                    <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} />
+            <ResponsiveTableWrapper
+                mobileView={
+                    <div className="space-y-2">
+                        {rows.length > 0 ? (
+                            rows.map((row) => {
+                                const item = row.original
+                                return (
+                                    <div
+                                        key={row.id}
+                                        className="relative overflow-hidden rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-900/20 transition-all active:scale-[0.98]"
+                                    >
+                                        {/* Price Badge - Top Right */}
+                                        <div className="absolute top-3 right-3 z-10">
+                                            <div className="px-3 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg">
+                                                <div className="text-xs font-medium opacity-90">Price</div>
+                                                <div className="text-lg font-black leading-none">
+                                                    {item.price_formatted}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 space-y-4">
+                                            {/* Header */}
+                                            <div className="pr-28">
+                                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm mb-2">
+                                                    <span className="text-xs font-semibold text-blue-600">{item.tanggal_informasi}</span>
+                                                </div>
+                                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">
+                                                    {item.customer}
+                                                </h3>
+                                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                    {item.business_consultant}
+                                                </p>
+                                            </div>
+
+                                            {/* Product Info Grid */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Size</div>
+                                                    <div className="font-bold text-sm text-gray-900 dark:text-gray-100">
+                                                        {item.size_tire}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Brand</div>
+                                                    <div className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
+                                                        {item.brand}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Category</div>
+                                                    <div className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-semibold">
+                                                        {item.category_tire}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Supplier</div>
+                                                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                                                        {item.supplier}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Remark */}
+                                            {item.remark && (
+                                                <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Remark</div>
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                                        {item.remark}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        ) : (
+                            <div className="text-center py-16 text-muted-foreground">
+                                <div className="mx-auto w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
+                                    <Search className="h-8 w-8" />
+                                </div>
+                                <p className="font-medium">No records found</p>
+                            </div>
+                        )}
+                    </div>
+                }
+            >
+                <div className="rounded-md border bg-card">
+                    <div
+                        ref={parentRef}
+                        className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                    >
+                        <Table>
+                            <TableHeader>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <TableRow key={headerGroup.id} className="bg-muted/50">
+                                        {headerGroup.headers.map((header) => (
+                                            <TableHead key={header.id}>
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </TableHead>
+                                        ))}
                                     </TableRow>
-                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
-                                        return (
-                                            <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
-                                                {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id}>
-                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} />
+                                ))}
+                            </TableHeader>
+                            <TableBody>
+                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                    <>
+                                        <TableRow style={{ height: `${before}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                            const row = rows[virtualRow.index]
+                                            return (
+                                                <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
+                                                    {row.getVisibleCells().map((cell) => (
+                                                        <TableCell key={cell.id}>
+                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            )
+                                        })}
+                                        <TableRow style={{ height: `${after}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                    </>
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={columns.length} className="h-32 text-center">
+                                            No records found.
+                                        </TableCell>
                                     </TableRow>
-                                </>
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={columns.length} className="h-32 text-center">
-                                        No records found.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </div>
-            </div>
+            </ResponsiveTableWrapper>
 
             <div className="text-sm text-muted-foreground">
                 Showing {table.getFilteredRowModel().rows.length} of {rawData.length} records
