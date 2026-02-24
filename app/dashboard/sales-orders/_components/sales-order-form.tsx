@@ -233,15 +233,22 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     }, [subTotal, discount, shipping])
 
     const handleSubmit = async () => {
+        console.log("🔍 SO Submit clicked")
+        console.log("customerId:", customerId)
+        console.log("items:", items)
+        
         if (!customerId) {
+            console.log("❌ No customer selected")
             toast.error("Please select a customer")
             return
         }
         if (items.length === 0) {
+            console.log("❌ No items")
             toast.error("Please add at least one product")
             return
         }
 
+        console.log("✅ Validation passed, submitting...")
         setIsSubmitting(true)
         try {
             const payload = {
@@ -269,9 +276,13 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 })),
             }
 
+            console.log("🚀 SO Payload:", payload)
+
             const result = isEdit
                 ? await updateSalesOrder(initialData!.id, payload)
                 : await createSalesOrder(payload)
+
+            console.log("📦 SO Result:", result)
 
             if (result.success) {
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
