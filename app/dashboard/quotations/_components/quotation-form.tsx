@@ -39,7 +39,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
