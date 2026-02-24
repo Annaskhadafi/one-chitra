@@ -24,7 +24,7 @@ import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getStockTransfers, updateStockTransfer } from "@/app/actions/stock-transfer"
+import { getStockTransfers, updateStockTransferStatus } from "@/app/actions/stock-transfer"
 import { toast } from "sonner"
 import {
     useReactTable,
@@ -100,7 +100,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     // Mutations
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, receivedStatus }: { id: number, receivedStatus: "Scheduled" | "Received" | "Rejected" }) =>
-            updateStockTransfer(id, { receivedStatus }),
+            updateStockTransferStatus(id, { receivedStatus }),
         onMutate: async ({ id, receivedStatus }) => {
             await queryClient.cancelQueries({ queryKey: ["stock-transfers"] })
             const previousTransfers = queryClient.getQueryData<Transfer[]>(["stock-transfers"])
