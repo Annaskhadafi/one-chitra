@@ -47,7 +47,7 @@ import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, Che
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -96,6 +96,57 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
+
+    // Mutations
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ id, status }: { id: number, status: string }) => updateDoMonitoringFields(id, { doStatus: status }),
+        onMutate: async ({ id, status }) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+
+            if (previousDeliveries) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.map(d => d.id === id ? { ...d, doStatus: status } : d)
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to update DO Status")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: number) => deleteDelivery(id),
+        onMutate: async (id) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+
+            if (previousDeliveries) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.filter(d => d.id !== id)
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to delete delivery")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
+    })
 
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
@@ -400,26 +451,15 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     }
 
     const handleUpdateStatus = async (id: number, status: string) => {
-        const res = await updateDoMonitoringFields(id, { doStatus: status })
-        if (res.success) {
-            setSuccessMessage(`Status DO berhasil diubah menjadi ${status}`)
-            setShowSuccessDialog(true)
-            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
-        } else {
-            toast.error((res as { error?: string }).error || "Failed to update DO Status")
-        }
+        updateStatusMutation.mutate({ id, status })
+        setSuccessMessage(`Status DO berhasil diubah menjadi ${status}`)
+        setShowSuccessDialog(true)
     }
 
     async function handleDelete(id: number) {
-        setDeleting(id)
-        const res = await deleteDelivery(id)
-        if (res.success) {
-            toast.success("Delivery deleted successfully")
-            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
-        } else {
-            toast.error((res as { error?: string }).error || "Failed to delete delivery")
-        }
-        setDeleting(null)
+        deleteMutation.mutate(id, {
+            onSuccess: () => toast.success("Delivery deleted successfully")
+        })
     }
 
     // Effect to trigger search when status filter changes

@@ -11,7 +11,8 @@ import {
     PieChart as PieChartIcon,
     Calendar,
     RefreshCw,
-    ArrowUpRight
+    ArrowUpRight,
+    ArrowUpDown
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,7 +39,7 @@ import {
     YAxis,
     CartesianGrid,
 } from "recharts"
-import { getHistoryOrderForSegmentation, CustomerRFMAggregate } from "@/app/actions/customer-segmentation"
+import { getHistoryOrderForSegmentation, getMaxBillingDate, CustomerRFMAggregate } from "@/app/actions/customer-segmentation"
 import {
     useReactTable,
     getCoreRowModel,
@@ -50,6 +51,10 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { cn } from "@/lib/utils"
 import { ProgressLoading } from "@/components/ui/progress-loading"
+import { getFleetList } from "@/app/actions/fleet"
+import { useQuery } from "@tanstack/react-query"
+import Fuse from "fuse.js"
+import { FleetDetailSheet } from "./fleet-detail-sheet"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -93,8 +98,37 @@ export function CustomerSegmentationClient() {
     const [startDate, setStartDate] = useState('2025-01-01');
     const [endDate, setEndDate] = useState('2025-12-31');
     const [loadingProgress, setLoadingProgress] = useState(0);
+    const [isInitialized, setIsInitialized] = useState(false);
+    const [selectedFleetData, setSelectedFleetData] = useState<any[]>([]);
+    const [fleetSheetOpen, setFleetSheetOpen] = useState(false);
+
+    // Fetch fleet data
+    const { data: fleetData = [] } = useQuery({
+        queryKey: ["fleet-list"],
+        queryFn: async () => {
+            const result = await getFleetList()
+            if (result.success && Array.isArray(result.data)) {
+                return result.data
+            }
+            return []
+        },
+    });
+
+    // Fetch max billing date on mount
+    React.useEffect(() => {
+        const initializeDates = async () => {
+            const result = await getMaxBillingDate();
+            if (result.success && result.maxDate) {
+                setEndDate(result.maxDate);
+            }
+            setIsInitialized(true);
+        };
+        initializeDates();
+    }, []);
 
     const fetchData = useCallback(async () => {
+        if (!isInitialized) return;
+
         setLoading(true);
         setLoadingProgress(10);
         try {
@@ -115,7 +149,7 @@ export function CustomerSegmentationClient() {
                 setLoadingProgress(0);
             }, 500);
         }
-    }, [startDate, endDate]);
+    }, [startDate, endDate, isInitialized]);
 
     React.useEffect(() => {
         fetchData();
@@ -197,6 +231,51 @@ export function CustomerSegmentationClient() {
         return { totalRev, totalCust: rfmData.length, pieData };
     }, [rfmData]);
 
+    // Fuzzy match customer name dengan fleet data
+    const getMatchingFleets = React.useCallback((customerName: string) => {
+        if (!customerName || !fleetData.length) return []
+
+        // Normalize customer name untuk matching yang lebih baik
+        const normalizeCustomerName = (name: string) => {
+            return name
+                .toLowerCase()
+                .replace(/\bpt\.?\s*/gi, '') // Hapus "PT" atau "PT."
+                .replace(/\bcv\.?\s*/gi, '') // Hapus "CV" atau "CV."
+                .replace(/\btbk\.?\s*/gi, '') // Hapus "TBK" atau "TBK."
+                .replace(/[.,\-_]/g, ' ') // Ganti punctuation dengan spasi
+                .replace(/\s+/g, ' ') // Normalize multiple spaces
+                .trim()
+        }
+
+        const normalizedSearchName = normalizeCustomerName(customerName)
+
+        const fuse = new Fuse(fleetData, {
+            keys: ["customer"],
+            threshold: 0.4,
+            includeScore: true,
+            ignoreLocation: true,
+            findAllMatches: true,
+            minMatchCharLength: 3,
+            getFn: (obj, path) => {
+                const value = obj.customer
+                return normalizeCustomerName(value || '')
+            }
+        })
+
+        const results = fuse.search(normalizedSearchName)
+        return results
+            .filter(result => result.score && result.score < 0.5)
+            .map(result => result.item)
+    }, [fleetData])
+
+    const handleFleetClick = React.useCallback((customerName: string) => {
+        const matchingFleets = getMatchingFleets(customerName)
+        if (matchingFleets.length > 0) {
+            setSelectedFleetData(matchingFleets)
+            setFleetSheetOpen(true)
+        }
+    }, [getMatchingFleets])
+
     // --- TanStack Table ---
     const columns = useMemo<ColumnDef<CustomerData>[]>(() => [
         {
@@ -224,6 +303,29 @@ export function CustomerSegmentationClient() {
             }
         },
         {
+            id: "fleet",
+            header: "Fleet List",
+            cell: ({ row }) => {
+                const cust = row.original
+                const matchingFleets = getMatchingFleets(cust.name)
+                
+                if (matchingFleets.length === 0) {
+                    return <span className="text-xs text-muted-foreground">No fleet data</span>
+                }
+
+                return (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFleetClick(cust.name)}
+                        className="h-7 text-xs"
+                    >
+                        View {matchingFleets.length} Fleet{matchingFleets.length > 1 ? 's' : ''}
+                    </Button>
+                )
+            }
+        },
+        {
             id: "rfm",
             header: () => <div className="text-center">Skor RFM</div>,
             cell: ({ row }) => {
@@ -239,7 +341,18 @@ export function CustomerSegmentationClient() {
         },
         {
             accessorKey: "monetary",
-            header: "Revenue",
+            header: ({ column }) => {
+                return (
+                    <Button
+                        variant="ghost"
+                        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                        className="-ml-4 h-8"
+                    >
+                        Revenue
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                )
+            },
             cell: ({ row }) => {
                 const cust = row.original
                 return (
@@ -248,13 +361,17 @@ export function CustomerSegmentationClient() {
                         <div className="text-xs text-muted-foreground">{cust.frequency} Transaksi</div>
                     </div>
                 )
+            },
+            sortingFn: (rowA, rowB) => {
+                return rowA.original.monetary - rowB.original.monetary
             }
         }
-    ], [])
+    ], [getMatchingFleets, handleFleetClick])
 
     const filteredData = useMemo(() => {
-        if (filterSegment === 'All') return rfmData;
-        return rfmData.filter(d => d.segment === filterSegment);
+        let data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
+        // Sort by revenue (monetary) descending by default
+        return data.sort((a, b) => b.monetary - a.monetary);
     }, [rfmData, filterSegment]);
 
     const table = useReactTable({
@@ -263,6 +380,14 @@ export function CustomerSegmentationClient() {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        initialState: {
+            sorting: [
+                {
+                    id: 'monetary',
+                    desc: true,
+                }
+            ],
+        },
         state: {
             globalFilter: searchTerm,
         },
@@ -538,6 +663,13 @@ export function CustomerSegmentationClient() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Fleet Detail Sheet */}
+            <FleetDetailSheet
+                open={fleetSheetOpen}
+                onOpenChange={setFleetSheetOpen}
+                fleetData={selectedFleetData}
+            />
         </div>
     );
 }

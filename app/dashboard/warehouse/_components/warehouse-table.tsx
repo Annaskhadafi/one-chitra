@@ -31,7 +31,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -54,11 +54,38 @@ interface WarehouseTableProps {
 }
 
 export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
+    const queryClient = useQueryClient()
     const { data = initialData, isLoading, refetch } = useQuery({
         queryKey: ["warehouses"],
         queryFn: getWarehouses,
         initialData,
         staleTime: 60 * 1000,
+    })
+
+    // Mutations
+    const deleteMutation = useMutation({
+        mutationFn: (ids: number[]) => ids.length === 1 ? deleteWarehouse(ids[0]) : bulkDeleteWarehouses(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["warehouses"] })
+            const previousWarehouses = queryClient.getQueryData<WarehouseEnhanced[]>(["warehouses"])
+
+            if (previousWarehouses) {
+                queryClient.setQueryData<WarehouseEnhanced[]>(["warehouses"], (old) =>
+                    old?.filter(warehouse => !ids.includes(warehouse.id))
+                )
+            }
+
+            return { previousWarehouses }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousWarehouses) {
+                queryClient.setQueryData(["warehouses"], context.previousWarehouses)
+            }
+            toast.error("Failed to delete warehouse(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["warehouses"] })
+        },
     })
 
     const [sorting, setSorting] = useState<SortingState>([])
@@ -154,13 +181,9 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
                                     onClick={async () => {
-                                        const result = await deleteWarehouse(row.original.id)
-                                        if (result.success) {
-                                            toast.success("Warehouse deleted")
-                                            refetch()
-                                        } else {
-                                            toast.error(result.error)
-                                        }
+                                        deleteMutation.mutate([row.original.id], {
+                                            onSuccess: () => toast.success("Warehouse deleted")
+                                        })
                                     }}
                                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 >
@@ -191,21 +214,19 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
         getRowId: (row) => row.id.toString(),
     })
 
-    const selectedIds = useMemo(() =>
-        Object.keys(rowSelection).map(id => parseInt(id)),
-        [rowSelection]
-    )
-
     const handleBulkDelete = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected warehouses?")) {
-            const result = await bulkDeleteWarehouses(selectedIds)
-            if (result.success) {
-                toast.success("Warehouses deleted successfully")
-                setRowSelection({})
-                refetch()
-            } else {
-                toast.error(result.error)
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Warehouses deleted successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
@@ -325,7 +346,7 @@ export function WarehouseTable({ data: initialData }: WarehouseTableProps) {
             </div>
 
             <BulkActions
-                selectedCount={selectedIds.length}
+                selectedCount={table.getSelectedRowModel().flatRows.length}
                 onDelete={handleBulkDelete}
                 entityName="warehouse"
                 showEdit={false}

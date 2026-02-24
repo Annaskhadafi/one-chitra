@@ -12,6 +12,29 @@ export interface CustomerRFMAggregate {
     global_first_purchase: string;
 }
 
+export async function getMaxBillingDate() {
+    try {
+        const result = await db.select({
+            max_date: sql<string>`MAX(TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY'))`
+        })
+            .from(historyOrders)
+            .where(
+                or(
+                    isNull(historyOrders.customerName),
+                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                )
+            );
+
+        if (result[0]?.max_date) {
+            return { success: true, maxDate: new Date(result[0].max_date).toISOString().split('T')[0] };
+        }
+        return { success: false, maxDate: '2025-12-31' };
+    } catch (error) {
+        console.error("Failed to fetch max billing date:", error);
+        return { success: false, maxDate: '2025-12-31' };
+    }
+}
+
 export async function getHistoryOrderForSegmentation(startDate?: string, endDate?: string) {
     try {
         // Default range if not provided

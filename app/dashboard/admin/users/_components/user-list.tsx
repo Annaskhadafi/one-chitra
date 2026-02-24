@@ -25,7 +25,7 @@ import { AddUserDialog } from "./add-user-dialog"
 import { ImportUsersDialog } from "./import-users-dialog"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     ColumnDef,
     flexRender,
@@ -58,17 +58,64 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
     const [rowSelection, setRowSelection] = useState({})
     const [resetUser, setResetUser] = useState<User | null>(null)
 
+    // Mutations
+    const deleteMutation = useMutation({
+        mutationFn: (ids: string[]) => ids.length === 1 ? deleteUser(ids[0]) : bulkDeleteUsers(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["users"] })
+            const previousUsers = queryClient.getQueryData<User[]>(["users"])
+
+            if (previousUsers) {
+                queryClient.setQueryData<User[]>(["users"], (old) =>
+                    old?.filter(u => !ids.includes(u.id))
+                )
+            }
+
+            return { previousUsers }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousUsers) {
+                queryClient.setQueryData(["users"], context.previousUsers)
+            }
+            toast.error("Failed to delete user(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["users"] })
+        },
+    })
+
+    const updateRoleMutation = useMutation({
+        mutationFn: ({ ids, role }: { ids: string[], role: string }) => bulkUpdateUserRole(ids, role),
+        onMutate: async ({ ids, role }) => {
+            await queryClient.cancelQueries({ queryKey: ["users"] })
+            const previousUsers = queryClient.getQueryData<User[]>(["users"])
+
+            if (previousUsers) {
+                queryClient.setQueryData<User[]>(["users"], (old) =>
+                    old?.map(u => ids.includes(u.id) ? { ...u, role } : u)
+                )
+            }
+
+            return { previousUsers }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousUsers) {
+                queryClient.setQueryData(["users"], context.previousUsers)
+            }
+            toast.error("Failed to update role(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["users"] })
+        },
+    })
+
     const handleDelete = useCallback(async (userId: string) => {
         if (confirm("Are you sure you want to delete this user?")) {
-            const result = await deleteUser(userId)
-            if (result.success) {
-                toast.success("User deleted")
-                queryClient.invalidateQueries({ queryKey: ["users"] })
-            } else {
-                toast.error(result.error || "Failed to delete user")
-            }
+            deleteMutation.mutate([userId], {
+                onSuccess: () => toast.success("User deleted")
+            })
         }
-    }, [queryClient])
+    }, [deleteMutation])
 
     // Stats calculation
     const totalUsers = data.length
@@ -185,34 +232,36 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
         getSortedRowModel: getSortedRowModel(),
     })
 
-    const selectedIds = Object.keys(rowSelection).map(
-        (idx) => data[parseInt(idx)].id
-    )
-
     const handleBulkDelete = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected users?")) {
-            const result = await bulkDeleteUsers(selectedIds)
-            if (result.success) {
-                toast.success("Users deleted")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["users"] })
-            } else {
-                toast.error(result.error || "Failed to delete users")
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Users deleted")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error || "Failed to delete users")
+                    }
+                }
+            })
         }
     }
 
     const handleBulkEditRole = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         const role = prompt("Enter new role for selected users (admin/staff/user):")
         if (role) {
-            const result = await bulkUpdateUserRole(selectedIds, role)
-            if (result.success) {
-                toast.success("Roles updated")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["users"] })
-            } else {
-                toast.error(result.error || "Failed to update roles")
-            }
+            updateRoleMutation.mutate({ ids: selectedIds, role }, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Roles updated")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error || "Failed to update roles")
+                    }
+                }
+            })
         }
     }
 
@@ -301,9 +350,9 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                 </Table>
             </div>
 
-            {selectedIds.length > 0 && (canEdit || canDelete) && (
+            {table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (
                 <BulkActions
-                    selectedCount={selectedIds.length}
+                    selectedCount={table.getSelectedRowModel().flatRows.length}
                     onDelete={canDelete ? handleBulkDelete : () => { }}
                     onEdit={canEdit ? handleBulkEditRole : () => { }}
                     entityName="user"

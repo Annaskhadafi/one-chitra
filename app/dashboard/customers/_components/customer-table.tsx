@@ -32,7 +32,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Customer } from "@/lib/types"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -51,6 +51,32 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
         queryFn: getCustomers,
         initialData: initialCustomers,
         staleTime: 60 * 1000,
+    })
+
+    // Mutations
+    const deleteMutation = useMutation({
+        mutationFn: (ids: number[]) => ids.length === 1 ? deleteCustomer(ids[0]) : bulkDeleteCustomers(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["customers"] })
+            const previousCustomers = queryClient.getQueryData<Customer[]>(["customers"])
+
+            if (previousCustomers) {
+                queryClient.setQueryData<Customer[]>(["customers"], (old) =>
+                    old?.filter(customer => !ids.includes(customer.id))
+                )
+            }
+
+            return { previousCustomers }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousCustomers) {
+                queryClient.setQueryData(["customers"], context.previousCustomers)
+            }
+            toast.error("Failed to delete customer(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["customers"] })
+        },
     })
 
     const { hasResourcePermission } = usePermissions()
@@ -227,35 +253,26 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
         ]
         : [0, 0]
 
-    const selectedIds = Object.keys(rowSelection).map(
-        (idx) => data[parseInt(idx)].id
-    )
-
     const handleBulkDelete = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected customers?")) {
-            const result = await bulkDeleteCustomers(selectedIds)
-            if (result.success) {
-                toast.success("Customers deleted successfully")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["customers"] })
-            } else {
-                toast.error(result.error)
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Customers deleted successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
     const handleDelete = async (id: number) => {
-        try {
-            const result = await deleteCustomer(id)
-            if (result.success) {
-                toast.success("Customer deleted")
-                queryClient.invalidateQueries({ queryKey: ["customers"] })
-            } else {
-                toast.error(result.error)
-            }
-        } catch (_error) {
-            toast.error("Failed to delete customer")
-        }
+        deleteMutation.mutate([id], {
+            onSuccess: () => toast.success("Customer deleted")
+        })
     }
 
     return (
@@ -293,7 +310,7 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     {canCreate && (
-                        <>  
+                        <>
                             <CustomerCSVUpload />
                             <CustomerDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customers"] })} />
                         </>
@@ -366,9 +383,9 @@ export function CustomerTable({ customers: initialCustomers }: { customers: Cust
                 </div>
             </div>
 
-            {selectedIds.length > 0 && (canDelete) && (
+            {table.getSelectedRowModel().flatRows.length > 0 && (canDelete) && (
                 <BulkActions
-                    selectedCount={selectedIds.length}
+                    selectedCount={table.getSelectedRowModel().flatRows.length}
                     onDelete={handleBulkDelete}
                     entityName="customer"
                     showEdit={false}

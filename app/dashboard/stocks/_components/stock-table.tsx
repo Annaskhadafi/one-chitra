@@ -371,7 +371,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         : [0, 0]
 
     const handleBulkDelete = async () => {
-        const selectedIds = Object.keys(rowSelection).map(id => parseInt(id))
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected stock entries?")) {
             const result = await bulkDeleteStocks(selectedIds)
             if (result.success) {
@@ -385,7 +385,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
     }
 
     const handleBulkUpdateMinStock = async () => {
-        const selectedIds = Object.keys(rowSelection).map(id => parseInt(id))
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         const minStockStr = prompt("Enter new minimum stock level for selected items:")
         if (minStockStr) {
             const minStock = parseInt(minStockStr)
@@ -577,7 +577,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 </div>
 
                 <BulkActions
-                    selectedCount={Object.keys(rowSelection).length}
+                    selectedCount={table.getSelectedRowModel().flatRows.length}
                     onDelete={handleBulkDelete}
                     onEdit={handleBulkUpdateMinStock}
                     entityName="stock item"

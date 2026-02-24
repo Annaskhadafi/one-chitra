@@ -1,0 +1,1 @@
+ALTER TABLE "stock_opname_sessions" ADD COLUMN "document_url" text;

@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Search, CheckCircle2, AlertTriangle, Loader2, X } from "lucide-react"
+import { Search, CheckCircle2, AlertTriangle, Loader2, X, FileText, Upload, Paperclip, Download } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import {
     Table,
     TableBody,
@@ -34,7 +35,12 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { updateOpnameItemCount, closeStockOpnameSession, cancelStockOpnameSession } from "@/app/actions/stock-opname"
+import {
+    updateOpnameItemCount,
+    closeStockOpnameSession,
+    cancelStockOpnameSession,
+} from "@/app/actions/stock-opname"
+import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
 
 interface OpnameDetailViewProps {
@@ -49,11 +55,47 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     const [editingId, setEditingId] = useState<number | null>(null)
     const [editValue, setEditValue] = useState<string>("")
     const [editNotes, setEditNotes] = useState<string>("")
-    const [saving, setSaving] = useState(false)
-    const [closing, setClosing] = useState(false)
-    const [applyAdjustments, setApplyAdjustments] = useState(true)
-    const [search, setSearch] = useState("")
-    const [filterStatus, setFilterStatus] = useState("all")
+    const [isCancelling, setIsCancelling] = useState(false)
+    const [isClosing, setIsClosing] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+
+    async function handlePrintPdf(mode: 'checklist' | 'report' = 'report') {
+        if (mode === 'report' && session.status !== "closed") {
+            toast.error("Hanya sesi yang sudah ditutup yang bisa dicetak sebagai laporan")
+            return
+        }
+
+        // Open PDF in new window
+        window.open(`/dashboard/stock-opname/${session.id}/pdf?mode=${mode}`, '_blank')
+    }
+
+    async function handleUploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploading(true)
+        const formData = new FormData()
+        formData.append("file", file)
+
+        try {
+            const uploadResult = await uploadFile(formData)
+            if (uploadResult.success && uploadResult.url) {
+                const updateResult = await updateSessionDocument(session.id, uploadResult.url)
+                if (updateResult.success) {
+                    toast.success("Dokumen hasil audit berhasil diunggah")
+                    router.refresh()
+                } else {
+                    toast.error("Gagal menyimpan link dokumen")
+                }
+            } else {
+                toast.error(uploadResult.error || "Gagal mengunggah file")
+            }
+        } catch (error) {
+            toast.error("Terjadi kesalahan saat mengunggah")
+        } finally {
+            setIsUploading(false)
+        }
+    }
 
     const filtered = useMemo(() => {
         return items.filter((item) => {
@@ -130,6 +172,16 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         }
     }
 
+    async function handlePrintPdf() {
+        if (session.status !== "closed") {
+            toast.error("Hanya sesi yang sudah ditutup yang bisa dicetak")
+            return
+        }
+
+        // Open PDF in new window
+        window.open(`/dashboard/stock-opname/${session.id}/pdf`, '_blank')
+    }
+
     return (
         <div className="flex flex-col gap-4">
             {/* Toolbar */}
@@ -157,84 +209,101 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                     </Select>
                 </div>
 
-                {isOpen && (
-                    <div className="flex gap-2">
-                        {/* Cancel Dialog */}
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="text-red-600">
-                                    <X className="h-4 w-4 mr-1" /> Batalkan
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Batalkan sesi ini?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Sesi akan dibatalkan dan tidak dapat dilanjutkan. Tidak ada perubahan stok yang akan terjadi.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Kembali</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        className="bg-red-600 hover:bg-red-700"
-                                        onClick={handleCancel}
-                                    >
-                                        Ya, Batalkan
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                <div className="flex gap-2">
+                    {/* Print Checklist Button - for open sessions */}
+                    {session.status === "open" && (
+                        <Button variant="outline" size="sm" onClick={() => handlePrintPdf('checklist')}>
+                            <FileText className="h-4 w-4 mr-1" />
+                            Cetak Checklist
+                        </Button>
+                    )}
 
-                        {/* Close Session Dialog */}
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button size="sm">
-                                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                                    Tutup & Selesaikan
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Tutup sesi opname?</AlertDialogTitle>
-                                    <AlertDialogDescription asChild>
-                                        <div className="space-y-3">
-                                            <p>
-                                                Setelah ditutup, sesi tidak bisa diedit lagi.
-                                                Item yang belum dihitung akan diabaikan.
-                                            </p>
-                                            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                                                <Checkbox
-                                                    id="adjust"
-                                                    checked={applyAdjustments}
-                                                    onCheckedChange={(v) => setApplyAdjustments(!!v)}
-                                                />
-                                                <label htmlFor="adjust" className="text-sm cursor-pointer">
-                                                    <strong>Terapkan adjustment stok</strong> — update stok sistem sesuai hitungan fisik & catat movement ADJUSTMENT
-                                                </label>
+                    {/* Print PDF Button - only show for closed sessions */}
+                    {session.status === "closed" && (
+                        <Button variant="outline" size="sm" onClick={() => handlePrintPdf('report')}>
+                            <FileText className="h-4 w-4 mr-1" />
+                            Cetak PDF
+                        </Button>
+                    )}
+
+                    {isOpen && (
+                        <>
+                            {/* Cancel Dialog */}
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="text-red-600">
+                                        <X className="h-4 w-4 mr-1" /> Batalkan
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Batalkan sesi ini?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Sesi akan dibatalkan dan tidak dapat dilanjutkan. Tidak ada perubahan stok yang akan terjadi.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Kembali</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            className="bg-red-600 hover:bg-red-700"
+                                            onClick={handleCancel}
+                                        >
+                                            Ya, Batalkan
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+
+                            {/* Close Session Dialog */}
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button size="sm">
+                                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                                        Tutup & Selesaikan
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Tutup sesi opname?</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="space-y-3">
+                                                <p>
+                                                    Setelah ditutup, sesi tidak bisa diedit lagi.
+                                                    Item yang belum dihitung akan diabaikan.
+                                                </p>
+                                                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
+                                                    <Checkbox
+                                                        id="adjust"
+                                                        checked={applyAdjustments}
+                                                        onCheckedChange={(v) => setApplyAdjustments(!!v)}
+                                                    />
+                                                    <label htmlFor="adjust" className="text-sm cursor-pointer">
+                                                        <strong>Terapkan adjustment stok</strong> — update stok sistem sesuai hitungan fisik & catat movement ADJUSTMENT
+                                                    </label>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleClose} disabled={closing}>
-                                        {closing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                        Tutup Sesi
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
-                )}
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleClose} disabled={closing}>
+                                            {closing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                            Tutup Sesi
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Status banner if closed/cancelled */}
             {!isOpen && (
-                <div className={`rounded-lg p-3 text-sm flex items-center gap-2 ${
-                    session.status === "closed"
-                        ? "bg-slate-100 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300"
-                        : "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
-                }`}>
+                <div className={`rounded-lg p-3 text-sm flex items-center gap-2 ${session.status === "closed"
+                    ? "bg-slate-100 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300"
+                    : "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
+                    }`}>
                     {session.status === "closed" ? (
                         <CheckCircle2 className="h-4 w-4 flex-none" />
                     ) : (
@@ -243,6 +312,64 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                     Sesi ini sudah <strong>{session.status === "closed" ? "ditutup" : "dibatalkan"}</strong>. Data bersifat read-only.
                 </div>
             )}
+
+            {/* Document Upload Section */}
+            <Card className="mt-2">
+                <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        Dokumen Hasil Audit Lapangan (Sudah TTD)
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="py-3">
+                    <div className="flex items-center gap-4">
+                        {session.documentUrl ? (
+                            <div className="flex items-center gap-2 bg-green-50 text-green-700 p-2 rounded-md border border-green-200 flex-1">
+                                <Paperclip className="h-4 w-4" />
+                                <span className="text-xs truncate flex-1">{session.documentUrl.split('/').pop()}</span>
+                                <Button variant="ghost" size="sm" className="h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-100" asChild>
+                                    <a href={session.documentUrl} target="_blank" rel="noopener noreferrer">
+                                        <Download className="h-3 w-3 mr-1" />
+                                        Lihat
+                                    </a>
+                                </Button>
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                        onChange={handleUploadDocument}
+                                        disabled={isUploading}
+                                        accept=".pdf,image/*"
+                                    />
+                                    <Button variant="outline" size="sm" className="h-7 px-2" disabled={isUploading}>
+                                        Ganti
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 border-2 border-dashed border-gray-200 rounded-md p-4 text-center">
+                                <p className="text-xs text-gray-500 mb-2">Belum ada dokumen yang diunggah</p>
+                                <div className="relative inline-block">
+                                    <input
+                                        type="file"
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                        onChange={handleUploadDocument}
+                                        disabled={isUploading}
+                                        accept=".pdf,image/*"
+                                    />
+                                    <Button variant="outline" size="sm" disabled={isUploading}>
+                                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                                        Unggah Hasil Audit
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                        Format yang didukung: PDF, Gambar. Maksimal 5MB.
+                    </p>
+                </CardContent>
+            </Card>
 
             {/* Table */}
             <div className="rounded-xl border overflow-hidden">
@@ -322,11 +449,10 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                                                 </div>
                                             ) : (
                                                 <button
-                                                    className={`text-right w-full font-medium ${
-                                                        !isOpen
-                                                            ? "cursor-default"
-                                                            : "hover:text-blue-600 hover:underline cursor-pointer"
-                                                    } ${!isCounted ? "text-muted-foreground italic" : ""}`}
+                                                    className={`text-right w-full font-medium ${!isOpen
+                                                        ? "cursor-default"
+                                                        : "hover:text-blue-600 hover:underline cursor-pointer"
+                                                        } ${!isCounted ? "text-muted-foreground italic" : ""}`}
                                                     onClick={() => isOpen && startEdit(item.id, item.countedQty, item.notes)}
                                                     title={isOpen ? "Klik untuk edit" : undefined}
                                                 >
@@ -340,8 +466,8 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                                                     item.variance > 0
                                                         ? "text-emerald-600 font-semibold"
                                                         : item.variance < 0
-                                                        ? "text-red-600 font-semibold"
-                                                        : "text-muted-foreground"
+                                                            ? "text-red-600 font-semibold"
+                                                            : "text-muted-foreground"
                                                 }>
                                                     {item.variance > 0 ? "+" : ""}{item.variance}
                                                 </span>

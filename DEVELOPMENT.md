@@ -14,6 +14,13 @@ Files are stored in the `public/uploads` directory.
 
 On production (Dokploy), the container path `/app/.next/standalone/public/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
 
+Mount Type
+BIND
+Host Path
+/mnt/data/one-chitra/uploads
+Mount Path
+/app/.next/standalone/public/uploads
+
 > ⚠️ **Jangan ubah path di `upload.ts` atau `route.ts`** — keduanya menggunakan `process.cwd()` yang sudah secara otomatis resolve ke path yang benar di dev maupun production.
 
 ### 2. Upload Action

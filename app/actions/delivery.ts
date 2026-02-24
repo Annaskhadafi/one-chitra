@@ -262,14 +262,15 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
                 const isVHSConsignment = order?.categoryPo === "VHS/Consignment"
                 const hasDestination = data.warehouseToId && data.warehouseToId !== 0
+                const isCancelled = data.status === "cancelled"
 
-                if (hasDestination) {
+                if (hasDestination && !isCancelled) {
                     const referenceNumber = `ST-AUTO-${newDelivery.deliveryNumber}`
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
                         deliveryId: newDelivery.id,
-                        fromWarehouseId: data.warehouseId,
-                        toWarehouseId: data.warehouseToId,
+                        fromWarehouseId: data.warehouseId as number,
+                        toWarehouseId: data.warehouseToId as number,
                         receivedStatus: "Scheduled",
                         transferDate: new Date(data.scheduledDate),
                         notes: `Automated transfer from delivery ${newDelivery.deliveryNumber}`,
@@ -411,12 +412,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 .where(eq(deliveries.id, id))
 
             // Sync automated Stock Transfer
-            const order = await tx.query.salesOrders.findFirst({
-                where: eq(salesOrders.id, data.salesOrderId),
-                columns: { categoryPo: true }
-            })
+            const hasDestination = data.warehouseToId && data.warehouseToId !== 0
+            const isCancelled = data.status === "cancelled"
 
-            if (order?.categoryPo === "VHS/Consignment" && data.warehouseToId) {
+            if (hasDestination && !isCancelled) {
                 const existingTransfer = await tx.query.stockTransfers.findFirst({
                     where: eq(stockTransfers.deliveryId, id)
                 })
@@ -446,8 +445,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     const [transfer] = await tx.insert(stockTransfers).values({
                         referenceNumber,
                         deliveryId: id,
-                        fromWarehouseId: data.warehouseId,
-                        toWarehouseId: data.warehouseToId,
+                        fromWarehouseId: data.warehouseId as number,
+                        toWarehouseId: data.warehouseToId as number,
                         receivedStatus: "Scheduled",
                         transferDate: new Date(data.scheduledDate),
                         notes: `Automated transfer from delivery ${data.deliveryNumber || originalDelivery.deliveryNumber}`,
@@ -462,7 +461,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     )
                 }
             } else {
-                // If no longer VHS or no destination, remove existing automated transfer if any
+                // If no destination, remove existing automated transfer if any
                 await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
             }
 
@@ -584,6 +583,9 @@ export async function deleteDelivery(id: number) {
                 await deleteFile(delivery.scanDoDocument)
             }
 
+            // Permanent deletion of stock transfers
+            await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+
             // Permanent deletion of items
             await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
             // Permanent deletion of the delivery record
@@ -602,10 +604,68 @@ export async function deleteDelivery(id: number) {
 export async function bulkDeleteDeliveries(ids: number[]) {
     try {
         await checkPermission('deliveries', 'delete')
-        await db.delete(deliveries).where(inArray(deliveries.id, ids))
-        revalidatePath("/dashboard/deliveries")
-        return { success: true }
-    } catch (_error) {
+
+        return await db.transaction(async (tx) => {
+            const session = await getAuthenticatedSession('deliveries', 'delete')
+            const userId = session.user.id
+
+            for (const id of ids) {
+                const delivery = await tx.query.deliveries.findFirst({
+                    where: eq(deliveries.id, id),
+                    with: { items: true }
+                })
+
+                if (!delivery) continue
+
+                // 1. Revert stock if it was committed
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, delivery.salesOrderId),
+                    columns: { categoryPo: true }
+                })
+                const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
+                const wasCommitted = delivery.status !== "cancelled"
+
+                if (wasCommitted && delivery.warehouseId && !wasVHS) {
+                    for (const item of delivery.items) {
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
+                                bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
+                                updatedAt: new Date(),
+                            })
+                            .where(and(
+                                eq(stockLevels.warehouseId, delivery.warehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            ))
+
+                        await recordStockMovement(tx, {
+                            productId: item.productId,
+                            warehouseId: delivery.warehouseId as number,
+                            quantity: item.deliveredQuantity,
+                            type: "DELIVERY",
+                            referenceNumber: delivery.deliveryNumber,
+                            recordedBy: userId,
+                        })
+                    }
+                }
+
+                // 2. Cleanup assets
+                if (delivery.scanDoDocument) {
+                    await deleteFile(delivery.scanDoDocument)
+                }
+
+                // 3. Delete items, transfers and record
+                await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+                await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
+                await tx.delete(deliveries).where(eq(deliveries.id, id))
+            }
+
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/inventory")
+            return { success: true }
+        })
+    } catch (error) {
+        console.error("Bulk delete deliveries error:", error)
         return { success: false, error: "Failed to delete deliveries" }
     }
 }
@@ -615,28 +675,70 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
         await checkPermission('deliveries', 'edit')
 
         return await db.transaction(async (tx) => {
-            // Get affected sales order IDs before update
-            const affectedDeliveries = await tx.query.deliveries.findMany({
-                where: inArray(deliveries.id, ids),
-                columns: { salesOrderId: true }
-            })
+            const session = await getAuthenticatedSession('deliveries', 'edit')
+            const userId = session.user.id
 
-            await tx.update(deliveries)
-                .set({ status, updatedAt: new Date() })
-                .where(inArray(deliveries.id, ids))
+            for (const id of ids) {
+                const delivery = await tx.query.deliveries.findFirst({
+                    where: eq(deliveries.id, id),
+                    with: { items: true }
+                })
 
-            if (status === "delivered") {
-                const uniqueSoIds = Array.from(new Set(affectedDeliveries.map(d => d.salesOrderId)))
-                for (const soId of uniqueSoIds) {
-                    await checkAndCompleteSalesOrder(tx, soId)
+                if (!delivery) continue
+
+                // Logic for status transitions:
+                // From non-cancelled to cancelled: REVERT stock
+                if (delivery.status !== "cancelled" && status === "cancelled") {
+                    const order = await tx.query.salesOrders.findFirst({
+                        where: eq(salesOrders.id, delivery.salesOrderId),
+                        columns: { categoryPo: true }
+                    })
+                    const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
+
+                    if (delivery.warehouseId && !wasVHS) {
+                        for (const item of delivery.items) {
+                            await tx.update(stockLevels)
+                                .set({
+                                    totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
+                                    bookedStock: sql`${stockLevels.bookedStock} + ${item.deliveredQuantity}`,
+                                    updatedAt: new Date(),
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, delivery.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
+
+                            await recordStockMovement(tx, {
+                                productId: item.productId,
+                                warehouseId: delivery.warehouseId as number,
+                                quantity: item.deliveredQuantity,
+                                type: "DELIVERY",
+                                referenceNumber: delivery.deliveryNumber,
+                                recordedBy: userId,
+                            })
+                        }
+                    }
+
+                    // Delete associated automated transfers if delivery is cancelled
+                    await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+                }
+
+                // Update status
+                await tx.update(deliveries)
+                    .set({ status, updatedAt: new Date() })
+                    .where(eq(deliveries.id, id))
+
+                if (status === "delivered") {
+                    await checkAndCompleteSalesOrder(tx, delivery.salesOrderId)
                 }
             }
 
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/inventory")
             return { success: true }
         })
-    } catch (_error) {
-        console.error("Bulk update delivery status error:", _error)
+    } catch (error) {
+        console.error("Bulk update delivery status error:", error)
         return { success: false, error: "Failed to update delivery status" }
     }
 }

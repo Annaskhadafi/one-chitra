@@ -145,85 +145,8 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                 }
             }
 
-            // Automation for VHS/Consignment
-            if (data.categoryPo === "VHS/Consignment" && data.warehouseId) {
-                const mainWarehouseId = 4 // Central Warehouse (Jakarta)
-
-                // 1. Create Delivery record (Scheduled)
-                const deliveryNumber = `DN-AUTO-${Date.now()}`
-                const [delivery] = await tx.insert(deliveries).values({
-                    deliveryNumber,
-                    salesOrderId: newOrder.id,
-                    warehouseId: data.warehouseId,
-                    warehouseToId: data.warehouseId, // Same for consignment
-                    scheduledDate: new Date(data.salesDate),
-                    status: "scheduled",
-                    deliveryType: "full",
-                    isExternal: false,
-                    notes: `Automatic delivery for Consignment SO: ${invoiceNumber}`,
-                }).returning()
-
-                // 2. Create Stock Transfer from MAIN to Consignment Warehouse
-                const transferRef = `ST-AUTO-${Date.now()}`
-                const [transfer] = await tx.insert(stockTransfers).values({
-                    referenceNumber: transferRef,
-                    deliveryId: delivery.id,
-                    fromWarehouseId: mainWarehouseId,
-                    toWarehouseId: data.warehouseId,
-                    status: "completed",
-                    receivedStatus: "Received",
-                    notes: `Automatic transfer for Consignment SO: ${invoiceNumber}`,
-                    transferDate: new Date(),
-                }).returning()
-
-                if (data.items.length > 0) {
-                    // Item records for Transfer and Delivery
-                    await tx.insert(stockTransferItems).values(data.items.map(item => ({
-                        transferId: transfer.id,
-                        productId: item.productId,
-                        quantity: item.quantity,
-                    })))
-
-                    await tx.insert(deliveryItems).values(data.items.map(item => ({
-                        deliveryId: delivery.id,
-                        productId: item.productId,
-                        orderedQuantity: item.quantity,
-                        deliveredQuantity: item.quantity,
-                    })))
-
-                    // Stock Movement: Deduct from MAIN, Add to Consignment
-                    for (const item of data.items) {
-                        // Deduct from MAIN
-                        await tx.insert(stockLevels)
-                            .values({
-                                warehouseId: mainWarehouseId,
-                                productId: item.productId,
-                                totalStock: 0,
-                                bookedStock: 0,
-                                minStock: 0,
-                            })
-                            .onConflictDoUpdate({
-                                target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: {
-                                    totalStock: sql`${stockLevels.totalStock} - ${item.quantity}`,
-                                    updatedAt: new Date(),
-                                },
-                            })
-
-                        // Add to Consignment (if not already handled by the "Book Stock" logic above)
-                        // Note: the "Book Stock" logic above already ensures a record exists for data.warehouseId
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
-                                updatedAt: new Date(),
-                            })
-                            .where(and(
-                                eq(stockLevels.warehouseId, data.warehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            ))
-                    }
-                }
-            }
+            // Removed legacy VHS/Consignment automation. 
+            // Delivery and Stock Transfer creation is now handled through the Delivery creation process.
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
@@ -359,7 +282,6 @@ export async function deleteSalesOrder(id: number) {
     try {
         await checkPermission('sales-orders', 'delete')
 
-        // Fetch order to check for assets
         const order = await db.query.salesOrders.findFirst({
             where: eq(salesOrders.id, id),
             with: { items: true }
@@ -367,9 +289,8 @@ export async function deleteSalesOrder(id: number) {
 
         if (!order) return { success: false, error: "Sales Order not found" }
 
-        // Start transaction
         return await db.transaction(async (tx) => {
-            // 1. Revert booked stock for SO items
+            // 1. Revert booked stock for SO items (Booked Stock only)
             if (order.warehouseId) {
                 for (const item of order.items) {
                     await tx.update(stockLevels)
@@ -384,42 +305,59 @@ export async function deleteSalesOrder(id: number) {
                 }
             }
 
-            // 2. Handle related deliveries and their stock
+            // 2. Revert Stock for Related Deliveries
             const relatedDeliveries = await tx.query.deliveries.findMany({
                 where: eq(deliveries.salesOrderId, id),
                 with: { items: true }
             })
 
             for (const delivery of relatedDeliveries) {
-                const wasCommitted = delivery.status !== "cancelled"
-                if (wasCommitted && delivery.warehouseId) {
+                // If delivery was not cancelled, it affects stock
+                if (delivery.status !== "cancelled" && delivery.warehouseId) {
                     for (const dItem of delivery.items) {
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
-                                bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
-                                updatedAt: new Date(),
-                            })
-                            .where(and(
-                                eq(stockLevels.warehouseId, delivery.warehouseId),
-                                eq(stockLevels.productId, dItem.productId)
-                            ))
+                        // Reverting delivery means:
+                        // - Add back to Total Stock (it was deducted when delivered)
+                        // - Add back to Booked Stock (it was deducted from booked when delivered)
+
+                        // NOTE: If status is 'delivered', it deducted both.
+                        // If status is 'scheduled/ready/in_transit', it only deducted Booked Stock? 
+                        // Actually, standard logic:
+                        // - SO Create -> Booked Stock +
+                        // - Delivery Delivered -> Total Stock -, Booked Stock -
+
+                        // So if we delete an SO that has a 'delivered' delivery:
+                        if (delivery.status === "delivered") {
+                            await tx.update(stockLevels)
+                                .set({
+                                    totalStock: sql`${stockLevels.totalStock} + ${dItem.deliveredQuantity}`,
+                                    bookedStock: sql`${stockLevels.bookedStock} + ${dItem.deliveredQuantity}`,
+                                    updatedAt: new Date(),
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, delivery.warehouseId),
+                                    eq(stockLevels.productId, dItem.productId)
+                                ))
+                        }
                     }
                 }
-                // Delete delivery items (cascaded by DB but safe to be explicit if needed, 
-                // though insert/delete in tx is fine)
+
+                // Cleanup Delivery Transfers and Documents
+                await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, delivery.id))
+                if (delivery.scanDoDocument) {
+                    await deleteFile(delivery.scanDoDocument)
+                }
+
                 await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id))
                 await tx.delete(deliveries).where(eq(deliveries.id, delivery.id))
             }
 
-            // Permanent deletion of assets
+            // 3. Cleanup SO Document
             if (order.poDocument) {
                 await deleteFile(order.poDocument)
             }
 
-            // Permanent deletion of items
+            // 4. Final Deletion
             await tx.delete(salesOrderItems).where(eq(salesOrderItems.salesOrderId, id))
-            // Permanent deletion of the record
             await tx.delete(salesOrders).where(eq(salesOrders.id, id))
 
             revalidatePath("/dashboard/sales-orders")
@@ -436,15 +374,16 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
     try {
         await checkPermission('sales-orders', 'delete')
 
-        // For asset deletion and stock reversion, we need to know what we are deleting
-        const orders = await db.query.salesOrders.findMany({
-            where: inArray(salesOrders.id, ids),
-            with: { items: true }
-        })
-
         return await db.transaction(async (tx) => {
-            for (const order of orders) {
-                // 1. Revert booked stock for SO items
+            for (const id of ids) {
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, id),
+                    with: { items: true }
+                })
+
+                if (!order) continue
+
+                // 1. Revert booked stock
                 if (order.warehouseId) {
                     for (const item of order.items) {
                         await tx.update(stockLevels)
@@ -466,8 +405,7 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
                 })
 
                 for (const delivery of relatedDeliveries) {
-                    const wasCommitted = delivery.status !== "cancelled"
-                    if (wasCommitted && delivery.warehouseId) {
+                    if (delivery.status === "delivered" && delivery.warehouseId) {
                         for (const dItem of delivery.items) {
                             await tx.update(stockLevels)
                                 .set({
@@ -481,16 +419,23 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
                                 ))
                         }
                     }
+
+                    if (delivery.scanDoDocument) {
+                        await deleteFile(delivery.scanDoDocument)
+                    }
+
+                    await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, delivery.id))
                     await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, delivery.id))
                     await tx.delete(deliveries).where(eq(deliveries.id, delivery.id))
                 }
 
-                // Delete files
+                // 3. Delete SO Document
                 if (order.poDocument) {
                     await deleteFile(order.poDocument)
                 }
             }
 
+            // 4. Final Bulk Deletion
             await tx.delete(salesOrderItems).where(inArray(salesOrderItems.salesOrderId, ids))
             await tx.delete(salesOrders).where(inArray(salesOrders.id, ids))
 

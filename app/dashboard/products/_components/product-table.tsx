@@ -47,7 +47,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -109,6 +109,57 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         queryFn: getProducts,
         initialData,
         staleTime: 60 * 1000,
+    })
+
+    // Mutations
+    const updateCategoryMutation = useMutation({
+        mutationFn: ({ ids, category }: { ids: number[], category: string }) => bulkUpdateProductCategory(ids, category),
+        onMutate: async ({ ids, category }) => {
+            await queryClient.cancelQueries({ queryKey: ["products"] })
+            const previousProducts = queryClient.getQueryData<Product[]>(["products"])
+
+            if (previousProducts) {
+                queryClient.setQueryData<Product[]>(["products"], (old) =>
+                    old?.map(product => ids.includes(product.id) ? { ...product, category } : product)
+                )
+            }
+
+            return { previousProducts }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousProducts) {
+                queryClient.setQueryData(["products"], context.previousProducts)
+            }
+            toast.error("Failed to update categories")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["products"] })
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: (ids: number[]) => ids.length === 1 ? deleteProduct(ids[0]) : bulkDeleteProducts(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["products"] })
+            const previousProducts = queryClient.getQueryData<Product[]>(["products"])
+
+            if (previousProducts) {
+                queryClient.setQueryData<Product[]>(["products"], (old) =>
+                    old?.filter(product => !ids.includes(product.id))
+                )
+            }
+
+            return { previousProducts }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousProducts) {
+                queryClient.setQueryData(["products"], context.previousProducts)
+            }
+            toast.error("Failed to delete product(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["products"] })
+        },
     })
 
     const { hasResourcePermission } = usePermissions()
@@ -364,49 +415,43 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         ]
         : [0, 0]
 
-    const selectedIds = Object.keys(rowSelection).map(
-        (idx) => data[parseInt(idx)].id
-    )
-
     const handleBulkDelete = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm("Are you sure you want to delete selected products?")) {
-            const result = await bulkDeleteProducts(selectedIds)
-            if (result.success) {
-                toast.success("Products deleted successfully")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["products"] })
-            } else {
-                toast.error(result.error)
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Products deleted successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
     const handleBulkEditCategory = async () => {
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         const category = prompt("Enter new category for selected products:")
         if (category) {
-            const result = await bulkUpdateProductCategory(selectedIds, category)
-            if (result.success) {
-                toast.success("Product categories updated successfully")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["products"] })
-            } else {
-                toast.error(result.error)
-            }
+            updateCategoryMutation.mutate({ ids: selectedIds, category }, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Product categories updated successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
     const handleDelete = async (id: number) => {
-        try {
-            const result = await deleteProduct(id)
-            if (result.success) {
-                toast.success("Product deleted")
-                queryClient.invalidateQueries({ queryKey: ["products"] })
-            } else {
-                toast.error(result.error)
-            }
-        } catch (_error) {
-            toast.error("Failed to delete product")
-        }
+        deleteMutation.mutate([id], {
+            onSuccess: () => toast.success("Product deleted")
+        })
     }
 
     return (
@@ -474,7 +519,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     {canCreate && (
-                        <>  
+                        <>
                             <ProductCSVUpload />
                             <ProductDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                         </>
@@ -547,9 +592,9 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                 </div>
             </div>
 
-            {selectedIds.length > 0 && (canEdit || canDelete) && (
+            {table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (
                 <BulkActions
-                    selectedCount={selectedIds.length}
+                    selectedCount={table.getSelectedRowModel().flatRows.length}
                     onDelete={canDelete ? handleBulkDelete : () => { }}
                     onEdit={canEdit ? handleBulkEditCategory : () => { }}
                     entityName="product"

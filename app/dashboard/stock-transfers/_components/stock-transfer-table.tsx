@@ -23,7 +23,7 @@ import { Search, ArrowRight, Package, Calendar, ChevronUp, ChevronDown, Pencil, 
 import { format } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getStockTransfers, updateStockTransfer } from "@/app/actions/stock-transfer"
 import { toast } from "sonner"
 import {
@@ -66,6 +66,7 @@ interface Transfer {
     notes: string | null
     transferDate: Date
     createdAt: Date
+    updatedAt: Date
     fromWarehouse: { id: number; sloc: string; description: string | null }
     toWarehouse: { id: number; sloc: string; description: string | null }
     items: TransferItem[]
@@ -88,11 +89,39 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function StockTransferTable({ data: initialData }: { data: Transfer[] }) {
-    const { data = initialData } = useQuery({
+    const queryClient = useQueryClient()
+    const { data: transfers = initialData } = useQuery<Transfer[]>({
         queryKey: ["stock-transfers"],
-        queryFn: getStockTransfers,
+        queryFn: getStockTransfers as any, // Cast to any if necessary to match Transfer[]
         initialData: initialData,
         staleTime: 60 * 1000,
+    })
+
+    // Mutations
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ id, receivedStatus }: { id: number, receivedStatus: "Scheduled" | "Received" | "Rejected" }) =>
+            updateStockTransfer(id, { receivedStatus }),
+        onMutate: async ({ id, receivedStatus }) => {
+            await queryClient.cancelQueries({ queryKey: ["stock-transfers"] })
+            const previousTransfers = queryClient.getQueryData<Transfer[]>(["stock-transfers"])
+
+            if (previousTransfers) {
+                queryClient.setQueryData<Transfer[]>(["stock-transfers"], (old) =>
+                    old?.map(t => t.id === id ? { ...t, receivedStatus } : t)
+                )
+            }
+
+            return { previousTransfers }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousTransfers) {
+                queryClient.setQueryData(["stock-transfers"], context.previousTransfers)
+            }
+            toast.error("Failed to update status")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["stock-transfers"] })
+        },
     })
 
     const [searchTerm, setSearchTerm] = useState("")
@@ -111,7 +140,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     // Chart data: status breakdown
     const chartData = useMemo(() => {
         const statusCounts: Record<string, number> = {}
-        data.forEach(t => {
+        transfers.forEach((t: Transfer) => {
             const status = t.receivedStatus || "Scheduled"
             statusCounts[status] = (statusCounts[status] || 0) + 1
         })
@@ -236,19 +265,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
 
                 const handleStatusChange = async (newStatus: "Scheduled" | "Received" | "Rejected") => {
                     if (newStatus === status) return
-
-                    const promise = updateStockTransfer(transfer.id, {
-                        receivedStatus: newStatus
-                    })
-
-                    toast.promise(promise, {
-                        loading: "Updating status...",
-                        success: (res) => {
-                            if (res.success) return "Status updated"
-                            throw new Error(res.error)
-                        },
-                        error: (err) => err.message || "Failed to update"
-                    })
+                    updateStatusMutation.mutate({ id: transfer.id, receivedStatus: newStatus })
                 }
 
                 return (
@@ -320,7 +337,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
     ], [])
 
     const table = useReactTable({
-        data,
+        data: transfers,
         columns,
         state: {
             sorting,
@@ -370,7 +387,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 open={editDialogOpen}
                 onOpenChange={setEditDialogOpen}
             />
-            
+
             <TransferPreviewDialog
                 transfer={previewTransfer}
                 open={previewDialogOpen}
@@ -378,7 +395,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             />
 
             {/* Status Chart */}
-            {data.length > 0 && (
+            {transfers.length > 0 && (
                 <Card className="border-none bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 shadow-lg">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-bold">Transfer Status Overview</CardTitle>
@@ -494,7 +511,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 {/* Footer Info */}
                 <div className="flex items-center justify-between text-xs bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950/30 dark:via-purple-950/30 dark:to-pink-950/30 p-3 rounded-lg border-2 border-dashed border-purple-200 dark:border-purple-800">
                     <div className="flex gap-4 font-medium">
-                        <span className="text-blue-700 dark:text-blue-400">Total Records: <strong className="text-blue-900 dark:text-blue-300">{data.length}</strong></span>
+                        <span className="text-blue-700 dark:text-blue-400">Total Records: <strong className="text-blue-900 dark:text-blue-300">{transfers.length}</strong></span>
                         <span className="text-purple-700 dark:text-purple-400">Filtered: <strong className="text-purple-900 dark:text-purple-300">{table.getFilteredRowModel().rows.length}</strong></span>
                     </div>
                     <div className="text-pink-700 dark:text-pink-400 font-medium">

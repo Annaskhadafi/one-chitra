@@ -45,7 +45,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { SalesOrderDetail } from "./sales-order-detail"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -162,30 +162,68 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         return monthNames.map((name, i) => ({ month: name, count: counts[i] }))
     }, [data])
 
-    const handleUpdateStatus = useCallback(async (id: number, status: string) => {
-        const result = await bulkUpdateSalesOrderStatus([id], status)
-        if (result.success) {
-            setSuccessMessage(`Status pesanan berhasil diubah menjadi ${status}`)
-            setShowSuccessDialog(true)
+    // Mutations
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ ids, status }: { ids: number[], status: string }) => bulkUpdateSalesOrderStatus(ids, status),
+        onMutate: async ({ ids, status }) => {
+            await queryClient.cancelQueries({ queryKey: ["sales-orders"] })
+            const previousOrders = queryClient.getQueryData<SalesOrderWithRelations[]>(["sales-orders"])
+
+            if (previousOrders) {
+                queryClient.setQueryData<SalesOrderWithRelations[]>(["sales-orders"], (old) =>
+                    old?.map(order => ids.includes(order.id) ? { ...order, status: status as any } : order)
+                )
+            }
+
+            return { previousOrders }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousOrders) {
+                queryClient.setQueryData(["sales-orders"], context.previousOrders)
+            }
+            toast.error("Failed to update status")
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-        } else {
-            toast.error(('error' in result ? String(result.error) : "Failed to update status"))
-        }
-    }, [queryClient])
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: (ids: number[]) => ids.length === 1 ? deleteSalesOrder(ids[0]) : bulkDeleteSalesOrders(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["sales-orders"] })
+            const previousOrders = queryClient.getQueryData<SalesOrderWithRelations[]>(["sales-orders"])
+
+            if (previousOrders) {
+                queryClient.setQueryData<SalesOrderWithRelations[]>(["sales-orders"], (old) =>
+                    old?.filter(order => !ids.includes(order.id))
+                )
+            }
+
+            return { previousOrders }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousOrders) {
+                queryClient.setQueryData(["sales-orders"], context.previousOrders)
+            }
+            toast.error("Failed to delete sales order(s)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
+        },
+    })
+
+    const handleUpdateStatus = useCallback(async (id: number, status: string) => {
+        updateStatusMutation.mutate({ ids: [id], status })
+        setSuccessMessage(`Status pesanan berhasil diubah menjadi ${status}`)
+        setShowSuccessDialog(true)
+    }, [updateStatusMutation])
 
     const handleDelete = useCallback(async (id: number) => {
-        try {
-            const result = await deleteSalesOrder(id)
-            if (result.success) {
-                toast.success("Sales order deleted")
-                queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-            } else {
-                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
-            }
-        } catch {
-            toast.error("Failed to delete sales order")
-        }
-    }, [queryClient])
+        deleteMutation.mutate([id], {
+            onSuccess: () => toast.success("Sales order deleted")
+        })
+    }, [deleteMutation])
 
     const columns = useMemo<ColumnDef<SalesOrderWithRelations>[]>(() => [
         {
@@ -460,31 +498,35 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         : [0, 0]
 
     const handleBulkDelete = async () => {
-        const selectedIds = table.getSelectedRowModel().rows.map(r => r.original.id)
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm(`Are you sure you want to delete ${selectedIds.length} selected sales orders?`)) {
-            const result = await bulkDeleteSalesOrders(selectedIds)
-            if (result.success) {
-                toast.success("Sales orders deleted successfully")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-            } else {
-                toast.error(('error' in result ? String(result.error) : "Failed to delete sales orders"))
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Sales orders deleted successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(('error' in result ? String(result.error) : "Failed to delete sales orders"))
+                    }
+                }
+            })
         }
     }
 
     const handleBulkUpdateStatus = async () => {
-        const selectedIds = table.getSelectedRowModel().rows.map(r => r.original.id)
+        const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         const status = prompt("Enter new status for selected orders (draft/confirmed/completed/cancelled):")
         if (status) {
-            const result = await bulkUpdateSalesOrderStatus(selectedIds, status)
-            if (result.success) {
-                toast.success("Sales order statuses updated successfully")
-                setRowSelection({})
-                queryClient.invalidateQueries({ queryKey: ["sales-orders"] })
-            } else {
-                toast.error(('error' in result ? String(result.error) : "Failed to update statuses"))
-            }
+            updateStatusMutation.mutate({ ids: selectedIds, status }, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Sales order statuses updated successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(('error' in result ? String(result.error) : "Failed to update statuses"))
+                    }
+                }
+            })
         }
     }
 
@@ -734,9 +776,9 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             </div>
 
             {
-                Object.keys(rowSelection).length > 0 && (canEdit || canDelete) && (
+                table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (
                     <BulkActions
-                        selectedCount={Object.keys(rowSelection).length}
+                        selectedCount={table.getSelectedRowModel().flatRows.length}
                         onDelete={canDelete ? handleBulkDelete : () => { }}
                         onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
                         entityName="sales order"

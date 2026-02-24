@@ -70,7 +70,7 @@ import {
     ColumnFiltersState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
 interface DeliveryWithRelations {
     id: number
@@ -165,10 +165,87 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
 
+    const queryClient = useQueryClient()
     const { data = initialData, isLoading, refetch } = useQuery({
         queryKey: ["deliveries"],
         queryFn: () => getDeliveries(),
         initialData: initialData,
+    })
+
+    // Mutations
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ ids, status }: { ids: number[], status: string }) => bulkUpdateDeliveryStatus(ids, status),
+        onMutate: async ({ ids, status }) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+
+            if (previousDeliveries) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.map(delivery => ids.includes(delivery.id) ? { ...delivery, status: status } : delivery)
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to update status")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
+    })
+
+    const updateDateMutation = useMutation({
+        mutationFn: ({ id, date }: { id: number, date: Date | null }) => updateDeliveryDate(id, date),
+        onMutate: async ({ id, date }) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+
+            if (previousDeliveries) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.map(delivery => delivery.id === id ? { ...delivery, deliveryDate: date } : delivery)
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to update delivery date")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: (ids: number[]) => ids.length === 1 ? deleteDelivery(ids[0]) : bulkDeleteDeliveries(ids),
+        onMutate: async (ids) => {
+            await queryClient.cancelQueries({ queryKey: ["deliveries"] })
+            const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
+
+            if (previousDeliveries) {
+                queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
+                    old?.filter(delivery => !ids.includes(delivery.id))
+                )
+            }
+
+            return { previousDeliveries }
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousDeliveries) {
+                queryClient.setQueryData(["deliveries"], context.previousDeliveries)
+            }
+            toast.error("Failed to delete delivery(ies)")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        },
     })
 
     const filteredData = useMemo(() => {
@@ -182,38 +259,27 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     }, [data, selectedYear, selectedMonth, selectedCategory])
 
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
-        const result = await bulkUpdateDeliveryStatus([id], status)
-        if (result.success) {
-            setSuccessMessage(`Status pengiriman berhasil diubah menjadi ${statusLabels[status] || status}`)
-            setShowSuccessDialog(true)
-            refetch()
-        } else {
-            toast.error(result.error)
-        }
-    }, [refetch])
+        updateStatusMutation.mutate({ ids: [id], status })
+        setSuccessMessage(`Status pengiriman berhasil diubah menjadi ${statusLabels[status] || status}`)
+        setShowSuccessDialog(true)
+    }, [updateStatusMutation])
 
     const handleUpdateDeliveryDate = useCallback(async (id: number, date: Date | undefined) => {
-        const result = await updateDeliveryDate(id, date || null)
-        if (result.success) {
-            toast.success("Delivery date updated")
-            refetch()
-        } else {
-            toast.error(result.error)
-        }
-    }, [refetch])
+        updateDateMutation.mutate({ id, date: date || null }, {
+            onSuccess: () => toast.success("Delivery date updated")
+        })
+    }, [updateDateMutation])
 
     const handleDelete = useCallback(async (id: number) => {
         setDeleting(id)
-        const res = await deleteDelivery(id)
-        if (res.success) {
-            toast.success("Delivery deleted successfully")
-            refetch()
-        } else {
-            const errorMsg = 'error' in res && res.error ? res.error : "Failed to delete delivery"
-            toast.error(errorMsg)
-        }
-        setDeleting(null)
-    }, [refetch])
+        deleteMutation.mutate([id], {
+            onSuccess: () => {
+                toast.success("Delivery deleted successfully")
+                setDeleting(null)
+            },
+            onError: () => setDeleting(null)
+        })
+    }, [deleteMutation])
 
     const columns = useMemo<ColumnDef<DeliveryWithRelations>[]>(() => [
         {
@@ -551,14 +617,16 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         if (confirm(`Are you sure you want to delete ${selectedIds.length} selected deliveries?`)) {
-            const result = await bulkDeleteDeliveries(selectedIds)
-            if (result.success) {
-                toast.success("Deliveries deleted successfully")
-                setRowSelection({})
-                refetch()
-            } else {
-                toast.error(result.error)
-            }
+            deleteMutation.mutate(selectedIds, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Deliveries deleted successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
@@ -566,14 +634,16 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
         const status = prompt("Enter new status (scheduled/ready/partial/in_transit/delivered/cancelled):")
         if (status) {
-            const result = await bulkUpdateDeliveryStatus(selectedIds, status)
-            if (result.success) {
-                toast.success("Delivery statuses updated successfully")
-                setRowSelection({})
-                refetch()
-            } else {
-                toast.error(result.error)
-            }
+            updateStatusMutation.mutate({ ids: selectedIds, status }, {
+                onSuccess: (result) => {
+                    if (result.success) {
+                        toast.success("Delivery statuses updated successfully")
+                        setRowSelection({})
+                    } else {
+                        toast.error(result.error)
+                    }
+                }
+            })
         }
     }
 
