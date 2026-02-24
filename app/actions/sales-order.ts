@@ -298,40 +298,58 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                 for (const item of data.items) {
                     if (!item.productId) continue
 
+                    // Manual upsert: cek existing record dulu
+                    const existingLevel = await tx.query.stockLevels.findFirst({
+                        where: and(
+                            eq(stockLevels.warehouseId, data.warehouseId),
+                            eq(stockLevels.productId, item.productId)
+                        )
+                    })
+
                     if (isDraft) {
-                        await tx.insert(stockLevels)
-                            .values({
-                                warehouseId: data.warehouseId,
-                                productId: item.productId,
-                                draftBookedStock: item.quantity,
-                                bookedStock: 0,
-                                totalStock: 0,
-                                minStock: 0,
-                            })
-                            .onConflictDoUpdate({
-                                target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: {
+                        if (existingLevel) {
+                            await tx.update(stockLevels)
+                                .set({
                                     draftBookedStock: sql`${stockLevels.draftBookedStock} + ${item.quantity}`,
                                     updatedAt: new Date()
-                                },
-                            })
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, data.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
+                        } else {
+                            await tx.insert(stockLevels)
+                                .values({
+                                    warehouseId: data.warehouseId,
+                                    productId: item.productId,
+                                    draftBookedStock: item.quantity,
+                                    bookedStock: 0,
+                                    totalStock: 0,
+                                    minStock: 0,
+                                })
+                        }
                     } else {
-                        await tx.insert(stockLevels)
-                            .values({
-                                warehouseId: data.warehouseId,
-                                productId: item.productId,
-                                draftBookedStock: 0,
-                                bookedStock: item.quantity,
-                                totalStock: 0,
-                                minStock: 0,
-                            })
-                            .onConflictDoUpdate({
-                                target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: {
+                        if (existingLevel) {
+                            await tx.update(stockLevels)
+                                .set({
                                     bookedStock: sql`${stockLevels.bookedStock} + ${item.quantity}`,
                                     updatedAt: new Date()
-                                },
-                            })
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, data.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
+                        } else {
+                            await tx.insert(stockLevels)
+                                .values({
+                                    warehouseId: data.warehouseId,
+                                    productId: item.productId,
+                                    draftBookedStock: 0,
+                                    bookedStock: item.quantity,
+                                    totalStock: 0,
+                                    minStock: 0,
+                                })
+                        }
                     }
                 }
             }

@@ -210,13 +210,13 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
         const session = await getAuthenticatedSession('deliveries', 'create')
         const userId = session.user.id
         console.log("[CREATE DELIVERY] User ID:", userId)
-        
+
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
         console.log("[CREATE DELIVERY] Delivery Number:", deliveryNumber)
 
         return await db.transaction(async (tx) => {
             console.log("[CREATE DELIVERY] Starting transaction...")
-            
+
             const [newDelivery] = await tx.insert(deliveries)
                 .values({
                     deliveryNumber,
@@ -249,7 +249,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     notes: data.notes || null,
                 })
                 .returning()
-            
+
             console.log("[CREATE DELIVERY] Delivery created, ID:", newDelivery.id)
 
             if (data.items.length > 0) {
@@ -263,7 +263,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                         deliveredQuantity: item.deliveredQuantity,
                         serialNumbers: item.serialNumbers || null,
                     })))
-                
+
                 console.log("[CREATE DELIVERY] Items inserted")
 
                 // Handle Stock Transfer automation for VHS/Consignment or any delivery with destination warehouse
@@ -296,26 +296,38 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             quantity: item.deliveredQuantity,
                         }))
                     )
-                    
+
                     // Add stock to destination warehouse and record TRANSFER_IN movement
                     for (const item of data.items) {
-                        // Add to destination warehouse stock
-                        await tx.insert(stockLevels)
-                            .values({
-                                warehouseId: data.warehouseToId as number,
-                                productId: item.productId,
-                                totalStock: item.deliveredQuantity,
-                                bookedStock: 0,
-                                draftBookedStock: 0,
-                                minStock: 0,
-                            })
-                            .onConflictDoUpdate({
-                                target: [stockLevels.warehouseId, stockLevels.productId],
-                                set: {
+                        // Add to destination warehouse stock (manual upsert for compatibility)
+                        const existingDestStock = await tx.query.stockLevels.findFirst({
+                            where: and(
+                                eq(stockLevels.warehouseId, data.warehouseToId as number),
+                                eq(stockLevels.productId, item.productId)
+                            )
+                        })
+
+                        if (existingDestStock) {
+                            await tx.update(stockLevels)
+                                .set({
                                     totalStock: sql`${stockLevels.totalStock} + ${item.deliveredQuantity}`,
-                                    updatedAt: new Date()
-                                },
-                            })
+                                    updatedAt: new Date(),
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, data.warehouseToId as number),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
+                        } else {
+                            await tx.insert(stockLevels)
+                                .values({
+                                    warehouseId: data.warehouseToId as number,
+                                    productId: item.productId,
+                                    totalStock: item.deliveredQuantity,
+                                    bookedStock: 0,
+                                    draftBookedStock: 0,
+                                    minStock: 0,
+                                })
+                        }
 
                         // Record TRANSFER_IN movement for destination warehouse
                         await recordStockMovement(tx, {
@@ -331,7 +343,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             notes: `Transfer IN dari ${newDelivery.deliveryNumber}`,
                         })
                     }
-                    
+
                     console.log("[CREATE DELIVERY] Stock transfer created with TRANSFER_IN movements")
                 }
 
@@ -382,7 +394,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             try {
                 revalidatePath("/dashboard/deliveries")
             } catch (_e) { }
-            
+
             console.log("[CREATE DELIVERY] Transaction completed successfully")
             return { success: true, id: newDelivery.id }
         })
