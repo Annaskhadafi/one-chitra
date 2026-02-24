@@ -221,27 +221,41 @@ export async function updateStockTransferStatus(id: number, data: {
 
             // If status changed to Received, move the stock
             if (data.receivedStatus === "Received") {
-                for (const item of transfer.items) {
-                    // 1. Deduct from source
-                    const sourceStock = await tx.query.stockLevels.findFirst({
-                        where: and(
-                            eq(stockLevels.warehouseId, transfer.fromWarehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        )
-                    })
+                const isAutomated = transfer.deliveryId !== null
 
-                    if (!sourceStock || sourceStock.totalStock < item.quantity) {
-                        throw new Error(`Insufficient stock for product ID ${item.productId} in source warehouse`)
+                for (const item of transfer.items) {
+                    // 1. Deduct from source (Only for manual transfers)
+                    if (!isAutomated) {
+                        const sourceStock = await tx.query.stockLevels.findFirst({
+                            where: and(
+                                eq(stockLevels.warehouseId, transfer.fromWarehouseId),
+                                eq(stockLevels.productId, item.productId)
+                            )
+                        })
+
+                        if (!sourceStock || sourceStock.totalStock < item.quantity) {
+                            throw new Error(`Insufficient stock for product ID ${item.productId} in source warehouse`)
+                        }
+
+                        await tx.update(stockLevels)
+                            .set({
+                                totalStock: sourceStock.totalStock - item.quantity,
+                                updatedAt: new Date()
+                            })
+                            .where(eq(stockLevels.id, sourceStock.id))
+
+                        // Record Source Movement (Out)
+                        await recordStockMovement(tx, {
+                            productId: item.productId,
+                            warehouseId: transfer.fromWarehouseId,
+                            quantity: -item.quantity,
+                            type: "TRANSFER_OUT",
+                            referenceNumber: transfer.referenceNumber as string,
+                            recordedBy: userId,
+                        })
                     }
 
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: sourceStock.totalStock - item.quantity,
-                            updatedAt: new Date()
-                        })
-                        .where(eq(stockLevels.id, sourceStock.id))
-
-                    // 2. Add to destination
+                    // 2. Add to destination (For BOTH manual and automated)
                     const destStock = await tx.query.stockLevels.findFirst({
                         where: and(
                             eq(stockLevels.warehouseId, transfer.toWarehouseId),
@@ -266,17 +280,6 @@ export async function updateStockTransferStatus(id: number, data: {
                         })
                     }
 
-                    // 3. Record Movement logs
-                    // Record Source Movement (Out)
-                    await recordStockMovement(tx, {
-                        productId: item.productId,
-                        warehouseId: transfer.fromWarehouseId,
-                        quantity: -item.quantity,
-                        type: "TRANSFER_OUT",
-                        referenceNumber: transfer.referenceNumber as string,
-                        recordedBy: userId,
-                    })
-
                     // Record Destination Movement (In)
                     await recordStockMovement(tx, {
                         productId: item.productId,
@@ -295,8 +298,10 @@ export async function updateStockTransferStatus(id: number, data: {
         console.error("Update stock transfer status error:", error)
         return { success: false, error: error.message || "Failed to update status" }
     } finally {
-        revalidatePath("/dashboard/stock-transfers")
-        revalidatePath("/dashboard/inventory")
+        try {
+            revalidatePath("/dashboard/stock-transfers")
+            revalidatePath("/dashboard/inventory")
+        } catch (e) { }
     }
 }
 

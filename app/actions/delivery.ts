@@ -286,10 +286,11 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
 
                 // Deduct stock for all statuses EXCEPT cancelled
-                // If destination warehouse is set, stock will be managed by the transfer, not here
                 const isCommitted = data.status !== "cancelled"
 
-                if (isCommitted && !hasDestination) {
+                if (isCommitted) {
+                    const movementType = hasDestination ? "TRANSFER_OUT" : "DELIVERY"
+
                     for (const item of data.items) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
@@ -308,7 +309,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                             productId: item.productId,
                             warehouseId: data.warehouseId,
                             quantity: -item.deliveredQuantity, // Negative for Out
-                            type: "DELIVERY",
+                            type: movementType,
                             referenceNumber: deliveryNumber,
                             recordedBy: userId,
                         })
@@ -320,7 +321,9 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 await checkAndCompleteSalesOrder(tx, data.salesOrderId)
             }
 
-            revalidatePath("/dashboard/deliveries")
+            try {
+                revalidatePath("/dashboard/deliveries")
+            } catch (e) { }
             return { success: true, id: newDelivery.id }
         })
     } catch (error) {
@@ -353,7 +356,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             const originalWasVHS = originalOrder?.categoryPo === "VHS/Consignment" && originalDelivery.warehouseToId
             const originalWasCommitted = originalDelivery.status !== "cancelled"
 
-            if (originalWasCommitted && originalDelivery.warehouseId && !originalWasVHS) {
+            if (originalWasCommitted && originalDelivery.warehouseId) {
+                const originalMovementType = originalWasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
                         .set({
@@ -371,7 +375,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         productId: item.productId,
                         warehouseId: originalDelivery.warehouseId,
                         quantity: item.deliveredQuantity, // Positive for Revert In
-                        type: "DELIVERY",
+                        type: originalMovementType,
                         referenceNumber: originalDelivery.deliveryNumber,
                         recordedBy: userId,
                     })
@@ -488,7 +492,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 const isVHSConsignment = order?.categoryPo === "VHS/Consignment" && data.warehouseToId
                 const isCommitted = data.status !== "cancelled"
 
-                if (isCommitted && !isVHSConsignment) {
+                if (isCommitted) {
+                    const movementType = isVHSConsignment ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of data.items) {
                         await tx.update(stockLevels)
                             .set({
@@ -506,7 +511,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                             productId: item.productId,
                             warehouseId: data.warehouseId,
                             quantity: -item.deliveredQuantity, // Negative for Out
-                            type: "DELIVERY",
+                            type: movementType,
                             referenceNumber: data.deliveryNumber || originalDelivery.deliveryNumber,
                             recordedBy: userId,
                         })
@@ -518,7 +523,9 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 await checkAndCompleteSalesOrder(tx, data.salesOrderId)
             }
 
-            revalidatePath("/dashboard/deliveries")
+            try {
+                revalidatePath("/dashboard/deliveries")
+            } catch (e) { }
             return { success: true }
         })
     } catch (error) {
@@ -553,7 +560,8 @@ export async function deleteDelivery(id: number) {
             const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
             const wasCommitted = delivery.status !== "cancelled"
 
-            if (wasCommitted && delivery.warehouseId && !wasVHS) {
+            if (wasCommitted && delivery.warehouseId) {
+                const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of delivery.items) {
                     await tx.update(stockLevels)
                         .set({
@@ -571,7 +579,7 @@ export async function deleteDelivery(id: number) {
                         productId: item.productId,
                         warehouseId: delivery.warehouseId as number,
                         quantity: item.deliveredQuantity, // Positive for Revert In
-                        type: "DELIVERY",
+                        type: movementType,
                         referenceNumber: delivery.deliveryNumber,
                         recordedBy: userId,
                     })
@@ -591,8 +599,10 @@ export async function deleteDelivery(id: number) {
             // Permanent deletion of the delivery record
             await tx.delete(deliveries).where(eq(deliveries.id, id))
 
-            revalidatePath("/dashboard/deliveries")
-            revalidatePath("/dashboard/inventory") // Revalidate inventory as stock levels changed
+            try {
+                revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/inventory")
+            } catch (e) { }
             return { success: true }
         })
     } catch (error) {
@@ -625,7 +635,8 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                 const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
                 const wasCommitted = delivery.status !== "cancelled"
 
-                if (wasCommitted && delivery.warehouseId && !wasVHS) {
+                if (wasCommitted && delivery.warehouseId) {
+                    const movementType = wasVHS ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of delivery.items) {
                         await tx.update(stockLevels)
                             .set({
@@ -642,7 +653,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                             productId: item.productId,
                             warehouseId: delivery.warehouseId as number,
                             quantity: item.deliveredQuantity,
-                            type: "DELIVERY",
+                            type: movementType,
                             referenceNumber: delivery.deliveryNumber,
                             recordedBy: userId,
                         })
@@ -660,8 +671,10 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                 await tx.delete(deliveries).where(eq(deliveries.id, id))
             }
 
-            revalidatePath("/dashboard/deliveries")
-            revalidatePath("/dashboard/inventory")
+            try {
+                revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/inventory")
+            } catch (e) { }
             return { success: true }
         })
     } catch (error) {
@@ -686,16 +699,17 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
                 if (!delivery) continue
 
-                // Logic for status transitions:
-                // From non-cancelled to cancelled: REVERT stock
-                if (delivery.status !== "cancelled" && status === "cancelled") {
-                    const order = await tx.query.salesOrders.findFirst({
-                        where: eq(salesOrders.id, delivery.salesOrderId),
-                        columns: { categoryPo: true }
-                    })
-                    const wasVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
+                const order = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, delivery.salesOrderId),
+                    columns: { categoryPo: true }
+                })
+                const isVHS = order?.categoryPo === "VHS/Consignment" && delivery.warehouseToId
 
-                    if (delivery.warehouseId && !wasVHS) {
+                // Logic for status transitions:
+                // 1. From non-cancelled to cancelled: REVERT stock
+                if (delivery.status !== "cancelled" && status === "cancelled") {
+                    if (delivery.warehouseId) {
+                        const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
                             await tx.update(stockLevels)
                                 .set({
@@ -712,7 +726,7 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                                 productId: item.productId,
                                 warehouseId: delivery.warehouseId as number,
                                 quantity: item.deliveredQuantity,
-                                type: "DELIVERY",
+                                type: movementType,
                                 referenceNumber: delivery.deliveryNumber,
                                 recordedBy: userId,
                             })
@@ -721,6 +735,56 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
                     // Delete associated automated transfers if delivery is cancelled
                     await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+                }
+
+                // 2. From cancelled to non-cancelled: APPLY stock
+                if (delivery.status === "cancelled" && status !== "cancelled") {
+                    if (delivery.warehouseId) {
+                        const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
+                        for (const item of delivery.items) {
+                            await tx.update(stockLevels)
+                                .set({
+                                    totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
+                                    bookedStock: sql`${stockLevels.bookedStock} - ${item.deliveredQuantity}`,
+                                    updatedAt: new Date(),
+                                })
+                                .where(and(
+                                    eq(stockLevels.warehouseId, delivery.warehouseId),
+                                    eq(stockLevels.productId, item.productId)
+                                ))
+
+                            await recordStockMovement(tx, {
+                                productId: item.productId,
+                                warehouseId: delivery.warehouseId as number,
+                                quantity: -item.deliveredQuantity,
+                                type: movementType,
+                                referenceNumber: delivery.deliveryNumber,
+                                recordedBy: userId,
+                            })
+                        }
+                    }
+
+                    // Re-create automated transfer if it's VHS and moving back from cancelled
+                    if (isVHS) {
+                        const referenceNumber = `ST-AUTO-${delivery.deliveryNumber}`
+                        const [transfer] = await tx.insert(stockTransfers).values({
+                            referenceNumber,
+                            deliveryId: delivery.id,
+                            fromWarehouseId: delivery.warehouseId as number,
+                            toWarehouseId: delivery.warehouseToId as number,
+                            receivedStatus: "Scheduled",
+                            transferDate: new Date(delivery.scheduledDate),
+                            notes: `Automated transfer from delivery ${delivery.deliveryNumber}`,
+                        }).returning()
+
+                        await tx.insert(stockTransferItems).values(
+                            delivery.items.map(item => ({
+                                transferId: transfer.id,
+                                productId: item.productId,
+                                quantity: item.deliveredQuantity,
+                            }))
+                        )
+                    }
                 }
 
                 // Update status
@@ -733,8 +797,10 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                 }
             }
 
-            revalidatePath("/dashboard/deliveries")
-            revalidatePath("/dashboard/inventory")
+            try {
+                revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/inventory")
+            } catch (e) { }
             return { success: true }
         })
     } catch (error) {
@@ -749,7 +815,9 @@ export async function updateDeliveryDate(id: number, date: Date | null) {
         await db.update(deliveries)
             .set({ deliveryDate: date, updatedAt: new Date() })
             .where(eq(deliveries.id, id))
-        revalidatePath("/dashboard/deliveries")
+        try {
+            revalidatePath("/dashboard/deliveries")
+        } catch (e) { }
         return { success: true }
     } catch (error) {
         console.error("Failed to update delivery date:", error)
@@ -796,8 +864,10 @@ export async function updateDoMonitoringFields(id: number, data: {
             }
         }
 
-        revalidatePath("/dashboard/deliveries")
-        revalidatePath("/dashboard/do-monitoring")
+        try {
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/do-monitoring")
+        } catch (e) { }
         return { success: true }
     } catch (error) {
         console.error("Failed to update DO Monitoring fields:", error)
