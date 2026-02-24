@@ -149,7 +149,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
             count,
             fill: STATUS_COLORS[status] || "hsl(var(--primary))",
         }))
-    }, [data])
+    }, [transfers])
 
     const columns = useMemo<ColumnDef<Transfer>[]>(() => [
         {
@@ -399,7 +399,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 <Card className="border-none bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-indigo-950/30 dark:via-purple-950/30 dark:to-pink-950/30 shadow-lg">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-bold">Transfer Status Overview</CardTitle>
-                        <CardDescription className="font-medium">{data.length} total transfers</CardDescription>
+                        <CardDescription className="font-medium">{transfers.length} total transfers</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ResponsiveContainer width="100%" height={150}>

@@ -15,17 +15,18 @@ export default async function StockTransfersPage() {
                 <div className="space-y-1">
                     <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">Stock Transfers</h1>
                     <p className="text-muted-foreground font-medium">
-                        Manage and monitor inventory movements across your warehouse network
+                        Stock transfers are automatically created from Delivery with PO type VHS Consignment
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
+                {/* New Transfer button hidden - stock transfers come from Delivery with PO type VHS Consignment */}
+                {/* <div className="flex items-center gap-3">
                     <Link href="/dashboard/stock-transfers/create">
                         <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-purple-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
                             <Plus className="mr-2 h-4 w-4" />
                             New Transfer
                         </Button>
                     </Link>
-                </div>
+                </div> */}
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
