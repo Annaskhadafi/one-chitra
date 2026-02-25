@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { Package } from "lucide-react"
 import Image from "next/image"
 import logo from "@/public/logo.png"
 
@@ -15,11 +14,12 @@ import {
     SidebarRail,
     SidebarSeparator,
 } from "@/components/ui/sidebar"
-import { navigationConfig } from "@/lib/navigation"
 import { usePermissions } from "@/hooks/use-permissions"
+import { getIconByName, type RuntimeNavSection } from "@/lib/navigation-menu"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     permissions?: string[]
+    navigationSections: RuntimeNavSection[]
     user?: {
         name: string
         email: string
@@ -29,36 +29,62 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSidebarProps) {
     const { hasResourcePermission } = usePermissions()
+    const { navigationSections, ...sidebarProps } = props
 
-    // Filter logic
-    const filteredConfig = navigationConfig.map(section => ({
+    const filteredConfig = navigationSections.map(section => ({
         ...section,
-        items: section.items.map(item => {
-            // If item has sub-items, filter them
-            if (item.items && item.items.length > 0) {
-                const filteredSubItems = item.items.filter(subItem =>
-                    hasResourcePermission(subItem.resource, 'view')
-                )
-                return {
-                    ...item,
-                    items: filteredSubItems
+        items: section.items
+            .map(item => {
+                if (item.hidden) {
+                    return null
                 }
-            }
-            // Regular item
-            return item
-        }).filter(item => {
-            // Keep item if:
-            // 1. It has sub-items and at least one is accessible
-            // 2. It has NO sub-items and is itself accessible
-            if (item.items && item.items.length > 0) {
-                return true
-            }
-            if (item.items && item.items.length === 0) {
-                return false // Parent with no accessible children
-            }
-            return hasResourcePermission(item.resource, 'view')
-        })
+
+                if (item.items && item.items.length > 0) {
+                    const filteredSubItems = item.items.filter(subItem => {
+                        if (subItem.hidden) {
+                            return false
+                        }
+
+                        if (!subItem.resource) {
+                            return true
+                        }
+
+                        return hasResourcePermission(subItem.resource, 'view')
+                    })
+
+                    return {
+                        ...item,
+                        items: filteredSubItems,
+                    }
+                }
+
+                return item
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+            .filter(item => {
+                if (item.items && item.items.length > 0) {
+                    return true
+                }
+
+                if (item.url === "#") {
+                    return false
+                }
+
+                if (!item.resource) {
+                    return true
+                }
+
+                return hasResourcePermission(item.resource, 'view')
+            })
     })).filter(section => section.items.length > 0)
+
+    const sidebarConfig = filteredConfig.map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({
+            ...item,
+            icon: getIconByName(item.iconName ?? "Circle"),
+        })),
+    }))
 
     // Fallback user if not provided (though layout should provide it)
     const currentUser = user || {
@@ -67,11 +93,12 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
         avatar: "",
     }
 
-    return (5        <Sidebar
-            {...props}
+    return (
+        <Sidebar
+            {...sidebarProps}
             collapsible="icon"
             style={{
-                ...props.style,
+                ...sidebarProps.style,
                 fontFamily: "var(--font-parkinsans), var(--font-geist-sans), sans-serif",
             }}
         >
@@ -93,7 +120,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                 </div>
             </SidebarHeader>
             <SidebarContent>
-                {filteredConfig.map((section, index) => (
+                {sidebarConfig.map((section, index) => (
                     <React.Fragment key={section.title || index}>
                         {/* Don't show separator/title for the very first section if it's "Main" or similar generic */}
                         {index > 0 && (

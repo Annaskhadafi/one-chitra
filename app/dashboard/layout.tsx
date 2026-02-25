@@ -16,6 +16,8 @@ import { getPermissionsByRoleName } from "@/lib/rbac"
 import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
+import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
+import { toRuntimeNavigationConfig } from "@/lib/navigation-menu"
 
 // ... imports
 
@@ -39,7 +41,11 @@ export default async function DashboardLayout({
 
   // Fetch permissions based on role
   let permissions: string[] = []
-  const navbarTheme = await getNavbarTheme()
+  const [navbarTheme, navbarMenuSettings] = await Promise.all([
+    getNavbarTheme(),
+    getNavbarMenuSettingsAction(),
+  ])
+  const navigationSections = toRuntimeNavigationConfig(navbarMenuSettings)
 
   const user = session?.user as {
     name: string;
@@ -78,7 +84,7 @@ export default async function DashboardLayout({
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="inset" permissions={permissions} user={
+        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSections} user={
           user ? {
             name: user.name,
             email: user.email,

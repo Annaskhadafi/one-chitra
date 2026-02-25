@@ -5,7 +5,9 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { db } from "@/db"
 import { getNavbarTheme } from "@/lib/navbar-theme"
+import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { NavbarThemeForm } from "./_components/navbar-theme-form"
+import { NavbarMenuForm } from "./_components/navbar-menu-form"
 
 export const metadata = {
     title: "Navbar Settings – One Chitra",
@@ -29,7 +31,10 @@ export default async function NavbarSettingsPage() {
         redirect("/dashboard")
     }
 
-    const theme = await getNavbarTheme()
+    const [theme, menuConfig] = await Promise.all([
+        getNavbarTheme(),
+        getNavbarMenuSettingsAction(),
+    ])
 
     return (
         <div className="space-y-6 p-6">
@@ -46,6 +51,7 @@ export default async function NavbarSettingsPage() {
             </div>
 
             <NavbarThemeForm initialTheme={theme} />
+            <NavbarMenuForm initialConfig={menuConfig} />
         </div>
     )
 }

@@ -22,14 +22,18 @@ import {
 } from "@/components/ui/sidebar"
 
 interface NavItem {
+  id?: string
   title: string
   url: string
   icon?: LucideIcon
   isActive?: boolean
+  openInNewTab?: boolean
   items?: {
+    id?: string
     title: string
     url: string
-    resource: string
+    resource?: string
+    openInNewTab?: boolean
   }[]
 }
 
@@ -48,7 +52,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
             if (hasChildren) {
               return (
                 <Collapsible
-                  key={item.title}
+                  key={item.id ?? item.title}
                   asChild
                   defaultOpen={isActive}
                   className="group/collapsible"
@@ -67,13 +71,17 @@ export function NavMain({ items }: { items: NavItem[] }) {
                     <CollapsibleContent>
                       <SidebarMenuSub>
                         {item.items?.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubItem key={subItem.id ?? subItem.title}>
                             <SidebarMenuSubButton
                               asChild
                               isActive={pathname === subItem.url}
                               className="ml-2"
                             >
-                              <Link href={subItem.url}>
+                              <Link
+                                href={subItem.url}
+                                target={subItem.openInNewTab ? "_blank" : undefined}
+                                rel={subItem.openInNewTab ? "noopener noreferrer" : undefined}
+                              >
                                 <span>{subItem.title}</span>
                               </Link>
                             </SidebarMenuSubButton>
@@ -87,13 +95,17 @@ export function NavMain({ items }: { items: NavItem[] }) {
             }
 
             return (
-              <SidebarMenuItem key={item.title}>
+              <SidebarMenuItem key={item.id ?? item.title}>
                 <SidebarMenuButton
                   asChild
                   tooltip={item.title}
                   isActive={pathname === item.url}
                 >
-                  <Link href={item.url}>
+                  <Link
+                    href={item.url}
+                    target={item.openInNewTab ? "_blank" : undefined}
+                    rel={item.openInNewTab ? "noopener noreferrer" : undefined}
+                  >
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
                   </Link>
