@@ -67,8 +67,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
         avatar: "",
     }
 
-    return (
-        <Sidebar
+    return (5        <Sidebar
             {...props}
             collapsible="icon"
             style={{
