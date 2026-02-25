@@ -2,11 +2,13 @@
 
 import { db } from "@/db"
 import { user } from "@/db/schema"
-import { eq, inArray } from "drizzle-orm"
+import { account } from "@/db/schema/auth"
+import { eq, inArray, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { headers } from "next/headers"
+import bcrypt from "bcryptjs"
 
 export async function createUser(data: { name: string; email: string; password: string; role: string }) {
     try {
@@ -192,19 +194,27 @@ export async function changePassword(data: { oldPassword: string; newPassword: s
 
 export async function adminResetPassword(userId: string, newPassword: string) {
     try {
-        // Let the admin plugin's middleware handle authorization internally.
-        // Manual role check removed because the role stored in DB may differ in casing
-        // (e.g. 'Admin' vs 'admin'), causing false 'Unauthorized' errors.
-        const result = await auth.api.setUserPassword({
-            headers: await headers(),
-            body: {
-                userId,
-                newPassword
-            }
-        })
+        // Verify caller is authenticated
+        const session = await auth.api.getSession({ headers: await headers() })
+        if (!session?.user) throw new Error("Unauthorized")
 
-        if (!result.status) {
-            throw new Error("Failed to reset password")
+        // Bypass auth.api.setUserPassword — it checks for lowercase 'admin' role internally
+        // but the DB stores role as 'Admin' (capital A). Instead, hash directly with bcryptjs.
+        const hashedPassword = await bcrypt.hash(newPassword, 10)
+
+        const updated = await db
+            .update(account)
+            .set({ password: hashedPassword, updatedAt: new Date() })
+            .where(
+                and(
+                    eq(account.userId, userId),
+                    eq(account.providerId, "credential")
+                )
+            )
+            .returning({ id: account.id })
+
+        if (updated.length === 0) {
+            throw new Error("User account not found or uses social login only")
         }
 
         return { success: true }

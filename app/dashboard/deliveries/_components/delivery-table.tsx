@@ -147,6 +147,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [rowSelection, setRowSelection] = useState({})
     const [globalFilter, setGlobalFilter] = useState("")
+    const [viewMode, setViewMode] = useState<"list" | "by-po">("list")
 
     const [deleting, setDeleting] = useState<number | null>(null)
     const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
@@ -773,305 +774,552 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-4">
-                <ScoreCard
-                    title="Total Volume"
-                    value={totalVolume.toLocaleString()}
-                    icon={Truck}
-                    description="Total items delivered"
-                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
-                    iconColor="text-blue-600 dark:text-blue-400"
-                    textColor="text-blue-900 dark:text-blue-100"
-                />
-                <ScoreCard
-                    title="On-Time Rate"
-                    value={`${onTimeRate}%`}
-                    icon={CalendarClock}
-                    description="Deliveries on or before schedule"
-                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
-                    iconColor="text-emerald-600 dark:text-emerald-400"
-                    textColor="text-emerald-900 dark:text-emerald-100"
-                />
-                <ScoreCard
-                    title="Scheduled"
-                    value={scheduled}
-                    icon={CalendarClock}
-                    description="Pending scheduled"
-                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
-                    iconColor="text-amber-600 dark:text-amber-400"
-                    textColor="text-amber-900 dark:text-amber-100"
-                />
-                <ScoreCard
-                    title="In Transit"
-                    value={inTransit}
-                    icon={MapPin}
-                    description="Currently on the way"
-                    gradient="from-cyan-500/10 via-cyan-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-cyan-400/10 dark:to-blue-500/20 dark:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20"
-                    iconColor="text-cyan-600 dark:text-cyan-400"
-                    textColor="text-cyan-900 dark:text-cyan-100"
-                />
+            {/* Tab Switcher: Semua Delivery / By PO */}
+            <div className="flex items-center gap-1 border-b pb-0">
+                <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                        viewMode === "list"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <Truck className="h-4 w-4" />
+                    Semua Delivery
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setViewMode("by-po")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                        viewMode === "by-po"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <span>📦</span>
+                    By PO
+                    {data.some(d => d.salesOrder?.customerPo) && (
+                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                            {new Set(data.map(d => d.salesOrder?.customerPo).filter(Boolean)).size}
+                        </span>
+                    )}
+                </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Monthly Volume Trend</CardTitle>
-                        <CardDescription>Item count per month ({selectedYear === "all" ? "All Years" : selectedYear})</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <LineChart data={monthlyTrends}>
-                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--card))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "8px",
-                                        color: "hsl(var(--foreground))",
-                                    }}
-                                    itemStyle={{ color: "hsl(var(--foreground))" }}
-                                />
-                                <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--card))" }} activeDot={{ r: 6, strokeWidth: 0 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
+            {/* By PO Grouped View */}
+            {viewMode === "by-po" && (
+                <DeliveryGroupedByPO
+                    data={data}
+                    globalFilter={globalFilter}
+                    setGlobalFilter={setGlobalFilter}
+                    onPreview={(d) => { setPreviewDelivery(d); setIsPreviewOpen(true) }}
+                    onPdf={(d) => { setPdfDelivery(d); setIsPdfOpen(true) }}
+                    canEdit={canEdit}
+                    statusVariants={statusVariants}
+                    statusLabels={statusLabels}
+                />
+            )}
 
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Product Category Mix</CardTitle>
-                        <CardDescription>Item distribution by category</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <PieChart>
-                                <Pie
-                                    data={categoryMix}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    stroke="hsl(var(--card))"
-                                    strokeWidth={2}
-                                >
-                                    {categoryMix.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: "hsl(var(--card))",
-                                        border: "1px solid hsl(var(--border))",
-                                        borderRadius: "8px",
-                                        color: "hsl(var(--foreground))",
-                                    }}
-                                    itemStyle={{ color: "hsl(var(--foreground))" }}
-                                />
-                                <Legend wrapperStyle={{ fontSize: '12px', color: 'hsl(var(--foreground))' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* Regular List View */}
+            {viewMode === "list" && (<>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search delivery, SO, customer, driver, user..."
-                        value={globalFilter}
-                        onChange={e => setGlobalFilter(e.target.value)}
-                        className="pl-10"
+                <div className="grid gap-4 md:grid-cols-4">
+                    <ScoreCard
+                        title="Total Volume"
+                        value={totalVolume.toLocaleString()}
+                        icon={Truck}
+                        description="Total items delivered"
+                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
+                        iconColor="text-blue-600 dark:text-blue-400"
+                        textColor="text-blue-900 dark:text-blue-100"
+                    />
+                    <ScoreCard
+                        title="On-Time Rate"
+                        value={`${onTimeRate}%`}
+                        icon={CalendarClock}
+                        description="Deliveries on or before schedule"
+                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
+                        iconColor="text-emerald-600 dark:text-emerald-400"
+                        textColor="text-emerald-900 dark:text-emerald-100"
+                    />
+                    <ScoreCard
+                        title="Scheduled"
+                        value={scheduled}
+                        icon={CalendarClock}
+                        description="Pending scheduled"
+                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
+                        iconColor="text-amber-600 dark:text-amber-400"
+                        textColor="text-amber-900 dark:text-amber-100"
+                    />
+                    <ScoreCard
+                        title="In Transit"
+                        value={inTransit}
+                        icon={MapPin}
+                        description="Currently on the way"
+                        gradient="from-cyan-500/10 via-cyan-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-cyan-400/10 dark:to-blue-500/20 dark:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20"
+                        iconColor="text-cyan-600 dark:text-cyan-400"
+                        textColor="text-cyan-900 dark:text-cyan-100"
                     />
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={handleExport}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export
-                    </Button>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {mounted && (
-                            <>
-                                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                    <SelectTrigger className="w-[100px]">
-                                        <SelectValue placeholder="Year" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Years</SelectItem>
-                                        {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
 
-                                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                    <SelectTrigger className="w-[120px]">
-                                        <SelectValue placeholder="Month" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Months</SelectItem>
-                                        {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
-                                            <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                <div className="grid gap-4 md:grid-cols-2">
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Monthly Volume Trend</CardTitle>
+                            <CardDescription>Item count per month ({selectedYear === "all" ? "All Years" : selectedYear})</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={250}>
+                                <LineChart data={monthlyTrends}>
+                                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                    <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            color: "hsl(var(--foreground))",
+                                        }}
+                                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                                    />
+                                    <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--card))" }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Product Category Mix</CardTitle>
+                            <CardDescription>Item distribution by category</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={250}>
+                                <PieChart>
+                                    <Pie
+                                        data={categoryMix}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        stroke="hsl(var(--card))"
+                                        strokeWidth={2}
+                                    >
+                                        {categoryMix.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
                                         ))}
-                                    </SelectContent>
-                                </Select>
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            color: "hsl(var(--foreground))",
+                                        }}
+                                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '12px', color: 'hsl(var(--foreground))' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </div>
 
-                                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                    <SelectTrigger className="w-[160px]">
-                                        <SelectValue placeholder="Product Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Types</SelectItem>
-                                        {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-
-                                <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
-
-                                <Select
-                                    value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
-                                    onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
-                                >
-                                    <SelectTrigger className="w-[140px]">
-                                        <SelectValue placeholder="Status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Status</SelectItem>
-                                        {Object.entries(statusLabels).map(([value, label]) => (
-                                            <SelectItem key={value} value={value}>{label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                {/* Quick partial filter chip */}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
-                                        table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
-                                    }}
-                                    className={cn(
-                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all",
-                                        (table.getColumn("status")?.getFilterValue() as string) === "partial"
-                                            ? "bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200"
-                                            : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
-                                    )}
-                                >
-                                    <span>⚠</span>
-                                    <span>Partial</span>
-                                    <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                                        {data.filter(d => d.status === "partial").length}
-                                    </span>
-                                </button>
-                            </>
-                        )}
-                        <Button variant="outline" size="icon" onClick={() => refetch()}>
-                            <RefreshCcw className="h-4 w-4" />
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search delivery, SO, customer, driver, user..."
+                            value={globalFilter}
+                            onChange={e => setGlobalFilter(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={handleExport}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export
                         </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {mounted && (
+                                <>
+                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                        <SelectTrigger className="w-[100px]">
+                                            <SelectValue placeholder="Year" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Years</SelectItem>
+                                            {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                        <SelectTrigger className="w-[120px]">
+                                            <SelectValue placeholder="Month" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Months</SelectItem>
+                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                                                <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                                        <SelectTrigger className="w-[160px]">
+                                            <SelectValue placeholder="Product Type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Types</SelectItem>
+                                            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
+
+                                    <Select
+                                        value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
+                                        onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
+                                    >
+                                        <SelectTrigger className="w-[140px]">
+                                            <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Status</SelectItem>
+                                            {Object.entries(statusLabels).map(([value, label]) => (
+                                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    {/* Quick partial filter chip */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                            table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
+                                        }}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all",
+                                            (table.getColumn("status")?.getFilterValue() as string) === "partial"
+                                                ? "bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200"
+                                                : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                                        )}
+                                    >
+                                        <span>⚠</span>
+                                        <span>Partial</span>
+                                        <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                                            {data.filter(d => d.status === "partial").length}
+                                        </span>
+                                    </button>
+                                </>
+                            )}
+                            <Button variant="outline" size="icon" onClick={() => refetch()}>
+                                <RefreshCcw className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="rounded-md border bg-card relative">
-                <div
-                    ref={parentRef}
-                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
-                >
-                    <Table>
-                        <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id} className="bg-muted/50">
-                                    {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </TableHead>
-                                    ))}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                <>
-                                    <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} />
+                <div className="rounded-md border bg-card relative">
+                    <div
+                        ref={parentRef}
+                        className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                    >
+                        <Table>
+                            <TableHeader>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <TableRow key={headerGroup.id} className="bg-muted/50">
+                                        {headerGroup.headers.map((header) => (
+                                            <TableHead key={header.id}>
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </TableHead>
+                                        ))}
                                     </TableRow>
-                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
-                                        const isPartialRow = row.original.status === "partial"
-                                        return (
-                                            <TableRow
-                                                key={row.id}
-                                                data-state={row.getIsSelected() && "selected"}
-                                                className={cn(
-                                                    "group transition-colors hover:bg-muted/50",
-                                                    isPartialRow && "border-l-4 border-l-orange-400 bg-orange-50/30 dark:bg-orange-950/10"
-                                                )}
-                                            >
-                                                {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id}>
-                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} />
+                                ))}
+                            </TableHeader>
+                            <TableBody>
+                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                    <>
+                                        <TableRow style={{ height: `${before}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                            const row = rows[virtualRow.index]
+                                            const isPartialRow = row.original.status === "partial"
+                                            return (
+                                                <TableRow
+                                                    key={row.id}
+                                                    data-state={row.getIsSelected() && "selected"}
+                                                    className={cn(
+                                                        "group transition-colors hover:bg-muted/50",
+                                                        isPartialRow && "border-l-4 border-l-orange-400 bg-orange-50/30 dark:bg-orange-950/10"
+                                                    )}
+                                                >
+                                                    {row.getVisibleCells().map((cell) => (
+                                                        <TableCell key={cell.id}>
+                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            )
+                                        })}
+                                        <TableRow style={{ height: `${after}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} />
+                                        </TableRow>
+                                    </>
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                                            No records found.
+                                        </TableCell>
                                     </TableRow>
-                                </>
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
-                                        No records found.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </div>
-            </div>
 
-            <div className="flex items-center justify-between text-sm text-muted-foreground py-2">
-                <div>Showing {table.getFilteredRowModel().rows.length} of {data.length} records</div>
-            </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground py-2">
+                    <div>Showing {table.getFilteredRowModel().rows.length} of {data.length} records</div>
+                </div>
 
-            {selectedCount > 0 && (canEdit || canDelete) && (
-                <BulkActions
-                    selectedCount={selectedCount}
-                    onDelete={canDelete ? handleBulkDelete : () => { }}
-                    onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
-                    entityName="delivery"
+                {selectedCount > 0 && (canEdit || canDelete) && (
+                    <BulkActions
+                        selectedCount={selectedCount}
+                        onDelete={canDelete ? handleBulkDelete : () => { }}
+                        onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
+                        entityName="delivery"
+                    />
+                )}
+
+                <DeliveryPreview
+                    delivery={previewDelivery}
+                    open={isPreviewOpen}
+                    onOpenChange={setIsPreviewOpen}
                 />
-            )}
 
-            <DeliveryPreview
-                delivery={previewDelivery}
-                open={isPreviewOpen}
-                onOpenChange={setIsPreviewOpen}
-            />
+                {pdfDelivery && (
+                    <DeliveryPdfPreview
+                        delivery={pdfDelivery}
+                        open={isPdfOpen}
+                        onClose={() => setIsPdfOpen(false)}
+                    />
+                )}
 
-            {pdfDelivery && (
-                <DeliveryPdfPreview
-                    delivery={pdfDelivery}
-                    open={isPdfOpen}
-                    onClose={() => setIsPdfOpen(false)}
+                <PoPreviewDialog
+                    open={isPoPreviewOpen}
+                    onOpenChange={setIsPoPreviewOpen}
+                    poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
+                    title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
+                    editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
                 />
-            )}
-
-            <PoPreviewDialog
-                open={isPoPreviewOpen}
-                onOpenChange={setIsPoPreviewOpen}
-                poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
-                title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
-                editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
-            />
-            <SuccessAlertDialog
-                open={showSuccessDialog}
-                onOpenChange={setShowSuccessDialog}
-                title="Status Diperbarui"
-                description={successMessage}
-            />
+                <SuccessAlertDialog
+                    open={showSuccessDialog}
+                    onOpenChange={setShowSuccessDialog}
+                    title="Status Diperbarui"
+                    description={successMessage}
+                />
+            </div>
+            </>)}
         </div>
     )
 }
+
+
+
+
+
+
+
+// ─── Grouped By PO View Component ────────────────────────────────────────────
+
+interface DeliveryGroupedByPOProps {
+    data: DeliveryWithRelations[]
+    globalFilter: string
+    setGlobalFilter: (v: string) => void
+    onPreview: (d: DeliveryWithRelations) => void
+    onPdf: (d: DeliveryWithRelations) => void
+    canEdit: boolean
+    statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning">
+    statusLabels: Record<string, string>
+}
+
+function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, canEdit, statusVariants, statusLabels }: DeliveryGroupedByPOProps) {
+    const grouped = useMemo(() => {
+        const q = globalFilter.toLowerCase()
+        const filtered = q
+            ? data.filter(d =>
+                d.salesOrder?.customerPo?.toLowerCase().includes(q) ||
+                d.salesOrder?.customer?.name?.toLowerCase().includes(q) ||
+                d.deliveryNumber?.toLowerCase().includes(q)
+            )
+            : data
+
+        const map = new Map<string, DeliveryWithRelations[]>()
+        for (const d of filtered) {
+            const key = d.salesOrder?.customerPo || `(No PO) SO-${d.salesOrderId}`
+            if (!map.has(key)) map.set(key, [])
+            map.get(key)!.push(d)
+        }
+
+        // Sort each group by scheduledDate asc
+        map.forEach((deliveries, key) => {
+            map.set(key, [...deliveries].sort((a, b) =>
+                new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+            ))
+        })
+
+        return Array.from(map.entries())
+    }, [data, globalFilter])
+
+    return (
+        <div className="space-y-4">
+            {/* Search */}
+            <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Cari No PO, customer, delivery..."
+                    value={globalFilter}
+                    onChange={e => setGlobalFilter(e.target.value)}
+                    className="pl-10"
+                />
+            </div>
+
+            <p className="text-sm text-muted-foreground">{grouped.length} PO ditemukan dari {data.length} delivery</p>
+
+            {grouped.map(([poKey, deliveries]) => {
+                const customer = deliveries[0]?.salesOrder?.customer?.name || "-"
+                const totalOrdered = deliveries.reduce((acc, d) => acc + d.items.reduce((s, i) => s + i.orderedQuantity, 0), 0)
+                const totalDelivered = deliveries.reduce((acc, d) => acc + d.items.reduce((s, i) => s + i.deliveredQuantity, 0), 0)
+                const pct = totalOrdered > 0 ? Math.min(100, Math.round((totalDelivered / totalOrdered) * 100)) : 0
+                const allDelivered = deliveries.every(d => d.status === "delivered")
+                const hasPartial = deliveries.some(d => d.status === "partial")
+
+                return (
+                    <div key={poKey} className="rounded-lg border bg-card overflow-hidden shadow-sm">
+                        {/* Group Header */}
+                        <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-sm font-mono">{poKey}</span>
+                                    {allDelivered
+                                        ? <Badge variant="success" className="text-xs">✓ Selesai</Badge>
+                                        : hasPartial
+                                            ? <Badge className="text-xs bg-orange-500 text-white border-orange-500">⚠ Partial</Badge>
+                                            : <Badge variant="secondary" className="text-xs">{deliveries.length}x pengiriman</Badge>
+                                    }
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5">{customer}</p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 min-w-[130px]">
+                                <span className={cn("text-xs font-semibold",
+                                    pct === 100 ? "text-emerald-600" : pct > 0 ? "text-orange-500" : "text-muted-foreground"
+                                )}>{pct}% terkirim</span>
+                                <div className="w-[130px] h-2 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                        className={cn("h-full rounded-full transition-all", pct === 100 ? "bg-emerald-500" : "bg-orange-400")}
+                                        style={{ width: `${pct}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">{totalDelivered} / {totalOrdered} qty</span>
+                            </div>
+                        </div>
+
+                        {/* Delivery Rows */}
+                        <div className="divide-y">
+                            {deliveries.map((delivery, idx) => {
+                                const itemOrdered = delivery.items.reduce((s, i) => s + i.orderedQuantity, 0)
+                                const itemDelivered = delivery.items.reduce((s, i) => s + i.deliveredQuantity, 0)
+                                const rowPct = itemOrdered > 0 ? Math.min(100, Math.round((itemDelivered / itemOrdered) * 100)) : 0
+                                const isPartial = delivery.status === "partial"
+
+                                return (
+                                    <div
+                                        key={delivery.id}
+                                        className={cn(
+                                            "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors text-sm",
+                                            isPartial && "border-l-4 border-l-orange-400 bg-orange-50/20 dark:bg-orange-950/10"
+                                        )}
+                                    >
+                                        {/* Pengiriman ke-N label */}
+                                        <span className={cn(
+                                            "text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap",
+                                            idx === 0
+                                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                                : "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300"
+                                        )}>
+                                            Pengiriman ke-{idx + 1}
+                                        </span>
+
+                                        {/* Delivery number */}
+                                        <Link href={`/dashboard/deliveries/${delivery.id}`} className="font-mono text-xs text-primary hover:underline min-w-[130px]">
+                                            {delivery.deliveryNumber || "-"}
+                                        </Link>
+
+                                        {/* Date */}
+                                        <span className="text-xs text-muted-foreground min-w-[80px]">
+                                            {new Date(delivery.scheduledDate).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                                        </span>
+
+                                        {/* Status */}
+                                        <Badge variant={statusVariants[delivery.status] || "secondary"} className="min-w-[80px] justify-center text-xs">
+                                            {statusLabels[delivery.status] || delivery.status}
+                                        </Badge>
+
+                                        {/* Type */}
+                                        <Badge variant="outline" className="capitalize min-w-[60px] justify-center text-xs">
+                                            {delivery.deliveryType}
+                                        </Badge>
+
+                                        {/* Driver */}
+                                        <span className="text-xs text-muted-foreground flex-1 truncate">
+                                            {delivery.driverName || "-"}
+                                        </span>
+
+                                        {/* Mini progress */}
+                                        <div className="flex items-center gap-1.5 min-w-[80px]">
+                                            <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden">
+                                                <div
+                                                    className={cn("h-full rounded-full", rowPct === 100 ? "bg-emerald-500" : "bg-orange-400")}
+                                                    style={{ width: `${rowPct}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground">{rowPct}%</span>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => onPreview(delivery)}>
+                                                <Eye className="h-3.5 w-3.5" />
+                                            </Button>
+                                            {canEdit && (
+                                                <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                                    <Button variant="ghost" size="sm" className="h-7 px-2">
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )
+            })}
+
+            {grouped.length === 0 && (
+                <div className="h-32 flex items-center justify-center text-muted-foreground text-sm border rounded-lg">
+                    Tidak ada data delivery ditemukan.
+                </div>
+            )}
+        </div>
+    )
+}
+

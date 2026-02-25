@@ -341,6 +341,9 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
             }
 
+            // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
+            await syncDeliveryTypesForSO(tx, data.salesOrderId)
+
             if (data.status === "delivered") {
                 console.log("[CREATE DELIVERY] Checking SO completion...")
                 await checkAndCompleteSalesOrder(tx, data.salesOrderId)
@@ -546,6 +549,9 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     }
                 }
             }
+
+            // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
+            await syncDeliveryTypesForSO(tx, data.salesOrderId)
 
             if (data.status === "delivered") {
                 await checkAndCompleteSalesOrder(tx, data.salesOrderId)
@@ -1017,3 +1023,33 @@ export async function clearLogisticsCosts() {
     }
 }
 
+// ─── Business Rule: Sinkronisasi deliveryType antar delivery dalam satu SO ────
+// Jika SO punya lebih dari 1 delivery (non-cancelled), semua harus "partial"
+// Jika hanya 1 delivery tersisa, biarkan type-nya seperti yang dipilih user
+async function syncDeliveryTypesForSO(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    salesOrderId: number
+) {
+    const siblings = await tx
+        .select({ id: deliveries.id })
+        .from(deliveries)
+        .where(
+            and(
+                eq(deliveries.salesOrderId, salesOrderId),
+                sql`${deliveries.status} != 'cancelled'`
+            )
+        )
+
+    if (siblings.length > 1) {
+        // Lebih dari 1 delivery aktif → semua harus partial
+        await tx
+            .update(deliveries)
+            .set({ deliveryType: "partial", updatedAt: new Date() })
+            .where(
+                and(
+                    eq(deliveries.salesOrderId, salesOrderId),
+                    sql`${deliveries.status} != 'cancelled'`
+                )
+            )
+    }
+}
