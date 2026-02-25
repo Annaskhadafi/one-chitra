@@ -51,6 +51,7 @@ export async function getDeliveryItemsFlat() {
             productId: item.productId,
             productName: item.product?.materialDescription || item.product?.materialNumber || "-",
             productNumber: item.product?.materialNumber || "-",
+            oldMaterialNo: item.product?.oldMaterialNo || "-",
             productCategory: item.product?.category || "-",
             orderedQuantity: item.orderedQuantity,
             deliveredQuantity: item.deliveredQuantity,

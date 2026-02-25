@@ -98,6 +98,11 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
             cell: ({ row }) => <span className="font-medium">{row.original.customerName || "-"}</span>,
         },
         {
+            accessorKey: "oldMaterialNo",
+            header: "Old Material No.",
+            cell: ({ row }) => row.original.oldMaterialNo || "-",
+        },
+        {
             accessorKey: "customerPo",
             header: "No PO Customer",
             cell: ({ row }) => row.original.customerPo || "-",
@@ -183,6 +188,7 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
             const matchesSearch =
                 item.productName.toLowerCase().includes(term) ||
                 item.productNumber.toLowerCase().includes(term) ||
+                item.oldMaterialNo?.toLowerCase().includes(term) ||
                 item.deliveryNumber?.toLowerCase().includes(term) ||
                 item.invoiceNumber?.toLowerCase().includes(term) ||
                 item.customerPo?.toLowerCase().includes(term) ||
@@ -214,13 +220,14 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Product Name", "Product No", "Category", "Customer", "PO Customer", "Delivery No (DO)", "SO Internal", "Delivery Date", "Status", "Qty Delivered", "Qty Ordered", "Driver/Vendor", "Vehicle", "Warehouse"]
+        const headers = ["Product Name", "Product No", "Old Material No", "Category", "Customer", "PO Customer", "Delivery No (DO)", "SO Internal", "Delivery Date", "Status", "Qty Delivered", "Qty Ordered", "Driver/Vendor", "Vehicle", "Warehouse"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const item = row.original
             const date = item.deliveryDate || item.scheduledDate
             return [
                 `"${item.productName.replace(/"/g, '""')}"`,
                 item.productNumber,
+                item.oldMaterialNo || "",
                 item.productCategory,
                 `"${item.customerName || ""}"`,
                 item.customerPo || "",
