@@ -17,7 +17,7 @@ import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
-import { toRuntimeNavigationConfig } from "@/lib/navigation-menu"
+import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 
 // ... imports
 
@@ -41,11 +41,12 @@ export default async function DashboardLayout({
 
   // Fetch permissions based on role
   let permissions: string[] = []
+  let roleLower = ""
   const [navbarTheme, navbarMenuSettings] = await Promise.all([
     getNavbarTheme(),
     getNavbarMenuSettingsAction(),
   ])
-  const navigationSections = toRuntimeNavigationConfig(navbarMenuSettings)
+  const runtimeNavigationSections = toRuntimeNavigationConfig(navbarMenuSettings)
 
   const user = session?.user as {
     name: string;
@@ -61,12 +62,45 @@ export default async function DashboardLayout({
 
     if (dbUser?.role) {
       permissions = await getPermissionsByRoleName(dbUser.role)
-      const roleLower = dbUser.role.toLowerCase()
+      roleLower = dbUser.role.toLowerCase()
       if (roleLower === 'admin' || roleLower === 'superuser') {
         permissions.push('admin:view')
       }
     }
   }
+
+  const isAdminRole = roleLower === 'admin' || roleLower === 'superuser'
+  const canViewResource = (resource?: string) => {
+    if (isAdminRole) {
+      return true
+    }
+    if (!resource) {
+      return true
+    }
+    return permissions.includes(`${resource}:view`)
+  }
+
+  const navigationSections: RuntimeNavSection[] = runtimeNavigationSections
+    .map((section) => ({
+      ...section,
+      items: section.items
+        .filter((item) => !item.hidden)
+        .map((item) => ({
+          ...item,
+          items: (item.items ?? []).filter((subItem) => !subItem.hidden && canViewResource(subItem.resource)),
+        }))
+        .filter((item) => {
+          const hasChildren = (item.items?.length ?? 0) > 0
+          if (hasChildren) {
+            return true
+          }
+          if (item.url === '#') {
+            return false
+          }
+          return canViewResource(item.resource)
+        }),
+    }))
+    .filter((section) => section.items.length > 0)
 
   return (
     <PermissionsProvider permissions={permissions}>

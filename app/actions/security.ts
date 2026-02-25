@@ -8,6 +8,7 @@ import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { syncPermissions } from "@/app/actions/permissions"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,7 @@ export async function getSecurityRoles() {
 
 export async function getAllSecurityPermissions() {
     await getAuthenticatedSession("security", "view")
+    await syncPermissions()
     return await db.select().from(permissions).orderBy(permissions.resource, permissions.action)
 }
 

@@ -131,6 +131,13 @@ const slugify = (value: string) =>
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
 
+const buildCustomResource = (id: string, title: string) => {
+    const idPart = slugify(id).replace(/-/g, "").slice(-22)
+    const titlePart = slugify(title).replace(/-/g, "").slice(0, 18)
+    const base = `${titlePart}${idPart}`.slice(0, 40)
+    return `custom-nav-${base || "entry"}`.slice(0, 50)
+}
+
 const normalizeInternalUrl = (url: string) => {
     if (!url) {
         return "#"
@@ -231,15 +238,18 @@ const normalizeEditableSubItem = (item: Partial<EditableNavSubItem>): EditableNa
 
     const linkType = normalizeLinkType(item.linkType)
     const externalOpenMode = normalizeExternalOpenMode(item.externalOpenMode)
+    const normalizedId = item.id ?? `sub-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`
+    const isCustom = Boolean(item.isCustom)
+    const normalizedResource = item.resource?.trim() || null
 
     return {
-        id: item.id ?? `sub-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`,
+        id: normalizedId,
         title: item.title.trim(),
         url: normalizeUrlByType(item.url.trim(), linkType),
-        resource: item.resource?.trim() || null,
+        resource: normalizedResource ?? (isCustom ? buildCustomResource(normalizedId, item.title.trim()) : null),
         hidden: Boolean(item.hidden),
         openInNewTab: Boolean(item.openInNewTab),
-        isCustom: Boolean(item.isCustom),
+        isCustom,
         linkType,
         externalOpenMode,
         iframeManualEnabled: Boolean(item.iframeManualEnabled),
@@ -259,16 +269,19 @@ const normalizeEditableItem = (item: Partial<EditableNavItem>): EditableNavItem 
     const iconName = item.iconName && item.iconName in ICON_REGISTRY ? item.iconName : "Circle"
     const linkType = normalizeLinkType(item.linkType)
     const externalOpenMode = normalizeExternalOpenMode(item.externalOpenMode)
+    const normalizedId = item.id ?? `item-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`
+    const isCustom = Boolean(item.isCustom)
+    const normalizedResource = item.resource?.trim() || null
 
     return {
-        id: item.id ?? `item-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`,
+        id: normalizedId,
         title: item.title.trim(),
         url: normalizeUrlByType(item.url.trim(), linkType),
         iconName,
-        resource: item.resource?.trim() || null,
+        resource: normalizedResource ?? (isCustom ? buildCustomResource(normalizedId, item.title.trim()) : null),
         hidden: Boolean(item.hidden),
         openInNewTab: Boolean(item.openInNewTab),
-        isCustom: Boolean(item.isCustom),
+        isCustom,
         linkType,
         externalOpenMode,
         iframeManualEnabled: Boolean(item.iframeManualEnabled),
@@ -355,6 +368,26 @@ export const findEditableNavEntryById = (
     }
 
     return null
+}
+
+export const collectResourcesFromEditableConfig = (config: EditableNavSection[]): string[] => {
+    const resources = new Set<string>()
+
+    for (const section of config) {
+        for (const item of section.items) {
+            if (item.resource) {
+                resources.add(item.resource)
+            }
+
+            for (const subItem of item.items) {
+                if (subItem.resource) {
+                    resources.add(subItem.resource)
+                }
+            }
+        }
+    }
+
+    return Array.from(resources)
 }
 
 const resolveRuntimeLink = (entry: {

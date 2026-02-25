@@ -1,11 +1,15 @@
 "use server"
 
 import { db } from "@/db"
-import { permissions } from "@/db/schema"
+import { permissions, settings } from "@/db/schema"
 import { navigationConfig } from "@/lib/navigation"
-import { revalidatePath } from "next/cache"
 import { eq, and } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import {
+    collectResourcesFromEditableConfig,
+    NAVBAR_MENU_SETTING_KEY,
+    parseNavigationConfigFromSetting,
+} from "../../lib/navigation-menu"
 
 export async function getAllPermissions() {
     await getAuthenticatedSession("roles", "view")
@@ -36,8 +40,24 @@ export async function syncPermissions() {
                 if (item.resource) {
                     resources.add(item.resource)
                 }
+
+                item.items?.forEach(subItem => {
+                    if (subItem.resource) {
+                        resources.add(subItem.resource)
+                    }
+                })
             })
         })
+
+        const navbarMenuSetting = await db
+            .select({ value: settings.value })
+            .from(settings)
+            .where(eq(settings.key, NAVBAR_MENU_SETTING_KEY))
+            .limit(1)
+
+        const editableConfig = parseNavigationConfigFromSetting(navbarMenuSetting[0]?.value ?? null)
+        const dynamicResources = collectResourcesFromEditableConfig(editableConfig)
+        dynamicResources.forEach((resource) => resources.add(resource))
 
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav
@@ -70,7 +90,6 @@ export async function syncPermissions() {
         }
 
         if (addedCount > 0) {
-            revalidatePath('/dashboard/admin/roles')
             console.log(`Synced ${addedCount} new permissions`)
         }
 
