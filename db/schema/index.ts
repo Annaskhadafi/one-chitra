@@ -58,6 +58,7 @@ export {
     priceListItemsRelations,
     priceHistoryRelations,
 } from "./price-management";
+export { forecasts } from "./forecasts";
 
 // Core Auth Table Relations
 import { user } from "./auth";

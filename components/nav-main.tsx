@@ -58,7 +58,6 @@ export function NavMain({ items }: { items: NavItem[] }) {
                       <SidebarMenuButton
                         tooltip={item.title}
                         isActive={isActive}
-                        className={isActive ? "bg-[#002147] text-white shadow-md hover:bg-[#002147]/90 hover:text-white" : ""}
                       >
                         {item.icon && <item.icon />}
                         <span>{item.title}</span>
@@ -72,7 +71,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
                             <SidebarMenuSubButton
                               asChild
                               isActive={pathname === subItem.url}
-                              className={pathname === subItem.url ? "bg-[#002147] text-white shadow-sm hover:bg-[#002147]/90 hover:text-white ml-2" : "ml-2"}
+                              className="ml-2"
                             >
                               <Link href={subItem.url}>
                                 <span>{subItem.title}</span>
@@ -93,7 +92,6 @@ export function NavMain({ items }: { items: NavItem[] }) {
                   asChild
                   tooltip={item.title}
                   isActive={pathname === item.url}
-                  className={pathname === item.url ? "bg-[#002147] text-white shadow-md hover:bg-[#002147]/90 hover:text-white" : ""}
                 >
                   <Link href={item.url}>
                     {item.icon && <item.icon />}

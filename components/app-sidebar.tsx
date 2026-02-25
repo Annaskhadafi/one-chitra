@@ -93,7 +93,11 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                         {index > 0 && (
                             <>
                                 <SidebarSeparator className="mx-2" />
-                                <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider" suppressHydrationWarning>
+                                <div
+                                    className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
+                                    style={{ color: "var(--app-navbar-section-color)" }}
+                                    suppressHydrationWarning
+                                >
                                     {section.title}
                                 </div>
                             </>

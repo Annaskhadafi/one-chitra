@@ -134,6 +134,13 @@
       "when": 1771930701291,
       "tag": "0018_left_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772008682538,
+      "tag": "0019_long_slipstream",
+      "breakpoints": true
     }
   ]
 }

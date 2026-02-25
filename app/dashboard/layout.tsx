@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth"
 import { getPermissionsByRoleName } from "@/lib/rbac"
 import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
+import { getNavbarTheme } from "@/lib/navbar-theme"
 
 // ... imports
 
@@ -38,6 +39,7 @@ export default async function DashboardLayout({
 
   // Fetch permissions based on role
   let permissions: string[] = []
+  const navbarTheme = await getNavbarTheme()
 
   const user = session?.user as {
     name: string;
@@ -67,6 +69,12 @@ export default async function DashboardLayout({
         style={
           {
             "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--sidebar": navbarTheme.navbarBg,
+            "--sidebar-foreground": navbarTheme.fontColor,
+            "--sidebar-accent": navbarTheme.activeBg,
+            "--sidebar-accent-foreground": "#ffffff",
+            "--app-navbar-active-bg": navbarTheme.activeBg,
+            "--app-navbar-section-color": navbarTheme.sectionColor,
           } as React.CSSProperties
         }
       >

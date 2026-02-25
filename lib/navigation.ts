@@ -230,6 +230,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/history-order",
                         resource: "history-order",
                     },
+                    {
+                        title: "Master Data Forecast",
+                        url: "/dashboard/forecasts",
+                        resource: "forecast-management",
+                    },
                 ],
             },
             {
@@ -247,6 +252,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Dashboard R49 Tire",
                         url: "/dashboard/r49-dashboard",
                         resource: "r49-dashboard",
+                    },
+                    {
+                        title: "Revenue vs Forecast",
+                        url: "/dashboard/revenue-forecast",
+                        resource: "revenue-forecast",
                     },
                     {
                         title: "Reports Hub",
@@ -304,6 +314,11 @@ export const navigationConfig: NavSection[] = [
                 icon: Mail,
                 resource: "admin",
                 items: [
+                    {
+                        title: "Navbar Settings",
+                        url: "/dashboard/settings/navbar",
+                        resource: "admin",
+                    },
                     {
                         title: "Email Settings",
                         url: "/dashboard/settings/email",
