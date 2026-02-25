@@ -102,6 +102,10 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         queryKey: ["sales-orders"],
         queryFn: getSalesOrders,
         initialData,
+        initialDataUpdatedAt: 0,    // Tandai initialData sebagai stale → langsung refetch
+        staleTime: 0,               // Selalu anggap data stale setelah fetched
+        refetchOnMount: true,       // Selalu refetch saat komponen mount
+        refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
 
     const { hasResourcePermission } = usePermissions()
