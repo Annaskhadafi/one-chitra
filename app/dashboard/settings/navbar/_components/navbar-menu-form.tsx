@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import {
     getIconByName,
     NAVBAR_ICON_OPTIONS,
@@ -70,6 +71,28 @@ const isValidExternalUrl = (value: string) => {
     }
 }
 
+const isValidManualIframeCode = (value: string) => {
+    const match = value.match(/src\s*=\s*["']([^"']+)["']/i)
+    const rawSrc = match?.[1]?.trim()
+
+    if (!rawSrc) {
+        return false
+    }
+
+    const normalized = rawSrc.startsWith("http://") || rawSrc.startsWith("https://")
+        ? rawSrc
+        : rawSrc.startsWith("//")
+            ? `https:${rawSrc}`
+            : `https://${rawSrc.replace(/^\/+/, "")}`
+
+    try {
+        const parsed = new URL(normalized)
+        return parsed.protocol === "http:" || parsed.protocol === "https:"
+    } catch {
+        return false
+    }
+}
+
 export function NavbarMenuForm({ initialConfig }: Props) {
     const router = useRouter()
     const [isSaving, startSaveTransition] = useTransition()
@@ -80,9 +103,17 @@ export function NavbarMenuForm({ initialConfig }: Props) {
 
     const hasInvalidExternalLinks = sections.some((section) =>
         section.items.some((item) => {
-            const invalidItem = item.isCustom && item.linkType === "external" && !isValidExternalUrl(item.url)
+            const invalidItem = item.isCustom && item.linkType === "external" && (
+                item.externalOpenMode === "iframe" && item.iframeManualEnabled
+                    ? !isValidManualIframeCode(item.iframeManualCode)
+                    : !isValidExternalUrl(item.url)
+            )
             const invalidSubItem = item.items.some(
-                (subItem) => subItem.isCustom && subItem.linkType === "external" && !isValidExternalUrl(subItem.url),
+                (subItem) => subItem.isCustom && subItem.linkType === "external" && (
+                    subItem.externalOpenMode === "iframe" && subItem.iframeManualEnabled
+                        ? !isValidManualIframeCode(subItem.iframeManualCode)
+                        : !isValidExternalUrl(subItem.url)
+                ),
             )
             return invalidItem || invalidSubItem
         }),
@@ -135,6 +166,8 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                             isCustom: true,
                             linkType: "internal",
                             externalOpenMode: "new_tab",
+                            iframeManualEnabled: false,
+                            iframeManualCode: "",
                             items: [],
                         },
                     ],
@@ -178,6 +211,8 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                     isCustom: true,
                     linkType: "internal",
                     externalOpenMode: "new_tab",
+                    iframeManualEnabled: false,
+                    iframeManualCode: "",
                 },
             ],
         }))
@@ -442,9 +477,39 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                                                 </SelectContent>
                                                             </Select>
                                                             {item.externalOpenMode === "iframe" && (
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Link akan dibuka di halaman internal IFRAME sesuai URL yang diisi.
-                                                                </p>
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                                        <Label className="text-xs">Paste Iframe Manual</Label>
+                                                                        <Switch
+                                                                            checked={item.iframeManualEnabled}
+                                                                            onCheckedChange={(checked) =>
+                                                                                updateItem(section.id, item.id, (target) => ({
+                                                                                    ...target,
+                                                                                    iframeManualEnabled: checked,
+                                                                                }))
+                                                                            }
+                                                                            disabled={isBusy}
+                                                                        />
+                                                                    </div>
+                                                                    {item.iframeManualEnabled ? (
+                                                                        <Textarea
+                                                                            value={item.iframeManualCode}
+                                                                            onChange={(event) =>
+                                                                                updateItem(section.id, item.id, (target) => ({
+                                                                                    ...target,
+                                                                                    iframeManualCode: event.target.value,
+                                                                                }))
+                                                                            }
+                                                                            placeholder='<iframe src="https://example.com" ...></iframe>'
+                                                                            className="min-h-20 text-xs"
+                                                                            disabled={isBusy}
+                                                                        />
+                                                                    ) : (
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            Link akan dibuka di halaman internal IFRAME sesuai URL yang diisi.
+                                                                        </p>
+                                                                    )}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     )}
@@ -452,15 +517,21 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                             )}
 
                                             {item.isCustom && isExternal && (
-                                                isValidExternalUrl(item.url) ? (
+                                                (item.externalOpenMode === "iframe" && item.iframeManualEnabled
+                                                    ? isValidManualIframeCode(item.iframeManualCode)
+                                                    : isValidExternalUrl(item.url)) ? (
                                                     <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
                                                         <CheckCircle2 className="h-4 w-4" />
-                                                        URL external menu valid.
+                                                        {item.externalOpenMode === "iframe" && item.iframeManualEnabled
+                                                            ? "Iframe manual menu valid."
+                                                            : "URL external menu valid."}
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                                                         <AlertTriangle className="h-4 w-4" />
-                                                        URL external menu belum valid.
+                                                        {item.externalOpenMode === "iframe" && item.iframeManualEnabled
+                                                            ? "Iframe manual menu belum valid."
+                                                            : "URL external menu belum valid."}
                                                     </div>
                                                 )
                                             )}
@@ -643,38 +714,77 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                                                                 />
                                                                             </div>
                                                                             {subIsExternal && (
-                                                                                <Select
-                                                                                    value={subItem.externalOpenMode}
-                                                                                    onValueChange={(value: "new_tab" | "iframe") =>
-                                                                                        updateSubItem(section.id, item.id, subItem.id, (target) => ({
-                                                                                            ...target,
-                                                                                            externalOpenMode: value,
-                                                                                        }))
-                                                                                    }
-                                                                                    disabled={isBusy}
-                                                                                >
-                                                                                    <SelectTrigger>
-                                                                                        <SelectValue placeholder="Mode external" />
-                                                                                    </SelectTrigger>
-                                                                                    <SelectContent>
-                                                                                        <SelectItem value="new_tab">New Tab</SelectItem>
-                                                                                        <SelectItem value="iframe">IFRAME</SelectItem>
-                                                                                    </SelectContent>
-                                                                                </Select>
+                                                                                <div className="space-y-2">
+                                                                                    <Select
+                                                                                        value={subItem.externalOpenMode}
+                                                                                        onValueChange={(value: "new_tab" | "iframe") =>
+                                                                                            updateSubItem(section.id, item.id, subItem.id, (target) => ({
+                                                                                                ...target,
+                                                                                                externalOpenMode: value,
+                                                                                            }))
+                                                                                        }
+                                                                                        disabled={isBusy}
+                                                                                    >
+                                                                                        <SelectTrigger>
+                                                                                            <SelectValue placeholder="Mode external" />
+                                                                                        </SelectTrigger>
+                                                                                        <SelectContent>
+                                                                                            <SelectItem value="new_tab">New Tab</SelectItem>
+                                                                                            <SelectItem value="iframe">IFRAME</SelectItem>
+                                                                                        </SelectContent>
+                                                                                    </Select>
+                                                                                    {subItem.externalOpenMode === "iframe" && (
+                                                                                        <>
+                                                                                            <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
+                                                                                                <Label className="text-xs">Paste Iframe Manual</Label>
+                                                                                                <Switch
+                                                                                                    checked={subItem.iframeManualEnabled}
+                                                                                                    onCheckedChange={(checked) =>
+                                                                                                        updateSubItem(section.id, item.id, subItem.id, (target) => ({
+                                                                                                            ...target,
+                                                                                                            iframeManualEnabled: checked,
+                                                                                                        }))
+                                                                                                    }
+                                                                                                    disabled={isBusy}
+                                                                                                />
+                                                                                            </div>
+                                                                                            {subItem.iframeManualEnabled && (
+                                                                                                <Textarea
+                                                                                                    value={subItem.iframeManualCode}
+                                                                                                    onChange={(event) =>
+                                                                                                        updateSubItem(section.id, item.id, subItem.id, (target) => ({
+                                                                                                            ...target,
+                                                                                                            iframeManualCode: event.target.value,
+                                                                                                        }))
+                                                                                                    }
+                                                                                                    placeholder='<iframe src="https://example.com" ...></iframe>'
+                                                                                                    className="min-h-16 text-xs"
+                                                                                                    disabled={isBusy}
+                                                                                                />
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
                                                                             )}
                                                                         </div>
                                                                     )}
 
                                                                     {subItem.isCustom && subIsExternal && (
-                                                                        isValidExternalUrl(subItem.url) ? (
+                                                                        (subItem.externalOpenMode === "iframe" && subItem.iframeManualEnabled
+                                                                            ? isValidManualIframeCode(subItem.iframeManualCode)
+                                                                            : isValidExternalUrl(subItem.url)) ? (
                                                                             <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/5 px-2 py-1.5 text-xs text-emerald-600 dark:text-emerald-400">
                                                                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                                                                                URL external submenu valid.
+                                                                                {subItem.externalOpenMode === "iframe" && subItem.iframeManualEnabled
+                                                                                    ? "Iframe manual submenu valid."
+                                                                                    : "URL external submenu valid."}
                                                                             </div>
                                                                         ) : (
                                                                             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
                                                                                 <AlertTriangle className="h-3.5 w-3.5" />
-                                                                                URL external submenu belum valid.
+                                                                                {subItem.externalOpenMode === "iframe" && subItem.iframeManualEnabled
+                                                                                    ? "Iframe manual submenu belum valid."
+                                                                                    : "URL external submenu belum valid."}
                                                                             </div>
                                                                         )
                                                                     )}

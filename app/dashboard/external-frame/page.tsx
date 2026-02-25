@@ -1,8 +1,31 @@
+import { eq } from "drizzle-orm"
 import { ExternalLink } from "lucide-react"
 
+import { db } from "@/db"
+import { settings } from "@/db/schema"
+import {
+    extractIframeSrcFromManualCode,
+    findEditableNavEntryById,
+    NAVBAR_MENU_SETTING_KEY,
+    parseNavigationConfigFromSetting,
+} from "@/lib/navigation-menu"
+
 interface SearchParams {
+    id?: string
     url?: string
     title?: string
+}
+
+const normalizeExternalUrl = (rawUrl: string) => {
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+        return rawUrl
+    }
+
+    if (rawUrl.startsWith("//")) {
+        return `https:${rawUrl}`
+    }
+
+    return `https://${rawUrl.replace(/^\/+/, "")}`
 }
 
 export default async function ExternalFramePage({
@@ -11,22 +34,38 @@ export default async function ExternalFramePage({
     searchParams: Promise<SearchParams>
 }) {
     const params = await searchParams
-    const rawUrl = params.url ?? ""
 
-    const normalizedUrl =
-        rawUrl.startsWith("http://") || rawUrl.startsWith("https://")
-            ? rawUrl
-            : `https://${rawUrl.replace(/^\/+/, "")}`
+    let title = params.title?.trim() || "External Website"
+    let rawTargetUrl = params.url?.trim() || ""
 
-    const title = params.title?.trim() || "External Website"
+    if (params.id) {
+        const settingRow = await db
+            .select({ value: settings.value })
+            .from(settings)
+            .where(eq(settings.key, NAVBAR_MENU_SETTING_KEY))
+            .limit(1)
 
+        const config = parseNavigationConfigFromSetting(settingRow[0]?.value ?? null)
+        const navEntry = findEditableNavEntryById(config, params.id)
+
+        if (navEntry && navEntry.linkType === "external" && navEntry.externalOpenMode === "iframe") {
+            title = navEntry.title || title
+            if (navEntry.iframeManualEnabled) {
+                rawTargetUrl = extractIframeSrcFromManualCode(navEntry.iframeManualCode) ?? ""
+            } else {
+                rawTargetUrl = navEntry.url
+            }
+        }
+    }
+
+    const normalizedUrl = rawTargetUrl ? normalizeExternalUrl(rawTargetUrl) : ""
     const isValid = /^https?:\/\//i.test(normalizedUrl)
 
     if (!isValid) {
         return (
             <div className="p-6">
                 <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-                    URL external tidak valid.
+                    URL iframe external tidak valid.
                 </div>
             </div>
         )

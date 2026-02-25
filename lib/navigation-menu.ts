@@ -63,6 +63,8 @@ export type EditableNavSubItem = {
     isCustom: boolean
     linkType: LinkType
     externalOpenMode: ExternalOpenMode
+    iframeManualEnabled: boolean
+    iframeManualCode: string
 }
 
 export type EditableNavItem = {
@@ -76,6 +78,8 @@ export type EditableNavItem = {
     isCustom: boolean
     linkType: LinkType
     externalOpenMode: ExternalOpenMode
+    iframeManualEnabled: boolean
+    iframeManualCode: string
     items: EditableNavSubItem[]
 }
 
@@ -95,6 +99,7 @@ export type RuntimeNavSubItem = {
     isCustom?: boolean
     linkType?: LinkType
     externalOpenMode?: ExternalOpenMode
+    iframeManualEnabled?: boolean
 }
 
 export type RuntimeNavItem = {
@@ -108,6 +113,7 @@ export type RuntimeNavItem = {
     isCustom?: boolean
     linkType?: LinkType
     externalOpenMode?: ExternalOpenMode
+    iframeManualEnabled?: boolean
     items?: RuntimeNavSubItem[]
 }
 
@@ -116,6 +122,8 @@ export type RuntimeNavSection = {
     title: string
     items: RuntimeNavItem[]
 }
+
+export type EditableNavEntry = EditableNavItem | EditableNavSubItem
 
 const slugify = (value: string) =>
     value
@@ -195,6 +203,8 @@ export const getDefaultEditableNavigationConfig = (): EditableNavSection[] => {
                     isCustom: false,
                     linkType: "internal" as LinkType,
                     externalOpenMode: "new_tab" as ExternalOpenMode,
+                    iframeManualEnabled: false,
+                    iframeManualCode: "",
                     items: (item.items ?? []).map((subItem, subIndex) => ({
                         id: `${itemId}-sub-${subIndex}-${slugify(subItem.title)}`,
                         title: subItem.title,
@@ -205,6 +215,8 @@ export const getDefaultEditableNavigationConfig = (): EditableNavSection[] => {
                         isCustom: false,
                         linkType: "internal" as LinkType,
                         externalOpenMode: "new_tab" as ExternalOpenMode,
+                        iframeManualEnabled: false,
+                        iframeManualCode: "",
                     })),
                 }
             }),
@@ -230,6 +242,8 @@ const normalizeEditableSubItem = (item: Partial<EditableNavSubItem>): EditableNa
         isCustom: Boolean(item.isCustom),
         linkType,
         externalOpenMode,
+        iframeManualEnabled: Boolean(item.iframeManualEnabled),
+        iframeManualCode: item.iframeManualCode?.trim() ?? "",
     }
 }
 
@@ -257,6 +271,8 @@ const normalizeEditableItem = (item: Partial<EditableNavItem>): EditableNavItem 
         isCustom: Boolean(item.isCustom),
         linkType,
         externalOpenMode,
+        iframeManualEnabled: Boolean(item.iframeManualEnabled),
+        iframeManualCode: item.iframeManualCode?.trim() ?? "",
         items: normalizedItems,
     }
 }
@@ -293,16 +309,56 @@ export const normalizeEditableNavigationConfig = (rawConfig: unknown): EditableN
     return normalizedSections
 }
 
-const buildIframeUrl = (title: string, externalUrl: string) => {
+const buildIframeUrl = (id: string) => {
     const params = new URLSearchParams({
-        title,
-        url: externalUrl,
+        id,
     })
 
     return `/dashboard/external-frame?${params.toString()}`
 }
 
+export const extractIframeSrcFromManualCode = (iframeCode: string): string | null => {
+    const match = iframeCode.match(/src\s*=\s*["']([^"']+)["']/i)
+    const rawSrc = match?.[1]?.trim()
+
+    if (!rawSrc) {
+        return null
+    }
+
+    if (rawSrc.startsWith("http://") || rawSrc.startsWith("https://")) {
+        return rawSrc
+    }
+
+    if (rawSrc.startsWith("//")) {
+        return `https:${rawSrc}`
+    }
+
+    return `https://${rawSrc.replace(/^\/+/, "")}`
+}
+
+export const findEditableNavEntryById = (
+    config: EditableNavSection[],
+    entryId: string,
+): EditableNavEntry | null => {
+    for (const section of config) {
+        for (const item of section.items) {
+            if (item.id === entryId) {
+                return item
+            }
+
+            for (const subItem of item.items) {
+                if (subItem.id === entryId) {
+                    return subItem
+                }
+            }
+        }
+    }
+
+    return null
+}
+
 const resolveRuntimeLink = (entry: {
+    id: string
     title: string
     url: string
     linkType: LinkType
@@ -314,7 +370,7 @@ const resolveRuntimeLink = (entry: {
 
         if (entry.externalOpenMode === "iframe") {
             return {
-                url: buildIframeUrl(entry.title, externalUrl),
+                url: buildIframeUrl(entry.id),
                 openInNewTab: false,
             }
         }
@@ -337,6 +393,7 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
         title: section.title,
         items: section.items.map((item) => {
             const runtimeLink = resolveRuntimeLink({
+                id: item.id,
                 title: item.title,
                 url: item.url,
                 linkType: item.linkType,
@@ -355,8 +412,10 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                 isCustom: item.isCustom,
                 linkType: item.linkType,
                 externalOpenMode: item.externalOpenMode,
+                iframeManualEnabled: item.iframeManualEnabled,
                 items: item.items.map((subItem) => {
                     const subRuntimeLink = resolveRuntimeLink({
+                        id: subItem.id,
                         title: subItem.title,
                         url: subItem.url,
                         linkType: subItem.linkType,
@@ -374,6 +433,7 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                         isCustom: subItem.isCustom,
                         linkType: subItem.linkType,
                         externalOpenMode: subItem.externalOpenMode,
+                        iframeManualEnabled: subItem.iframeManualEnabled,
                     }
                 }),
             }
