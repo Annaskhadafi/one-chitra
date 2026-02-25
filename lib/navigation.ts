@@ -109,11 +109,6 @@ export const navigationConfig: NavSection[] = [
                         resource: "deliveries",
                     },
                     {
-                        title: "Delivery Items",
-                        url: "/dashboard/deliveries/items",
-                        resource: "deliveries",
-                    },
-                    {
                         title: "DO Monitoring",
                         url: "/dashboard/do-monitoring",
                         resource: "deliveries",

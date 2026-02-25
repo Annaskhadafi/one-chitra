@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
+import { DeliveryItemsTable } from "./delivery-items-table"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -51,7 +52,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -71,6 +72,7 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 
 interface DeliveryWithRelations {
     id: number
@@ -109,6 +111,7 @@ interface DeliveryWithRelations {
 
 interface DeliveryTableProps {
     data: DeliveryWithRelations[]
+    itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
@@ -138,7 +141,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
-export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
+export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTableProps) {
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
     const canDelete = hasResourcePermission('deliveries', 'delete')
@@ -147,7 +150,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [rowSelection, setRowSelection] = useState({})
     const [globalFilter, setGlobalFilter] = useState("")
-    const [viewMode, setViewMode] = useState<"list" | "by-po">("list")
+    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items">("list")
 
     const [deleting, setDeleting] = useState<number | null>(null)
     const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
@@ -811,7 +814,27 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                         </span>
                     )}
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setViewMode("items")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
+                        viewMode === "items"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <PackageSearch className="h-4 w-4" />
+                    Delivery Items
+                </button>
             </div>
+
+            {/* Delivery Items View */}
+            {viewMode === "items" && (
+                <div className="pt-4">
+                    <DeliveryItemsTable data={itemsData} />
+                </div>
+            )}
 
             {/* By PO Grouped View */}
             {viewMode === "by-po" && (

@@ -1,4 +1,4 @@
-import { getDeliveries } from "@/app/actions/delivery"
+import { getDeliveries, getDeliveryItemsFlat } from "@/app/actions/delivery"
 import { DeliveryTable } from "./_components/delivery-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -6,7 +6,10 @@ import { Plus } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function DeliveriesPage() {
-    const deliveriesData = await getDeliveries()
+    const [deliveriesData, itemsData] = await Promise.all([
+        getDeliveries(),
+        getDeliveryItemsFlat()
+    ])
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -28,7 +31,7 @@ export default async function DeliveriesPage() {
             </div>
 
             <div className="flex-1">
-                <DeliveryTable data={deliveriesData} />
+                <DeliveryTable data={deliveriesData} itemsData={itemsData} />
             </div>
         </div>
     )

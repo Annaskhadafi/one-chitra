@@ -75,12 +75,16 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
         },
         {
             accessorKey: "productName",
-            header: "Product",
+            header: "Product Name",
             cell: ({ row }) => (
-                <div className="flex flex-col">
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{row.original.productName}</span>
-                    <span className="text-xs text-muted-foreground font-mono">{row.original.productNumber}</span>
-                </div>
+                <span className="font-medium text-slate-900 dark:text-slate-100">{row.original.productName}</span>
+            ),
+        },
+        {
+            accessorKey: "productNumber",
+            header: "Material No.",
+            cell: ({ row }) => (
+                <span className="font-mono text-slate-700 dark:text-slate-300">{row.original.productNumber || "-"}</span>
             ),
         },
         {
