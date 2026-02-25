@@ -183,10 +183,6 @@ export async function changePassword(data: { oldPassword: string; newPassword: s
             }
         })
 
-        if (result.status === false) {
-            throw new Error("Failed to change password")
-        }
-
         return { success: true }
     } catch (error) {
         console.error("Failed to change password:", error)
@@ -204,7 +200,7 @@ export async function adminResetPassword(userId: string, newPassword: string) {
             throw new Error("Unauthorized. Only admins can reset passwords.")
         }
 
-        const result = await auth.api.setPassword({
+        const result = await auth.api.setUserPassword({
             headers: await headers(),
             body: {
                 userId,
@@ -212,7 +208,7 @@ export async function adminResetPassword(userId: string, newPassword: string) {
             }
         })
 
-        if (result.status === false) {
+        if (!result.status) {
             throw new Error("Failed to reset password")
         }
 
