@@ -171,6 +171,10 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
         queryKey: ["deliveries"],
         queryFn: () => getDeliveries(),
         initialData: initialData,
+        initialDataUpdatedAt: 0,    // Tandai initialData sebagai stale → langsung refetch
+        staleTime: 0,               // Selalu anggap data stale setelah fetched
+        refetchOnMount: true,       // Selalu refetch saat komponen mount
+        refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
 
     // Mutations
@@ -1098,34 +1102,36 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                     />
                 )}
 
-                <DeliveryPreview
-                    delivery={previewDelivery}
-                    open={isPreviewOpen}
-                    onOpenChange={setIsPreviewOpen}
-                />
-
-                {pdfDelivery && (
-                    <DeliveryPdfPreview
-                        delivery={pdfDelivery}
-                        open={isPdfOpen}
-                        onClose={() => setIsPdfOpen(false)}
-                    />
-                )}
-
-                <PoPreviewDialog
-                    open={isPoPreviewOpen}
-                    onOpenChange={setIsPoPreviewOpen}
-                    poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
-                    title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
-                    editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
-                />
-                <SuccessAlertDialog
-                    open={showSuccessDialog}
-                    onOpenChange={setShowSuccessDialog}
-                    title="Status Diperbarui"
-                    description={successMessage}
-                />
             </>)}
+
+            {/* Shared Dialogs - tersedia untuk semua view mode */}
+            <DeliveryPreview
+                delivery={previewDelivery}
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+            />
+
+            {pdfDelivery && (
+                <DeliveryPdfPreview
+                    delivery={pdfDelivery}
+                    open={isPdfOpen}
+                    onClose={() => setIsPdfOpen(false)}
+                />
+            )}
+
+            <PoPreviewDialog
+                open={isPoPreviewOpen}
+                onOpenChange={setIsPoPreviewOpen}
+                poDocument={poPreviewDelivery?.salesOrder?.poDocument || null}
+                title={`PO Preview: ${poPreviewDelivery?.salesOrder?.invoiceNumber || "Customer PO"}`}
+                editUrl={poPreviewDelivery?.salesOrder ? `/dashboard/sales-orders/${poPreviewDelivery.salesOrder.id}/edit` : undefined}
+            />
+            <SuccessAlertDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                title="Status Diperbarui"
+                description={successMessage}
+            />
         </div>
     )
 }
