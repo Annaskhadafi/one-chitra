@@ -1125,7 +1125,6 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                     title="Status Diperbarui"
                     description={successMessage}
                 />
-            </div>
             </>)}
         </div>
     )
