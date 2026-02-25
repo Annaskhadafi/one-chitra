@@ -68,7 +68,14 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
     }
 
     return (
-        <Sidebar collapsible="icon" {...props}>
+        <Sidebar
+            {...props}
+            collapsible="icon"
+            style={{
+                ...props.style,
+                fontFamily: "var(--font-parkinsans), var(--font-geist-sans), sans-serif",
+            }}
+        >
             <SidebarHeader>
                 <div className="flex items-center gap-2 px-4 py-2 text-sidebar-foreground">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white shadow-md overflow-hidden border border-white/10 dark:bg-white">
