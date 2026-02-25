@@ -50,6 +50,9 @@ const ICON_REGISTRY: Record<string, LucideIcon> = {
     Link2,
 }
 
+export type LinkType = "internal" | "external"
+export type ExternalOpenMode = "new_tab" | "iframe"
+
 export type EditableNavSubItem = {
     id: string
     title: string
@@ -58,6 +61,8 @@ export type EditableNavSubItem = {
     hidden: boolean
     openInNewTab: boolean
     isCustom: boolean
+    linkType: LinkType
+    externalOpenMode: ExternalOpenMode
 }
 
 export type EditableNavItem = {
@@ -69,6 +74,8 @@ export type EditableNavItem = {
     hidden: boolean
     openInNewTab: boolean
     isCustom: boolean
+    linkType: LinkType
+    externalOpenMode: ExternalOpenMode
     items: EditableNavSubItem[]
 }
 
@@ -86,6 +93,8 @@ export type RuntimeNavSubItem = {
     hidden?: boolean
     openInNewTab?: boolean
     isCustom?: boolean
+    linkType?: LinkType
+    externalOpenMode?: ExternalOpenMode
 }
 
 export type RuntimeNavItem = {
@@ -97,6 +106,8 @@ export type RuntimeNavItem = {
     hidden?: boolean
     openInNewTab?: boolean
     isCustom?: boolean
+    linkType?: LinkType
+    externalOpenMode?: ExternalOpenMode
     items?: RuntimeNavSubItem[]
 }
 
@@ -112,16 +123,44 @@ const slugify = (value: string) =>
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
 
-const normalizeUrl = (url: string) => {
+const normalizeInternalUrl = (url: string) => {
     if (!url) {
         return "#"
     }
 
-    if (url.startsWith("/") || url.startsWith("http://") || url.startsWith("https://") || url === "#") {
+    if (url.startsWith("/") || url === "#") {
         return url
     }
 
     return `/${url}`
+}
+
+const normalizeExternalUrl = (url: string) => {
+    if (!url) {
+        return "https://"
+    }
+
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+        return url
+    }
+
+    if (url.startsWith("//")) {
+        return `https:${url}`
+    }
+
+    return `https://${url.replace(/^\/+/, "")}`
+}
+
+const normalizeLinkType = (value: unknown): LinkType => {
+    return value === "external" ? "external" : "internal"
+}
+
+const normalizeExternalOpenMode = (value: unknown): ExternalOpenMode => {
+    return value === "iframe" ? "iframe" : "new_tab"
+}
+
+const normalizeUrlByType = (url: string, linkType: LinkType) => {
+    return linkType === "external" ? normalizeExternalUrl(url) : normalizeInternalUrl(url)
 }
 
 const getBaseIconName = (icon: LucideIcon): string => {
@@ -154,6 +193,8 @@ export const getDefaultEditableNavigationConfig = (): EditableNavSection[] => {
                     hidden: false,
                     openInNewTab: false,
                     isCustom: false,
+                    linkType: "internal" as LinkType,
+                    externalOpenMode: "new_tab" as ExternalOpenMode,
                     items: (item.items ?? []).map((subItem, subIndex) => ({
                         id: `${itemId}-sub-${subIndex}-${slugify(subItem.title)}`,
                         title: subItem.title,
@@ -162,6 +203,8 @@ export const getDefaultEditableNavigationConfig = (): EditableNavSection[] => {
                         hidden: false,
                         openInNewTab: false,
                         isCustom: false,
+                        linkType: "internal" as LinkType,
+                        externalOpenMode: "new_tab" as ExternalOpenMode,
                     })),
                 }
             }),
@@ -174,14 +217,19 @@ const normalizeEditableSubItem = (item: Partial<EditableNavSubItem>): EditableNa
         return null
     }
 
+    const linkType = normalizeLinkType(item.linkType)
+    const externalOpenMode = normalizeExternalOpenMode(item.externalOpenMode)
+
     return {
         id: item.id ?? `sub-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`,
         title: item.title.trim(),
-        url: normalizeUrl(item.url.trim()),
+        url: normalizeUrlByType(item.url.trim(), linkType),
         resource: item.resource?.trim() || null,
         hidden: Boolean(item.hidden),
         openInNewTab: Boolean(item.openInNewTab),
         isCustom: Boolean(item.isCustom),
+        linkType,
+        externalOpenMode,
     }
 }
 
@@ -195,16 +243,20 @@ const normalizeEditableItem = (item: Partial<EditableNavItem>): EditableNavItem 
         .filter((subItem): subItem is EditableNavSubItem => Boolean(subItem))
 
     const iconName = item.iconName && item.iconName in ICON_REGISTRY ? item.iconName : "Circle"
+    const linkType = normalizeLinkType(item.linkType)
+    const externalOpenMode = normalizeExternalOpenMode(item.externalOpenMode)
 
     return {
         id: item.id ?? `item-${slugify(item.title)}-${Math.random().toString(36).slice(2, 8)}`,
         title: item.title.trim(),
-        url: normalizeUrl(item.url.trim()),
+        url: normalizeUrlByType(item.url.trim(), linkType),
         iconName,
         resource: item.resource?.trim() || null,
         hidden: Boolean(item.hidden),
         openInNewTab: Boolean(item.openInNewTab),
         isCustom: Boolean(item.isCustom),
+        linkType,
+        externalOpenMode,
         items: normalizedItems,
     }
 }
@@ -241,29 +293,91 @@ export const normalizeEditableNavigationConfig = (rawConfig: unknown): EditableN
     return normalizedSections
 }
 
+const buildIframeUrl = (title: string, externalUrl: string) => {
+    const params = new URLSearchParams({
+        title,
+        url: externalUrl,
+    })
+
+    return `/dashboard/external-frame?${params.toString()}`
+}
+
+const resolveRuntimeLink = (entry: {
+    title: string
+    url: string
+    linkType: LinkType
+    externalOpenMode: ExternalOpenMode
+    openInNewTab: boolean
+}) => {
+    if (entry.linkType === "external") {
+        const externalUrl = normalizeExternalUrl(entry.url)
+
+        if (entry.externalOpenMode === "iframe") {
+            return {
+                url: buildIframeUrl(entry.title, externalUrl),
+                openInNewTab: false,
+            }
+        }
+
+        return {
+            url: externalUrl,
+            openInNewTab: true,
+        }
+    }
+
+    return {
+        url: normalizeInternalUrl(entry.url),
+        openInNewTab: Boolean(entry.openInNewTab),
+    }
+}
+
 export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]): RuntimeNavSection[] => {
     return editableConfig.map((section) => ({
         id: section.id,
         title: section.title,
-        items: section.items.map((item) => ({
-            id: item.id,
-            title: item.title,
-            url: item.url,
-            iconName: item.iconName,
-            resource: item.resource ?? undefined,
-            hidden: item.hidden,
-            openInNewTab: item.openInNewTab,
-            isCustom: item.isCustom,
-            items: item.items.map((subItem) => ({
-                id: subItem.id,
-                title: subItem.title,
-                url: subItem.url,
-                resource: subItem.resource ?? undefined,
-                hidden: subItem.hidden,
-                openInNewTab: subItem.openInNewTab,
-                isCustom: subItem.isCustom,
-            })),
-        })),
+        items: section.items.map((item) => {
+            const runtimeLink = resolveRuntimeLink({
+                title: item.title,
+                url: item.url,
+                linkType: item.linkType,
+                externalOpenMode: item.externalOpenMode,
+                openInNewTab: item.openInNewTab,
+            })
+
+            return {
+                id: item.id,
+                title: item.title,
+                url: runtimeLink.url,
+                iconName: item.iconName,
+                resource: item.resource ?? undefined,
+                hidden: item.hidden,
+                openInNewTab: runtimeLink.openInNewTab,
+                isCustom: item.isCustom,
+                linkType: item.linkType,
+                externalOpenMode: item.externalOpenMode,
+                items: item.items.map((subItem) => {
+                    const subRuntimeLink = resolveRuntimeLink({
+                        title: subItem.title,
+                        url: subItem.url,
+                        linkType: subItem.linkType,
+                        externalOpenMode: subItem.externalOpenMode,
+                        openInNewTab: subItem.openInNewTab,
+                    })
+
+                    return {
+                        id: subItem.id,
+                        title: subItem.title,
+                        url: subRuntimeLink.url,
+                        resource: subItem.resource ?? undefined,
+                        hidden: subItem.hidden,
+                        openInNewTab: subRuntimeLink.openInNewTab,
+                        isCustom: subItem.isCustom,
+                        linkType: subItem.linkType,
+                        externalOpenMode: subItem.externalOpenMode,
+                    }
+                }),
+            }
+        }),
     }))
 }
 

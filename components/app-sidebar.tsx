@@ -15,7 +15,7 @@ import {
     SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { usePermissions } from "@/hooks/use-permissions"
-import { getIconByName, type RuntimeNavSection } from "@/lib/navigation-menu"
+import { getIconByName, type RuntimeNavSection } from "../lib/navigation-menu"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     permissions?: string[]
