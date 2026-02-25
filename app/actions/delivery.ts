@@ -1,4 +1,4 @@
-"use server"
+﻿"use server"
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
@@ -28,6 +28,52 @@ export async function getDeliveries() {
         },
         orderBy: [desc(deliveries.createdAt)],
     })
+}
+
+export async function getDeliveryItemsFlat() {
+    const allDeliveries = await db.query.deliveries.findMany({
+        with: {
+            salesOrder: {
+                with: { customer: true },
+            },
+            warehouse: true,
+            items: {
+                with: { product: true },
+            },
+        },
+        orderBy: [desc(deliveries.createdAt)],
+    })
+
+    // Flatten: satu baris per item produk
+    return allDeliveries.flatMap(delivery =>
+        delivery.items.map(item => ({
+            itemId: item.id,
+            productId: item.productId,
+            productName: item.product?.materialDescription || item.product?.materialNumber || "-",
+            productNumber: item.product?.materialNumber || "-",
+            productCategory: item.product?.category || "-",
+            orderedQuantity: item.orderedQuantity,
+            deliveredQuantity: item.deliveredQuantity,
+            serialNumbers: item.serialNumbers,
+            deliveryId: delivery.id,
+            deliveryNumber: delivery.deliveryNumber,
+            scheduledDate: delivery.scheduledDate,
+            deliveryDate: delivery.deliveryDate,
+            status: delivery.status,
+            deliveryType: delivery.deliveryType,
+            driverName: delivery.driverName,
+            vehicleNumber: delivery.vehicleNumber,
+            isExternal: delivery.isExternal,
+            vendorName: delivery.vendorName,
+            salesOrderId: delivery.salesOrderId,
+            invoiceNumber: delivery.salesOrder?.invoiceNumber,
+            customerPo: delivery.salesOrder?.customerPo,
+            customerName: delivery.salesOrder?.customer?.name,
+            customerId: delivery.salesOrder?.customer?.id,
+            warehouseId: delivery.warehouseId,
+            warehouseName: delivery.warehouse?.description || delivery.warehouse?.sloc,
+        }))
+    )
 }
 
 export async function getDelivery(id: number) {
@@ -1023,7 +1069,7 @@ export async function clearLogisticsCosts() {
     }
 }
 
-// ─── Business Rule: Sinkronisasi deliveryType antar delivery dalam satu SO ────
+// ΓöÇΓöÇΓöÇ Business Rule: Sinkronisasi deliveryType antar delivery dalam satu SO ΓöÇΓöÇΓöÇΓöÇ
 // Jika SO punya lebih dari 1 delivery (non-cancelled), semua harus "partial"
 // Jika hanya 1 delivery tersisa, biarkan type-nya seperti yang dipilih user
 async function syncDeliveryTypesForSO(
@@ -1041,7 +1087,7 @@ async function syncDeliveryTypesForSO(
         )
 
     if (siblings.length > 1) {
-        // Lebih dari 1 delivery aktif → semua harus partial
+        // Lebih dari 1 delivery aktif ΓåÆ semua harus partial
         await tx
             .update(deliveries)
             .set({ deliveryType: "partial", updatedAt: new Date() })
