@@ -1,28 +1,2 @@
-# Nixpacks Configuration for Dokploy Deployment
-# https://nixpacks.com/docs/configuration/file
-
-[phases.setup]
-nixPkgs = ["nodejs_20", "npm-9_x", "bash"]
-
-[phases.install]
-cmds = ["npm ci"]
-
-[phases.build]
-cmds = [
-  "npm run build",
-  # Copy static files to standalone directory
-  # Use 'source/.' syntax to copy CONTENTS (avoids double-nesting if dest already exists)
-  "mkdir -p .next/standalone/.next/static && cp -r .next/static/. .next/standalone/.next/static/",
-  "mkdir -p .next/standalone/public && cp -r public/. .next/standalone/public/"
-]
-
-[start]
-# mkdir ensures /app/uploads exists at startup (volume mount may not create the dir)
-cmd = "mkdir -p /app/uploads && npm run db:push && node .next/standalone/server.js"
-
 [variables]
-NODE_ENV = "production"
-HOSTNAME = "0.0.0.0"
-PORT = "3000"
-# Volume mount path for uploaded files — mount Dokploy volume at /app/uploads
-UPLOAD_DIR = "/app/uploads"
+NODE_VERSION = "22"
