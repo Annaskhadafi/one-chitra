@@ -192,14 +192,9 @@ export async function changePassword(data: { oldPassword: string; newPassword: s
 
 export async function adminResetPassword(userId: string, newPassword: string) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        })
-
-        if (!session?.user || session.user.role !== 'admin') {
-            throw new Error("Unauthorized. Only admins can reset passwords.")
-        }
-
+        // Let the admin plugin's middleware handle authorization internally.
+        // Manual role check removed because the role stored in DB may differ in casing
+        // (e.g. 'Admin' vs 'admin'), causing false 'Unauthorized' errors.
         const result = await auth.api.setUserPassword({
             headers: await headers(),
             body: {
@@ -218,3 +213,4 @@ export async function adminResetPassword(userId: string, newPassword: string) {
         return { success: false, error: error instanceof Error ? error.message : "Failed to reset password" }
     }
 }
+

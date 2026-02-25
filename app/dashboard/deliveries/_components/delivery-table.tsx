@@ -473,6 +473,30 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
             cell: ({ row }) => <div className="text-right">{row.original.items.length}</div>,
         },
         {
+            id: "fulfillment",
+            header: () => <div className="text-right">Fulfillment</div>,
+            cell: ({ row }) => {
+                const items = row.original.items
+                const totalOrdered = items.reduce((sum, i) => sum + i.orderedQuantity, 0)
+                const totalDelivered = items.reduce((sum, i) => sum + i.deliveredQuantity, 0)
+                if (totalOrdered === 0) return <div className="text-right text-muted-foreground text-xs">-</div>
+                const pct = Math.min(100, Math.round((totalDelivered / totalOrdered) * 100))
+                const isPartial = pct > 0 && pct < 100
+                return (
+                    <div className="flex flex-col items-end gap-1 min-w-[90px]">
+                        <span className={`text-xs font-semibold ${isPartial ? "text-orange-500" : pct === 100 ? "text-emerald-500" : "text-muted-foreground"}`}>{pct}%</span>
+                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : isPartial ? "bg-orange-400" : "bg-muted-foreground"}`}
+                                style={{ width: `${pct}%` }}
+                            />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{totalDelivered}/{totalOrdered}</span>
+                    </div>
+                )
+            },
+        },
+        {
             id: "actions",
             header: () => <div className="text-right">Actions</div>,
             cell: ({ row }) => {
@@ -623,7 +647,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                         toast.success("Deliveries deleted successfully")
                         setRowSelection({})
                     } else {
-                        toast.error(result.error)
+                        toast.error((result as { success: false; error: string }).error)
                     }
                 }
             })
@@ -640,7 +664,7 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                         toast.success("Delivery statuses updated successfully")
                         setRowSelection({})
                     } else {
-                        toast.error(result.error)
+                        toast.error((result as { success: false; error: string }).error)
                     }
                 }
             })
@@ -919,6 +943,27 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                                         ))}
                                     </SelectContent>
                                 </Select>
+
+                                {/* Quick partial filter chip */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                        table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
+                                    }}
+                                    className={cn(
+                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all",
+                                        (table.getColumn("status")?.getFilterValue() as string) === "partial"
+                                            ? "bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200"
+                                            : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                                    )}
+                                >
+                                    <span>⚠</span>
+                                    <span>Partial</span>
+                                    <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                                        {data.filter(d => d.status === "partial").length}
+                                    </span>
+                                </button>
                             </>
                         )}
                         <Button variant="outline" size="icon" onClick={() => refetch()}>
@@ -953,8 +998,16 @@ export function DeliveryTable({ data: initialData }: DeliveryTableProps) {
                                     </TableRow>
                                     {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                                         const row = rows[virtualRow.index]
+                                        const isPartialRow = row.original.status === "partial"
                                         return (
-                                            <TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="group transition-colors hover:bg-muted/50">
+                                            <TableRow
+                                                key={row.id}
+                                                data-state={row.getIsSelected() && "selected"}
+                                                className={cn(
+                                                    "group transition-colors hover:bg-muted/50",
+                                                    isPartialRow && "border-l-4 border-l-orange-400 bg-orange-50/30 dark:bg-orange-950/10"
+                                                )}
+                                            >
                                                 {row.getVisibleCells().map((cell) => (
                                                     <TableCell key={cell.id}>
                                                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
