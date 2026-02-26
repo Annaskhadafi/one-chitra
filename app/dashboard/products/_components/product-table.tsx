@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory, getProducts } from "@/app/actions/product"
+import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory, getProducts, syncProductCostSapFromStockSapNewPC } from "@/app/actions/product"
 import { getSetting, updateSetting, getRealtimeExchangeRate } from "@/app/actions/settings"
 import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
 import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
-import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import {
@@ -47,6 +47,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
+import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -161,6 +162,26 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
         },
     })
 
+    const syncCostSapMutation = useMutation({
+        mutationFn: syncProductCostSapFromStockSapNewPC,
+        onSuccess: (result) => {
+            if (!result.success) {
+                toast.error(result.error)
+                return
+            }
+
+            if (result.updatedCount === 0) {
+                setSyncInfoOpen(true)
+            }
+
+            toast.success(`${result.message}. Updated: ${result.updatedCount}, skipped: ${result.skippedCount}`)
+            queryClient.invalidateQueries({ queryKey: ["products"] })
+        },
+        onError: () => {
+            toast.error("Failed to sync Cost SAP from Stock SAP New")
+        },
+    })
+
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission('products', 'create')
     const canEdit = hasResourcePermission('products', 'edit')
@@ -173,6 +194,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
 
     const [manualRate, setManualRate] = useState<number>(0)
     const [realtimeRate, setRealtimeRate] = useState<number>(0)
+    const [syncInfoOpen, setSyncInfoOpen] = useState(false)
 
     useEffect(() => {
         const fetchRates = async () => {
@@ -517,6 +539,14 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     </Select>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                        variant="outline"
+                        onClick={() => syncCostSapMutation.mutate()}
+                        disabled={syncCostSapMutation.isPending}
+                    >
+                        <RefreshCcw className={`mr-2 h-4 w-4 ${syncCostSapMutation.isPending ? "animate-spin" : ""}`} />
+                        {syncCostSapMutation.isPending ? "Syncing Cost SAP..." : "Sync Cost SAP (PC)"}
+                    </Button>
                     {canCreate && (
                         <>
                             <ProductCSVUpload />
@@ -599,6 +629,13 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     entityName="product"
                 />
             )}
+
+            <SuccessAlertDialog
+                open={syncInfoOpen}
+                onOpenChange={setSyncInfoOpen}
+                title="Data Sudah Sama dengan SAP"
+                description="Tidak ada perubahan Cost SAP untuk item UoM PC karena data produk saat ini sudah sinkron."
+            />
         </div>
     )
 }

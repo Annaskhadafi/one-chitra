@@ -196,3 +196,113 @@ export async function bulkUpdateProductCategory(ids: number[], category: string)
         return { success: false, error: "Failed to update product categories" }
     }
 }
+
+type StockSapCostRow = {
+    stock_id: number
+    material_no: string | null
+    stor_loc: string | null
+    total_stock: string | number | null
+    value_stock: string | number | null
+}
+
+const normalizeSloc = (value: string | null | undefined) => {
+    const raw = (value || "").trim()
+    if (!raw) return ""
+    if (/^\d+$/.test(raw)) return String(parseInt(raw, 10))
+    return raw.toUpperCase()
+}
+
+const normalizeMaterial = (value: string | null | undefined) => (value || "").trim().toUpperCase()
+
+const formatCost = (value: number) => {
+    if (!Number.isFinite(value)) return "0"
+    return value.toFixed(6).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+}
+
+export async function syncProductCostSapFromStockSapNewPC() {
+    try {
+        const result = await db.execute(sql`
+            SELECT DISTINCT ON (material_no, stor_loc)
+                stock_id,
+                material_no,
+                stor_loc,
+                total_stock,
+                value_stock
+            FROM public.zmc9_stock_sap
+            WHERE upper(coalesce(base_unit_of_measure, '')) = 'PC'
+            ORDER BY material_no, stor_loc, extracted_at DESC NULLS LAST, stock_id DESC
+        `)
+
+        const sapRows = result.rows as StockSapCostRow[]
+
+        if (!sapRows.length) {
+            return { success: true as const, updatedCount: 0, skippedCount: 0, message: "No Stock SAP New rows with UoM PC" }
+        }
+
+        const allProducts = await db.select({
+            id: products.id,
+            materialNumber: products.materialNumber,
+            sloc: products.sloc,
+            costSap: products.costSap,
+        }).from(products)
+
+        const productMap = new Map<string, { id: number; costSap: string | null }>()
+        for (const product of allProducts) {
+            const key = `${normalizeMaterial(product.materialNumber)}|${normalizeSloc(product.sloc)}`
+            productMap.set(key, { id: product.id, costSap: product.costSap })
+        }
+
+        let updatedCount = 0
+        let skippedCount = 0
+
+        for (const row of sapRows) {
+            const material = normalizeMaterial(row.material_no)
+            const sloc = normalizeSloc(row.stor_loc)
+            if (!material || !sloc) {
+                skippedCount++
+                continue
+            }
+
+            const qty = Number(row.total_stock ?? 0)
+            const valuation = Number(row.value_stock ?? 0)
+
+            if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(valuation)) {
+                skippedCount++
+                continue
+            }
+
+            const costSap = formatCost(valuation / qty)
+            const key = `${material}|${sloc}`
+            const target = productMap.get(key)
+
+            if (!target) {
+                skippedCount++
+                continue
+            }
+
+            if ((target.costSap || "") === costSap) {
+                continue
+            }
+
+            await db.update(products)
+                .set({ costSap, updatedAt: new Date() })
+                .where(eq(products.id, target.id))
+
+            updatedCount++
+        }
+
+        revalidatePath("/dashboard/products")
+        revalidatePath("/dashboard/stocks")
+        revalidatePath("/dashboard/inventory")
+
+        return {
+            success: true as const,
+            updatedCount,
+            skippedCount,
+            message: `Synced ${updatedCount} product costs from Stock SAP New (UoM PC)`
+        }
+    } catch (error) {
+        console.error("Sync Product Cost SAP from Stock SAP New failed:", error)
+        return { success: false as const, error: "Failed to sync Cost SAP from Stock SAP New" }
+    }
+}
