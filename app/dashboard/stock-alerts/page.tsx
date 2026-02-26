@@ -1,11 +1,34 @@
 import { getReorderAlerts } from "@/app/actions/stock-alerts"
 import { ReorderAlertTable } from "./_components/reorder-alert-table"
+import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 
 export default async function StockAlertsPage() {
     const alerts = await getReorderAlerts()
 
     const critical = alerts.filter((a) => a.urgency === "critical").length
     const warning = alerts.filter((a) => a.urgency === "warning").length
+
+    // Data for Urgency Distribution (Pie Chart)
+    const urgencyData = [
+        { name: "Critical (Stok 0)", value: critical },
+        { name: "Warning (< Min)", value: warning },
+    ].filter(d => d.value > 0)
+
+    // Data for Top 10 Critical Products (Bar Chart)
+    // We calculate the stock ratio (current / min) - the lower the ratio, the more critical
+    const topCriticalProducts = [...alerts]
+        .map(a => ({
+            name: a.product.materialDescription || a.product.materialNumber,
+            value: a.totalStock,
+            min: a.minStock,
+            ratio: a.minStock > 0 ? (a.totalStock / a.minStock) * 100 : 0
+        }))
+        .sort((a, b) => a.ratio - b.ratio) // Most critical first
+        .slice(0, 10)
+        .map(p => ({
+            name: p.name,
+            value: p.value,
+        }))
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -41,6 +64,29 @@ export default async function StockAlertsPage() {
                     <p className="text-xs text-amber-500">Perlu segera ditambah</p>
                 </div>
             </div>
+
+            {/* Charts Section */}
+            {alerts.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1">
+                        <ReportPieChart
+                            data={urgencyData}
+                            title="Distribusi Urgensi"
+                            description="Perbandingan stok kosong vs stok minim"
+                            variant="donut"
+                            height={300}
+                        />
+                    </div>
+                    <div className="lg:col-span-2">
+                        <ReportBarChart
+                            data={topCriticalProducts}
+                            title="Top 10 Produk Paling Kritis"
+                            description="Produk dengan prioritas restock tertinggi (berdasarkan urutan urgensi)"
+                            height={300}
+                        />
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1">
                 <ReorderAlertTable data={alerts} />

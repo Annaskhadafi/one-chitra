@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "data-visualization": {
+      "source": "inference-sh-9/skills",
+      "sourceType": "github",
+      "computedHash": "1a8326b72461c4cb8c3d4c926d5d1f2d6643e36928ede475ce8529c2d3cfcdf4"
+    }
+  }
+}
