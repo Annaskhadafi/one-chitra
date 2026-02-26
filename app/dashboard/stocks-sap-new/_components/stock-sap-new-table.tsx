@@ -91,6 +91,11 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     const normalizeSloc = (value: string | null | undefined) => formatSloc(value).toLowerCase()
 
+    const safeNumber = (value: unknown) => {
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : 0
+    }
+
     const isCentralWarehouseSloc = (value: string | null | undefined) => {
         const normalized = normalizeSloc(value)
         return normalized === "101" || normalized === "1"
@@ -225,7 +230,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                         </Button>
                     </div>
                 ),
-                cell: ({ row }) => <div className="text-right font-mono">{row.original.totalStock.toLocaleString()}</div>,
+                cell: ({ row }) => <div className="text-right font-mono">{safeNumber(row.original.totalStock).toLocaleString()}</div>,
             },
             {
                 accessorKey: "baseUnitOfMeasure",
@@ -242,7 +247,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                         </Button>
                     </div>
                 ),
-                cell: ({ row }) => <div className="text-right font-mono text-[10px]">{row.original.currency || "USD"} {row.original.valueStock.toLocaleString()}</div>,
+                cell: ({ row }) => <div className="text-right font-mono text-[10px]">{row.original.currency || "USD"} {safeNumber(row.original.valueStock).toLocaleString()}</div>,
             },
             {
                 accessorKey: "extractedAt",
