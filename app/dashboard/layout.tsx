@@ -105,6 +105,37 @@ export default async function DashboardLayout({
     }))
     .filter((section) => section.items.length > 0)
 
+  const inventorySection = navigationSections.find((section) =>
+    section.items.some((item) => item.resource === "inventory-control")
+  )
+
+  const inventoryControlItem = inventorySection?.items.find(
+    (item) => item.resource === "inventory-control"
+  )
+
+  if (inventoryControlItem) {
+    const existingSubItems = (inventoryControlItem.items ?? []).filter(
+      (subItem) => subItem.url !== "/dashboard/stocks-sap"
+    )
+
+    const hasStockSapNew = existingSubItems.some(
+      (subItem) => subItem.url === "/dashboard/stocks-sap-new"
+    )
+
+    if (!hasStockSapNew) {
+      const stockSapNewItem = {
+        id: "inventory-control-stock-sap-new",
+        title: "Stock SAP New",
+        url: "/dashboard/stocks-sap-new",
+        resource: "stocks-sap",
+      }
+
+      existingSubItems.push(stockSapNewItem)
+    }
+
+    inventoryControlItem.items = existingSubItems
+  }
+
   return (
     <PermissionsProvider permissions={permissions}>
       <SidebarProvider

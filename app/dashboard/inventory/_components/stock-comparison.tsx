@@ -52,16 +52,16 @@ interface SAPStockItem {
 }
 
 interface RawSAPInventoryItem {
-    idinv?: string | number
-    plant?: string | number
-    plantname?: string | number
-    material?: string | number
-    oldmaterial?: string | number
-    desc?: string | number
-    sloc?: string | number
-    slocdesc?: string
-    qtystock?: string | number
-    valuestock?: string | number
+    stockId?: number
+    plantCode?: string
+    plantName?: string
+    materialNo?: string
+    oldMaterialNo?: string
+    materialDesc?: string
+    storLoc?: string
+    storLocDesc?: string
+    totalStock?: number
+    valueStock?: number
 }
 
 interface LocalStockItem {
@@ -119,28 +119,26 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
         staleTime: 60 * 1000,
     })
 
-    const { data: sapData = [], isLoading: isLoadingSAP, refetch: refetchSAP } = useQuery({
-        queryKey: ["sap-inventory"],
+    const { data: sapData = [], isLoading: isLoadingSAP, error: sapError, refetch: refetchSAP } = useQuery({
+        queryKey: ["zmc9-stock-sap"],
         queryFn: async () => {
-            const response = await fetch(
-                "https://ics.chitraparatama.co.id/product/api/apiconnect.php?function=get_inventory"
-            )
+            const response = await fetch(`/api/stocks-sap-new?ts=${Date.now()}`, { cache: "no-store" })
             const result = await response.json()
-            if (result.status === "OK") {
+            if (response.ok && result.status === "OK") {
                 return (result.result as RawSAPInventoryItem[]).map((item) => ({
-                    idInv: item.idinv?.toString().trim() ?? "",
-                    plant: item.plant?.toString().trim() ?? "",
-                    plantName: item.plantname?.toString().trim() ?? "",
-                    material: item.material?.toString().trim() ?? "",
-                    oldMaterial: item.oldmaterial?.toString().trim() ?? "",
-                    description: item.desc?.toString().trim() ?? "",
-                    sloc: item.sloc?.toString().trim() ?? "",
-                    slocDesc: item.slocdesc?.toString().trim() ?? "",
-                    qtyStock: Number(item.qtystock) || 0,
-                    valueStock: Number(item.valuestock) || 0,
+                    idInv: item.materialNo?.toString().trim() ?? "",
+                    plant: item.plantCode?.toString().trim() ?? "",
+                    plantName: item.plantName?.toString().trim() ?? "",
+                    material: item.materialNo?.toString().trim() ?? "",
+                    oldMaterial: item.oldMaterialNo?.toString().trim() ?? "",
+                    description: item.materialDesc?.toString().trim() ?? "",
+                    sloc: item.storLoc?.toString().trim() ?? "",
+                    slocDesc: item.storLocDesc?.toString().trim() ?? "",
+                    qtyStock: Number(item.totalStock) || 0,
+                    valueStock: Number(item.valueStock) || 0,
                 }))
             }
-            throw new Error("Failed to fetch SAP data")
+            throw new Error("Failed to fetch zmc9_stock_sap data")
         },
         staleTime: 5 * 60 * 1000,
     })
@@ -368,7 +366,20 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching SAP data for comparison…</p>
+                <p className="text-sm text-muted-foreground">Fetching Stock SAP New data for comparison…</p>
+            </div>
+        )
+    }
+
+    if (sapError) {
+        return (
+            <div className="h-[400px] flex flex-col items-center justify-center gap-2 border rounded-lg bg-card/50 px-4 text-center">
+                <p className="text-sm font-medium text-red-600">Failed to load Stock SAP New for comparison</p>
+                <p className="text-xs text-muted-foreground">{sapError instanceof Error ? sapError.message : "Unknown error"}</p>
+                <Button variant="outline" size="sm" onClick={() => refetchSAP()}>
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                    Retry
+                </Button>
             </div>
         )
     }
@@ -559,7 +570,7 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetchSAP()} className="shrink-0">
                     <RefreshCcw className="mr-2 h-4 w-4" />
-                    Refresh SAP
+                    Refresh Stock SAP New
                 </Button>
                 <div className="text-xs text-muted-foreground ml-auto">
                     Showing {table.getFilteredRowModel().rows.length} of {comparisonData.length} items
