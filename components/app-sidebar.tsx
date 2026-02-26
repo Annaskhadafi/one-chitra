@@ -115,7 +115,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                             <SidebarGroup>
                                 <SidebarGroupContent className="flex flex-col gap-1">
                                     <SidebarMenu className="px-1">
-                                        {Array.from({ length: Math.max(2, Math.min(section.items.length, 4)) }).map((_, itemIndex) => (
+                                        {Array.from({ length: Math.min(Math.max(section.items.length, 1), 2) }).map((_, itemIndex) => (
                                             <SidebarMenuSkeleton key={`menu-skeleton-${section.title || index}-${itemIndex}`} showIcon />
                                         ))}
                                     </SidebarMenu>
