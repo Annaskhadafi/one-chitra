@@ -78,6 +78,8 @@ export async function createSecurityUser(data: {
     email: string
     password: string
     role: string
+    department?: string
+    jobTitle?: string
 }) {
     const session = await getAuthenticatedSession("security", "create")
 
@@ -87,7 +89,12 @@ export async function createSecurityUser(data: {
         })
 
         if (result.user) {
-            await db.update(user).set({ role: data.role }).where(eq(user.id, result.user.id))
+            await db.update(user).set({
+                role: data.role,
+                department: data.department?.trim() ? data.department.trim() : null,
+                jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
+                updatedAt: new Date(),
+            }).where(eq(user.id, result.user.id))
         }
 
         await writeAuditLog(
@@ -118,6 +125,38 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
         session.user.id,
         "user.role_change",
         `Changed role of ${targetUser.email} from ${targetUser.role} to ${newRole}`
+    )
+
+    revalidatePath("/dashboard/security/users")
+    return { success: true }
+}
+
+export async function updateSecurityUserProfile(targetUserId: string, data: {
+    name?: string
+    department?: string
+    jobTitle?: string
+}) {
+    const session = await getAuthenticatedSession("security", "edit")
+
+    const [targetUser] = await db.select().from(user).where(eq(user.id, targetUserId))
+    if (!targetUser) return { success: false, error: "User not found" }
+
+    const name = data.name?.trim() ?? ""
+    if (!name) {
+        return { success: false, error: "Name is required" }
+    }
+
+    await db.update(user).set({
+        name,
+        department: data.department?.trim() ? data.department.trim() : null,
+        jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
+        updatedAt: new Date(),
+    }).where(eq(user.id, targetUserId))
+
+    await writeAuditLog(
+        session.user.id,
+        "user.profile_update",
+        `Updated profile fields for ${targetUser.email}`
     )
 
     revalidatePath("/dashboard/security/users")
@@ -190,7 +229,7 @@ export async function deleteSecurityUser(targetUserId: string) {
 }
 
 export async function bulkCreateSecurityUsers(
-    users: Array<{ name: string; email: string; password: string; role: string }>
+    users: Array<{ name: string; email: string; password: string; role: string; department?: string; jobTitle?: string }>
 ) {
     const session = await getAuthenticatedSession("security", "create")
 
@@ -203,7 +242,12 @@ export async function bulkCreateSecurityUsers(
             })
 
             if (result.user) {
-                await db.update(user).set({ role: data.role }).where(eq(user.id, result.user.id))
+                await db.update(user).set({
+                    role: data.role,
+                    department: data.department?.trim() ? data.department.trim() : null,
+                    jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
+                    updatedAt: new Date(),
+                }).where(eq(user.id, result.user.id))
             }
 
             await writeAuditLog(

@@ -433,12 +433,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                     </CardContent>
                 </Card>
 
-                {/* Status & Approval */}
+                {/* Status */}
                 <Card>
                     <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <StatusIcon className={`h-4 w-4 ${config.color}`} />
-                            Status & Approval
+                            Status
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">

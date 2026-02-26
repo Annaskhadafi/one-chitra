@@ -59,6 +59,30 @@ export {
     priceHistoryRelations,
 } from "./price-management";
 export { forecasts } from "./forecasts";
+export {
+    approvalDefinitionStatusEnum,
+    approvalApproverTypeEnum,
+    approvalRequestStatusEnum,
+    approvalAssignmentStatusEnum,
+    approvalDecisionActionEnum,
+    approvalOrgStructureTypeEnum,
+    approvalFormRegistry,
+    approvalDefinitions,
+    approvalDefinitionSteps,
+    approvalRequests,
+    approvalAssignments,
+    approvalAuditLogs,
+    approvalMatrixImports,
+    approvalOrgStructures,
+    approvalOrgStructureNodes,
+    approvalDefinitionsRelations,
+    approvalDefinitionStepsRelations,
+    approvalRequestsRelations,
+    approvalAssignmentsRelations,
+    approvalAuditLogsRelations,
+    approvalOrgStructuresRelations,
+    approvalOrgStructureNodesRelations,
+} from "./approval-workflows";
 
 // Core Auth Table Relations
 import { user } from "./auth";

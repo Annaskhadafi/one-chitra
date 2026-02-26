@@ -13,7 +13,7 @@ export default async function QuotationsPage() {
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-bold tracking-tight">Quotations</h1>
                     <p className="text-muted-foreground">
-                        Manage quotations, pricing proposals, and customer approvals.
+                        Manage quotations and pricing proposals.
                     </p>
                 </div>
                 <Link href="/dashboard/quotations/create">

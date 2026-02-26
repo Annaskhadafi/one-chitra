@@ -10,6 +10,7 @@ import { deliveries } from "@/db/schema/deliveries"
 import { stockTransfers, stockTransferItems } from "@/db/schema/transfers"
 import { billingRecords } from "@/db/schema/billing"
 import { sapSyncLogs } from "@/db/schema/sap-sync"
+import { approvalAssignments, approvalRequests } from "@/db/schema/approval-workflows"
 import { sql, desc, asc, eq, gte, lte, and, or } from "drizzle-orm"
 
 // ==================== INVENTORY REPORT TYPES ====================
@@ -323,6 +324,26 @@ export type SAPIntegrationReportData = {
         sapCount: number
         difference: number
         lastChecked: Date
+    }[]
+}
+
+export type ApprovalReportData = {
+    summary: {
+        totalRequests: number
+        pendingRequests: number
+        approvedRequests: number
+        rejectedRequests: number
+    }
+    averageLeadTimeHours: number
+    pendingByStep: {
+        stepOrder: number
+        pendingCount: number
+    }[]
+    monthlyTrend: {
+        month: string
+        submitted: number
+        approved: number
+        rejected: number
     }[]
 }
 
@@ -1350,5 +1371,64 @@ export async function getSAPIntegrationReport(): Promise<SAPIntegrationReportDat
             { entity: "Deliveries", localCount: 320, sapCount: 320, difference: 0, lastChecked: new Date() },
             { entity: "Stock Levels", localCount: 8900, sapCount: 9005, difference: -105, lastChecked: new Date() },
         ],
+    }
+}
+
+export async function getApprovalReport(): Promise<ApprovalReportData> {
+    const summaryRaw = await db.select({
+        total: sql<number>`COUNT(*)`,
+        pending: sql<number>`COUNT(*) FILTER (WHERE ${approvalRequests.status} = 'pending')`,
+        approved: sql<number>`COUNT(*) FILTER (WHERE ${approvalRequests.status} = 'approved')`,
+        rejected: sql<number>`COUNT(*) FILTER (WHERE ${approvalRequests.status} = 'rejected')`,
+    }).from(approvalRequests)
+
+    const leadTimeRaw = await db.select({
+        avgHours: sql<number>`COALESCE(AVG(EXTRACT(EPOCH FROM (${approvalRequests.completedAt} - ${approvalRequests.submittedAt})) / 3600), 0)`,
+    })
+        .from(approvalRequests)
+        .where(sql`${approvalRequests.completedAt} IS NOT NULL`)
+
+    const pendingByStepRaw = await db.select({
+        stepOrder: approvalAssignments.stepOrder,
+        pendingCount: sql<number>`COUNT(*)`,
+    })
+        .from(approvalAssignments)
+        .where(eq(approvalAssignments.status, "pending"))
+        .groupBy(approvalAssignments.stepOrder)
+        .orderBy(asc(approvalAssignments.stepOrder))
+
+    const monthlyTrendRaw = await db.select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${approvalRequests.submittedAt}), 'YYYY-MM')`.as("month"),
+        submitted: sql<number>`COUNT(*)`,
+        approved: sql<number>`COUNT(*) FILTER (WHERE ${approvalRequests.status} = 'approved')`,
+        rejected: sql<number>`COUNT(*) FILTER (WHERE ${approvalRequests.status} = 'rejected')`,
+    })
+        .from(approvalRequests)
+        .groupBy(sql`DATE_TRUNC('month', ${approvalRequests.submittedAt})`)
+        .orderBy(desc(sql`DATE_TRUNC('month', ${approvalRequests.submittedAt})`))
+        .limit(12)
+
+    const summary = summaryRaw[0] ?? { total: 0, pending: 0, approved: 0, rejected: 0 }
+
+    return {
+        summary: {
+            totalRequests: Number(summary.total ?? 0),
+            pendingRequests: Number(summary.pending ?? 0),
+            approvedRequests: Number(summary.approved ?? 0),
+            rejectedRequests: Number(summary.rejected ?? 0),
+        },
+        averageLeadTimeHours: Number(leadTimeRaw[0]?.avgHours ?? 0),
+        pendingByStep: pendingByStepRaw.map((row) => ({
+            stepOrder: Number(row.stepOrder ?? 0),
+            pendingCount: Number(row.pendingCount ?? 0),
+        })),
+        monthlyTrend: monthlyTrendRaw
+            .map((row) => ({
+                month: String(row.month),
+                submitted: Number(row.submitted ?? 0),
+                approved: Number(row.approved ?? 0),
+                rejected: Number(row.rejected ?? 0),
+            }))
+            .reverse(),
     }
 }

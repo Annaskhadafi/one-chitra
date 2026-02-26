@@ -9,6 +9,8 @@ export const user = pgTable("user", {
         .notNull(),
     image: text("image"),
     role: text("role").default("staff").notNull(),
+    department: text("department"),
+    jobTitle: text("job_title"),
     banned: boolean("banned").default(false),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires"),

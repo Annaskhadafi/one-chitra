@@ -10,6 +10,7 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "test:approval": "npx tsx scripts/test-approval-e2e.ts && npx tsx scripts/test-approval-reject-email.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",
@@ -26,7 +27,8 @@
     "docker:build": "docker build -t codeguide-starter-fullstack .",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "navbar:sync-approvals": "npx tsx scripts/sync-navbar-approvals.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -103,6 +105,7 @@
     "tailwind-merge": "^3.3.1",
     "uuid": "^13.0.0",
     "vaul": "^1.1.2",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.3"
   },
   "devDependencies": {

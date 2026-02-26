@@ -36,6 +36,8 @@ type FieldMapping = {
     email: string
     password: string
     role: string
+    department: string
+    jobTitle: string
 }
 
 type PreviewRow = {
@@ -44,6 +46,8 @@ type PreviewRow = {
     email: string
     password: string
     role: string
+    department: string
+    jobTitle: string
     errors: string[]
     status?: "success" | "error" | "pending"
     statusMessage?: string
@@ -60,7 +64,14 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
     const [csvRows, setCsvRows] = useState<ParsedRow[]>([])
     const [fileName, setFileName] = useState("")
     const [isDragOver, setIsDragOver] = useState(false)
-    const [mapping, setMapping] = useState<FieldMapping>({ name: NONE, email: NONE, password: NONE, role: DEFAULT_ROLE })
+    const [mapping, setMapping] = useState<FieldMapping>({
+        name: NONE,
+        email: NONE,
+        password: NONE,
+        role: DEFAULT_ROLE,
+        department: NONE,
+        jobTitle: NONE,
+    })
     const [previewRows, setPreviewRows] = useState<PreviewRow[]>([])
     const [importState, setImportState] = useState<ImportState>("idle")
     const [importProgress, setImportProgress] = useState(0)
@@ -72,7 +83,14 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
         setCsvHeaders([])
         setCsvRows([])
         setFileName("")
-        setMapping({ name: NONE, email: NONE, password: NONE, role: DEFAULT_ROLE })
+        setMapping({
+            name: NONE,
+            email: NONE,
+            password: NONE,
+            role: DEFAULT_ROLE,
+            department: NONE,
+            jobTitle: NONE,
+        })
         setPreviewRows([])
         setImportState("idle")
         setImportProgress(0)
@@ -105,6 +123,8 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
                     email: findHeader("email", "mail"),
                     password: findHeader("password", "pass", "pwd", "sandi"),
                     role: findHeader("role", "roles", "jabatan", "level"),
+                    department: findHeader("department", "departement", "dept", "divisi"),
+                    jobTitle: findHeader("jobtitle", "job", "position", "title", "jabatan"),
                 })
                 setStep(2)
             },
@@ -136,6 +156,8 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
                 mapping.role !== NONE && mapping.role !== DEFAULT_ROLE
                     ? (row[mapping.role]?.trim() || (roles[0]?.name ?? "staff"))
                     : (roles[0]?.name ?? "staff")
+            const department = mapping.department !== NONE ? (row[mapping.department]?.trim() ?? "") : ""
+            const jobTitle = mapping.jobTitle !== NONE ? (row[mapping.jobTitle]?.trim() ?? "") : ""
 
             const errors: string[] = []
             if (!name) errors.push("Missing name")
@@ -144,7 +166,7 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
             if (!password) errors.push("Missing password")
             else if (password.length < 8) errors.push("Password too short (min 8)")
 
-            return { index: i + 1, name, email, password, role, errors }
+            return { index: i + 1, name, email, password, role, department, jobTitle, errors }
         })
         setPreviewRows(rows)
         setStep(3)
@@ -170,7 +192,14 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
         for (let i = 0; i < validRows.length; i += batchSize) {
             const batch = validRows.slice(i, i + batchSize)
             const result = await bulkCreateSecurityUsers(
-                batch.map((r) => ({ name: r.name, email: r.email, password: r.password, role: r.role }))
+                batch.map((r) => ({
+                    name: r.name,
+                    email: r.email,
+                    password: r.password,
+                    role: r.role,
+                    department: r.department,
+                    jobTitle: r.jobTitle,
+                }))
             )
 
             if (result.success) {
@@ -274,6 +303,10 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
                                 <code className="bg-muted px-1 rounded">password</code>,{" "}
                                 <code className="bg-muted px-1 rounded">role</code>{" "}
                                 <span className="text-xs">(optional)</span>
+                                , <code className="bg-muted px-1 rounded">department</code>{" "}
+                                <span className="text-xs">(optional)</span>
+                                , <code className="bg-muted px-1 rounded">job_title</code>{" "}
+                                <span className="text-xs">(optional)</span>
                             </p>
                             <p className="text-xs text-muted-foreground">
                                 Column names are auto-detected and can be remapped in the next step.
@@ -297,6 +330,8 @@ export function ImportUsersDialog({ open, onOpenChange, roles, onSuccess }: Impo
                                     { field: "email" as const, label: "Email Address", required: true },
                                     { field: "password" as const, label: "Password", required: true },
                                     { field: "role" as const, label: "Role", required: false },
+                                            { field: "department" as const, label: "Department", required: false },
+                                            { field: "jobTitle" as const, label: "Jabatan / Job Title", required: false },
                                 ] as const
                             ).map(({ field, label, required }) => (
                                 <div key={field} className="space-y-1">

@@ -150,7 +150,7 @@ export async function setUserRole(userId: string, role: string) {
     }
 }
 
-export async function updateProfile(data: { name: string; image?: string }) {
+export async function updateProfile(data: { name: string; image?: string; department?: string; jobTitle?: string }) {
     try {
         const session = await auth.api.getSession({
             headers: await headers()
@@ -162,6 +162,8 @@ export async function updateProfile(data: { name: string; image?: string }) {
             .set({
                 name: data.name,
                 image: data.image,
+                department: data.department?.trim() ? data.department.trim() : null,
+                jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
                 updatedAt: new Date()
             })
             .where(eq(user.id, session.user.id))
@@ -176,7 +178,7 @@ export async function updateProfile(data: { name: string; image?: string }) {
 
 export async function changePassword(data: { oldPassword: string; newPassword: string }) {
     try {
-        const result = await auth.api.changePassword({
+        await auth.api.changePassword({
             headers: await headers(),
             body: {
                 currentPassword: data.oldPassword,

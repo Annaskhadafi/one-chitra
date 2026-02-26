@@ -1,18 +1,13 @@
 import {
-    Warehouse,
-    Package,
     Database,
     Box,
     Truck,
     Home,
-    CreditCard,
     ShoppingCart,
-    ArrowRightLeft,
     ArrowDownToLine,
     BarChart3,
     LayoutGrid,
     Mail,
-    AlertTriangle,
     ClipboardList,
     Lock,
     type LucideIcon
@@ -267,6 +262,34 @@ export const navigationConfig: NavSection[] = [
                         title: "ABC Analysis",
                         url: "/dashboard/abc-analysis",
                         resource: "abc-analysis",
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        title: "Approval",
+        items: [
+            {
+                title: "Approval",
+                url: "#",
+                icon: ClipboardList,
+                resource: "approvals",
+                items: [
+                    {
+                        title: "Approval Inbox",
+                        url: "/dashboard/approvals",
+                        resource: "approvals",
+                    },
+                    {
+                        title: "Approval Settings",
+                        url: "/dashboard/settings/approvals",
+                        resource: "approvals",
+                    },
+                    {
+                        title: "Matrix Approval",
+                        url: "/dashboard/approvals/matrix",
+                        resource: "approvals",
                     },
                 ],
             },

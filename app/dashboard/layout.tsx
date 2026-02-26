@@ -70,8 +70,11 @@ export default async function DashboardLayout({
   }
 
   const isAdminRole = roleLower === 'admin' || roleLower === 'superuser'
-  const canViewResource = (resource?: string) => {
+  const canViewResource = (resource?: string, url?: string) => {
     if (isAdminRole) {
+      return true
+    }
+    if (url === "/dashboard/approvals") {
       return true
     }
     if (!resource) {
@@ -87,7 +90,7 @@ export default async function DashboardLayout({
         .filter((item) => !item.hidden)
         .map((item) => ({
           ...item,
-          items: (item.items ?? []).filter((subItem) => !subItem.hidden && canViewResource(subItem.resource)),
+          items: (item.items ?? []).filter((subItem) => !subItem.hidden && canViewResource(subItem.resource, subItem.url)),
         }))
         .filter((item) => {
           const hasChildren = (item.items?.length ?? 0) > 0
@@ -97,7 +100,7 @@ export default async function DashboardLayout({
           if (item.url === '#') {
             return false
           }
-          return canViewResource(item.resource)
+          return canViewResource(item.resource, item.url)
         }),
     }))
     .filter((section) => section.items.length > 0)

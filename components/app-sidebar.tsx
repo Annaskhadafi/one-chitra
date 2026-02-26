@@ -14,7 +14,6 @@ import {
     SidebarRail,
     SidebarSeparator,
 } from "@/components/ui/sidebar"
-import { usePermissions } from "@/hooks/use-permissions"
 import { getIconByName, type RuntimeNavSection } from "../lib/navigation-menu"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -28,57 +27,9 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSidebarProps) {
-    const { hasResourcePermission } = usePermissions()
     const { navigationSections, ...sidebarProps } = props
 
-    const filteredConfig = navigationSections.map(section => ({
-        ...section,
-        items: section.items
-            .map(item => {
-                if (item.hidden) {
-                    return null
-                }
-
-                if (item.items && item.items.length > 0) {
-                    const filteredSubItems = item.items.filter(subItem => {
-                        if (subItem.hidden) {
-                            return false
-                        }
-
-                        if (!subItem.resource) {
-                            return true
-                        }
-
-                        return hasResourcePermission(subItem.resource, 'view')
-                    })
-
-                    return {
-                        ...item,
-                        items: filteredSubItems,
-                    }
-                }
-
-                return item
-            })
-            .filter((item): item is NonNullable<typeof item> => Boolean(item))
-            .filter(item => {
-                if (item.items && item.items.length > 0) {
-                    return true
-                }
-
-                if (item.url === "#") {
-                    return false
-                }
-
-                if (!item.resource) {
-                    return true
-                }
-
-                return hasResourcePermission(item.resource, 'view')
-            })
-    })).filter(section => section.items.length > 0)
-
-    const sidebarConfig = filteredConfig.map((section) => ({
+    const sidebarConfig = navigationSections.map((section) => ({
         ...section,
         items: section.items.map((item) => ({
             ...item,

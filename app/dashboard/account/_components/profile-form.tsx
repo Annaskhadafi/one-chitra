@@ -27,11 +27,13 @@ const profileFormSchema = z.object({
         message: "Name must be at least 2 characters.",
     }),
     email: z.string().email().readonly(),
+    department: z.string().optional(),
+    jobTitle: z.string().optional(),
 })
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>
 
-export function ProfileForm({ user }: { user: { name: string; email: string } }) {
+export function ProfileForm({ user }: { user: { name: string; email: string; department?: string; jobTitle?: string } }) {
     const router = useRouter()
     const [isLoading, setIsLoading] = useState(false)
 
@@ -40,13 +42,19 @@ export function ProfileForm({ user }: { user: { name: string; email: string } })
         defaultValues: {
             name: user.name,
             email: user.email,
+            department: user.department ?? "",
+            jobTitle: user.jobTitle ?? "",
         },
     })
 
     async function onSubmit(data: ProfileFormValues) {
         setIsLoading(true)
         try {
-            const result = await updateProfile({ name: data.name })
+            const result = await updateProfile({
+                name: data.name,
+                department: data.department,
+                jobTitle: data.jobTitle,
+            })
             if (result.success) {
                 toast.success("Profile updated successfully")
                 router.refresh()
@@ -79,6 +87,32 @@ export function ProfileForm({ user }: { user: { name: string; email: string } })
                                     <FormLabel>Name</FormLabel>
                                     <FormControl>
                                         <Input placeholder="Your name" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="jobTitle"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Jabatan</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Contoh: Finance Manager" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="department"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Department</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Contoh: Finance" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

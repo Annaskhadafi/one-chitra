@@ -13,10 +13,11 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { UserPlus, Ban, CheckCircle, Trash2, Shield, Search, RefreshCw, KeyRound, Users, UserCheck, Upload } from "lucide-react"
+import { UserPlus, Ban, CheckCircle, Trash2, Shield, Search, RefreshCw, KeyRound, Users, UserCheck, Upload, Pencil } from "lucide-react"
 import {
     createSecurityUser,
     updateSecurityUserRole,
+    updateSecurityUserProfile,
     banSecurityUser,
     unbanSecurityUser,
     deleteSecurityUser,
@@ -32,6 +33,8 @@ type UserRow = {
     name: string
     email: string
     role: string
+    department: string | null
+    jobTitle: string | null
     banned: boolean | null
     banReason: string | null
     createdAt: Date
@@ -58,13 +61,22 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
     const [importOpen, setImportOpen] = useState(false)
     const [banOpen, setBanOpen] = useState<{ user: UserRow } | null>(null)
     const [roleOpen, setRoleOpen] = useState<{ user: UserRow } | null>(null)
+    const [editOpen, setEditOpen] = useState<{ user: UserRow } | null>(null)
     const [deleteOpen, setDeleteOpen] = useState<{ user: UserRow } | null>(null)
     const [changePasswordOpen, setChangePasswordOpen] = useState<{ user: UserRow } | null>(null)
 
     // Form states
-    const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: roles[0]?.name ?? "staff" })
+    const [newUser, setNewUser] = useState({
+        name: "",
+        email: "",
+        password: "",
+        role: roles[0]?.name ?? "staff",
+        department: "",
+        jobTitle: "",
+    })
     const [banReason, setBanReason] = useState("")
     const [selectedRole, setSelectedRole] = useState("")
+    const [editUserForm, setEditUserForm] = useState({ name: "", jobTitle: "", department: "" })
     const [newPassword, setNewPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
 
@@ -86,7 +98,14 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
         if (result.success) {
             toast.success("User created successfully")
             setCreateOpen(false)
-            setNewUser({ name: "", email: "", password: "", role: roles[0]?.name ?? "staff" })
+            setNewUser({
+                name: "",
+                email: "",
+                password: "",
+                role: roles[0]?.name ?? "staff",
+                department: "",
+                jobTitle: "",
+            })
             refresh()
         } else {
             toast.error(result.error ?? "Failed to create user")
@@ -103,6 +122,22 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
             refresh()
         } else {
             toast.error(result.error ?? "Failed to update role")
+        }
+    }
+
+    async function handleEditUser() {
+        if (!editOpen) return
+        const result = await updateSecurityUserProfile(editOpen.user.id, {
+            name: editUserForm.name,
+            jobTitle: editUserForm.jobTitle,
+            department: editUserForm.department,
+        })
+        if (result.success) {
+            toast.success("User profile updated")
+            setEditOpen(null)
+            refresh()
+        } else {
+            toast.error(result.error ?? "Failed to update user")
         }
     }
 
@@ -264,6 +299,8 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                         <TableRow>
                             <TableHead>User</TableHead>
                             <TableHead>Role</TableHead>
+                            <TableHead>Jabatan</TableHead>
+                            <TableHead>Department</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Created</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -272,7 +309,7 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                     <TableBody>
                         {filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                                     No users found.
                                 </TableCell>
                             </TableRow>
@@ -290,6 +327,8 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                                             {u.role}
                                         </Badge>
                                     </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{u.jobTitle ?? "-"}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{u.department ?? "-"}</TableCell>
                                     <TableCell>
                                         {u.banned ? (
                                             <Badge variant="destructive" title={u.banReason ?? ""}>Banned</Badge>
@@ -302,6 +341,21 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex justify-end gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Edit user"
+                                                onClick={() => {
+                                                    setEditUserForm({
+                                                        name: u.name,
+                                                        jobTitle: u.jobTitle ?? "",
+                                                        department: u.department ?? "",
+                                                    })
+                                                    setEditOpen({ user: u })
+                                                }}
+                                            >
+                                                <Pencil className="h-4 w-4 text-primary" />
+                                            </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -402,6 +456,14 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-1">
+                            <Label>Jabatan</Label>
+                            <Input value={newUser.jobTitle} onChange={(e) => setNewUser({ ...newUser, jobTitle: e.target.value })} placeholder="Contoh: Finance Manager" />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Department</Label>
+                            <Input value={newUser.department} onChange={(e) => setNewUser({ ...newUser, department: e.target.value })} placeholder="Contoh: Finance" />
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -434,6 +496,47 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setRoleOpen(null)}>Cancel</Button>
                         <Button onClick={handleRoleChange} disabled={!selectedRole}>Save</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Edit User Dialog ─────────────────────────────────────────────────── */}
+            <Dialog open={!!editOpen} onOpenChange={(o) => !o && setEditOpen(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit User</DialogTitle>
+                        <DialogDescription>
+                            Update profile fields for <strong>{editOpen?.user.email}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1">
+                            <Label>Full Name</Label>
+                            <Input
+                                value={editUserForm.name}
+                                onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Jabatan</Label>
+                            <Input
+                                value={editUserForm.jobTitle}
+                                onChange={(e) => setEditUserForm({ ...editUserForm, jobTitle: e.target.value })}
+                                placeholder="Contoh: Finance Manager"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Department</Label>
+                            <Input
+                                value={editUserForm.department}
+                                onChange={(e) => setEditUserForm({ ...editUserForm, department: e.target.value })}
+                                placeholder="Contoh: Finance"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditOpen(null)}>Cancel</Button>
+                        <Button onClick={handleEditUser} disabled={!editUserForm.name.trim()}>Save</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

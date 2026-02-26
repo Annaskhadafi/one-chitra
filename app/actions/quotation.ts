@@ -74,7 +74,7 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
         const userId = session?.user?.id || "system"
         const quotationNumber = data.quotationNumber || await generateQuotationNumber()
 
-        return await db.transaction(async (tx) => {
+        const creationResult = await db.transaction(async (tx) => {
             const [newQuotation] = await tx.insert(quotations)
                 .values({
                     quotationNumber,
@@ -120,6 +120,8 @@ export async function createQuotation(data: z.infer<typeof quotationSchema>) {
             revalidatePath("/dashboard/quotations")
             return { success: true, id: newQuotation.id }
         })
+
+        return creationResult
     } catch (error) {
         console.error("Failed to create quotation:", error)
         return { success: false, error: "Failed to create quotation" }
