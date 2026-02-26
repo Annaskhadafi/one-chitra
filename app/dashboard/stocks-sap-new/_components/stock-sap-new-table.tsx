@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react"
 import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ScoreCard } from "@/components/score-card"
 import {
     Table,
@@ -333,9 +334,41 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     if (isLoading) {
         return (
-            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50 px-4">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Fetching Data from zmc9_stock_sap...</p>
+            <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                    <Skeleton className="h-28 rounded-xl" />
+                    <Skeleton className="h-28 rounded-xl" />
+                    <Skeleton className="h-28 rounded-xl" />
+                </div>
+
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <Skeleton className="h-14 w-full sm:w-[220px] rounded-md" />
+                        <Skeleton className="h-14 w-full sm:w-[280px] rounded-md" />
+                        <Skeleton className="h-9 w-[140px] rounded-md" />
+                    </div>
+                    <Skeleton className="h-10 w-full max-w-sm rounded-md" />
+                </div>
+
+                <div className="rounded-md border bg-card p-4 space-y-3">
+                    <div className="grid grid-cols-12 gap-3">
+                        {Array.from({ length: 12 }).map((_, idx) => (
+                            <Skeleton key={`header-skeleton-${idx}`} className="h-4 col-span-1 rounded" />
+                        ))}
+                    </div>
+                    {Array.from({ length: 12 }).map((_, rowIdx) => (
+                        <div key={`row-skeleton-${rowIdx}`} className="grid grid-cols-12 gap-3">
+                            {Array.from({ length: 12 }).map((_, colIdx) => (
+                                <Skeleton key={`cell-skeleton-${rowIdx}-${colIdx}`} className="h-6 col-span-1 rounded" />
+                            ))}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Fetching Data from zmc9_stock_sap...
+                </div>
             </div>
         )
     }
