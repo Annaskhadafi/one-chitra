@@ -36,6 +36,7 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import type { Warehouse } from "@/lib/types"
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface SAPStockItem {
@@ -88,6 +89,7 @@ interface ComparisonRow {
     description: string
     sloc: string
     slocDesc: string
+    warehouseType: string
     localStock: number
     sapStock: number
     gap: number
@@ -107,9 +109,31 @@ const chartConfig = {
 // ─── Component ───────────────────────────────────────────────────────
 interface StockComparisonProps {
     localStocks: LocalStockItem[]
+    warehouses: Warehouse[]
 }
 
-export function StockComparison({ localStocks: initialLocalStocks }: StockComparisonProps) {
+export function StockComparison({ localStocks: initialLocalStocks, warehouses }: StockComparisonProps) {
+
+    const normalizeMaterialNumber = (value: string | null | undefined) => (value || "").trim().toUpperCase()
+
+    const normalizeSloc = (value: string | null | undefined) => {
+        const raw = (value || "").trim()
+        if (!raw) return ""
+        if (/^\d+$/.test(raw)) return String(parseInt(raw, 10))
+        return raw.toUpperCase()
+    }
+
+    const isRepairType = (type: string | null | undefined) => (type || "").toLowerCase().includes("repair")
+
+    const warehouseTypeBySloc = useMemo(() => {
+        const mapping = new Map<string, string>()
+        for (const warehouse of warehouses) {
+            const sloc = normalizeSloc(warehouse.sloc)
+            if (!sloc) continue
+            mapping.set(sloc, warehouse.type || "")
+        }
+        return mapping
+    }, [warehouses])
 
     // --- Data Fetching ---
     const { data: localStocks = initialLocalStocks } = useQuery({
@@ -145,20 +169,36 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
 
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
+    const [warehouseTypeFilter, setWarehouseTypeFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "gap", desc: true }])
+
+    const nonRepairLocalStocks = useMemo(() => {
+        return localStocks.filter(item => {
+            if (!item.product || !item.warehouse) return false
+            return !isRepairType(item.warehouse.type)
+        })
+    }, [localStocks])
+
+    const nonRepairSapData = useMemo(() => {
+        return sapData.filter(item => {
+            if (item.plant === "2002") return false
+            const type = warehouseTypeBySloc.get(normalizeSloc(item.sloc)) || ""
+            return !isRepairType(type)
+        })
+    }, [sapData, warehouseTypeBySloc])
 
     // ─── Build comparison data ─────────────────────────────────────
     const comparisonData = useMemo<ComparisonRow[]>(() => {
         const localMap = new Map<string, LocalStockItem>()
-        for (const item of localStocks) {
+        for (const item of nonRepairLocalStocks) {
             if (!item.product || !item.warehouse) continue
-            const key = `${item.product.materialNumber}|${item.warehouse.sloc}`
+            const key = `${normalizeMaterialNumber(item.product.materialNumber)}|${normalizeSloc(item.warehouse.sloc)}`
             localMap.set(key, item)
         }
 
         const sapMap = new Map<string, SAPStockItem>()
-        for (const item of sapData) {
-            const key = `${item.idInv}|${item.sloc}`
+        for (const item of nonRepairSapData) {
+            const key = `${normalizeMaterialNumber(item.material)}|${normalizeSloc(item.sloc)}`
             sapMap.set(key, item)
         }
 
@@ -173,10 +213,11 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
             const sapStock = sap?.qtyStock ?? 0
             const gap = localStock - sapStock
 
-            const materialNumber = local?.product?.materialNumber ?? sap?.idInv ?? ""
+            const materialNumber = normalizeMaterialNumber(local?.product?.materialNumber ?? sap?.material ?? "")
             const description = local?.product?.materialDescription ?? sap?.description ?? ""
-            const sloc = local?.warehouse?.sloc ?? sap?.sloc ?? ""
+            const sloc = normalizeSloc(local?.warehouse?.sloc ?? sap?.sloc ?? "")
             const slocDesc = local?.warehouse?.description ?? sap?.slocDesc ?? ""
+            const warehouseType = local?.warehouse?.type || warehouseTypeBySloc.get(sloc) || ""
             const category = local?.product?.category ?? ""
             const plant = local?.product?.plant ?? sap?.plant ?? ""
 
@@ -190,6 +231,7 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
                 description,
                 sloc,
                 slocDesc,
+                warehouseType,
                 localStock,
                 sapStock,
                 gap,
@@ -200,7 +242,25 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
         }
 
         return rows
-    }, [localStocks, sapData])
+    }, [nonRepairLocalStocks, nonRepairSapData])
+
+    const warehouseTypeOptions = useMemo(() => {
+        const types = new Set<string>()
+        for (const row of comparisonData) {
+            if (row.warehouseType?.trim()) {
+                types.add(row.warehouseType.trim())
+            }
+        }
+        return ["all", ...Array.from(types).sort()]
+    }, [comparisonData])
+
+    const filteredComparisonData = useMemo(() => {
+        return comparisonData.filter(item => {
+            const matchesStatus = statusFilter === "all" || item.status === statusFilter
+            const matchesWarehouseType = warehouseTypeFilter === "all" || item.warehouseType === warehouseTypeFilter
+            return matchesStatus && matchesWarehouseType
+        })
+    }, [comparisonData, statusFilter, warehouseTypeFilter])
 
     const columns = useMemo<ColumnDef<ComparisonRow>[]>(() => [
         {
@@ -289,7 +349,7 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
     ], [])
 
     const table = useReactTable({
-        data: comparisonData,
+        data: filteredComparisonData,
         columns,
         state: {
             sorting,
@@ -303,14 +363,13 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
         globalFilterFn: (row, _columnId, filterValue): boolean => {
             const term = (filterValue as string).toLowerCase()
             const item = row.original
-            const matchesSearch = !!(
+            return !!(
                 item.materialNumber.toLowerCase().includes(term) ||
                 item.description.toLowerCase().includes(term) ||
                 item.sloc.toLowerCase().includes(term) ||
-                item.slocDesc.toLowerCase().includes(term)
+                item.slocDesc.toLowerCase().includes(term) ||
+                item.warehouseType.toLowerCase().includes(term)
             )
-            const matchesStatus = statusFilter === "all" || item.status === statusFilter
-            return !!(matchesSearch && matchesStatus)
         }
     })
 
@@ -568,12 +627,25 @@ export function StockComparison({ localStocks: initialLocalStocks }: StockCompar
                         </SelectContent>
                     </Select>
                 </div>
+                <div className="w-full sm:w-[220px]">
+                    <Select value={warehouseTypeFilter} onValueChange={setWarehouseTypeFilter}>
+                        <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Filter Type Warehouse" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Type Warehouse</SelectItem>
+                            {warehouseTypeOptions.filter(type => type !== "all").map(type => (
+                                <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => refetchSAP()} className="shrink-0">
                     <RefreshCcw className="mr-2 h-4 w-4" />
                     Refresh Stock SAP New
                 </Button>
                 <div className="text-xs text-muted-foreground ml-auto">
-                    Showing {table.getFilteredRowModel().rows.length} of {comparisonData.length} items
+                    Showing {table.getFilteredRowModel().rows.length} of {filteredComparisonData.length} items
                 </div>
             </div>
 

@@ -1,10 +1,11 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { Search, RefreshCcw, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ScoreCard } from "@/components/score-card"
 import {
     Table,
     TableBody,
@@ -14,17 +15,27 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useQuery } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
     getSortedRowModel,
     getFilteredRowModel,
+    getPaginationRowModel,
     ColumnDef,
     flexRender,
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import type { Warehouse } from "@/lib/types"
 
 type StockSAPNewItem = {
     stockId: number
@@ -48,9 +59,58 @@ type StockSAPNewResponse = {
     message?: string
 }
 
-export function StockSAPNewTable() {
+interface StockSAPNewTableProps {
+    defaultRate: string
+    warehouses: Warehouse[]
+}
+
+export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
-    const [sorting, setSorting] = useState<SortingState>([])
+    const [sorting, setSorting] = useState<SortingState>([{ id: "totalStock", desc: true }])
+    const [activeTab, setActiveTab] = useState("all")
+    const [filterPlant, setFilterPlant] = useState("all")
+    const [filterStorLocDesc, setFilterStorLocDesc] = useState("")
+    const [pageIndex, setPageIndex] = useState(0)
+    const [pageSize, setPageSize] = useState(100)
+
+    const parsedRate = useMemo(() => {
+        const rate = parseFloat(defaultRate)
+        return Number.isFinite(rate) ? rate : 16000
+    }, [defaultRate])
+
+    const CENTRAL_WAREHOUSE_TYPE = "Central Warehouse"
+
+    const formatSloc = (value: string | null | undefined) => {
+        const raw = (value || "").trim()
+        if (!raw) return ""
+        if (/^\d+$/.test(raw)) {
+            return String(parseInt(raw, 10))
+        }
+        return raw.toUpperCase()
+    }
+
+    const normalizeSloc = (value: string | null | undefined) => formatSloc(value).toLowerCase()
+
+    const isCentralWarehouseSloc = (value: string | null | undefined) => {
+        const normalized = normalizeSloc(value)
+        return normalized === "101" || normalized === "1"
+    }
+
+    const warehouseTypeBySloc = useMemo(() => {
+        const mapping = new Map<string, string>()
+        for (const warehouse of warehouses) {
+            if (warehouse.sloc) {
+                mapping.set(normalizeSloc(warehouse.sloc), warehouse.type || "")
+            }
+        }
+        return mapping
+    }, [warehouses])
+
+    const getDerivedWarehouseType = (item: StockSAPNewItem) => {
+        if (item.plantCode === "2002") return "REPAIR"
+        if (isCentralWarehouseSloc(item.storLoc)) return CENTRAL_WAREHOUSE_TYPE
+        return warehouseTypeBySloc.get(normalizeSloc(item.storLoc)) || ""
+    }
 
     const { data = [], isLoading, error, refetch } = useQuery({
         queryKey: ["zmc9-stock-sap"],
@@ -66,6 +126,40 @@ export function StockSAPNewTable() {
         },
         staleTime: 5 * 60 * 1000,
     })
+
+    const plantOptions = useMemo(() => {
+        const plants = new Set(data.map(item => item.plantCode).filter(Boolean))
+        return ["all", ...Array.from(plants).sort()]
+    }, [data])
+
+    const warehouseTypeOptions = useMemo(() => {
+        const types = new Set<string>()
+        for (const warehouse of warehouses) {
+            if (warehouse.type?.trim()) {
+                types.add(warehouse.type.trim())
+            }
+        }
+        const hasCentralStock = data.some(item => isCentralWarehouseSloc(item.storLoc))
+        if (hasCentralStock) {
+            types.add(CENTRAL_WAREHOUSE_TYPE)
+        }
+        return ["all", "repair-2002", ...Array.from(types).sort()]
+    }, [warehouses, data])
+
+    const preFilteredData = useMemo(() => {
+        return data.filter(item => {
+            const itemWarehouseType = getDerivedWarehouseType(item)
+            const matchesTab =
+                activeTab === "all" ||
+                (activeTab === "repair-2002" && item.plantCode === "2002") ||
+                (activeTab !== "repair-2002" && activeTab === itemWarehouseType)
+
+            const matchesPlant = filterPlant === "all" || item.plantCode === filterPlant
+            const matchesStorLocDesc = !filterStorLocDesc || item.storLocDesc?.toLowerCase().includes(filterStorLocDesc.toLowerCase())
+
+            return matchesTab && matchesPlant && matchesStorLocDesc
+        })
+    }, [data, activeTab, filterPlant, filterStorLocDesc, warehouseTypeBySloc])
 
     const columns = useMemo<ColumnDef<StockSAPNewItem>[]>(
         () => [
@@ -106,12 +200,20 @@ export function StockSAPNewTable() {
             {
                 accessorKey: "storLoc",
                 header: "Storage Loc",
-                cell: ({ row }) => <Badge variant="outline">{row.original.storLoc}</Badge>,
+                cell: ({ row }) => <Badge variant="outline">{formatSloc(row.original.storLoc)}</Badge>,
             },
             {
                 accessorKey: "storLocDesc",
                 header: "Storage Loc Desc",
                 cell: ({ row }) => <span className="text-muted-foreground text-xs italic truncate max-w-[140px]" title={row.original.storLocDesc}>{row.original.storLocDesc}</span>,
+            },
+            {
+                id: "warehouseType",
+                header: "Type",
+                cell: ({ row }) => {
+                    const warehouseType = getDerivedWarehouseType(row.original)
+                    return <span className="text-xs font-medium">{warehouseType || "-"}</span>
+                },
             },
             {
                 accessorKey: "totalStock",
@@ -156,21 +258,59 @@ export function StockSAPNewTable() {
     )
 
     const table = useReactTable({
-        data,
+        data: preFilteredData,
         columns,
         state: {
             sorting,
             globalFilter: searchTerm,
+            pagination: {
+                pageIndex,
+                pageSize,
+            },
         },
         onSortingChange: setSorting,
         onGlobalFilterChange: setSearchTerm,
+        onPaginationChange: (updater) => {
+            const next = typeof updater === "function"
+                ? updater({ pageIndex, pageSize })
+                : updater
+            setPageIndex(next.pageIndex)
+            setPageSize(next.pageSize)
+        },
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        globalFilterFn: (row, _columnId, filterValue): boolean => {
+            const term = String(filterValue).toLowerCase()
+            const item = row.original
+
+            return !!(
+                item.stockId.toString().toLowerCase().includes(term) ||
+                item.plantCode.toLowerCase().includes(term) ||
+                item.plantName.toLowerCase().includes(term) ||
+                item.materialNo.toLowerCase().includes(term) ||
+                item.oldMaterialNo.toLowerCase().includes(term) ||
+                item.materialDesc.toLowerCase().includes(term) ||
+                item.storLoc.toLowerCase().includes(term) ||
+                formatSloc(item.storLoc).toLowerCase().includes(term) ||
+                item.storLocDesc.toLowerCase().includes(term) ||
+                getDerivedWarehouseType(item).toLowerCase().includes(term)
+            )
+        },
     })
 
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
+    const filteredRows = table.getFilteredRowModel().rows
+
+    const stats = useMemo(() => {
+        return {
+            totalItems: filteredRows.length,
+            outOfStock: filteredRows.filter(row => row.original.totalStock <= 0).length,
+            totalValuationIdr: filteredRows.reduce((sum, row) => sum + (row.original.valueStock * parsedRate), 0),
+        }
+    }, [filteredRows, parsedRate])
 
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
@@ -209,68 +349,212 @@ export function StockSAPNewTable() {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center gap-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search Stock SAP New..."
-                        className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+        <div className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <TabsList>
+                        <TabsTrigger value="all">All Stocks</TabsTrigger>
+                        <TabsTrigger value="repair-2002">Repair Warehouse (2002)</TabsTrigger>
+                        {warehouseTypeOptions
+                            .filter(type => type !== "all" && type !== "repair-2002")
+                            .map(type => (
+                                <TabsTrigger key={type} value={type}>
+                                    {type}
+                                </TabsTrigger>
+                            ))}
+                    </TabsList>
+                    <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        Refresh DB Data
+                    </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                    <ScoreCard
+                        title="Total Stock Items"
+                        value={stats.totalItems}
+                        icon={Box}
+                        description={
+                            activeTab === "all"
+                                ? "All unique stock units"
+                                : activeTab === "repair-2002"
+                                    ? "Stock units in Plant 2002 (Repair)"
+                                    : `Stock units in warehouse type ${activeTab}`
+                        }
+                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
+                        iconColor="text-blue-600"
+                        textColor="text-blue-900"
+                    />
+                    <ScoreCard
+                        title="Low Stock Items"
+                        value={stats.outOfStock}
+                        icon={AlertTriangle}
+                        description="Items below minimum level"
+                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
+                        iconColor="text-amber-600"
+                        textColor="text-amber-900"
+                    />
+                    <ScoreCard
+                        title="Total Valuation"
+                        value={`IDR ${stats.totalValuationIdr.toLocaleString()}`}
+                        icon={TrendingUp}
+                        description={`Total inventory value (USD × ${parsedRate.toLocaleString()})`}
+                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
+                        iconColor="text-emerald-600"
+                        textColor="text-emerald-900"
                     />
                 </div>
-                <Button variant="outline" size="sm" onClick={() => refetch()}>
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Refresh DB Data
-                </Button>
-            </div>
 
-            <div className="rounded-md border bg-card">
-                <div ref={parentRef} className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent">
-                    <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </TableHead>
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="w-full sm:w-[220px]">
+                            <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Plant Filter</label>
+                            <Select value={filterPlant} onValueChange={setFilterPlant}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select Plant" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Plants</SelectItem>
+                                    {plantOptions.filter(p => p !== "all").map(plant => (
+                                        <SelectItem key={plant} value={plant}>{plant}</SelectItem>
                                     ))}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                <>
-                                    <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} className="p-0" />
-                                    </TableRow>
-                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
-                                        return (
-                                            <TableRow key={row.id}>
-                                                {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                                                ))}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} className="p-0" />
-                                    </TableRow>
-                                </>
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={columns.length} className="h-24 text-center">
-                                        No records found in zmc9_stock_sap.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="w-full sm:w-[280px]">
+                            <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Sloc Description</label>
+                            <Input
+                                placeholder="Filter Sloc Desc..."
+                                value={filterStorLocDesc}
+                                onChange={(e) => setFilterStorLocDesc(e.target.value)}
+                                className="h-9"
+                            />
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setFilterPlant("all")
+                                setFilterStorLocDesc("")
+                                setSearchTerm("")
+                                setActiveTab("all")
+                            }}
+                        >
+                            <FilterX className="mr-2 h-4 w-4" />
+                            Reset Filter
+                        </Button>
+                    </div>
+
+                    <div className="flex justify-between items-center gap-4">
+                        <div className="relative flex-1 max-w-sm">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search by material or sloc..."
+                                className="pl-8"
+                                value={searchTerm}
+                                onChange={(e) => {
+                                    setSearchTerm(e.target.value)
+                                    setPageIndex(0)
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
-            </div>
+
+                <div className="rounded-md border bg-card">
+                    <div ref={parentRef} className="h-[75vh] min-h-[720px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent">
+                        <Table>
+                            <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <TableRow key={headerGroup.id}>
+                                        {headerGroup.headers.map((header) => (
+                                            <TableHead key={header.id}>
+                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </TableHead>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableHeader>
+                            <TableBody>
+                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                    <>
+                                        <TableRow style={{ height: `${before}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} className="p-0" />
+                                        </TableRow>
+                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                            const row = rows[virtualRow.index]
+                                            return (
+                                                <TableRow key={row.id}>
+                                                    {row.getVisibleCells().map((cell) => (
+                                                        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            )
+                                        })}
+                                        <TableRow style={{ height: `${after}px` }} className="border-none">
+                                            <TableCell colSpan={columns.length} className="p-0" />
+                                        </TableRow>
+                                    </>
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                                            No records found in zmc9_stock_sap for current filter.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Rows per page</span>
+                        <Select
+                            value={String(pageSize)}
+                            onValueChange={(value) => {
+                                setPageSize(Number(value))
+                                setPageIndex(0)
+                            }}
+                        >
+                            <SelectTrigger className="h-8 w-[110px]">
+                                <SelectValue placeholder="Page size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                                <SelectItem value="200">200</SelectItem>
+                                <SelectItem value="500">500</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                        >
+                            Previous
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                            Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                        >
+                            Next
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                    Showing {filteredRows.length} of {data.length} records
+                </div>
+            </Tabs>
         </div>
     )
 }

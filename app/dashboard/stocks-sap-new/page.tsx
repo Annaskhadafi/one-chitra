@@ -1,6 +1,13 @@
 import { StockSAPNewTable } from "./_components/stock-sap-new-table"
+import { getSetting } from "@/app/actions/settings"
+import { getWarehouses } from "@/app/actions/warehouse"
 
-export default function StocksSAPNewPage() {
+export default async function StocksSAPNewPage() {
+    const [savedRate, warehouses] = await Promise.all([
+        getSetting("manual_usd_rate"),
+        getWarehouses(),
+    ])
+
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <div className="flex flex-col gap-1">
@@ -14,7 +21,10 @@ export default function StocksSAPNewPage() {
             </div>
 
             <div className="flex-1">
-                <StockSAPNewTable />
+                <StockSAPNewTable
+                    defaultRate={savedRate || "16000"}
+                    warehouses={warehouses}
+                />
             </div>
         </div>
     )

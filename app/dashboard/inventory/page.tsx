@@ -1,8 +1,12 @@
 import { getStocks } from "@/app/actions/stock"
+import { getWarehouses } from "@/app/actions/warehouse"
 import { StockComparison } from "./_components/stock-comparison"
 
 export default async function InventoryPage() {
-    const localStocks = await getStocks()
+    const [localStocks, warehouses] = await Promise.all([
+        getStocks(),
+        getWarehouses(),
+    ])
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -19,7 +23,7 @@ export default async function InventoryPage() {
             </div>
 
             <div className="flex-1">
-                <StockComparison localStocks={localStocks} />
+                <StockComparison localStocks={localStocks} warehouses={warehouses} />
             </div>
         </div>
     )
