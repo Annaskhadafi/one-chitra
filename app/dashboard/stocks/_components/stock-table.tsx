@@ -196,7 +196,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             ),
             cell: ({ row }) => (
                 <div className="text-right font-mono font-bold">
-                    {row.original.totalStock.toLocaleString()}
+                    {row.original.totalStock.toLocaleString("id-ID")}
                 </div>
             ),
         },
@@ -212,7 +212,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             ),
             cell: ({ row }) => (
                 <div className="text-right font-mono text-orange-600">
-                    {row.original.minStock?.toLocaleString() || 0}
+                    {row.original.minStock?.toLocaleString("id-ID") || 0}
                 </div>
             ),
         },
@@ -452,7 +452,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                     />
                     <ScoreCard
                         title="Total Valuation"
-                        value={`IDR ${stats.totalValuation.toLocaleString()}`}
+                        value={`IDR ${stats.totalValuation.toLocaleString("id-ID")}`}
                         icon={TrendingUp}
                         description="Total inventory value"
                         gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
