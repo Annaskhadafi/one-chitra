@@ -10,7 +10,11 @@ import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
+    SidebarGroup,
+    SidebarGroupContent,
     SidebarHeader,
+    SidebarMenu,
+    SidebarMenuSkeleton,
     SidebarRail,
     SidebarSeparator,
 } from "@/components/ui/sidebar"
@@ -28,6 +32,11 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSidebarProps) {
     const { navigationSections, ...sidebarProps } = props
+    const [isHydrated, setIsHydrated] = React.useState(false)
+
+    React.useEffect(() => {
+        setIsHydrated(true)
+    }, [])
 
     const sidebarConfig = navigationSections.map((section) => ({
         ...section,
@@ -71,24 +80,49 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                 </div>
             </SidebarHeader>
             <SidebarContent>
-                {sidebarConfig.map((section, index) => (
-                    <React.Fragment key={section.title || index}>
-                        {/* Don't show separator/title for the very first section if it's "Main" or similar generic */}
-                        {index > 0 && (
-                            <>
-                                <SidebarSeparator className="mx-2" />
-                                <div
-                                    className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
-                                    style={{ color: "var(--app-navbar-section-color)" }}
-                                    suppressHydrationWarning
-                                >
-                                    {section.title}
-                                </div>
-                            </>
-                        )}
-                        <NavMain items={section.items} />
-                    </React.Fragment>
-                ))}
+                {isHydrated
+                    ? sidebarConfig.map((section, index) => (
+                        <React.Fragment key={section.title || index}>
+                            {index > 0 && (
+                                <>
+                                    <SidebarSeparator className="mx-2" />
+                                    <div
+                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
+                                        style={{ color: "var(--app-navbar-section-color)" }}
+                                        suppressHydrationWarning
+                                    >
+                                        {section.title}
+                                    </div>
+                                </>
+                            )}
+                            <NavMain items={section.items} />
+                        </React.Fragment>
+                    ))
+                    : sidebarConfig.map((section, index) => (
+                        <React.Fragment key={`skeleton-${section.title || index}`}>
+                            {index > 0 && (
+                                <>
+                                    <SidebarSeparator className="mx-2" />
+                                    <div
+                                        className="px-4 py-2 text-xs font-semibold uppercase tracking-wider"
+                                        style={{ color: "var(--app-navbar-section-color)" }}
+                                        suppressHydrationWarning
+                                    >
+                                        {section.title}
+                                    </div>
+                                </>
+                            )}
+                            <SidebarGroup>
+                                <SidebarGroupContent className="flex flex-col gap-1">
+                                    <SidebarMenu className="px-1">
+                                        {Array.from({ length: Math.max(2, Math.min(section.items.length, 4)) }).map((_, itemIndex) => (
+                                            <SidebarMenuSkeleton key={`menu-skeleton-${section.title || index}-${itemIndex}`} showIcon />
+                                        ))}
+                                    </SidebarMenu>
+                                </SidebarGroupContent>
+                            </SidebarGroup>
+                        </React.Fragment>
+                    ))}
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={currentUser} />
