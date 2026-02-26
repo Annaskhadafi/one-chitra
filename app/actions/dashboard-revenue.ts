@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { historyOrders } from "@/db/schema/history-orders"
 import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, ne, or, isNull, notIlike, ilike } from "drizzle-orm"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
@@ -27,6 +28,7 @@ const PA_MAT_GRPS = [
 
 export async function getDashboardRevenueForecast(filters: DashboardRevenueFilters) {
     try {
+        await getAuthenticatedSession("revenue-forecast", "view")
         const periodStr = filters.period || "02.2026";
         const isYearlyView = !periodStr.includes('.');
         const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
