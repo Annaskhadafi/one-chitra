@@ -15,6 +15,42 @@ type SapStockRow = {
     total_stock: string | number | null
 }
 
+type SortableOpnameItem = {
+    systemQty: number
+    product?: {
+        category?: string | null
+        materialNumber?: string | null
+        materialDescription?: string | null
+    } | null
+}
+
+const sortOpnameItemsByCategoryAndStock = <T extends SortableOpnameItem>(items: T[]): T[] => {
+    return [...items].sort((a, b) => {
+        const categoryA = (a.product?.category ?? "").trim().toLowerCase()
+        const categoryB = (b.product?.category ?? "").trim().toLowerCase()
+
+        const categoryCompare = categoryA.localeCompare(categoryB, undefined, { sensitivity: "base" })
+        if (categoryCompare !== 0) {
+            return categoryCompare
+        }
+
+        if (b.systemQty !== a.systemQty) {
+            return b.systemQty - a.systemQty
+        }
+
+        const materialA = (a.product?.materialNumber ?? "").trim().toLowerCase()
+        const materialB = (b.product?.materialNumber ?? "").trim().toLowerCase()
+        const materialCompare = materialA.localeCompare(materialB, undefined, { sensitivity: "base" })
+        if (materialCompare !== 0) {
+            return materialCompare
+        }
+
+        const descriptionA = (a.product?.materialDescription ?? "").trim().toLowerCase()
+        const descriptionB = (b.product?.materialDescription ?? "").trim().toLowerCase()
+        return descriptionA.localeCompare(descriptionB, undefined, { sensitivity: "base" })
+    })
+}
+
 const normalizeSloc = (value: string | null | undefined) => {
     const raw = (value || "").trim()
     if (!raw) return ""
@@ -41,7 +77,7 @@ export async function getStockOpnameSessions() {
 }
 
 export async function getStockOpnameSession(sessionId: number) {
-    return await db.query.stockOpnameSessions.findFirst({
+    const session = await db.query.stockOpnameSessions.findFirst({
         where: eq(stockOpnameSessions.id, sessionId),
         with: {
             warehouse: true,
@@ -57,6 +93,15 @@ export async function getStockOpnameSession(sessionId: number) {
             },
         },
     })
+
+    if (!session) {
+        return null
+    }
+
+    return {
+        ...session,
+        items: sortOpnameItemsByCategoryAndStock(session.items ?? []),
+    }
 }
 
 // ─── Create Session & Populate Items ───────────────────────────────────────
@@ -457,6 +502,7 @@ export async function getOpnamePdfReportData(
 
         // Ensure all items have product data
         const itemsWithProducts = session.items.filter(item => item.product !== null) as Array<typeof session.items[number] & { product: NonNullable<typeof session.items[number]['product']> }>
+        const sortedItems = sortOpnameItemsByCategoryAndStock(itemsWithProducts)
 
         // Return structured data for PDF rendering
         // Includes closure timestamp and user information (Requirements 5.2, 5.3)
@@ -466,11 +512,11 @@ export async function getOpnamePdfReportData(
                 warehouse: session.warehouse,
                 createdBy: session.createdBy,
                 closedBy: session.closedBy,
-                items: itemsWithProducts,
+                items: sortedItems,
                 signatures: session.signatures,
             },
             signatures: session.signatures,
-            items: itemsWithProducts,
+            items: sortedItems,
             companyLogo: "/logo.png", // Default company logo path
         }
 
