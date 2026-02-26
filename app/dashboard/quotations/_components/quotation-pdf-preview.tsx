@@ -83,6 +83,7 @@ function formatDate(date: Date) {
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
     const printRef = useRef<HTMLDivElement>(null)
+    const companyLogoSrc = "/brand/Chitra-Paratama.png"
 
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
         return sum + (item.quantity * Number(item.unitPrice))
@@ -184,9 +185,28 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         `)
         printWindow.document.close()
         printWindow.focus()
-        setTimeout(() => {
+
+        const images = Array.from(printWindow.document.images)
+        const waitForImages = Promise.all(
+            images.map((img) => {
+                if (img.complete) {
+                    return Promise.resolve()
+                }
+
+                return new Promise<void>((resolve) => {
+                    const done = () => resolve()
+                    img.addEventListener("load", done, { once: true })
+                    img.addEventListener("error", done, { once: true })
+                })
+            })
+        )
+
+        Promise.race([
+            waitForImages,
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]).finally(() => {
             printWindow.print()
-        }, 800)
+        })
     }
 
     return (
@@ -213,7 +233,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                         <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, borderBottom: '2px solid #2563eb', paddingBottom: 12 }}>
                             <div className="logo-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <div className="logo-container">
-                                    <img src="/api/uploads/Chitra-Paratama.png" alt="Logo" style={{ height: 90, width: 'auto' }} />
+                                    <img src={companyLogoSrc} alt="Logo" style={{ height: 90, width: 'auto' }} />
                                 </div>
                                 <div className="company-info" style={{ marginTop: 8 }}>
                                     <div className="company-name" style={{ fontSize: '13pt', fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>PT Chitra Paratama</div>
