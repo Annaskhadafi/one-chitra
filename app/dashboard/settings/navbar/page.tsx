@@ -6,8 +6,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/db"
 import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
-import { NavbarThemeForm } from "./_components/navbar-theme-form"
-import { NavbarMenuForm } from "./_components/navbar-menu-form"
+import { NavbarSettingsClient } from "./_components/navbar-settings-client"
 
 export const metadata = {
     title: "Navbar Settings – One Chitra",
@@ -50,8 +49,7 @@ export default async function NavbarSettingsPage() {
                 </div>
             </div>
 
-            <NavbarThemeForm initialTheme={theme} />
-            <NavbarMenuForm initialConfig={menuConfig} />
+            <NavbarSettingsClient initialTheme={theme} initialConfig={menuConfig} />
         </div>
     )
 }

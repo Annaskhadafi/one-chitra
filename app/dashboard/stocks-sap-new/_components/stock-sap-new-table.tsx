@@ -1,8 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX } from "lucide-react"
-import { ProgressLoading } from "@/components/ui/progress-loading"
+import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScoreCard } from "@/components/score-card"
@@ -335,7 +334,8 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     if (isLoading) {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50 px-4">
-                <ProgressLoading message="Fetching Data from zmc9_stock_sap..." />
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Fetching Data from zmc9_stock_sap...</p>
             </div>
         )
     }

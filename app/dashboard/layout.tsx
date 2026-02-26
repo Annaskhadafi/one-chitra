@@ -105,36 +105,55 @@ export default async function DashboardLayout({
     }))
     .filter((section) => section.items.length > 0)
 
-  const inventorySection = navigationSections.find((section) =>
-    section.items.some((item) => item.resource === "inventory-control")
-  )
-
-  const inventoryControlItem = inventorySection?.items.find(
-    (item) => item.resource === "inventory-control"
-  )
-
-  if (inventoryControlItem) {
-    const existingSubItems = (inventoryControlItem.items ?? []).filter(
-      (subItem) => subItem.url !== "/dashboard/stocks-sap"
-    )
-
-    const hasStockSapNew = existingSubItems.some(
-      (subItem) => subItem.url === "/dashboard/stocks-sap-new"
-    )
-
-    if (!hasStockSapNew) {
-      const stockSapNewItem = {
-        id: "inventory-control-stock-sap-new",
-        title: "Stock SAP New",
-        url: "/dashboard/stocks-sap-new",
-        resource: "stocks-sap",
+  const navigationSectionsWithStockSapNew: RuntimeNavSection[] = navigationSections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      if (item.resource !== "inventory-control") {
+        return item
       }
 
-      existingSubItems.push(stockSapNewItem)
-    }
+      const subItems = item.items ?? []
+      const hasStockSapNew = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap-new")
+      const hasStockSapOld = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap")
 
-    inventoryControlItem.items = existingSubItems
-  }
+      let normalizedSubItems = subItems
+
+      if (!hasStockSapNew && hasStockSapOld) {
+        normalizedSubItems = subItems.map((subItem) =>
+          subItem.url === "/dashboard/stocks-sap"
+            ? {
+              ...subItem,
+              id: subItem.id ?? "inventory-control-stock-sap-new",
+              title: "Stock SAP New",
+              url: "/dashboard/stocks-sap-new",
+              resource: "stocks-sap",
+            }
+            : subItem,
+        )
+      }
+
+      if (hasStockSapNew && hasStockSapOld) {
+        normalizedSubItems = normalizedSubItems.filter((subItem) => subItem.url !== "/dashboard/stocks-sap")
+      }
+
+      if (!hasStockSapNew && !hasStockSapOld) {
+        normalizedSubItems = [
+          ...normalizedSubItems,
+          {
+            id: "inventory-control-stock-sap-new",
+            title: "Stock SAP New",
+            url: "/dashboard/stocks-sap-new",
+            resource: "stocks-sap",
+          },
+        ]
+      }
+
+      return {
+        ...item,
+        items: normalizedSubItems,
+      }
+    }),
+  }))
 
   return (
     <PermissionsProvider permissions={permissions}>
@@ -152,7 +171,7 @@ export default async function DashboardLayout({
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSections} user={
+        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithStockSapNew} user={
           user ? {
             name: user.name,
             email: user.email,
