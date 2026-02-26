@@ -124,7 +124,7 @@ export default async function DashboardLayout({
             ? {
               ...subItem,
               id: subItem.id ?? "inventory-control-stock-sap-new",
-              title: "Stock SAP New",
+              title: subItem.title,
               url: "/dashboard/stocks-sap-new",
               resource: "stocks-sap",
             }
