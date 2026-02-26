@@ -53,13 +53,20 @@ function makeItemId(title: string) {
   return `sync-item-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function getApprovalResourceByUrl(url: string) {
+  if (url === APPROVAL_INBOX_URL) return "approvals-inbox"
+  if (url === APPROVAL_SETTINGS_URL) return "approvals-settings"
+  if (url === APPROVAL_MATRIX_URL) return "approvals-matrix"
+  return "approvals"
+}
+
 function makeSubItem(title: string, url: string): NavSubItem {
   const id = `sync-approval-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).slice(2, 8)}`
   return {
     id,
     title,
     url,
-    resource: "approvals",
+    resource: getApprovalResourceByUrl(url),
     hidden: false,
     openInNewTab: false,
     isCustom: true,
@@ -158,6 +165,12 @@ async function main() {
   const hasInbox = approvalGroup.items.some((item) => item.url === APPROVAL_INBOX_URL)
   const hasSettings = approvalGroup.items.some((item) => item.url === APPROVAL_SETTINGS_URL)
   const hasMatrix = approvalGroup.items.some((item) => item.url === APPROVAL_MATRIX_URL)
+
+  for (const item of approvalGroup.items) {
+    if (item.url === APPROVAL_INBOX_URL || item.url === APPROVAL_SETTINGS_URL || item.url === APPROVAL_MATRIX_URL) {
+      item.resource = getApprovalResourceByUrl(item.url)
+    }
+  }
 
   let addedToApproval = 0
   if (!hasInbox) {

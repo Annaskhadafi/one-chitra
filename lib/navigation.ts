@@ -279,17 +279,17 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Approval Inbox",
                         url: "/dashboard/approvals",
-                        resource: "approvals",
+                        resource: "approvals-inbox",
                     },
                     {
                         title: "Approval Settings",
                         url: "/dashboard/settings/approvals",
-                        resource: "approvals",
+                        resource: "approvals-settings",
                     },
                     {
                         title: "Matrix Approval",
                         url: "/dashboard/approvals/matrix",
-                        resource: "approvals",
+                        resource: "approvals-matrix",
                     },
                 ],
             },

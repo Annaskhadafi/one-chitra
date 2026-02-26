@@ -219,7 +219,7 @@ export async function getApprovalInbox() {
 }
 
 export async function getApprovalDefinitions() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-settings", "view")
 
     return db.query.approvalDefinitions.findMany({
         with: {
@@ -230,7 +230,7 @@ export async function getApprovalDefinitions() {
 }
 
 export async function getApprovalFormRegistry() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-settings", "view")
 
     return db.query.approvalFormRegistry.findMany({
         orderBy: [asc(approvalFormRegistry.formName)],
@@ -238,7 +238,7 @@ export async function getApprovalFormRegistry() {
 }
 
 export async function getWebsiteFormOptions() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-settings", "view")
 
     const dashboardDir = path.join(process.cwd(), "app", "dashboard")
     const routes = await collectDashboardRoutes(dashboardDir)
@@ -268,7 +268,7 @@ export async function getWebsiteFormOptions() {
 }
 
 export async function registerApprovalForm(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-settings", "create")
 
     const discoveredFormRaw = String(formData.get("discoveredForm") ?? "").trim()
     const manualFormKey = String(formData.get("formKey") ?? "").trim()
@@ -313,7 +313,7 @@ export async function registerApprovalForm(formData: FormData) {
 }
 
 export async function createApprovalDefinition(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-settings", "create")
 
     const name = String(formData.get("name") ?? "").trim()
     const formKey = String(formData.get("formKey") ?? "").trim()
@@ -354,7 +354,7 @@ export async function createApprovalDefinition(formData: FormData) {
 }
 
 export async function createApprovalStep(formData: FormData) {
-    await getAuthenticatedSession("approvals", "create")
+    await getAuthenticatedSession("approvals-settings", "create")
 
     const definitionId = String(formData.get("definitionId") ?? "").trim()
     const stepName = String(formData.get("stepName") ?? "").trim()
@@ -403,7 +403,7 @@ export async function createApprovalStep(formData: FormData) {
 }
 
 export async function createApprovalRequest(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-settings", "create")
 
     const definitionId = String(formData.get("definitionId") ?? "").trim()
     const formKey = String(formData.get("formKey") ?? "").trim()
@@ -528,7 +528,7 @@ export async function createApprovalRequestForEntity(input: {
 }
 
 export async function submitApprovalDecision(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "edit")
+    const session = await getAuthenticatedSession("approvals-inbox", "edit")
 
     const assignmentId = String(formData.get("assignmentId") ?? "").trim()
     const decision = String(formData.get("decision") ?? "").trim() as DecisionType
@@ -765,7 +765,7 @@ export async function submitApprovalDecision(formData: FormData) {
 }
 
 export async function getApprovalRequestsByDefinition(definitionId: string) {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-settings", "view")
 
     const requests = await db.query.approvalRequests.findMany({
         where: eq(approvalRequests.definitionId, definitionId),
@@ -831,7 +831,7 @@ export async function getApprovalRequestDetail(requestId: string) {
     }
 
     try {
-        await checkPermission("approvals", "view")
+        await checkPermission("approvals-inbox", "view")
         return request
     } catch {
         return null
@@ -839,7 +839,7 @@ export async function getApprovalRequestDetail(requestId: string) {
 }
 
 export async function getApprovalMatrixImports() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-matrix", "view")
 
     return db.query.approvalMatrixImports.findMany({
         orderBy: [desc(approvalMatrixImports.createdAt)],
@@ -848,7 +848,7 @@ export async function getApprovalMatrixImports() {
 }
 
 export async function getApprovalOrgStructures() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-matrix", "view")
 
     const structures = await db.query.approvalOrgStructures.findMany({
         where: eq(approvalOrgStructures.isActive, true),
@@ -972,7 +972,7 @@ type MatrixBuilderNodeInput = {
 }
 
 export async function saveApprovalMatrixBuilder(formData: FormData) {
-    await getAuthenticatedSession("approvals", "create")
+    await getAuthenticatedSession("approvals-matrix", "create")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
     const nodesJson = String(formData.get("nodes") ?? "").trim()
@@ -1109,7 +1109,7 @@ export async function saveApprovalMatrixBuilder(formData: FormData) {
 }
 
 export async function seedApprovalOrgSampleData() {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-matrix", "create")
 
     const [existing] = await db
         .select({ count: count() })
@@ -1197,7 +1197,7 @@ export async function seedApprovalOrgSampleData() {
 }
 
 export async function getApprovalOrgUsers() {
-    await getAuthenticatedSession("approvals", "view")
+    await getAuthenticatedSession("approvals-matrix", "view")
 
     return db
         .select({
@@ -1212,7 +1212,7 @@ export async function getApprovalOrgUsers() {
 }
 
 export async function createApprovalOrgStructure(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-matrix", "create")
 
     const name = String(formData.get("name") ?? "").trim()
     const typeRaw = String(formData.get("type") ?? "enterprise").trim()
@@ -1240,7 +1240,7 @@ export async function createApprovalOrgStructure(formData: FormData) {
 }
 
 export async function updateApprovalOrgStructure(formData: FormData) {
-    await getAuthenticatedSession("approvals", "edit")
+    await getAuthenticatedSession("approvals-matrix", "edit")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
     const name = String(formData.get("name") ?? "").trim()
@@ -1271,7 +1271,7 @@ export async function updateApprovalOrgStructure(formData: FormData) {
 }
 
 export async function deleteApprovalOrgStructure(formData: FormData) {
-    await getAuthenticatedSession("approvals", "delete")
+    await getAuthenticatedSession("approvals-matrix", "delete")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
 
@@ -1296,7 +1296,7 @@ export async function deleteApprovalOrgStructure(formData: FormData) {
 }
 
 export async function createApprovalOrgNode(formData: FormData) {
-    await getAuthenticatedSession("approvals", "create")
+    await getAuthenticatedSession("approvals-matrix", "create")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
     const parentNodeIdRaw = String(formData.get("parentNodeId") ?? "").trim()
@@ -1342,7 +1342,7 @@ export async function createApprovalOrgNode(formData: FormData) {
 }
 
 export async function updateApprovalOrgNode(formData: FormData) {
-    await getAuthenticatedSession("approvals", "edit")
+    await getAuthenticatedSession("approvals-matrix", "edit")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
     const nodeId = String(formData.get("nodeId") ?? "").trim()
@@ -1416,7 +1416,7 @@ export async function updateApprovalOrgNode(formData: FormData) {
 }
 
 export async function deleteApprovalOrgNode(formData: FormData) {
-    await getAuthenticatedSession("approvals", "delete")
+    await getAuthenticatedSession("approvals-matrix", "delete")
 
     const structureId = String(formData.get("structureId") ?? "").trim()
     const nodeId = String(formData.get("nodeId") ?? "").trim()
@@ -1524,7 +1524,7 @@ async function parseMatrixFile(file: File) {
 }
 
 export async function importApprovalMatrix(formData: FormData) {
-    const session = await getAuthenticatedSession("approvals", "create")
+    const session = await getAuthenticatedSession("approvals-matrix", "create")
     const file = formData.get("matrixFile")
 
     if (!(file instanceof File) || file.size === 0) {
