@@ -29,7 +29,7 @@ export default async function DeliveriesPage() {
     // Top Customers by Deliveries
     const customerMap: Record<string, number> = {}
     deliveriesData.forEach(d => {
-        const name = d.customer?.name || "Unknown"
+        const name = d.salesOrder?.customer?.name || "Unknown"
         customerMap[name] = (customerMap[name] || 0) + 1
     })
     const customerData = Object.entries(customerMap)
