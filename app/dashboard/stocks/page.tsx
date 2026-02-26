@@ -4,7 +4,9 @@ import { getWarehouses } from "@/app/actions/warehouse"
 import { getSetting } from "@/app/actions/settings"
 import { StockTable } from "./_components/stock-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { StackedBarChart, formatCurrency } from "@/components/reports/report-charts"
+import { StackedBarChart } from "@/components/reports/report-charts"
+import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { formatCurrency, formatNumber, formatPercentage } from "@/lib/formatters"
 import { Package, DollarSign, AlertTriangle, Warehouse } from "lucide-react"
 
 export default async function StocksPage() {
@@ -28,15 +30,23 @@ export default async function StocksPage() {
     const outOfStockItems = stocks.filter(s => s.totalStock <= 0).length
 
     // Stacked Bar Chart Data
-    const warehouseData = warehouses.map(w => {
-        const wStocks = stocks.filter(s => s.warehouseId === w.id)
-        return {
-            name: w.description || w.sloc,
-            stock: wStocks.filter(s => s.totalStock > s.minStock).length,
-            lowStock: wStocks.filter(s => s.totalStock > 0 && s.totalStock <= s.minStock).length,
-            outOfStock: wStocks.filter(s => s.totalStock <= 0).length,
-        }
-    })
+    const warehouseData = warehouses
+        .map(w => {
+            const wStocks = stocks.filter(s => s.warehouseId === w.id)
+            const normal = wStocks.filter(s => s.totalStock > s.minStock).length
+            const low = wStocks.filter(s => s.totalStock > 0 && s.totalStock <= s.minStock).length
+            const out = wStocks.filter(s => s.totalStock <= 0).length
+
+            return {
+                name: w.description || w.sloc,
+                stock: normal,
+                lowStock: low,
+                outOfStock: out,
+                hasStock: normal > 0 || low > 0
+            }
+        })
+        .filter(w => w.hasStock) // Only show warehouses that have some stock
+        .sort((a, b) => (b.stock + b.lowStock) - (a.stock + a.lowStock)) // Sort by volume for better visualization
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">

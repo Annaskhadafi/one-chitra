@@ -5,23 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
 
-// ==================== FORMAT HELPERS ====================
-export function formatCurrency(val: number): string {
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
-    if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
-    return `Rp ${val.toLocaleString()}`
-}
+import { formatCurrency, formatNumber, formatPercentage } from "@/lib/formatters"
 
-export function formatNumber(val: number): string {
-    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`
-    if (val >= 1_000) return `${(val / 1_000).toFixed(0)}K`
-    return val.toLocaleString()
-}
-
-export function formatPercentage(val: number): string {
-    return `${val.toFixed(1)}%`
-}
 
 // ==================== AREA CHART (Sales Trend) ====================
 interface SalesTrendChartProps {
