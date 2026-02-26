@@ -124,7 +124,7 @@ export function OpnamePdfReport({ data }: OpnamePdfReportProps) {
                                 <th className="border border-gray-300 p-2 text-left w-8">No</th>
                                 <th className="border border-gray-300 p-2 text-left">Material No.</th>
                                 <th className="border border-gray-300 p-2 text-left">Deskripsi</th>
-                                <th className="border border-gray-300 p-2 text-right w-20">Qty Sistem</th>
+                                <th className="border border-gray-300 p-2 text-right w-20">Qty SAP</th>
                                 <th className="border border-gray-300 p-2 text-right w-20">Qty Fisik</th>
                                 <th className="border border-gray-300 p-2 text-right w-20">Selisih</th>
                                 <th className="border border-gray-300 p-2 text-left">Catatan</th>

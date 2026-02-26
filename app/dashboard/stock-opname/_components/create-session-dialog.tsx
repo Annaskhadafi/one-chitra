@@ -96,7 +96,7 @@ export function CreateSessionDialog({ warehouses }: CreateSessionDialogProps) {
                 <DialogHeader>
                     <DialogTitle>Buat Sesi Stock Opname</DialogTitle>
                     <DialogDescription>
-                        Sesi baru akan mengambil data stok saat ini sebagai referensi. Kemudian tim gudang bisa mengisi hitungan fisik.
+                        Sesi baru akan mengambil snapshot Stock SAP sebagai referensi. Kemudian tim gudang bisa mengisi hitungan fisik.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>

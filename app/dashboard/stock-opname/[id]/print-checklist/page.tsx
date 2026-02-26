@@ -237,7 +237,7 @@ export default async function PrintChecklistPage({ params }: Props) {
                             <th className="col-material">Material No.</th>
                             <th className="col-desc">Deskripsi Material</th>
                             <th className="col-category">Kategori</th>
-                            <th className="col-qty">Qty Sistem</th>
+                            <th className="col-qty">Qty SAP</th>
                             <th className="col-counted">Qty Fisik</th>
                             <th className="col-notes">Catatan</th>
                         </tr>

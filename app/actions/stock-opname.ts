@@ -1,13 +1,31 @@
 "use server"
 
 import { db } from "@/db"
-import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements } from "@/db/schema"
-import { eq, and, desc, sql } from "drizzle-orm"
+import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements, products, warehouses } from "@/db/schema"
+import { eq, and, desc, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
 import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
 import type { OpnamePdfReportData } from "@/lib/types"
+
+type SapStockRow = {
+    material_no: string | null
+    stor_loc: string | null
+    total_stock: string | number | null
+}
+
+const normalizeSloc = (value: string | null | undefined) => {
+    const raw = (value || "").trim()
+    if (!raw) return ""
+    if (/^\d+$/.test(raw)) {
+        return String(parseInt(raw, 10))
+    }
+    return raw.toUpperCase()
+}
+
+const normalizeMaterialNumber = (value: string | null | undefined) =>
+    (value || "").trim().toUpperCase()
 
 // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -92,17 +110,69 @@ export async function createStockOpnameSession(
                 )
             }
 
-            // Fetch current stock levels for this warehouse
-            const currentStocks = await tx.query.stockLevels.findMany({
-                where: eq(stockLevels.warehouseId, validatedData.warehouseId),
+            // Fetch SAP stock snapshot for this warehouse SLoc
+            const selectedWarehouse = await tx.query.warehouses.findFirst({
+                where: eq(warehouses.id, validatedData.warehouseId),
+                columns: {
+                    sloc: true,
+                },
             })
 
-            if (currentStocks.length > 0) {
+            const selectedSloc = normalizeSloc(selectedWarehouse?.sloc)
+
+            const sapStocksResult = await tx.execute(sql`
+                SELECT
+                    TRIM(material_no) AS material_no,
+                    TRIM(stor_loc) AS stor_loc,
+                    SUM(COALESCE(total_stock::numeric, 0)) AS total_stock
+                FROM public.zmc9_stock_sap
+                WHERE material_no IS NOT NULL
+                  AND stor_loc IS NOT NULL
+                GROUP BY TRIM(material_no), TRIM(stor_loc)
+            `)
+
+            const sapRows = (sapStocksResult.rows as SapStockRow[])
+                .filter((row) => normalizeSloc(row.stor_loc) === selectedSloc)
+
+            const materialNumbers = Array.from(
+                new Set(
+                    sapRows
+                        .map((row) => normalizeMaterialNumber(row.material_no))
+                        .filter(Boolean)
+                )
+            )
+
+            const mappedProducts = materialNumbers.length > 0
+                ? await tx.query.products.findMany({
+                    where: inArray(products.materialNumber, materialNumbers),
+                    columns: {
+                        id: true,
+                        materialNumber: true,
+                    },
+                })
+                : []
+
+            const productIdByMaterialNumber = new Map(
+                mappedProducts.map((product) => [normalizeMaterialNumber(product.materialNumber), product.id])
+            )
+
+            const sapQtyByProductId = new Map<number, number>()
+            for (const row of sapRows) {
+                const normalizedMaterialNumber = normalizeMaterialNumber(row.material_no)
+                const productId = productIdByMaterialNumber.get(normalizedMaterialNumber)
+                if (!productId) continue
+
+                const qty = Math.max(0, Math.round(Number(row.total_stock ?? 0)))
+                const currentQty = sapQtyByProductId.get(productId) ?? 0
+                sapQtyByProductId.set(productId, currentQty + qty)
+            }
+
+            if (sapQtyByProductId.size > 0) {
                 await tx.insert(stockOpnameItems).values(
-                    currentStocks.map((s) => ({
+                    Array.from(sapQtyByProductId.entries()).map(([productId, sapQty]) => ({
                         sessionId: newSession.id,
-                        productId: s.productId,
-                        systemQty: s.totalStock,
+                        productId,
+                        systemQty: sapQty,
                         countedQty: null,
                         variance: null,
                     }))

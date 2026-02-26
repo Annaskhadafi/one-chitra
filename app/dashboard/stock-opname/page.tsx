@@ -26,7 +26,7 @@ export default async function StockOpnamePage() {
                             )}
                         </div>
                         <p className="text-muted-foreground mt-1">
-                            Penghitungan fisik stok & rekonsiliasi selisih antara sistem dan aktual di gudang.
+                            Penghitungan fisik stok & rekonsiliasi selisih antara Stock SAP dan stok aktual di gudang.
                         </p>
                     </div>
                     <CreateSessionDialog warehouses={warehouses} />

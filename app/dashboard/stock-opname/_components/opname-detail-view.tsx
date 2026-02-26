@@ -270,7 +270,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                                                         onCheckedChange={(v) => setApplyAdjustments(!!v)}
                                                     />
                                                     <label htmlFor="adjust" className="text-sm cursor-pointer">
-                                                        <strong>Terapkan adjustment stok</strong> — update stok sistem sesuai hitungan fisik & catat movement ADJUSTMENT
+                                                        <strong>Terapkan adjustment stok</strong> — update stok lokal sesuai hitungan fisik & catat movement ADJUSTMENT
                                                     </label>
                                                 </div>
                                             </div>
@@ -372,7 +372,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                             <TableHead>Material No.</TableHead>
                             <TableHead>Deskripsi</TableHead>
                             <TableHead>Kategori</TableHead>
-                            <TableHead className="text-right">Qty Sistem</TableHead>
+                            <TableHead className="text-right">Qty SAP</TableHead>
                             <TableHead className="text-right">Qty Fisik</TableHead>
                             <TableHead className="text-right">Selisih</TableHead>
                             <TableHead>Catatan</TableHead>
