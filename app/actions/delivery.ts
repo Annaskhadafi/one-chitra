@@ -10,6 +10,42 @@ import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
 
+const isConsignmentCategory = (categoryPo: string | null | undefined) => {
+    const normalized = (categoryPo ?? "").trim().toLowerCase()
+    return normalized.includes("vhs") || normalized.includes("consignment")
+}
+
+const buildDeliveryItemQuantityMap = (
+    items: Array<{ productId: number; deliveredQuantity: number; salesOrderItemId?: number | null }>,
+) => {
+    const result = new Map<string, number>()
+    for (const item of items) {
+        const key = `${item.productId}:${item.salesOrderItemId ?? "null"}`
+        result.set(key, (result.get(key) ?? 0) + item.deliveredQuantity)
+    }
+    return result
+}
+
+const isSameDeliveryItemComposition = (
+    originalItems: Array<{ productId: number; deliveredQuantity: number; salesOrderItemId?: number | null }>,
+    newItems: Array<{ productId: number; deliveredQuantity: number; salesOrderItemId?: number | null }>,
+) => {
+    const left = buildDeliveryItemQuantityMap(originalItems)
+    const right = buildDeliveryItemQuantityMap(newItems)
+
+    if (left.size !== right.size) {
+        return false
+    }
+
+    for (const [key, qty] of left.entries()) {
+        if ((right.get(key) ?? null) !== qty) {
+            return false
+        }
+    }
+
+    return true
+}
+
 export async function getDeliveries() {
     return await db.query.deliveries.findMany({
         with: {
@@ -429,12 +465,35 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             // Check if original was VHS/Consignment
             const originalOrder = await tx.query.salesOrders.findFirst({
                 where: eq(salesOrders.id, originalDelivery.salesOrderId),
-                columns: { categoryPo: true }
+                columns: { categoryPo: true, customerId: true }
             })
-            const originalWasVHS = (originalOrder?.categoryPo === "VHS" || originalOrder?.categoryPo === "CONSIGNMENT") && originalDelivery.warehouseToId
+            const originalWasVHS = isConsignmentCategory(originalOrder?.categoryPo) && originalDelivery.warehouseToId
             const originalWasCommitted = originalDelivery.status !== "cancelled"
+            const newIsCommitted = data.status !== "cancelled"
 
-            if (originalWasCommitted && originalDelivery.warehouseId) {
+            const sameItemComposition = isSameDeliveryItemComposition(
+                originalDelivery.items.map((item) => ({
+                    productId: item.productId,
+                    deliveredQuantity: item.deliveredQuantity,
+                    salesOrderItemId: item.salesOrderItemId,
+                })),
+                data.items.map((item) => ({
+                    productId: item.productId,
+                    deliveredQuantity: item.deliveredQuantity,
+                    salesOrderItemId: item.salesOrderItemId,
+                })),
+            )
+
+            const hasWarehouseChanged = (originalDelivery.warehouseId ?? null) !== (data.warehouseId ?? null)
+            const hasDestinationChanged = (originalDelivery.warehouseToId ?? null) !== (data.warehouseToId ?? null)
+
+            const shouldReconcileStock =
+                originalWasCommitted !== newIsCommitted ||
+                hasWarehouseChanged ||
+                hasDestinationChanged ||
+                !sameItemComposition
+
+            if (shouldReconcileStock && originalWasCommitted && originalDelivery.warehouseId) {
                 const originalMovementType = originalWasVHS ? "TRANSFER_OUT" : "DELIVERY"
                 for (const item of originalDelivery.items) {
                     await tx.update(stockLevels)
@@ -456,6 +515,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         type: originalMovementType,
                         referenceNumber: originalDelivery.deliveryNumber ?? undefined,
                         recordedBy: userId ?? undefined,
+                        customerId: originalOrder?.customerId ?? undefined,
                     })
                 }
             }
@@ -565,12 +625,11 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 // For VHS/Consignment, stock will be managed by the transfer
                 const order = await tx.query.salesOrders.findFirst({
                     where: eq(salesOrders.id, data.salesOrderId),
-                    columns: { categoryPo: true }
+                    columns: { categoryPo: true, customerId: true }
                 })
-                const isVHSConsignment = order?.categoryPo === "VHS/Consignment" && data.warehouseToId
-                const isCommitted = data.status !== "cancelled"
+                const isVHSConsignment = isConsignmentCategory(order?.categoryPo) && data.warehouseToId
 
-                if (isCommitted) {
+                if (shouldReconcileStock && newIsCommitted) {
                     const movementType = isVHSConsignment ? "TRANSFER_OUT" : "DELIVERY"
                     for (const item of data.items) {
                         await tx.update(stockLevels)
@@ -592,6 +651,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                             type: movementType,
                             referenceNumber: data.deliveryNumber ?? originalDelivery.deliveryNumber ?? undefined,
                             recordedBy: userId,
+                            customerId: order?.customerId ?? undefined,
+                            fromWarehouseId: hasDestination ? (data.warehouseId ?? undefined) : undefined,
+                            toWarehouseId: hasDestination ? (data.warehouseToId ?? undefined) : undefined,
+                            notes: hasDestination ? `Transfer OUT ke warehouse tujuan` : `Delivery ke customer`,
                         })
                     }
                 }

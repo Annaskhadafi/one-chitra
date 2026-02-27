@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScoreCard } from "@/components/score-card"
 import { ReportBarChart, ReportPieChart } from "@/components/reports/report-charts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MovementTable } from "./movement-table"
-import { ArrowUpRight, ArrowDownLeft, Activity, ListChecks, Database, ClipboardCheck, TrendingUp } from "lucide-react"
+import { ArrowUpRight, ArrowDownLeft, Activity, ListChecks } from "lucide-react"
 import type { Warehouse } from "@/lib/types"
 
 type MovementRecord = {
@@ -106,12 +105,6 @@ export function MovementDashboard({ movements, warehouses }: MovementDashboardPr
         .filter((m) => stockOutTypes.includes(m.type))
         .reduce((sum, m) => sum + m.quantity, 0)
 
-    const inboundSapMovements = filteredMovements.filter((m) => m.type === "GR_SAP")
-    const inboundManualMovements = filteredMovements.filter((m) => m.type === "GR_MANUAL")
-    const inboundSapQty = inboundSapMovements.reduce((sum, m) => sum + m.quantity, 0)
-    const inboundManualQty = inboundManualMovements.reduce((sum, m) => sum + m.quantity, 0)
-    const inboundTotalQty = inboundSapQty + inboundManualQty
-
     const typeDistributionMap: Record<string, number> = {}
     filteredMovements.forEach((movement) => {
         typeDistributionMap[movement.type] = (typeDistributionMap[movement.type] || 0) + 1
@@ -129,11 +122,6 @@ export function MovementDashboard({ movements, warehouses }: MovementDashboardPr
     const qtyData = Object.entries(qtyByTypeMap)
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
-
-    const inboundSourceVolumeData = [
-        { name: "Inbound SAP", value: inboundSapQty },
-        { name: "Inbound Manual", value: inboundManualQty },
-    ]
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -222,45 +210,6 @@ export function MovementDashboard({ movements, warehouses }: MovementDashboardPr
                         height={350}
                     />
                 </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <ScoreCard
-                    title="Inbound SAP"
-                    value={inboundSapMovements.length}
-                    description={`${inboundSapQty.toLocaleString()} unit masuk dari SAP`}
-                    icon={Database}
-                    gradient="from-blue-500/10 via-blue-400/5 to-cyan-500/10 border-blue-200/50 hover:shadow-lg"
-                    iconColor="text-blue-600"
-                    textColor="text-blue-900"
-                />
-                <ScoreCard
-                    title="Inbound Manual"
-                    value={inboundManualMovements.length}
-                    description={`${inboundManualQty.toLocaleString()} unit masuk manual`}
-                    icon={ClipboardCheck}
-                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
-                    iconColor="text-emerald-600"
-                    textColor="text-emerald-900"
-                />
-                <ScoreCard
-                    title="Total Inbound Qty"
-                    value={inboundTotalQty.toLocaleString()}
-                    description="Akumulasi unit dari GR SAP + GR Manual"
-                    icon={TrendingUp}
-                    gradient="from-violet-500/10 via-violet-400/5 to-fuchsia-500/10 border-violet-200/50 hover:shadow-lg"
-                    iconColor="text-violet-600"
-                    textColor="text-violet-900"
-                />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6">
-                <ReportBarChart
-                    data={inboundSourceVolumeData}
-                    title="Volume Inbound per Source"
-                    description={`Perbandingan unit masuk SAP vs Manual (${PERIOD_LABELS[period]})`}
-                    height={320}
-                />
             </div>
 
             <div className="flex-1">
