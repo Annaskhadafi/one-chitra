@@ -11,6 +11,7 @@ export const stockMovements = pgTable("stock_movements", {
     warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
     quantity: integer("quantity").notNull(), // Positive for In, Negative for Out
     type: varchar("type", { length: 50 }).notNull(), // GR_SAP, GR_MANUAL, DELIVERY, TRANSFER_IN, TRANSFER_OUT, ADJUSTMENT
+    source: varchar("source", { length: 50 }).notNull().default("OTHER"), // INBOUND_SAP, INBOUND_MANUAL, DELIVERY, TRANSFER, ADJUSTMENT, OTHER
     referenceNumber: varchar("reference_number", { length: 100 }),
     recordedBy: text("recorded_by").references(() => user.id),
     // Additional context fields

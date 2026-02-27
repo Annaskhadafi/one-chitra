@@ -121,6 +121,7 @@ export async function processGoodReceive(
 
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/good-receive")
+        revalidatePath("/dashboard/stock-movements")
 
         return {
             success: true,

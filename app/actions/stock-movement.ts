@@ -14,6 +14,32 @@ export type StockMovementType =
     | "TRANSFER_OUT"
     | "ADJUSTMENT"
 
+export type StockMovementSource =
+    | "INBOUND_SAP"
+    | "INBOUND_MANUAL"
+    | "DELIVERY"
+    | "TRANSFER"
+    | "ADJUSTMENT"
+    | "OTHER"
+
+const inferMovementSource = (type: StockMovementType): StockMovementSource => {
+    switch (type) {
+        case "GR_SAP":
+            return "INBOUND_SAP"
+        case "GR_MANUAL":
+            return "INBOUND_MANUAL"
+        case "DELIVERY":
+            return "DELIVERY"
+        case "TRANSFER_IN":
+        case "TRANSFER_OUT":
+            return "TRANSFER"
+        case "ADJUSTMENT":
+            return "ADJUSTMENT"
+        default:
+            return "OTHER"
+    }
+}
+
 export async function recordStockMovement(
     tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
     data: {
@@ -21,6 +47,7 @@ export async function recordStockMovement(
         warehouseId: number
         quantity: number
         type: StockMovementType
+        source?: StockMovementSource
         referenceNumber?: string
         recordedBy?: string
         customerId?: number
@@ -35,6 +62,7 @@ export async function recordStockMovement(
             warehouseId: data.warehouseId,
             quantity: data.quantity,
             type: data.type,
+            source: data.source ?? inferMovementSource(data.type),
             referenceNumber: data.referenceNumber,
             recordedBy: data.recordedBy,
             customerId: data.customerId,

@@ -41,6 +41,7 @@ interface StockMovementWithRelations {
     id: number
     createdAt: string | Date
     type: string
+    source?: string | null
     quantity: number
     referenceNumber?: string | null
     warehouseId: number
@@ -78,18 +79,28 @@ interface MovementTableProps {
 }
 
 const TYPE_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" | "success" | "warning"; icon: React.ElementType }> = {
-    GR_SAP: { label: "GR SAP", variant: "success", icon: ArrowDown },
-    GR_MANUAL: { label: "GR Manual", variant: "success", icon: ArrowDown },
+    GR_SAP: { label: "Inbound SAP", variant: "success", icon: ArrowDown },
+    GR_MANUAL: { label: "Inbound Manual", variant: "success", icon: ArrowDown },
     DELIVERY: { label: "Delivery", variant: "destructive", icon: ArrowUp },
     TRANSFER_IN: { label: "Transfer In", variant: "default", icon: ArrowRightLeft },
     TRANSFER_OUT: { label: "Transfer Out", variant: "warning", icon: ArrowRightLeft },
     ADJUSTMENT: { label: "Adjustment", variant: "outline", icon: RotateCcw },
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+    INBOUND_SAP: "Good Receive SAP",
+    INBOUND_MANUAL: "Good Receive Manual",
+    DELIVERY: "Delivery",
+    TRANSFER: "Stock Transfer",
+    ADJUSTMENT: "Stock Adjustment",
+    OTHER: "Other",
+}
+
 export function MovementTable({ data, warehouses }: MovementTableProps) {
     const [globalFilter, setGlobalFilter] = useState("")
     const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [filterType, setFilterType] = useState("all")
+    const [filterSource, setFilterSource] = useState("all")
     const [filterWarehouse, setFilterWarehouse] = useState("all")
     const { permissions } = usePermissions()
     const isAdmin = permissions.includes("admin") || permissions.includes("superuser") || permissions.includes("admin:view")
@@ -134,6 +145,14 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
             },
         },
         {
+            accessorKey: "source",
+            header: "Source",
+            cell: ({ row }) => {
+                const source = row.original.source ?? "OTHER"
+                return SOURCE_LABELS[source] ?? source
+            },
+        },
+        {
             accessorKey: "product.materialNumber",
             header: "Material #",
             cell: ({ row }) => (
@@ -158,7 +177,21 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
         {
             accessorKey: "customer.name",
             header: "Customer",
-            cell: ({ row }) => row.original.customer?.name ?? "-",
+            cell: ({ row }) => {
+                if (row.original.type === "GR_SAP" || row.original.type === "GR_MANUAL") {
+                    const targetWarehouse = row.original.warehouse
+                    if (!targetWarehouse) {
+                        return "-"
+                    }
+
+                    const targetLabel = targetWarehouse.description?.trim()
+                    return targetLabel
+                        ? `${targetLabel} (${targetWarehouse.sloc})`
+                        : targetWarehouse.sloc
+                }
+
+                return row.original.customer?.name ?? "-"
+            },
         },
         {
             id: "transfer",
@@ -224,15 +257,17 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
             )
 
             const matchesType = filterType === "all" || item.type === filterType
+            const itemSource = item.source ?? "OTHER"
+            const matchesSource = filterSource === "all" || itemSource === filterSource
             const matchesWarehouse = filterWarehouse === "all" || item.warehouseId.toString() === filterWarehouse
 
-            return matchesSearch && matchesType && matchesWarehouse
+            return matchesSearch && matchesType && matchesSource && matchesWarehouse
         },
     })
 
     useEffect(() => {
         table.setGlobalFilter(globalFilter)
-    }, [filterType, filterWarehouse, globalFilter, table])
+    }, [filterType, filterSource, filterWarehouse, globalFilter, table])
 
     const { rows } = table.getRowModel()
     const parentRef = useRef<HTMLDivElement>(null)
@@ -281,6 +316,21 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                     </Select>
                 </div>
 
+                <div className="w-full md:w-[220px] space-y-1.5">
+                    <label className="text-sm font-medium">Source</label>
+                    <Select value={filterSource} onValueChange={setFilterSource}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="All Sources" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Sources</SelectItem>
+                            {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+                                <SelectItem key={key} value={key}>{label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
                 <div className="w-full md:w-[250px] space-y-1.5">
                     <label className="text-sm font-medium">Warehouse</label>
                     <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
@@ -301,6 +351,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                 <Button variant="outline" onClick={() => {
                     setGlobalFilter("")
                     setFilterType("all")
+                    setFilterSource("all")
                     setFilterWarehouse("all")
                 }}>
                     Reset Filters

@@ -1,0 +1,13 @@
+ALTER TABLE IF EXISTS "stock_movements"
+ADD COLUMN IF NOT EXISTS "source" varchar(50) DEFAULT 'OTHER' NOT NULL;
+
+UPDATE "stock_movements"
+SET "source" = CASE
+  WHEN "type" = 'GR_SAP' THEN 'INBOUND_SAP'
+  WHEN "type" = 'GR_MANUAL' THEN 'INBOUND_MANUAL'
+  WHEN "type" = 'DELIVERY' THEN 'DELIVERY'
+  WHEN "type" IN ('TRANSFER_IN', 'TRANSFER_OUT') THEN 'TRANSFER'
+  WHEN "type" = 'ADJUSTMENT' THEN 'ADJUSTMENT'
+  ELSE 'OTHER'
+END
+WHERE "source" IS NULL OR "source" = '' OR "source" = 'OTHER';

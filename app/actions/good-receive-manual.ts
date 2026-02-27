@@ -89,6 +89,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
 
         revalidatePath("/dashboard/good-receive-manual")
         revalidatePath("/dashboard/stocks")
+        revalidatePath("/dashboard/stock-movements")
 
         return { success: true }
     } catch (error) {
