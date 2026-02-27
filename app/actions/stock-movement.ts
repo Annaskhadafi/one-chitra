@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockMovements } from "@/db/schema"
-import { eq, desc, and } from "drizzle-orm"
+import { desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
@@ -40,6 +40,72 @@ const inferMovementSource = (type: StockMovementType): StockMovementSource => {
     }
 }
 
+let ensureSourceColumnPromise: Promise<void> | null = null
+
+const isMissingSourceColumnError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.toLowerCase().includes("source") && message.toLowerCase().includes("stock_movements")
+}
+
+const ensureStockMovementSourceColumn = async () => {
+    if (!ensureSourceColumnPromise) {
+        ensureSourceColumnPromise = (async () => {
+            await db.execute(sql`
+                ALTER TABLE IF EXISTS "stock_movements"
+                ADD COLUMN IF NOT EXISTS "source" varchar(50) DEFAULT 'OTHER' NOT NULL;
+            `)
+
+            await db.execute(sql`
+                UPDATE "stock_movements"
+                SET "source" = CASE
+                    WHEN "type" = 'GR_SAP' THEN 'INBOUND_SAP'
+                    WHEN "type" = 'GR_MANUAL' THEN 'INBOUND_MANUAL'
+                    WHEN "type" = 'DELIVERY' THEN 'DELIVERY'
+                    WHEN "type" IN ('TRANSFER_IN', 'TRANSFER_OUT') THEN 'TRANSFER'
+                    WHEN "type" = 'ADJUSTMENT' THEN 'ADJUSTMENT'
+                    ELSE 'OTHER'
+                END
+                WHERE "source" IS NULL OR "source" = '' OR "source" = 'OTHER';
+            `)
+        })().finally(() => {
+            ensureSourceColumnPromise = null
+        })
+    }
+
+    await ensureSourceColumnPromise
+}
+
+const insertStockMovement = async (
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    data: {
+        productId: number
+        warehouseId: number
+        quantity: number
+        type: StockMovementType
+        source?: StockMovementSource
+        referenceNumber?: string
+        recordedBy?: string
+        customerId?: number
+        fromWarehouseId?: number
+        toWarehouseId?: number
+        notes?: string
+    }
+) => {
+    await tx.insert(stockMovements).values({
+        productId: data.productId,
+        warehouseId: data.warehouseId,
+        quantity: data.quantity,
+        type: data.type,
+        source: data.source ?? inferMovementSource(data.type),
+        referenceNumber: data.referenceNumber,
+        recordedBy: data.recordedBy,
+        customerId: data.customerId,
+        fromWarehouseId: data.fromWarehouseId,
+        toWarehouseId: data.toWarehouseId,
+        notes: data.notes,
+    })
+}
+
 export async function recordStockMovement(
     tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
     data: {
@@ -57,19 +123,33 @@ export async function recordStockMovement(
     }
 ) {
     try {
-        await tx.insert(stockMovements).values({
-            productId: data.productId,
-            warehouseId: data.warehouseId,
-            quantity: data.quantity,
-            type: data.type,
-            source: data.source ?? inferMovementSource(data.type),
-            referenceNumber: data.referenceNumber,
-            recordedBy: data.recordedBy,
-            customerId: data.customerId,
-            fromWarehouseId: data.fromWarehouseId,
-            toWarehouseId: data.toWarehouseId,
-            notes: data.notes,
-        })
+        try {
+            await insertStockMovement(tx, data)
+        } catch (error) {
+            if (!isMissingSourceColumnError(error)) {
+                throw error
+            }
+
+            await tx.execute(sql`
+                ALTER TABLE IF EXISTS "stock_movements"
+                ADD COLUMN IF NOT EXISTS "source" varchar(50) DEFAULT 'OTHER' NOT NULL;
+            `)
+
+            await tx.execute(sql`
+                UPDATE "stock_movements"
+                SET "source" = CASE
+                    WHEN "type" = 'GR_SAP' THEN 'INBOUND_SAP'
+                    WHEN "type" = 'GR_MANUAL' THEN 'INBOUND_MANUAL'
+                    WHEN "type" = 'DELIVERY' THEN 'DELIVERY'
+                    WHEN "type" IN ('TRANSFER_IN', 'TRANSFER_OUT') THEN 'TRANSFER'
+                    WHEN "type" = 'ADJUSTMENT' THEN 'ADJUSTMENT'
+                    ELSE 'OTHER'
+                END
+                WHERE "source" IS NULL OR "source" = '' OR "source" = 'OTHER';
+            `)
+
+            await insertStockMovement(tx, data)
+        }
         return { success: true }
     } catch (error) {
         console.error("Error recording stock movement:", error)
@@ -78,17 +158,37 @@ export async function recordStockMovement(
 }
 
 export async function getStockMovements() {
-    return await db.query.stockMovements.findMany({
-        with: {
-            product: true,
-            warehouse: true,
-            recordedByUser: true,
-            customer: true,
-            fromWarehouse: true,
-            toWarehouse: true,
-        },
-        orderBy: [desc(stockMovements.createdAt)],
-    })
+    try {
+        return await db.query.stockMovements.findMany({
+            with: {
+                product: true,
+                warehouse: true,
+                recordedByUser: true,
+                customer: true,
+                fromWarehouse: true,
+                toWarehouse: true,
+            },
+            orderBy: [desc(stockMovements.createdAt)],
+        })
+    } catch (error) {
+        if (!isMissingSourceColumnError(error)) {
+            throw error
+        }
+
+        await ensureStockMovementSourceColumn()
+
+        return await db.query.stockMovements.findMany({
+            with: {
+                product: true,
+                warehouse: true,
+                recordedByUser: true,
+                customer: true,
+                fromWarehouse: true,
+                toWarehouse: true,
+            },
+            orderBy: [desc(stockMovements.createdAt)],
+        })
+    }
 }
 
 export async function clearStockMovements() {
