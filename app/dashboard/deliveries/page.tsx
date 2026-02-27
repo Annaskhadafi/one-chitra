@@ -2,9 +2,8 @@ import { getDeliveries, getDeliveryItemsFlat } from "@/app/actions/delivery"
 import { DeliveryTable } from "./_components/delivery-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Plus, Truck, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Plus } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 
 export default async function DeliveriesPage() {
@@ -17,7 +16,6 @@ export default async function DeliveriesPage() {
     const scheduled = deliveriesData.filter(d => d.status.toLowerCase() === "scheduled").length
     const delivered = deliveriesData.filter(d => d.status.toLowerCase() === "delivered").length
     const cancelled = deliveriesData.filter(d => d.status.toLowerCase() === "cancelled").length
-    const total = deliveriesData.length
 
     // Status Distribution Data
     const statusData = [
@@ -55,51 +53,6 @@ export default async function DeliveriesPage() {
                     </Link>
                 </PermissionGuard>
             </div>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Total Delivery</CardTitle>
-                        <Truck className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{total}</div>
-                        <p className="text-xs text-muted-foreground">Total pengiriman terdaftar</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Scheduled</CardTitle>
-                        <Clock className="h-4 w-4 text-blue-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{scheduled}</div>
-                        <p className="text-xs text-muted-foreground">Pengiriman dalam jadwal</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Delivered</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{delivered}</div>
-                        <p className="text-xs text-muted-foreground">Pengiriman telah sampai</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">Cancelled</CardTitle>
-                        <XCircle className="h-4 w-4 text-rose-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{cancelled}</div>
-                        <p className="text-xs text-muted-foreground">Pengiriman dibatalkan</p>
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
