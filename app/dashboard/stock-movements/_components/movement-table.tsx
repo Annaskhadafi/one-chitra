@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef, useEffect } from "react"
-import { Search, History, ChevronUp, ChevronDown, ListFilter, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft, Trash2 } from "lucide-react"
+import { useState, useMemo, useRef } from "react"
+import { Search, History, ChevronUp, ChevronDown, RotateCcw, Box, ArrowDown, ArrowUp, ArrowRightLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -35,7 +35,7 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { format } from "date-fns"
-import type { StockMovement, Warehouse } from "@/lib/types"
+import type { Warehouse } from "@/lib/types"
 
 interface StockMovementWithRelations {
     id: number
@@ -232,8 +232,18 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
         },
     ], [])
 
+    const filteredData = useMemo(() => {
+        return data.filter((item) => {
+            const matchesType = filterType === "all" || item.type === filterType
+            const itemSource = item.source ?? "OTHER"
+            const matchesSource = filterSource === "all" || itemSource === filterSource
+            const matchesWarehouse = filterWarehouse === "all" || item.warehouseId.toString() === filterWarehouse
+            return matchesType && matchesSource && matchesWarehouse
+        })
+    }, [data, filterType, filterSource, filterWarehouse])
+
     const table = useReactTable({
-        data,
+        data: filteredData,
         columns,
         state: {
             sorting,
@@ -245,29 +255,22 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         globalFilterFn: (row, columnId, filterValue): boolean => {
-            const term = filterValue.toLowerCase()
+            const term = String(filterValue ?? "").trim().toLowerCase()
+            if (!term) {
+                return true
+            }
+
             const item = row.original
 
-            const matchesSearch = !!(
+            return !!(
                 item.product?.materialNumber.toLowerCase().includes(term) ||
                 item.product?.materialDescription?.toLowerCase().includes(term) ||
                 item.warehouse?.sloc.toLowerCase().includes(term) ||
                 item.warehouse?.description?.toLowerCase().includes(term) ||
                 item.referenceNumber?.toLowerCase().includes(term)
             )
-
-            const matchesType = filterType === "all" || item.type === filterType
-            const itemSource = item.source ?? "OTHER"
-            const matchesSource = filterSource === "all" || itemSource === filterSource
-            const matchesWarehouse = filterWarehouse === "all" || item.warehouseId.toString() === filterWarehouse
-
-            return matchesSearch && matchesType && matchesSource && matchesWarehouse
         },
     })
-
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [filterType, filterSource, filterWarehouse, globalFilter, table])
 
     const { rows } = table.getRowModel()
     const parentRef = useRef<HTMLDivElement>(null)
@@ -421,7 +424,7 @@ export function MovementTable({ data, warehouses }: MovementTableProps) {
                 </div>
             </div>
             <div className="text-xs text-muted-foreground">
-                Showing {table.getFilteredRowModel().rows.length} of {data.length} movement records
+                Showing {table.getFilteredRowModel().rows.length} of {filteredData.length} movement records
             </div>
         </div>
     )
