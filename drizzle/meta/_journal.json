@@ -141,6 +141,13 @@
       "when": 1772008682538,
       "tag": "0019_long_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772358778433,
+      "tag": "0020_small_masque",
+      "breakpoints": true
     }
   ]
 }
