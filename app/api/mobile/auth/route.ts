@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { user } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { user, account } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import bcryptjs from "bcryptjs";
 
 export async function POST(req: NextRequest) {
@@ -22,8 +22,22 @@ export async function POST(req: NextRequest) {
 
         const foundUser = users[0];
 
+        // Cari kredensial password di tabel account
+        const accounts = await db.select().from(account).where(
+            and(
+                eq(account.userId, foundUser.id),
+                eq(account.providerId, "credential")
+            )
+        ).limit(1);
+
+        if (accounts.length === 0 || !accounts[0].password) {
+            return NextResponse.json({ error: "Email atau password salah" }, { status: 401 });
+        }
+
+        const foundAccount = accounts[0];
+
         // Verifikasi password
-        const isValid = await bcryptjs.compare(password, foundUser.password ?? "");
+        const isValid = await bcryptjs.compare(password, foundAccount.password as string);
         if (!isValid) {
             return NextResponse.json({ error: "Email atau password salah" }, { status: 401 });
         }
