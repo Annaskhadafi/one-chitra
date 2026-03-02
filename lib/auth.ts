@@ -4,6 +4,7 @@ import { admin, magicLink } from "better-auth/plugins";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
 import { sendMagicLinkEmail, sendTemplatedEmail } from "@/lib/email";
+import bcrypt from "bcryptjs";
 
 // Ensure URL has protocol prefix
 function normalizeUrl(url?: string): string {
@@ -46,6 +47,14 @@ export const auth = betterAuth({
     }),
     emailAndPassword: {
         enabled: true,
+        password: {
+            hash: async (password) => {
+                return await bcrypt.hash(password, 10);
+            },
+            verify: async ({ hash, password }) => {
+                return await bcrypt.compare(password, hash);
+            },
+        },
         sendResetPassword: async ({ user: u, url }) => {
             await sendTemplatedEmail(u.email, "password_reset", {
                 resetUrl: url,
