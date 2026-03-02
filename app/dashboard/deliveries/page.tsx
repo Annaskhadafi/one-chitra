@@ -2,8 +2,9 @@ import { getDeliveries, getDeliveryItemsFlat } from "@/app/actions/delivery"
 import { DeliveryTable } from "./_components/delivery-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, Truck } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
+import { PageHeader } from "@/components/page-header"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 
 export default async function DeliveriesPage() {
@@ -38,11 +39,12 @@ export default async function DeliveriesPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-bold tracking-tight">Delivery Management</h1>
-                    <p className="text-muted-foreground">
-                        Schedule and manage deliveries from sales orders.
-                    </p>
+                <div className="flex-1">
+                    <PageHeader
+                        title="Delivery Management"
+                        subtitle="Schedule and manage deliveries from sales orders."
+                        icon={Truck}
+                    />
                 </div>
                 <PermissionGuard resource="deliveries" action="create">
                     <Link href="/dashboard/deliveries/create">
