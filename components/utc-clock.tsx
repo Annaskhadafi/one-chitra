@@ -35,11 +35,14 @@ export function UtcClock() {
     }, [])
 
     if (!mounted) {
-        return <div className="text-xs font-mono text-muted-foreground w-[180px] h-4 animate-pulse bg-muted rounded"></div>
+        return <div className="hidden sm:block w-[160px] h-7 animate-pulse bg-muted rounded-md shrink-0"></div>
     }
 
     return (
-        <div className="text-xs font-medium font-mono text-muted-foreground hidden sm:block whitespace-nowrap">
+        <div
+            className="text-xs font-medium font-mono text-white hidden sm:flex items-center justify-center whitespace-nowrap px-3 py-1.5 rounded-md shadow-sm shrink-0"
+            style={{ backgroundColor: "var(--sidebar-accent)" }}
+        >
             {timeString}
         </div>
     )
