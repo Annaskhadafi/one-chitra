@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
+import logo from "@/public/logo.png"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -10,6 +12,7 @@ import {
     SidebarFooter,
     SidebarGroup,
     SidebarGroupContent,
+    SidebarHeader,
     SidebarMenu,
     SidebarMenuSkeleton,
     SidebarRail,
@@ -59,6 +62,23 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                 fontFamily: "var(--font-parkinsans), var(--font-geist-sans), sans-serif",
             }}
         >
+            <SidebarHeader>
+                <div className="flex items-center gap-2 px-4 py-2 text-sidebar-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
+                    <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden border border-white/10 dark:bg-white">
+                        <Image
+                            src={logo}
+                            alt="One Chitra Logo"
+                            width={32}
+                            height={32}
+                            className="object-contain p-1"
+                        />
+                    </div>
+                    <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                        <span className="truncate font-semibold">One Chitra</span>
+                        <span className="truncate text-xs">All In One Apps Chitra Paratama</span>
+                    </div>
+                </div>
+            </SidebarHeader>
             <SidebarContent>
                 {isHydrated
                     ? sidebarConfig.map((section, index) => (

@@ -2,8 +2,6 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { UtcClock } from "@/components/utc-clock"
-import Image from "next/image"
-import logo from "@/public/logo.png"
 
 export function SiteHeader() {
   return (
@@ -17,22 +15,7 @@ export function SiteHeader() {
             orientation="vertical"
             className="mx-2 data-[orientation=vertical]:h-4"
           />
-          {/* Logo Perusahaan dipindah ke sini */}
-          <div className="flex items-center gap-2 px-1">
-            <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm overflow-hidden border border-muted dark:bg-white">
-              <Image
-                src={logo}
-                alt="One Chitra Logo"
-                width={32}
-                height={32}
-                className="object-contain p-1"
-              />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-bold">One Chitra</span>
-              <span className="truncate text-xs text-muted-foreground hidden sm:inline-block">All In One Apps Chitra Paratama</span>
-            </div>
-          </div>
+          <h1 className="text-base font-medium hidden sm:inline-block">All In One Apps Chitra Paratama</h1>
         </div>
 
         {/* Right Section: Jam UTC & Theme Switcher */}
