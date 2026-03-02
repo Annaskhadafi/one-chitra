@@ -196,12 +196,12 @@ export async function changePassword(data: { oldPassword: string; newPassword: s
 
 export async function adminResetPassword(userId: string, newPassword: string) {
     try {
-        // Verify caller is authenticated
-        const session = await auth.api.getSession({ headers: await headers() })
-        if (!session?.user) throw new Error("Unauthorized")
+        // Use central RBAC function to verify the caller has 'edit' permission for users
+        // This ensures the caller is an Admin or has permission, rather than just any logged-in user.
+        const session = await getAuthenticatedSession("users", "edit")
+        if (!session?.user?.id) throw new Error("Unauthorized")
 
-        // Bypass auth.api.setUserPassword — it checks for lowercase 'admin' role internally
-        // but the DB stores role as 'Admin' (capital A). Instead, hash directly with bcryptjs.
+        // Hash directly with bcryptjs
         const hashedPassword = await bcrypt.hash(newPassword, 10)
 
         const updated = await db
@@ -216,9 +216,11 @@ export async function adminResetPassword(userId: string, newPassword: string) {
             .returning({ id: account.id })
 
         if (updated.length === 0) {
+            console.error(`adminResetPassword error: No credential account found for user ${userId}`)
             throw new Error("User account not found or uses social login only")
         }
 
+        console.log(`User ${userId} password has been successfully reset by admin ${session.user.id}`)
         return { success: true }
     } catch (error) {
         console.error("Failed to reset password:", error)

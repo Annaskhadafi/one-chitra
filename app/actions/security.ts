@@ -216,16 +216,30 @@ export async function deleteSecurityUser(targetUserId: string) {
         return { success: false, error: "Cannot delete your own account" }
     }
 
-    await db.delete(user).where(eq(user.id, targetUserId))
+    try {
+        await db.delete(user).where(eq(user.id, targetUserId))
 
-    await writeAuditLog(
-        session.user.id,
-        "user.delete",
-        `Deleted user ${targetUser.email}`
-    )
+        await writeAuditLog(
+            session.user.id,
+            "user.delete",
+            `Deleted user ${targetUser.email}`
+        )
 
-    revalidatePath("/dashboard/security/users")
-    return { success: true }
+        revalidatePath("/dashboard/security/users")
+        return { success: true }
+    } catch (error: any) {
+        // Cek jika error adalah constraint violation dari database
+        if (error.code === '23503' || error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
+            return {
+                success: false,
+                error: "Tidak bisa menghapus user yang masih memiliki kaitan riwayat transaksi di sistem. Rekomendasi: Gunakan fitur 'Ban User' untuk menonaktifkan pengguna ini."
+            }
+        }
+        return {
+            success: false,
+            error: "Gagal menghapus user. Terjadi kesalahan pada database."
+        }
+    }
 }
 
 export async function bulkCreateSecurityUsers(
