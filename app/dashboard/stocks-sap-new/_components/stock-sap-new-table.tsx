@@ -24,6 +24,9 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useQuery } from "@tanstack/react-query"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import type { Warehouse } from "@/lib/types"
+import { format, isAfter, startOfDay, subDays } from "date-fns"
 import {
     useReactTable,
     getCoreRowModel,
@@ -34,8 +37,6 @@ import {
     flexRender,
     SortingState,
 } from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
-import type { Warehouse } from "@/lib/types"
 
 type StockSAPNewItem = {
     stockId: number
@@ -131,6 +132,33 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         },
         staleTime: 5 * 60 * 1000,
     })
+
+    // Menghitung status last update
+    const updateStatus = useMemo(() => {
+        if (!data || data.length === 0) return null;
+
+        // Cari extractedAt yang paling baru (terbesar/max)
+        let latestDate = new Date(0);
+        for (const item of data) {
+            if (item.extractedAt) {
+                const date = new Date(item.extractedAt);
+                if (date > latestDate) latestDate = date;
+            }
+        }
+
+        if (latestDate.getTime() === 0) return null;
+
+        // Aturan status: 
+        // H-1 (kemarin) jam 00:00 adalah batas minimum data 'Up to Date'.
+        const yesterdayStart = startOfDay(subDays(new Date(), 1));
+        const isUpdated = isAfter(latestDate, yesterdayStart) || latestDate.getTime() === yesterdayStart.getTime();
+
+        return {
+            dateStr: format(latestDate, "dd MMM yyyy, HH:mm"),
+            isUpdated,
+            message: isUpdated ? "Data sudah diperbarui" : "Data belum diperbarui"
+        };
+    }, [data]);
 
     const plantOptions = useMemo(() => {
         const plants = new Set(data.map(item => item.plantCode).filter(Boolean))
@@ -327,9 +355,9 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     const [before, after] =
         rowVirtualizer.getVirtualItems().length > 0
             ? [
-                  rowVirtualizer.getVirtualItems()[0].start,
-                  rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
-              ]
+                rowVirtualizer.getVirtualItems()[0].start,
+                rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
+            ]
             : [0, 0]
 
     if (isLoading) {
@@ -401,10 +429,25 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                                 </TabsTrigger>
                             ))}
                     </TabsList>
-                    <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
-                        <RefreshCcw className="mr-2 h-4 w-4" />
-                        Refresh DB Data
-                    </Button>
+                    <div className="ml-auto flex items-center gap-4">
+                        {updateStatus && (
+                            <div className="flex flex-col items-end text-right">
+                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                    Last Extracted At
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-sm font-semibold">{updateStatus.dateStr}</span>
+                                    <Badge variant={updateStatus.isUpdated ? "secondary" : "destructive"} className={updateStatus.isUpdated ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : ''}>
+                                        {updateStatus.message}
+                                    </Badge>
+                                </div>
+                            </div>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => refetch()}>
+                            <RefreshCcw className="mr-2 h-4 w-4" />
+                            Refresh DB Data
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
