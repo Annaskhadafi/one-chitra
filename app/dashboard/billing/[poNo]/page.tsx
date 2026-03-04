@@ -21,5 +21,6 @@ export default async function BillingDetailPage({ params }: PageProps) {
         notFound()
     }
 
-    return <BillingDetailClient data={result.data as BillingRecordDisplay} />
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return <BillingDetailClient data={result.data as any} />
 }

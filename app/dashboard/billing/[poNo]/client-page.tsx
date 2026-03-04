@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/page-header"
 
 interface BillingDetailClientProps {
-    data: BillingRecordDisplay
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any
 }
 
 export function BillingDetailClient({ data }: BillingDetailClientProps) {

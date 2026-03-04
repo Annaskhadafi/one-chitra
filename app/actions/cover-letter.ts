@@ -127,7 +127,7 @@ export async function getCoverLetterBillingData(
 
     // Filter out yang sudah dipakai di cover letter lain
     const filtered = usedPoNos.length > 0
-        ? records.filter(r => !usedPoNos.includes(r.poNo))
+        ? records.filter(r => r.poNo && !usedPoNos.includes(r.poNo))
         : records;
 
     return filtered as CoverLetterBillingItem[];

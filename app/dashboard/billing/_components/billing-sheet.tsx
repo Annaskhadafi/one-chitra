@@ -30,7 +30,8 @@ interface BillingSheetProps {
 
 export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
-    const [formData, setFormData] = useState<Partial<BillingRecordDisplay>>({})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [formData, setFormData] = useState<any>({})
 
     useEffect(() => {
         if (record) {
@@ -39,7 +40,8 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
     }, [record])
 
     const handleChange = (key: string, value: unknown) => {
-        setFormData((prev) => ({ ...prev, [key]: value }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setFormData((prev: any) => ({ ...prev, [key]: value }))
     }
 
     const handleSubmit = async () => {
@@ -47,9 +49,13 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
         setIsLoading(true)
         try {
+            // Exclude properties that are not part of BillingRecordUpdate (e.g. items)
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { items, ...updatePayload } = formData as any
+
             await updateBillingRecord({
                 poNo: record.poNo as string,
-                ...formData
+                ...updatePayload
             })
 
             toast.success("Record updated successfully")
@@ -71,7 +77,8 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
         try {
             const result = await trackJneResi(formData.noResi)
             if (result.success && result.data) {
-                setFormData(prev => ({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                setFormData((prev: any) => ({
                     ...prev,
                     statusDelivery: result.data.statusAction,
                     receiverDate: result.data.receiverDate || prev.receiverDate

@@ -7,7 +7,8 @@ import { Loader2 } from "lucide-react"
 
 export default async function BillingPage() {
     const result = await getBillingRecords()
-    const data = result.success ? (result.data as BillingRecordDisplay[] || []) : []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.success ? (result.data as any[]) : []
 
     return (
         <div className="h-full flex-1 flex-col space-y-8 p-8 md:flex">

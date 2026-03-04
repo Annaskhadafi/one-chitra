@@ -74,10 +74,17 @@ export type BillingRecordDisplay = {
     actualNoDo: string | null
     tglDoFaktur: Date | null
     remaks: string | null
-    dateSendInvoice: Date | null
-    receiverDate: Date | null
-    recvDateApproved: Date | null
-    eFaktur: string | null
+    dateSendInvoice?: string | null;
+    receiverDate?: string | null;
+    recvDateApproved?: string | null;
+    eFaktur?: string | null;
+    modeDelivery?: string | null;
+    noResi?: string | null;
+    statusDelivery?: string | null;
+    scanInvUrl?: string | null;
+    // joined item properties (as generic)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    items?: any[];
     status: string | null
     deliveryNumber: string | null
     originalPrice: string | null
