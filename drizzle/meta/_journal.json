@@ -141,6 +141,13 @@
       "when": 1772008682538,
       "tag": "0019_long_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772591195072,
+      "tag": "0020_skinny_jazinda",
+      "breakpoints": true
     }
   ]
 }

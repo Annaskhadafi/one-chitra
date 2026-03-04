@@ -11,11 +11,20 @@ export default async function QuotationDetailPage({
 }) {
     const { id } = await params
     const { pdf } = await searchParams
-    const quotation = await getQuotation(Number(id))
+    if (!/^\d+$/.test(id)) {
+        notFound()
+    }
+
+    const quotation = await getQuotation(id)
 
     if (!quotation) {
         notFound()
     }
 
-    return <QuotationDetail quotation={quotation} autoOpenPdf={pdf === "true"} />
+    return (
+        <QuotationDetail
+            quotation={quotation as Parameters<typeof QuotationDetail>[0]["quotation"]}
+            autoOpenPdf={pdf === "true"}
+        />
+    )
 }

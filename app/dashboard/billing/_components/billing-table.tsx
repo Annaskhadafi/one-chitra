@@ -37,47 +37,10 @@ import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
-
-interface BillingRecordDisplay {
-    deliveryItemId: number
-    billingRecordId: number | null
-    no: string | null
-    year: number | null
-    month: string | null
-    plant: string
-    customer: string
-    poNo: string
-    datePo: Date
-    materialNumber: string
-    materialDescription: string
-    qty: string
-    curr: string
-    pricePerPcsIdr: string | null
-    totalPriceIdr: string | null
-    ppn: string | null
-    price: string | null
-    includePpn: string | null
-    noInvSap: string | null
-    dateInvoice: Date | null
-    custId: string | null
-    salesName: string | null
-    ddpAddress: string | null
-    paymentType: string | null
-    nomorDoSap: string | null
-    actualNoDo: string | null
-    tglDoFaktur: Date | null
-    remaks: string | null
-    dateSendInvoice: Date | null
-    receiverDate: Date | null
-    recvDateApproved: Date | null
-    eFaktur: string | null
-    status: string
-    deliveryNumber: string | null
-    originalPrice: string
-}
+import type { BillingRecordDisplay } from "@/lib/types"
 
 export function BillingTable({ data: initialData }: { data: BillingRecordDisplay[] }) {
-    const { data: records = initialData, isLoading, refetch } = useQuery({
+    const { data: records = initialData, isLoading, refetch } = useQuery<BillingRecordDisplay[]>({
         queryKey: ["billing-records"],
         queryFn: async () => {
             const result = await getBillingRecords()
@@ -109,10 +72,10 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         setSheetOpen(true)
     }
 
-    const handleDelete = async (id: number) => {
-        if (confirm("Are you sure you want to delete the billing data for this delivery item? This will reset it to default.")) {
+    const handleDelete = async (poNo: string) => {
+        if (confirm("Are you sure you want to delete the billing data for this PO? This will reset custom fields.")) {
             try {
-                const result = await deleteBillingRecord(id)
+                const result = await deleteBillingRecord(poNo)
                 if (result.success) {
                     toast.success("Billing data deleted")
                     refetch()
@@ -133,13 +96,13 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             return [
                 d.customer || "",
                 d.poNo || "",
-                d.poDate ? new Date(d.datePo).toLocaleDateString("id-ID") : "",
-                d.deliveryNo || "",
-                d.materialNo || "",
-                d.description || "",
+                d.datePo ? new Date(d.datePo).toLocaleDateString("id-ID") : "",
+                d.deliveryNumber || "",
+                d.materialNumber || "",
+                d.materialDescription || "",
                 d.qty || 0,
                 d.price || 0,
-                d.amount || 0
+                d.totalPriceIdr || 0
             ]
         })
 
@@ -170,7 +133,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         handleView
     ), [canEdit, canDelete, handleDelete])
 
-    const table = useReactTable({
+    const table = useReactTable<BillingRecordDisplay>({
         data: records,
         columns,
         onSortingChange: setSorting,

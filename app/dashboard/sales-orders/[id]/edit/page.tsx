@@ -25,7 +25,7 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
             customers={customers}
             products={products}
             warehouses={warehouses}
-            initialData={order}
+            initialData={order as Parameters<typeof SalesOrderForm>[0]["initialData"]}
         />
     )
 }

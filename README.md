@@ -95,7 +95,9 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 
 # Authentication
-BETTER_AUTH_SECRET=your_secret_key_here
+# Generate with:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+BETTER_AUTH_SECRET=replace_with_64_hex_chars_generated_secret
 BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
 ```
@@ -288,7 +290,7 @@ npm run db:dev
 ```env
 # Required for production
 DATABASE_URL=postgresql://user:password@host:port/database
-BETTER_AUTH_SECRET=generate-a-very-secure-32-character-key
+BETTER_AUTH_SECRET=replace_with_64_hex_chars_generated_secret
 BETTER_AUTH_URL=https://yourdomain.com
 
 # Optional optimizations
@@ -298,7 +300,7 @@ NODE_ENV=production
 ### Production Considerations
 
 - **Database**: Use managed PostgreSQL (AWS RDS, Google Cloud SQL, etc.)
-- **Security**: Generate strong secrets, use HTTPS
+- **Security**: Use a high-entropy `BETTER_AUTH_SECRET` (>= 32 chars), never use placeholders, and enforce HTTPS
 - **Performance**: Enable Next.js output: 'standalone' for smaller containers
 - **Monitoring**: Add logging and health checks
 - **Backup**: Regular database backups

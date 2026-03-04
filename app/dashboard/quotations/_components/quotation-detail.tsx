@@ -607,7 +607,7 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
             {/* PDF Preview Dialog */}
             <QuotationPdfPreview
-                quotation={quotation}
+                quotation={quotation as unknown as Parameters<typeof QuotationPdfPreview>[0]["quotation"]}
                 open={pdfOpen}
                 onClose={() => setPdfOpen(false)}
             />

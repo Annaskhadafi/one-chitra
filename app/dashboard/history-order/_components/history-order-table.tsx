@@ -383,35 +383,35 @@ export function HistoryOrderTable() {
                 <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                     <FilterPopover
                         title="Customer"
-                        options={filterOptions?.customers || []}
+                        options={(filterOptions?.customers ?? []).filter((value): value is string => Boolean(value))}
                         selectedValues={customerFilter}
                         onSelect={(val: string) => setCustomerFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setCustomerFilter([])}
                     />
                     <FilterPopover
                         title="Plant"
-                        options={filterOptions?.plants || []}
+                        options={(filterOptions?.plants ?? []).filter((value): value is string => Boolean(value))}
                         selectedValues={plantFilter}
                         onSelect={(val: string) => setPlantFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setPlantFilter([])}
                     />
                     <FilterPopover
                         title="Mat Group"
-                        options={filterOptions?.matGrps || []}
+                        options={(filterOptions?.matGrps ?? []).filter((value): value is string => Boolean(value))}
                         selectedValues={matGrpFilter}
                         onSelect={(val: string) => setMatGrpFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setMatGrpFilter([])}
                     />
                     <FilterPopover
                         title="Year"
-                        options={filterOptions?.years || []}
+                        options={(filterOptions?.years ?? []).filter((value): value is string => Boolean(value))}
                         selectedValues={yearFilter}
                         onSelect={(val: string) => setYearFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setYearFilter([])}
                     />
                     <FilterPopover
                         title="Month"
-                        options={filterOptions?.months || []}
+                        options={(filterOptions?.months ?? []).filter((value): value is string => Boolean(value))}
                         selectedValues={monthFilter}
                         onSelect={(val: string) => setMonthFilter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])}
                         onClear={() => setMonthFilter([])}

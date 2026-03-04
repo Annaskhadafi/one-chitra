@@ -1,6 +1,6 @@
 "use client"
 
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
@@ -80,7 +80,7 @@ type GoodReceiveFormProps = {
 export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) {
     const router = useRouter()
     const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
         defaultValues: {
             receiveDate: new Date(),
             deliveryType: "Complete",

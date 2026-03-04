@@ -5,7 +5,12 @@ import { R49DashboardClient } from "./_components/r49-dashboard-client"
 export default async function R49DashboardPage() {
     const filtersResponse = await getR49DashboardFilters();
 
-    const filterOptions = filtersResponse.success ? filtersResponse.data : {
+    const filterOptions = filtersResponse.success && filtersResponse.data ? {
+        customers: filtersResponse.data.customers.filter((v): v is string => Boolean(v)),
+        salesmen: filtersResponse.data.salesmen.filter((v): v is string => Boolean(v)),
+        years: filtersResponse.data.years,
+        months: filtersResponse.data.months,
+    } : {
         customers: [],
         salesmen: [],
         years: [],

@@ -18,7 +18,7 @@ type ViewMode = "grid" | "list"
 type FilterType = "all" | "pdf" | "excel" | "other"
 
 export default function SalesDocumentsPage() {
-    const [documents, setDocuments] = useState<(SalesDocument & { uploadedBy?: { name: string } })[]>([])
+    const [documents, setDocuments] = useState<Awaited<ReturnType<typeof getSalesDocuments>>>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [previewDoc, setPreviewDoc] = useState<SalesDocument | null>(null)
@@ -31,7 +31,6 @@ export default function SalesDocumentsPage() {
     useEffect(() => {
         const fetchDocs = async () => {
             const data = await getSalesDocuments()
-            // @ts-expect-error - Type mismatch between getSalesDocuments return and documents state
             setDocuments(data)
             setIsLoading(false)
         }
@@ -85,7 +84,6 @@ export default function SalesDocumentsPage() {
                         </div>
                         {canCreate && <UploadDialog onSuccess={() => {
                             getSalesDocuments().then(data => {
-                                // @ts-expect-error - Type mismatch
                                 setDocuments(data)
                             })
                         }} />}
@@ -196,7 +194,6 @@ export default function SalesDocumentsPage() {
                             {canCreate && !searchQuery && filterType === "all" && (
                                 <UploadDialog onSuccess={() => {
                                     getSalesDocuments().then(data => {
-                                        // @ts-expect-error - Type mismatch
                                         setDocuments(data)
                                     })
                                 }} />

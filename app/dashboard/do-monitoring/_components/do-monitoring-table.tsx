@@ -82,7 +82,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [invoiceFilter, setInvoiceFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
+
 
     const [editDelivery, setEditDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isEditOpen, setIsEditOpen] = useState(false)
@@ -371,30 +373,34 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
     ], [canEdit, canDelete, deleting])
 
-    const table = useReactTable({
-        data,
-        columns,
-        state: {
-            sorting,
-            globalFilter,
-        },
-        onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, _columnId, filterValue): boolean => {
-            const term = (filterValue as string).toLowerCase()
-            const d = row.original
-            const matchesSearch = !!(
-                d.deliveryNumber?.toLowerCase().includes(term) ||
-                d.salesOrder?.customer?.name?.toLowerCase().includes(term) ||
-                d.invoiceNumber?.toLowerCase().includes(term)
+    const filteredData = useMemo(() => {
+        const term = globalFilter.toLowerCase().trim()
+        return (data || []).filter(d => {
+            const matchesSearch = !term || (
+                (d.deliveryNumber?.toLowerCase().includes(term)) ||
+                (d.salesOrder?.customer?.name?.toLowerCase().includes(term)) ||
+                (d.invoiceNumber?.toLowerCase().includes(term)) ||
+                (d.salesOrder?.customerPo?.toLowerCase().includes(term))
             )
 
             const matchesStatus = statusFilter === "all" || (d.doStatus || "Pending") === statusFilter
-            return !!(matchesSearch && matchesStatus)
+            const matchesInvoice = invoiceFilter === "all" ||
+                (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
+                (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== ""))
+
+            return matchesSearch && matchesStatus && matchesInvoice
+        })
+    }, [data, globalFilter, statusFilter, invoiceFilter])
+
+    const table = useReactTable({
+        data: filteredData,
+        columns,
+        state: {
+            sorting,
         },
+        onSortingChange: setSorting,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
     })
 
     // Virtualization
@@ -462,12 +468,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         })
     }
 
-    // Effect to trigger search when status filter changes
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [statusFilter, globalFilter, table])
 
     return (
+
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
@@ -485,7 +488,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         Export CSV
                     </Button>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[160px]">
+                        <SelectTrigger className="w-[150px]">
                             <SelectValue placeholder="DO Status" />
                         </SelectTrigger>
                         <SelectContent>
@@ -495,7 +498,19 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                             <SelectItem value="Lost">Lost</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
+                        <SelectTrigger className="w-[170px]">
+                            <SelectValue placeholder="Invoice Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Invoice</SelectItem>
+                            <SelectItem value="uninvoice">Uninvoice</SelectItem>
+                            <SelectItem value="invoiced">Invoice</SelectItem>
+                        </SelectContent>
+                    </Select>
+
                 </div>
+
             </div>
 
             <div className="rounded-md border overflow-hidden">

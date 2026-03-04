@@ -1,0 +1,257 @@
+app/actions/calendar-events.ts(116,21): error TS2322: Type 'HolidayType' is not assignable to type '"national_holiday" | "joint_leave" | "birthday" | "marketing" | "reminder"'.
+  Type '"observance"' is not assignable to type '"national_holiday" | "joint_leave" | "birthday" | "marketing" | "reminder"'.
+app/actions/competitor.ts(38,15): error TS2322: Type '{ timestamp: {}; customer: {}; size_tire: {}; brand: {}; category_tire: {}; supplier: {}; currency: {}; price: {}; remark: {}; tanggal_informasi: {}; business_consultant: {}; price_formatted: string; }[]' is not assignable to type 'CompetitorItem[]'.
+  Type '{ timestamp: {}; customer: {}; size_tire: {}; brand: {}; category_tire: {}; supplier: {}; currency: {}; price: {}; remark: {}; tanggal_informasi: {}; business_consultant: {}; price_formatted: string; }' is not assignable to type 'CompetitorItem'.
+    Types of property 'timestamp' are incompatible.
+      Type '{}' is not assignable to type 'string'.
+app/actions/competitor.ts(38,58): error TS2345: Argument of type '(item: Record<string, unknown>) => { timestamp: {}; customer: {}; size_tire: {}; brand: {}; category_tire: {}; supplier: {}; currency: {}; price: {}; remark: {}; tanggal_informasi: {}; business_consultant: {}; price_formatted: string; }' is not assignable to parameter of type '(value: unknown, index: number, array: unknown[]) => { timestamp: {}; customer: {}; size_tire: {}; brand: {}; category_tire: {}; supplier: {}; currency: {}; price: {}; remark: {}; tanggal_informasi: {}; business_consultant: {}; price_formatted: string; }'.
+  Types of parameters 'item' and 'value' are incompatible.
+    Type 'unknown' is not assignable to type 'Record<string, unknown>'.
+app/actions/competitor.ts(50,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+app/actions/dashboard.ts(156,9): error TS2322: Type '{ id: unknown; invoiceNumber: unknown; customerName: {}; salesDate: Date; status: unknown; totalValue: number; }[]' is not assignable to type '{ id: number; invoiceNumber: string | null; customerName: string; salesDate: Date; status: string; totalValue: number; }[]'.
+  Type '{ id: unknown; invoiceNumber: unknown; customerName: {}; salesDate: Date; status: unknown; totalValue: number; }' is not assignable to type '{ id: number; invoiceNumber: string | null; customerName: string; salesDate: Date; status: string; totalValue: number; }'.
+    Types of property 'id' are incompatible.
+      Type 'unknown' is not assignable to type 'number'.
+app/actions/dashboard.ts(160,33): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string | number'.
+app/actions/dashboard.ts(164,9): error TS2322: Type '{ productName: {}; materialNumber: unknown; warehouseName: unknown; currentStock: number; minStock: number; }[]' is not assignable to type '{ productName: string; materialNumber: string; warehouseName: string; currentStock: number; minStock: number; }[]'.
+  Type '{ productName: {}; materialNumber: unknown; warehouseName: unknown; currentStock: number; minStock: number; }' is not assignable to type '{ productName: string; materialNumber: string; warehouseName: string; currentStock: number; minStock: number; }'.
+    Types of property 'productName' are incompatible.
+      Type '{}' is not assignable to type 'string'.
+app/actions/fleet-trips.ts(124,42): error TS18047: 'item.product' is possibly 'null'.
+app/actions/fleet-trips.ts(179,33): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(value: { productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: number | ... 2 more ... | undefined; serialNumbers?: string[] | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error.
+    Argument of type '{ deliveryId: number; salesOrderItemId: number; productId: number | null; orderedQuantity: number; deliveredQuantity: number; serialNumbers: any[] | null; }[]' is not assignable to parameter of type '{ productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: nu...'.
+      Type '{ deliveryId: number; salesOrderItemId: number; productId: number | null; orderedQuantity: number; deliveredQuantity: number; serialNumbers: any[] | null; }[]' is missing the following properties from type '{ productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: nu...': productId, deliveryId
+  Overload 2 of 2, '(values: { productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: number | ... 2 more ... | undefined; serialNumbers?: string[] | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error.
+    Argument of type '{ deliveryId: number; salesOrderItemId: number; productId: number | null; orderedQuantity: number; deliveredQuantity: number; serialNumbers: any[] | null; }[]' is not assignable to parameter of type '{ productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: nu...'.
+      Type '{ deliveryId: number; salesOrderItemId: number; productId: number | null; orderedQuantity: number; deliveredQuantity: number; serialNumbers: any[] | null; }' is not assignable to type '{ productId: number | SQL<unknown> | Placeholder<string, any>; deliveryId: number | SQL<unknown> | Placeholder<string, any>; id?: number | SQL<unknown> | Placeholder<...> | undefined; salesOrderItemId?: number | ... 3 more ... | undefined; orderedQuantity?: number | ... 2 more ... | undefined; deliveredQuantity?: nu...'.
+        Types of property 'productId' are incompatible.
+          Type 'number | null' is not assignable to type 'number | SQL<unknown> | Placeholder<string, any>'.
+            Type 'null' is not assignable to type 'number | SQL<unknown> | Placeholder<string, any>'.
+app/actions/history-order.ts(106,13): error TS2322: Type 'SQL<unknown> | undefined' is not assignable to type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+app/actions/history-order.ts(117,30): error TS2345: Argument of type 'SQL<unknown> | undefined' is not assignable to parameter of type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+app/actions/history-order.ts(132,30): error TS2345: Argument of type 'SQL<unknown> | undefined' is not assignable to parameter of type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+app/actions/history-order.ts(135,30): error TS2345: Argument of type 'SQL<unknown> | undefined' is not assignable to parameter of type 'SQL<unknown>'.
+  Type 'undefined' is not assignable to type 'SQL<unknown>'.
+app/actions/r49-dashboard.ts(120,9): error TS2740: Type 'Omit<PgSelectBase<"history_orders", { customerName: PgColumn<{ name: "customer_name"; tableName: "history_orders"; dataType: "string"; columnType: "PgText"; data: string; driverParam: string; notNull: false; ... 7 more ...; generated: undefined; }, {}, {}>; totalRevenue: SQL<...>; }, ... 5 more ..., { ...; }>, "wher...' is missing the following properties from type 'PgSelectBuilder<SelectedFields, "db">': fields, session, dialect, withList, and 2 more.
+app/actions/r49-dashboard.ts(137,31): error TS18047: 'paginatedCustomers' is possibly 'null'.
+app/actions/r49-dashboard.ts(137,50): error TS2339: Property 'map' does not exist on type 'PgSelectBuilder<SelectedFields, "db">'.
+app/actions/sales-dashboard.ts(103,13): error TS2339: Property '_areas' does not exist on type 'SalesDashboardFilters'.
+app/actions/security.ts(543,44): error TS2339: Property 'session' does not exist on type '{ user: { id: string; name: string; email: string; }; }'.
+app/actions/security.ts(581,38): error TS2339: Property 'session' does not exist on type '{ user: { id: string; name: string; email: string; }; }'.
+app/dashboard/account/_components/password-form.tsx(23,7): error TS7022: 'passwordFormSchema' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+app/dashboard/account/_components/password-form.tsx(27,12): error TS2502: 'data' is referenced directly or indirectly in its own type annotation.
+app/dashboard/account/_components/password-form.tsx(32,6): error TS2456: Type alias 'PasswordFormValues' circularly references itself.
+app/dashboard/admin/users/_components/reset-password-dialog.tsx(30,7): error TS7022: 'resetPasswordSchema' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+app/dashboard/admin/users/_components/reset-password-dialog.tsx(33,12): error TS2502: 'data' is referenced directly or indirectly in its own type annotation.
+app/dashboard/admin/users/_components/reset-password-dialog.tsx(38,6): error TS2456: Type alias 'ResetPasswordValues' circularly references itself.
+app/dashboard/approvals/matrix/page.tsx(122,31): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(141,31): error TS2322: Type '() => Promise<{ success: boolean; skipped: boolean; message: string; error?: undefined; } | { success: boolean; error: string; skipped?: undefined; message?: undefined; } | { success: boolean; skipped?: undefined; message?: undefined; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '() => Promise<{ success: boolean; skipped: boolean; message: string; error?: undefined; } | { success: boolean; error: string; skipped?: undefined; message?: undefined; } | { success: boolean; skipped?: undefined; message?: undefined; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; skipped: boolean; message: string; error?: undefined; } | { success: boolean; error: string; skipped?: undefined; message?: undefined; } | { success: boolean; skipped?: undefined; message?: undefined; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; skipped: boolean; message: string; error?: undefined; } | { success: boolean; error: string; skipped?: undefined; message?: undefined; } | { success: boolean; skipped?: undefined; message?: undefined; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; skipped: boolean; message: string; error?: undefined; } | { success: boolean; error: string; skipped?: undefined; message?: undefined; } | { success: boolean; skipped?: undefined; message?: undefined; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; skipped: boolean; message: string; error?: undefined; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(158,31): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(228,43): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(256,43): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(284,59): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/matrix/page.tsx(320,59): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/approvals/page.tsx(127,59): error TS2322: Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'string | ((formData: FormData) => void | Promise<void>) | undefined'.
+  Type '(formData: FormData) => Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type '(formData: FormData) => void | Promise<void>'.
+    Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'void | Promise<void>'.
+      Type 'Promise<{ success: boolean; error: string; } | { success: boolean; error?: undefined; }>' is not assignable to type 'Promise<void>'.
+        Type '{ success: boolean; error: string; } | { success: boolean; error?: undefined; }' is not assignable to type 'void'.
+          Type '{ success: boolean; error: string; }' is not assignable to type 'void'.
+app/dashboard/billing/_components/billing-table.tsx(136,19): error TS2339: Property 'poDate' does not exist on type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }'.
+app/dashboard/billing/_components/billing-table.tsx(137,19): error TS2339: Property 'deliveryNo' does not exist on type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }'.
+app/dashboard/billing/_components/billing-table.tsx(138,19): error TS2339: Property 'materialNo' does not exist on type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }'.
+app/dashboard/billing/_components/billing-table.tsx(139,19): error TS2339: Property 'description' does not exist on type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }'.
+app/dashboard/billing/_components/billing-table.tsx(142,19): error TS2339: Property 'amount' does not exist on type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }'.
+app/dashboard/billing/_components/billing-table.tsx(175,9): error TS2322: Type 'ColumnDef<BillingRecordDisplay>[]' is not assignable to type 'ColumnDef<{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }, any>[]'.
+  Type 'ColumnDef<BillingRecordDisplay>' is not assignable to type 'ColumnDef<{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }, any>'.
+    Type 'ColumnDefBase<BillingRecordDisplay, unknown> & StringHeaderIdentifier' is not assignable to type 'ColumnDef<{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }, any>'.
+      Type 'ColumnDefBase<BillingRecordDisplay, unknown> & StringHeaderIdentifier' is not assignable to type 'AccessorFnColumnDefBase<{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }, any> & IdIdentifier<...>'.
+        Property 'accessorFn' is missing in type 'ColumnDefBase<BillingRecordDisplay, unknown> & StringHeaderIdentifier' but required in type 'AccessorFnColumnDefBase<{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }, any>'.
+app/dashboard/billing/_components/editable-cell.tsx(38,13): error TS2322: Type '{}' is not assignable to type 'number'.
+app/dashboard/billing/_components/editable-cell.tsx(52,29): error TS2339: Property 'blur' does not exist on type 'EventTarget & Element'.
+app/dashboard/billing/_components/editable-cell.tsx(78,13): error TS2322: Type '{}' is not assignable to type 'ReactNode'.
+app/dashboard/billing/page.tsx(27,39): error TS2322: Type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }[]' is not assignable to type 'BillingRecordDisplay[]'.
+  Type '{ deliveryItemId: number; billingRecordId: number | null; no: string | null; year: number | null; month: string | null; plant: string; customer: string; poNo: string; datePo: Date; ... 25 more ...; originalPrice: string | null; }' is not assignable to type 'BillingRecordDisplay'.
+    Types of property 'status' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+app/dashboard/competitor-info-new/_components/competitor-activity-form.tsx(48,24): error TS2353: Object literal may only specify known properties, and 'required_error' does not exist in type '{ error?: string | $ZodErrorMap<$ZodIssueInvalidType<unknown>> | undefined; message?: string | undefined; }'.
+app/dashboard/competitor-info-new/_components/lost-sale-form.tsx(49,28): error TS2353: Object literal may only specify known properties, and 'required_error' does not exist in type '{ error?: string | $ZodErrorMap<$ZodIssueInvalidType<unknown>> | undefined; message?: string | undefined; }'.
+app/dashboard/competitor-info-new/_components/price-competitor-form.tsx(47,24): error TS2353: Object literal may only specify known properties, and 'required_error' does not exist in type '{ error?: string | $ZodErrorMap<$ZodIssueInvalidType<unknown>> | undefined; message?: string | undefined; }'.
+app/dashboard/competitor-info-new/_components/price-competitor-form.tsx(95,56): error TS2345: Argument of type '{ businessConsultantId: string | null | undefined; infoDate: Date; customerName: string; productSize: string; category: string; brand: string; supplier: string; currency: string; price: string; consultantName?: string | ... 1 more ... | undefined; remark?: string | undefined; }' is not assignable to parameter of type '{ brand: string; category: string; currency: string; price: string; supplier: string; customerName: string; infoDate: Date; productSize: string; createdById: string; id?: string | undefined; ... 4 more ...; consultantName?: string | ... 1 more ... | undefined; }'.
+  Property 'createdById' is missing in type '{ businessConsultantId: string | null | undefined; infoDate: Date; customerName: string; productSize: string; category: string; brand: string; supplier: string; currency: string; price: string; consultantName?: string | ... 1 more ... | undefined; remark?: string | undefined; }' but required in type '{ brand: string; category: string; currency: string; price: string; supplier: string; customerName: string; infoDate: Date; productSize: string; createdById: string; id?: string | undefined; ... 4 more ...; consultantName?: string | ... 1 more ... | undefined; }'.
+app/dashboard/customer-segmentation/_components/customer-segmentation-client.tsx(671,17): error TS2322: Type '{ [key: string]: unknown; customer: string; }[]' is not assignable to type 'FleetItem[]'.
+  Type '{ [key: string]: unknown; customer: string; }' is missing the following properties from type 'FleetItem': id_fleet_list, site, status, location, and 10 more.
+app/dashboard/deliveries/[id]/page.tsx(18,17): error TS2322: Type '{ items: { alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]; ... 18 more ...; customer: { ...; }; }[]' is not assignable to type 'SalesOrderForDelivery[]'.
+  Type '{ items: { alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]; ... 18 more ...; customer: { ...; }; }' is not assignable to type 'SalesOrderForDelivery'.
+    Types of property 'items' are incompatible.
+      Type '{ alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]' is not assignable to type 'SOItemWithRemaining[]'.
+        Type '{ alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }' is not assignable to type 'SOItemWithRemaining'.
+          Types of property 'productId' are incompatible.
+            Type 'number | null' is not assignable to type 'number'.
+              Type 'null' is not assignable to type 'number'.
+app/dashboard/deliveries/[id]/page.tsx(20,17): error TS2322: Type '{ id: number; createdAt: Date; updatedAt: Date; warehouseId: number | null; invoiceNumber: string | null; status: string; notes: string | null; createdBy: string | null; salesOrderId: number; ... 27 more ...; salesOrder: { ...; }; }' is not assignable to type '{ id: number; deliveryNumber: string | null; salesOrderId: number; scheduledDate: Date; deliveryDate: Date | null; status: string; deliveryType: string; driverName: string | null; ... 18 more ...; items: { ...; }[]; }'.
+  The types of 'salesOrder.items' are incompatible between these types.
+    Type '{ id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { id: number; brand: string | null; createdAt: Date; ... 11 more ...; isConsignment: boolean; } | null; }[]' is not assignable to type '{ id: number; productId: number; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }[]'.
+      Type '{ id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { id: number; brand: string | null; createdAt: Date; ... 11 more ...; isConsignment: boolean; } | null; }' is not assignable to type '{ id: number; productId: number; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }'.
+        Types of property 'productId' are incompatible.
+          Type 'number | null' is not assignable to type 'number'.
+            Type 'null' is not assignable to type 'number'.
+app/dashboard/deliveries/create/page.tsx(11,27): error TS2322: Type '{ items: { alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]; ... 18 more ...; customer: { ...; }; }[]' is not assignable to type 'SalesOrderForDelivery[]'.
+  Type '{ items: { alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]; ... 18 more ...; customer: { ...; }; }' is not assignable to type 'SalesOrderForDelivery'.
+    Types of property 'items' are incompatible.
+      Type '{ alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }[]' is not assignable to type 'SOItemWithRemaining[]'.
+        Type '{ alreadyDelivered: number; remainingQuantity: number; id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { ...; } | null; }' is not assignable to type 'SOItemWithRemaining'.
+          Types of property 'productId' are incompatible.
+            Type 'number | null' is not assignable to type 'number'.
+              Type 'null' is not assignable to type 'number'.
+app/dashboard/history-order/_components/history-order-table.tsx(386,25): error TS2322: Type '(string | null)[]' is not assignable to type 'string[]'.
+  Type 'string | null' is not assignable to type 'string'.
+    Type 'null' is not assignable to type 'string'.
+app/dashboard/history-order/_components/history-order-table.tsx(393,25): error TS2322: Type '(string | null)[]' is not assignable to type 'string[]'.
+  Type 'string | null' is not assignable to type 'string'.
+    Type 'null' is not assignable to type 'string'.
+app/dashboard/history-order/_components/history-order-table.tsx(400,25): error TS2322: Type '(string | null)[]' is not assignable to type 'string[]'.
+  Type 'string | null' is not assignable to type 'string'.
+    Type 'null' is not assignable to type 'string'.
+app/dashboard/portal/_components/portal-card.tsx(27,28): error TS2352: Conversion of type 'typeof import("D:/[01] PROJECT/one chitra/node_modules/lucide-react/dist/lucide-react")' to type 'Record<string, ComponentType<{ size?: number | undefined; className?: string | undefined; }>>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'Icon' is incompatible with index signature.
+    Type 'ForwardRefExoticComponent<Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>>' is not comparable to type 'ComponentType<{ size?: number | undefined; className?: string | undefined; }>'.
+      Type 'ForwardRefExoticComponent<Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>>' is not comparable to type 'FunctionComponent<{ size?: number | undefined; className?: string | undefined; }>'.
+        Types of parameters 'props' and 'props' are incompatible.
+          Type '{ size?: number | undefined; className?: string | undefined; }' is not comparable to type 'Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>'.
+            Property 'iconNode' is missing in type '{ size?: number | undefined; className?: string | undefined; }' but required in type 'Omit<IconComponentProps, "ref">'.
+app/dashboard/portal/_components/portal-dialog.tsx(178,55): error TS2352: Conversion of type 'typeof import("D:/[01] PROJECT/one chitra/node_modules/lucide-react/dist/lucide-react")' to type 'Record<string, ComponentType<{ size?: number | undefined; }>>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'Icon' is incompatible with index signature.
+    Type 'ForwardRefExoticComponent<Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>>' is not comparable to type 'ComponentType<{ size?: number | undefined; }>'.
+      Type 'ForwardRefExoticComponent<Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>>' is not comparable to type 'FunctionComponent<{ size?: number | undefined; }>'.
+        Types of parameters 'props' and 'props' are incompatible.
+          Type '{ size?: number | undefined; }' is not comparable to type 'Omit<IconComponentProps, "ref"> & RefAttributes<SVGSVGElement>'.
+            Property 'iconNode' is missing in type '{ size?: number | undefined; }' but required in type 'Omit<IconComponentProps, "ref">'.
+app/dashboard/quotations/[id]/edit/page.tsx(25,83): error TS2322: Type '{ id: number; createdAt: Date; updatedAt: Date; customerId: number; status: string; termsConditions: string | null; notes: string | null; discount: string; shipping: string; createdBy: string; ... 24 more ...; salesPerson: { ...; } | null; }' is not assignable to type '{ id: number; quotationNumber: string | null; customerId: number; quotationDate: Date; validUntil: Date | null; subject: string | null; salesPersonId: string | null; attn: string | null; ... 15 more ...; items: { ...; }[]; }'.
+  Types of property 'currency' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+app/dashboard/quotations/[id]/page.tsx(24,29): error TS2322: Type '{ id: number; createdAt: Date; updatedAt: Date; customerId: number; status: string; termsConditions: string | null; notes: string | null; discount: string; shipping: string; createdBy: string; ... 24 more ...; salesPerson: { ...; } | null; }' is not assignable to type 'QuotationDetailData'.
+  Types of property 'items' are incompatible.
+    Type '{ id: number; description: string | null; productId: number | null; discount: string; quantity: number; unitPrice: string; tax: string; quotationId: number; longDescription: string | null; product: { ...; } | null; }[]' is not assignable to type '{ id: number; productId: number; description: string | null; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }[]'.
+      Type '{ id: number; description: string | null; productId: number | null; discount: string; quantity: number; unitPrice: string; tax: string; quotationId: number; longDescription: string | null; product: { ...; } | null; }' is not assignable to type '{ id: number; productId: number; description: string | null; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }'.
+        Types of property 'productId' are incompatible.
+          Type 'number | null' is not assignable to type 'number'.
+            Type 'null' is not assignable to type 'number'.
+app/dashboard/quotations/_components/quotation-detail.tsx(610,17): error TS2740: Type 'QuotationDetailData' is missing the following properties from type 'QuotationPdfData': address, closingStatus, tags, currency, and 4 more.
+app/dashboard/quotations/page.tsx(30,33): error TS2322: Type '{ id: number; createdAt: Date; updatedAt: Date; customerId: number; status: string; termsConditions: string | null; notes: string | null; discount: string; shipping: string; createdBy: string; ... 25 more ...; salesPerson: { ...; } | null; }[]' is not assignable to type 'QuotationWithRelations[]'.
+  Type '{ id: number; createdAt: Date; updatedAt: Date; customerId: number; status: string; termsConditions: string | null; notes: string | null; discount: string; shipping: string; createdBy: string; ... 25 more ...; salesPerson: { ...; } | null; }' is not assignable to type 'QuotationWithRelations'.
+    Types of property 'currency' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+app/dashboard/r49-dashboard/page.tsx(34,37): error TS2322: Type '{ customers: (string | null)[]; salesmen: (string | null)[]; years: string[]; months: string[]; } | undefined' is not assignable to type '{ customers: string[]; salesmen: string[]; years: string[]; months: string[]; }'.
+  Type 'undefined' is not assignable to type '{ customers: string[]; salesmen: string[]; years: string[]; months: string[]; }'.
+app/dashboard/sales-dashboard/_components/sales-dashboard-client.tsx(232,25): error TS2322: Type '{ category: string | null; year: string; revenue: number; }[]' is not assignable to type 'ChartData[]'.
+  Type '{ category: string | null; year: string; revenue: number; }' is not assignable to type 'ChartData'.
+    Types of property 'category' are incompatible.
+      Type 'string | null' is not assignable to type 'string | undefined'.
+        Type 'null' is not assignable to type 'string | undefined'.
+app/dashboard/sales-dashboard/_components/sales-dashboard-client.tsx(233,25): error TS2322: Type '{ area: string | null; year: string; revenue: number; }[]' is not assignable to type 'ChartData[]'.
+  Type '{ area: string | null; year: string; revenue: number; }' is not assignable to type 'ChartData'.
+    Types of property 'area' are incompatible.
+      Type 'string | null' is not assignable to type 'string | undefined'.
+        Type 'null' is not assignable to type 'string | undefined'.
+app/dashboard/sales-dashboard/page.tsx(25,39): error TS2322: Type '{ customers: (string | null)[]; salesmen: (string | null)[]; revTypes: (string | undefined)[]; areas: string[]; years: string[]; months: string[]; } | undefined' is not assignable to type '{ customers: string[]; salesmen: string[]; revTypes: string[]; areas: string[]; years: string[]; months: string[]; }'.
+  Type 'undefined' is not assignable to type '{ customers: string[]; salesmen: string[]; revTypes: string[]; areas: string[]; years: string[]; months: string[]; }'.
+app/dashboard/sales-documents/page.tsx(34,13): error TS2578: Unused '@ts-expect-error' directive.
+app/dashboard/sales-documents/page.tsx(88,33): error TS2578: Unused '@ts-expect-error' directive.
+app/dashboard/sales-documents/page.tsx(199,41): error TS2578: Unused '@ts-expect-error' directive.
+app/dashboard/sales-orders/[id]/edit/page.tsx(28,13): error TS2322: Type '{ items: { id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { id: number; brand: string | null; createdAt: Date; ... 11 more ...; isConsignment: boolean; } | null; }[]; ... 18 more ...; customer: { ...; }; }' is not assignable to type '{ id: number; invoiceNumber: string | null; customerPo: string | null; customerId: number; warehouseId?: number | null | undefined; salesDate: Date; poReceive?: Date | null | undefined; ... 8 more ...; items: { ...; }[]; }'.
+  Types of property 'items' are incompatible.
+    Type '{ id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { id: number; brand: string | null; createdAt: Date; ... 11 more ...; isConsignment: boolean; } | null; }[]' is not assignable to type '{ id: number; productId: number; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }[]'.
+      Type '{ id: number; productId: number | null; discount: string; salesOrderId: number; quantity: number; unitPrice: string; tax: string; product: { id: number; brand: string | null; createdAt: Date; ... 11 more ...; isConsignment: boolean; } | null; }' is not assignable to type '{ id: number; productId: number; quantity: number; unitPrice: string; discount: string; tax: string; product: Product; }'.
+        Types of property 'productId' are incompatible.
+          Type 'number | null' is not assignable to type 'number'.
+            Type 'null' is not assignable to type 'number'.
+app/dashboard/sales-orders/_components/quick-add-product-dialog.tsx(102,21): error TS2322: Type 'unknown' is not assignable to type 'number'.
+app/dashboard/sales-orders/_components/quick-add-product-dialog.tsx(118,17): error TS2322: Type 'unknown' is not assignable to type 'number'.
+app/dashboard/sales-orders/_components/quick-add-product-dialog.tsx(121,17): error TS2322: Type 'string | undefined' is not assignable to type 'string | null'.
+  Type 'undefined' is not assignable to type 'string | null'.
+app/dashboard/stock-transfers/_components/edit-transfer-dialog.tsx(62,36): error TS2339: Property 'error' does not exist on type '{ success: boolean; } | { success: boolean; error: string; }'.
+  Property 'error' does not exist on type '{ success: boolean; }'.
+app/dashboard/stock-transfers/_components/transfer-dialog.tsx(77,17): error TS2353: Object literal may only specify known properties, and 'productId' does not exist in type '{ sourceWarehouseId: number; destinationWarehouseId: number; items: { productId: number; quantity: number; }[]; transferDate: Date; notes?: string | undefined; }'.
+app/dashboard/stock-transfers/page.tsx(53,68): error TS2339: Property 'completedTransfers' does not exist on type '{ totalTransfers: number; receivedTransfers: number; scheduledTransfers: number; rejectedTransfers: number; }'.
+app/dashboard/stock-transfers/page.tsx(65,68): error TS2339: Property 'pendingTransfers' does not exist on type '{ totalTransfers: number; receivedTransfers: number; scheduledTransfers: number; rejectedTransfers: number; }'.
+app/dashboard/stock-transfers/page.tsx(72,37): error TS2322: Type '{ id: number; createdAt: Date; updatedAt: Date; status: string; notes: string | null; deliveryId: number | null; referenceNumber: string | null; fromWarehouseId: number; toWarehouseId: number; ... 7 more ...; toWarehouse: { ...; }; }[]' is not assignable to type 'Transfer[]'.
+  Type '{ id: number; createdAt: Date; updatedAt: Date; status: string; notes: string | null; deliveryId: number | null; referenceNumber: string | null; fromWarehouseId: number; toWarehouseId: number; ... 7 more ...; toWarehouse: { ...; }; }' is not assignable to type 'Transfer'.
+    Types of property 'receivedStatus' are incompatible.
+      Type 'string' is not assignable to type '"Scheduled" | "Received" | "Rejected"'.
+app/dashboard/stocks/_components/stock-table.tsx(290,69): error TS2339: Property 'error' does not exist on type '{ success: boolean; } | { success: boolean; error: string; }'.
+  Property 'error' does not exist on type '{ success: boolean; }'.
+components/approval/workflow-canvas.tsx(1073,21): error TS2322: Type '(_event: unknown, params: { nodeId: string | null; handleId: string | null; handleType: "source" | "target"; }) => void' is not assignable to type 'OnConnectStart'.
+  Types of parameters 'params' and 'params' are incompatible.
+    Type 'OnConnectStartParams' is not assignable to type '{ nodeId: string | null; handleId: string | null; handleType: "source" | "target"; }'.
+      Types of property 'handleType' are incompatible.
+        Type 'HandleType | null' is not assignable to type '"source" | "target"'.
+          Type 'null' is not assignable to type '"source" | "target"'.
+lib/s3.ts(1,26): error TS2307: Cannot find module '@aws-sdk/client-s3' or its corresponding type declarations.
+next.config.ts(13,3): error TS2353: Object literal may only specify known properties, and 'eslint' does not exist in type 'NextConfig'.
+scripts/check-constraints.ts(13,26): error TS2345: Argument of type '(r: { conname: string; }) => void' is not assignable to parameter of type '(value: Record<string, unknown>, index: number, array: Record<string, unknown>[]) => void'.
+  Types of parameters 'r' and 'value' are incompatible.
+    Property 'conname' is missing in type 'Record<string, unknown>' but required in type '{ conname: string; }'.
+scripts/diagnose-so-save.ts(45,47): error TS2345: Argument of type '{ invoiceNumber: string; customerId: number; warehouseId: number; salesDate: string; status: "draft" | "confirmed" | "delivered" | "cancelled"; items: { productId: number; quantity: number; unitPrice: number; discount: number; tax: number; }[]; discount: number; shipping: number; categoryPo: string; categoryProduct:...' is not assignable to parameter of type '{ customerId: number; salesDate: string | Date; status: "draft" | "cancelled" | "confirmed" | "completed"; discount: number; shipping: number; items: { productId: number; quantity: number; unitPrice: number; discount: number; tax: number; id?: number | undefined; }[]; ... 8 more ...; notes?: string | undefined; }'.
+  Types of property 'status' are incompatible.
+    Type '"draft" | "cancelled" | "confirmed" | "delivered"' is not assignable to type '"draft" | "cancelled" | "confirmed" | "completed"'.
+      Type '"delivered"' is not assignable to type '"draft" | "cancelled" | "confirmed" | "completed"'.
+scripts/fix-items-tables.ts(11,79): error TS18046: 'error' is of type 'unknown'.
+scripts/reset-user-password.ts(54,38): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(value: { id: string | SQL<unknown> | Placeholder<string, any>; createdAt: SQL<unknown> | Date | Placeholder<string, any>; updatedAt: SQL<unknown> | Date | Placeholder<...>; ... 9 more ...; password?: string | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error.
+    Argument of type '{ userId: string; accountId: string; providerId: string; password: string; }' is not assignable to parameter of type '{ id: string | SQL<unknown> | Placeholder<string, any>; createdAt: SQL<unknown> | Date | Placeholder<string, any>; updatedAt: SQL<unknown> | Date | Placeholder<...>; ... 9 more ...; password?: string | ... 3 more ... | undefined; }'.
+      Type '{ userId: string; accountId: string; providerId: string; password: string; }' is missing the following properties from type '{ id: string | SQL<unknown> | Placeholder<string, any>; createdAt: SQL<unknown> | Date | Placeholder<string, any>; updatedAt: SQL<unknown> | Date | Placeholder<...>; ... 9 more ...; password?: string | ... 3 more ... | undefined; }': id, createdAt, updatedAt
+  Overload 2 of 2, '(values: { id: string | SQL<unknown> | Placeholder<string, any>; createdAt: SQL<unknown> | Date | Placeholder<string, any>; updatedAt: SQL<unknown> | Date | Placeholder<...>; ... 9 more ...; password?: string | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error.
+    Object literal may only specify known properties, and 'userId' does not exist in type '{ id: string | SQL<unknown> | Placeholder<string, any>; createdAt: SQL<unknown> | Date | Placeholder<string, any>; updatedAt: SQL<unknown> | Date | Placeholder<...>; ... 9 more ...; password?: string | ... 3 more ... | undefined; }[]'.
+scripts/test-delivery-costs.ts(47,45): error TS2345: Argument of type '{ salesOrderId: number; warehouseId: number; scheduledDate: string; status: "scheduled"; deliveryType: "full"; isExternal: boolean; costGasoline: number; costToll: number; costParking: number; costMeals: number; costMaintenance: number; costOthers: number; items: { ...; }[]; }' is not assignable to parameter of type '{ salesOrderId: number; scheduledDate: string | Date; status: "scheduled" | "cancelled" | "ready" | "partial" | "in_transit" | "delivered"; deliveryType: "full" | "partial"; ... 19 more ...; notes?: string | ... 1 more ... | undefined; }'.
+  Property 'shippingCost' is missing in type '{ salesOrderId: number; warehouseId: number; scheduledDate: string; status: "scheduled"; deliveryType: "full"; isExternal: boolean; costGasoline: number; costToll: number; costParking: number; costMeals: number; costMaintenance: number; costOthers: number; items: { ...; }[]; }' but required in type '{ salesOrderId: number; scheduledDate: string | Date; status: "scheduled" | "cancelled" | "ready" | "partial" | "in_transit" | "delivered"; deliveryType: "full" | "partial"; ... 19 more ...; notes?: string | ... 1 more ... | undefined; }'.
+scripts/test-so-automation.ts(80,76): error TS2339: Property 'error' does not exist on type '{ success: boolean; } | { success: boolean; error: string; }'.
+  Property 'error' does not exist on type '{ success: boolean; }'.
+verify-stock-logic.ts(54,29): error TS2339: Property 'id' does not exist on type '{ success: boolean; id: number; } | { success: boolean; error: string; }'.
+  Property 'id' does not exist on type '{ success: boolean; error: string; }'.

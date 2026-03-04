@@ -54,7 +54,7 @@ import { ProgressLoading } from "@/components/ui/progress-loading"
 import { getFleetList } from "@/app/actions/fleet"
 import { useQuery } from "@tanstack/react-query"
 import Fuse from "fuse.js"
-import { FleetDetailSheet } from "./fleet-detail-sheet"
+import { FleetDetailSheet, type FleetItem } from "./fleet-detail-sheet"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -99,7 +99,7 @@ export function CustomerSegmentationClient() {
     const [endDate, setEndDate] = useState('2025-12-31');
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [selectedFleetData, setSelectedFleetData] = useState<Array<{ customer: string; [key: string]: unknown }>>([]);
+    const [selectedFleetData, setSelectedFleetData] = useState<FleetItem[]>([]);
     const [fleetSheetOpen, setFleetSheetOpen] = useState(false);
 
     // Fetch fleet data

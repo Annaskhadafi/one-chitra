@@ -10,7 +10,14 @@ export const metadata = {
 export default async function SalesDashboardPage() {
     const filtersResponse = await getSalesDashboardFilters();
 
-    const filterOptions = filtersResponse.success ? filtersResponse.data : {
+    const filterOptions = filtersResponse.success && filtersResponse.data ? {
+        customers: filtersResponse.data.customers.filter((v): v is string => Boolean(v)),
+        salesmen: filtersResponse.data.salesmen.filter((v): v is string => Boolean(v)),
+        revTypes: filtersResponse.data.revTypes.filter((v): v is string => Boolean(v)),
+        areas: filtersResponse.data.areas,
+        years: filtersResponse.data.years,
+        months: filtersResponse.data.months,
+    } : {
         customers: [],
         salesmen: [],
         revTypes: [],

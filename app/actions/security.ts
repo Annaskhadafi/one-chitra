@@ -227,9 +227,18 @@ export async function deleteSecurityUser(targetUserId: string) {
 
         revalidatePath("/dashboard/security/users")
         return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const errorCode = typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code: unknown }).code)
+            : undefined
+        const errorMessage = error instanceof Error
+            ? error.message
+            : typeof error === "string"
+                ? error
+                : ""
+
         // Cek jika error adalah constraint violation dari database
-        if (error.code === '23503' || error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
+        if (errorCode === "23503" || errorMessage.includes("foreign key constraint") || errorMessage.includes("violates foreign key")) {
             return {
                 success: false,
                 error: "Tidak bisa menghapus user yang masih memiliki kaitan riwayat transaksi di sistem. Rekomendasi: Gunakan fitur 'Ban User' untuk menonaktifkan pengguna ini."
@@ -494,6 +503,7 @@ export async function getAuditLogs(params: {
 export async function getActiveSessions() {
     const session = await getAuthenticatedSession("security", "view")
     const currentSession = session
+    const currentSessionId = (currentSession as { session?: { id?: string } }).session?.id ?? null
 
     // Admins see all sessions; others see only their own
     const dbUser = await db.query.user.findFirst({
@@ -531,7 +541,7 @@ export async function getActiveSessions() {
         ...s,
         // Hide full token — expose only last 8 chars for identification
         tokenPreview: s.token.slice(-8),
-        isCurrent: s.id === currentSession.session.id,
+        isCurrent: currentSessionId ? s.id === currentSessionId : false,
     }))
 }
 
@@ -569,7 +579,11 @@ export async function revokeSession(targetSessionId: string) {
 
 export async function revokeAllOtherSessions() {
     const session = await getAuthenticatedSession("security", "edit")
-    const currentSessionId = session.session.id
+    const currentSessionId = (session as { session?: { id?: string } }).session?.id
+
+    if (!currentSessionId) {
+        return { success: false, error: "Current session not found" }
+    }
 
     await db
         .delete(sessionTable)

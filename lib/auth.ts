@@ -1,10 +1,40 @@
-import { betterAuth } from "better-auth";
+                                                                                                                                                  import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, magicLink } from "better-auth/plugins";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
 import { sendMagicLinkEmail, sendTemplatedEmail } from "@/lib/email";
 import bcrypt from "bcryptjs";
+
+const MIN_AUTH_SECRET_LENGTH = 32;
+
+function shouldEnforceStrictAuthSecret(): boolean {
+    const value = process.env.BETTER_AUTH_ENFORCE_STRICT_SECRET?.toLowerCase().trim();
+    return value === "1" || value === "true" || value === "yes";
+}
+
+function validateBetterAuthSecret(): void {
+    if (!shouldEnforceStrictAuthSecret()) {
+        return;
+    }
+
+    const secret = process.env.BETTER_AUTH_SECRET?.trim() ?? "";
+    const isPlaceholder = [
+        "your_secret_key_here",
+        "generate-a-very-secure-32-character-key",
+    ].includes(secret);
+    const isWeak = !secret || secret.length < MIN_AUTH_SECRET_LENGTH || isPlaceholder;
+
+    if (!isWeak) {
+        return;
+    }
+
+    const message =
+        `BETTER_AUTH_SECRET must be set to a high-entropy value with at least ${MIN_AUTH_SECRET_LENGTH} characters.` +
+        " Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"";
+
+    throw new Error(message);
+}
 
 // Ensure URL has protocol prefix
 function normalizeUrl(url?: string): string {
@@ -33,8 +63,10 @@ function resolveBaseURL(): string {
 }
 
 const baseURL = resolveBaseURL();
+validateBetterAuthSecret();
 
 export const auth = betterAuth({
+    secret: process.env.BETTER_AUTH_SECRET,
     baseURL,
     database: drizzleAdapter(db, {
         provider: "pg",

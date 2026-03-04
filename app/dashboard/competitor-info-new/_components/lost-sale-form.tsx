@@ -46,7 +46,7 @@ import { toast } from "sonner"
 const formSchema = z.object({
     businessConsultantId: z.string().min(1, "Consultant is required"),
     productType: z.string().min(1, "Product type is required"),
-    offeringDate: z.date({ required_error: "Offering date is required" }),
+    offeringDate: z.date({ error: "Offering date is required" }),
     customerName: z.string().min(1, "Customer name is required"),
     productDetail: z.string().min(1, "Product detail is required"),
     totalOffering: z.string().min(1, "Total offering is required"),

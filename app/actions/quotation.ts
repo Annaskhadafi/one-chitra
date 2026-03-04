@@ -25,9 +25,22 @@ export async function getQuotations() {
     })
 }
 
-export async function getQuotation(id: number) {
+function toValidQuotationId(value: number | string) {
+    const parsed = typeof value === "number" ? value : Number.parseInt(value, 10)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        return null
+    }
+    return parsed
+}
+
+export async function getQuotation(id: number | string) {
+    const safeId = toValidQuotationId(id)
+    if (safeId === null) {
+        return null
+    }
+
     return await db.query.quotations.findFirst({
-        where: eq(quotations.id, id),
+        where: eq(quotations.id, safeId),
         with: {
             customer: true,
             salesPerson: true,

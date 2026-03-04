@@ -193,7 +193,7 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                         </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1 font-semibold italic">
-                        VISION "TO BE THE TRUSTED LEADER IN MINING TIRE SOLUTION"
+                        VISION &quot;TO BE THE TRUSTED LEADER IN MINING TIRE SOLUTION&quot;
                     </p>
                     <div className="flex gap-2 mt-1.5">
                         {['Resilience', 'Adaptive', 'Creative', 'Assertive Leader'].map((v, i) => (

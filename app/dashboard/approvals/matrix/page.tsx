@@ -101,6 +101,34 @@ export default async function ApprovalMatrixPage() {
         getApprovalMatrixImports(),
     ])
 
+    const handleCreateStructure = async (formData: FormData): Promise<void> => {
+        await createApprovalOrgStructure(formData)
+    }
+
+    const handleSeedSampleData = async (): Promise<void> => {
+        await seedApprovalOrgSampleData()
+    }
+
+    const handleImportMatrix = async (formData: FormData): Promise<void> => {
+        await importApprovalMatrix(formData)
+    }
+
+    const handleUpdateStructure = async (formData: FormData): Promise<void> => {
+        await updateApprovalOrgStructure(formData)
+    }
+
+    const handleDeleteStructure = async (formData: FormData): Promise<void> => {
+        await deleteApprovalOrgStructure(formData)
+    }
+
+    const handleUpdateNode = async (formData: FormData): Promise<void> => {
+        await updateApprovalOrgNode(formData)
+    }
+
+    const handleDeleteNode = async (formData: FormData): Promise<void> => {
+        await deleteApprovalOrgNode(formData)
+    }
+
     return (
         <div className="space-y-6 p-6">
             <div>
@@ -119,7 +147,7 @@ export default async function ApprovalMatrixPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <form action={createApprovalOrgStructure} className="space-y-3">
+                        <form action={handleCreateStructure} className="space-y-3">
                             <div className="space-y-1.5">
                                 <Label htmlFor="name">Nama Struktur</Label>
                                 <Input id="name" name="name" placeholder="Contoh: Struktur Approver Project A" required />
@@ -138,7 +166,7 @@ export default async function ApprovalMatrixPage() {
                             </div>
                             <Button type="submit">Simpan Struktur</Button>
                         </form>
-                        <form action={seedApprovalOrgSampleData} className="mt-3">
+                        <form action={handleSeedSampleData} className="mt-3">
                             <Button type="submit" variant="secondary">Generate Sample Data</Button>
                         </form>
                     </CardContent>
@@ -155,7 +183,7 @@ export default async function ApprovalMatrixPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <form action={importApprovalMatrix} className="grid gap-3 md:grid-cols-3">
+                        <form action={handleImportMatrix} className="grid gap-3 md:grid-cols-3">
                             <div className="space-y-1.5 md:col-span-2">
                                 <Label htmlFor="matrixFile">Matrix File</Label>
                                 <Input id="matrixFile" name="matrixFile" type="file" accept=".csv,.xlsx,.xls" required />
@@ -225,7 +253,7 @@ export default async function ApprovalMatrixPage() {
                                     <CardDescription>{structure.description || "-"}</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <form action={updateApprovalOrgStructure} className="grid gap-3 rounded-md border p-3 md:grid-cols-6">
+                                    <form action={handleUpdateStructure} className="grid gap-3 rounded-md border p-3 md:grid-cols-6">
                                         <input type="hidden" name="structureId" value={structure.id} />
                                         <div className="space-y-1.5 md:col-span-2">
                                             <Label htmlFor={`structure-name-${structure.id}`}>Nama Struktur</Label>
@@ -253,7 +281,7 @@ export default async function ApprovalMatrixPage() {
                                         </div>
                                     </form>
 
-                                    <form action={deleteApprovalOrgStructure}>
+                                    <form action={handleDeleteStructure}>
                                         <input type="hidden" name="structureId" value={structure.id} />
                                         <Button type="submit" variant="destructive">Delete Matrix</Button>
                                     </form>
@@ -281,7 +309,7 @@ export default async function ApprovalMatrixPage() {
                                         ) : (
                                             nodes.map((node) => (
                                                 <div key={node.id} className="grid gap-2 rounded-md border p-2 md:grid-cols-8">
-                                                    <form action={updateApprovalOrgNode} className="grid gap-2 md:col-span-7 md:grid-cols-7">
+                                                    <form action={handleUpdateNode} className="grid gap-2 md:col-span-7 md:grid-cols-7">
                                                         <input type="hidden" name="structureId" value={structure.id} />
                                                         <input type="hidden" name="nodeId" value={node.id} />
 
@@ -317,7 +345,7 @@ export default async function ApprovalMatrixPage() {
                                                         <Button type="submit">Edit</Button>
                                                     </form>
 
-                                                    <form action={deleteApprovalOrgNode} className="md:col-span-1">
+                                                    <form action={handleDeleteNode} className="md:col-span-1">
                                                         <input type="hidden" name="structureId" value={structure.id} />
                                                         <input type="hidden" name="nodeId" value={node.id} />
                                                         <Button type="submit" variant="destructive" className="w-full">Delete</Button>

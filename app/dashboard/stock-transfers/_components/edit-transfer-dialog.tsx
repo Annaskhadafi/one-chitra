@@ -59,7 +59,7 @@ export function EditTransferDialog({ transfer, open, onOpenChange }: EditTransfe
                 toast.success("Transfer updated successfully")
                 onOpenChange(false)
             } else {
-                toast.error(result.error || "Failed to update transfer")
+                toast.error("error" in result ? result.error : "Failed to update transfer")
             }
         } catch (error) {
             toast.error("An error occurred")

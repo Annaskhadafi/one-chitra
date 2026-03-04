@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock, getStocks } from "@/app/actions/stock"
 import { StockDialog } from "./stock-dialog"
 import { StockCSVUpload } from "./stock-csv-upload"
@@ -67,6 +67,12 @@ interface StockTableProps {
 }
 
 export function StockTable({ data: initialData, products, warehouses, defaultRate }: StockTableProps) {
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const { data: stocks = initialData, isLoading, refetch } = useQuery({
         queryKey: ["stocks"],
         queryFn: async () => {
@@ -287,7 +293,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                                         onClick={async () => {
                                             const result = await deleteStock(row.original.id)
                                             if (result.success) toast.success("Stock entry deleted")
-                                            else toast.error(result.error)
+                                            else toast.error("error" in result ? result.error : "Failed to delete stock")
                                         }}
                                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
@@ -402,6 +408,15 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                 toast.error(result.error)
             }
         }
+    }
+
+    if (!mounted) {
+        return (
+            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Preparing stock interface...</p>
+            </div>
+        )
     }
 
     if (isLoading && !stocks.length) {

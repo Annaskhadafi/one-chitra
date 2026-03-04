@@ -1,6 +1,16 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
+type StockMovementColumnRow = {
+    column_name: string;
+    data_type: string;
+    is_nullable: string;
+};
+
+type ExistsRow = {
+    exists: boolean;
+};
+
 async function checkSchema() {
     try {
         console.log("🔍 Checking database schema...\n");
@@ -15,12 +25,13 @@ async function checkSchema() {
         `);
 
         console.log("   Columns found:");
-        result.rows.forEach((row: any) => {
-            console.log(`   - ${row.column_name} (${row.data_type}) ${row.is_nullable === 'YES' ? 'NULL' : 'NOT NULL'}`);
+        result.rows.forEach((row) => {
+            const typedRow = row as StockMovementColumnRow;
+            console.log(`   - ${typedRow.column_name} (${typedRow.data_type}) ${typedRow.is_nullable === 'YES' ? 'NULL' : 'NOT NULL'}`);
         });
 
         // Check if new columns exist
-        const columnNames = result.rows.map((row: any) => row.column_name);
+        const columnNames = result.rows.map((row) => (row as StockMovementColumnRow).column_name);
         const requiredColumns = ['customer_id', 'from_warehouse_id', 'to_warehouse_id', 'notes'];
         
         console.log("\n2. Checking for new columns...");
@@ -42,7 +53,7 @@ async function checkSchema() {
                     WHERE table_name = ${table}
                 );
             `);
-            const exists = (tableCheck.rows[0] as any).exists;
+            const exists = (tableCheck.rows[0] as ExistsRow).exists;
             console.log(`   ${exists ? '✓' : '✗'} ${table} table`);
         }
 

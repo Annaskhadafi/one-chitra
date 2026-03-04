@@ -83,6 +83,28 @@ export default async function ApprovalInboxPage() {
                                 </TableHeader>
                                 <TableBody>
                                     {pendingTasks.map((task) => (
+                                        (() => {
+                                            const stepConditionJson = (typeof task.stepConditionJson === "object" && task.stepConditionJson !== null)
+                                                ? (task.stepConditionJson as Record<string, unknown>)
+                                                : {}
+                                            const instructions = typeof stepConditionJson.instructions === "string"
+                                                ? stepConditionJson.instructions.trim()
+                                                : ""
+                                            const workflowNotePolicy = stepConditionJson.workflowNotePolicy === "optional"
+                                                || stepConditionJson.workflowNotePolicy === "required_on_approve"
+                                                || stepConditionJson.workflowNotePolicy === "required_on_reject"
+                                                || stepConditionJson.workflowNotePolicy === "required_always"
+                                                ? stepConditionJson.workflowNotePolicy
+                                                : "required_on_approve"
+                                            const noteHint = workflowNotePolicy === "optional"
+                                                ? "Note optional"
+                                                : workflowNotePolicy === "required_on_reject"
+                                                    ? "Note wajib saat reject"
+                                                    : workflowNotePolicy === "required_always"
+                                                        ? "Note wajib untuk approve/reject"
+                                                        : "Note wajib saat approve"
+
+                                            return (
                                         <TableRow key={task.assignmentId}>
                                             <TableCell className="font-medium">{task.formKey}</TableCell>
                                             <TableCell>{task.entityId}</TableCell>
@@ -92,19 +114,27 @@ export default async function ApprovalInboxPage() {
                                                     <Badge variant="outline">Step {task.stepOrder}</Badge>
                                                     <span>{task.stepName}</span>
                                                 </div>
+                                                {instructions ? (
+                                                    <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2">{instructions}</p>
+                                                ) : null}
                                             </TableCell>
                                             <TableCell>
                                                 {new Date(task.submittedAt).toLocaleString("id-ID")}
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col items-end gap-2">
-                                                    <form action={submitApprovalDecision} className="flex items-center justify-end gap-2">
+                                                    <span className="text-[10px] text-muted-foreground">{noteHint}</span>
+                                                    <form
+                                                        action={async (formData: FormData): Promise<void> => {
+                                                            await submitApprovalDecision(formData)
+                                                        }}
+                                                        className="flex items-center justify-end gap-2"
+                                                    >
                                                         <input type="hidden" name="assignmentId" value={task.assignmentId} />
                                                         <Input
                                                             name="comment"
-                                                            placeholder="Comment (wajib saat approve)"
+                                                            placeholder="Comment / workflow note"
                                                             className="h-8 w-44"
-                                                            required
                                                         />
                                                         <Button size="sm" type="submit" name="decision" value="approve" className="gap-1">
                                                             <CheckCircle2 className="h-4 w-4" />
@@ -121,6 +151,8 @@ export default async function ApprovalInboxPage() {
                                                 </div>
                                             </TableCell>
                                         </TableRow>
+                                            )
+                                        })()
                                     ))}
                                 </TableBody>
                             </Table>

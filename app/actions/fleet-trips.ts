@@ -117,12 +117,18 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
                 deliveredItems.forEach(d => deliveredMap.set(d.salesOrderItemId!, Number(d.totalDelivered)))
 
                 const itemsToDeliver = soItems
-                    .map(item => ({
-                        salesOrderItemId: item.id,
-                        productId: item.productId,
-                        remainingQuantity: item.quantity - (deliveredMap.get(item.id) || 0),
-                        productCategory: item.product.category,
-                    }))
+                    .flatMap(item => {
+                        if (item.productId === null || !item.product) {
+                            return []
+                        }
+
+                        return [{
+                            salesOrderItemId: item.id,
+                            productId: item.productId,
+                            remainingQuantity: item.quantity - (deliveredMap.get(item.id) || 0),
+                            productCategory: item.product.category,
+                        }]
+                    })
                     .filter(item => item.remainingQuantity > 0)
 
                 if (itemsToDeliver.length === 0) continue // Skip if fully delivered

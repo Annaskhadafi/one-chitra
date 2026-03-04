@@ -102,25 +102,33 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
         const offset = (page - 1) * pageSize;
 
         // Filter logic
-        const filterArray: SQL[] = [
-            and(
-                isNotNull(historyOrders.billingDate),
-                ne(historyOrders.billingDate, ""),
-                or(
-                    isNull(historyOrders.customerName),
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-                )
+        const filterArray: SQL[] = [];
+
+        const baseFilter = and(
+            isNotNull(historyOrders.billingDate),
+            ne(historyOrders.billingDate, ""),
+            or(
+                isNull(historyOrders.customerName),
+                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
             )
-        ];
+        );
+
+        if (baseFilter) {
+            filterArray.push(baseFilter);
+        }
 
         if (search) {
-            filterArray.push(or(
+            const searchFilter = or(
                 sql`${historyOrders.customerName} ILIKE ${`%${search}%`}`,
                 sql`${historyOrders.materialNo} ILIKE ${`%${search}%`}`,
                 sql`${historyOrders.materialDescription} ILIKE ${`%${search}%`}`,
                 sql`${historyOrders.poNo} ILIKE ${`%${search}%`}`,
                 sql`${historyOrders.salesman} ILIKE ${`%${search}%`}`
-            ));
+            );
+
+            if (searchFilter) {
+                filterArray.push(searchFilter);
+            }
         }
 
         if (customers.length > 0) filterArray.push(sql`${historyOrders.customerName} IN ${customers}`);
@@ -129,10 +137,16 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
 
         // Date filters for MM/DD/YYYY text format
         if (years.length > 0) {
-            filterArray.push(or(...years.map(y => sql`${historyOrders.billingDate} LIKE ${`%/%/${y}`} `)));
+            const yearFilter = or(...years.map(y => sql`${historyOrders.billingDate} LIKE ${`%/%/${y}`} `));
+            if (yearFilter) {
+                filterArray.push(yearFilter);
+            }
         }
         if (months.length > 0) {
-            filterArray.push(or(...months.map(m => sql`${historyOrders.billingDate} LIKE ${`${parseInt(m)}/%/%`} `)));
+            const monthFilter = or(...months.map(m => sql`${historyOrders.billingDate} LIKE ${`${parseInt(m)}/%/%`} `));
+            if (monthFilter) {
+                filterArray.push(monthFilter);
+            }
         }
 
         const finalWhere = and(...filterArray);

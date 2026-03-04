@@ -27,7 +27,7 @@ export default async function QuotationsPage() {
             </div>
 
             <div className="flex-1">
-                <QuotationTable data={quotations} />
+                <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
             </div>
         </div>
     )

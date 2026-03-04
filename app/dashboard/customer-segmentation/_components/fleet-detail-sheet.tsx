@@ -38,7 +38,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 
-interface FleetItem {
+export interface FleetItem {
     id_fleet_list: string
     customer: string
     site: string

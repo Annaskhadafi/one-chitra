@@ -26,7 +26,7 @@ export async function getCompetitorInfo() {
 
         const csvText = await response.text();
 
-        const { data } = Papa.parse(csvText, {
+        const { data } = Papa.parse<Record<string, string>>(csvText, {
             header: true,
             skipEmptyLines: true,
             transformHeader: (header: string) => {
@@ -35,19 +35,19 @@ export async function getCompetitorInfo() {
         });
 
         // Map CSV headers to our interface keys
-        const formattedData: CompetitorItem[] = data.map((item: Record<string, unknown>) => ({
-            timestamp: item['Timestamp'] || '',
-            customer: item['Nama Customer'] || '',
-            size_tire: item['Size Tire'] || '',
-            brand: item['Brand'] || '',
-            category_tire: item['Category Tire'] || '',
-            supplier: item['Supplier'] || '',
-            currency: item['Currency'] || '',
-            price: item['Price'] || '',
-            remark: item['Remark / Delivery Drop Point'] || '',
-            tanggal_informasi: item['Tanggal Informasi'] || '',
-            business_consultant: item['Business Consultant'] || '',
-            price_formatted: formatPrice(item['Price'], item['Currency'])
+        const formattedData: CompetitorItem[] = data.map((item) => ({
+            timestamp: String(item["Timestamp"] ?? ""),
+            customer: String(item["Nama Customer"] ?? ""),
+            size_tire: String(item["Size Tire"] ?? ""),
+            brand: String(item["Brand"] ?? ""),
+            category_tire: String(item["Category Tire"] ?? ""),
+            supplier: String(item["Supplier"] ?? ""),
+            currency: String(item["Currency"] ?? ""),
+            price: String(item["Price"] ?? ""),
+            remark: String(item["Remark / Delivery Drop Point"] ?? ""),
+            tanggal_informasi: String(item["Tanggal Informasi"] ?? ""),
+            business_consultant: String(item["Business Consultant"] ?? ""),
+            price_formatted: formatPrice(String(item["Price"] ?? ""), String(item["Currency"] ?? ""))
         }));
 
         return { success: true, data: formattedData };

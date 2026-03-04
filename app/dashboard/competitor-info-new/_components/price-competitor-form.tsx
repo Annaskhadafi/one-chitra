@@ -44,7 +44,7 @@ import { createCompetitorPrice } from "@/app/actions/competitor-new"
 import { toast } from "sonner"
 
 const formSchema = z.object({
-    infoDate: z.date({ required_error: "Information date is required" }),
+    infoDate: z.date({ error: "Information date is required" }),
     businessConsultantId: z.string().optional().nullable(),
     customerName: z.string().min(1, "Customer name is required"),
     productSize: z.string().min(1, "Product size is required"),
@@ -92,7 +92,7 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
                 ...values,
                 businessConsultantId: values.businessConsultantId === "none" ? null : values.businessConsultantId
             }
-            const result = await createCompetitorPrice(submissionData)
+            const result = await createCompetitorPrice(submissionData as Parameters<typeof createCompetitorPrice>[0])
             if (result.success) {
                 toast.success("Record created successfully")
                 form.reset()

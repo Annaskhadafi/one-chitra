@@ -4,7 +4,7 @@
  * Tahun 2025 & 2026
  */
 
-export type HolidayType = "national_holiday" | "joint_leave"
+export type HolidayType = "national_holiday" | "joint_leave" | "observance"
 
 export interface IndonesiaHoliday {
   date: string // format: YYYY-MM-DD

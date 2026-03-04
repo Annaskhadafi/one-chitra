@@ -332,6 +332,34 @@ export const navigationConfig: NavSection[] = [
                 ],
             },
             {
+                title: "Integration & Sync",
+                url: "#",
+                icon: Database,
+                resource: "admin",
+                items: [
+                    {
+                        title: "SAP Stock Feed (PostgreSQL)",
+                        url: "/dashboard/stocks-sap-new",
+                        resource: "stocks-sap",
+                    },
+                    {
+                        title: "SAP Stock Feed (Live API)",
+                        url: "/dashboard/stocks-sap",
+                        resource: "stocks-sap",
+                    },
+                    {
+                        title: "SAP Sync Report",
+                        url: "/dashboard/reports/sap",
+                        resource: "reports",
+                    },
+                    {
+                        title: "Email Delivery Logs",
+                        url: "/dashboard/settings/email",
+                        resource: "email-settings",
+                    },
+                ],
+            },
+            {
                 title: "Admin",
                 url: "#",
                 icon: Mail,

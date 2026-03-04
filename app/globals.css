@@ -122,3 +122,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .approval-workflow-canvas .react-flow__handle {
+    pointer-events: all !important;
+    cursor: crosshair;
+  }
+
+  .approval-workflow-canvas .react-flow__edgeupdater {
+    pointer-events: all !important;
+  }
+}

@@ -8,7 +8,10 @@ export default async function CreateDeliveryPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
-            <DeliveryForm salesOrders={salesOrders} warehouses={warehouses} />
+            <DeliveryForm
+                salesOrders={salesOrders as Parameters<typeof DeliveryForm>[0]["salesOrders"]}
+                warehouses={warehouses}
+            />
         </div>
     )
 }

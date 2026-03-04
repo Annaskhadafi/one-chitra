@@ -68,7 +68,6 @@ export async function getR49DashboardFilters() {
 
 
 export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
-    let topCustomersQuery: ReturnType<typeof db.select> | null = null;
     try {
         const {
             years = [],
@@ -117,7 +116,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
             ? sql`SUM(CASE WHEN split_part(${historyOrders.billingDate}, '/', 3) = ${sortByYear} THEN COALESCE(${historyOrders.revenueInDocCurr}, 0) ELSE 0 END)`
             : sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`;
 
-        topCustomersQuery = db.select({
+        const paginatedCustomers = await db.select({
             customerName: historyOrders.customerName,
             totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
         })
@@ -127,8 +126,6 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
             .orderBy(sortOrder === 'desc' ? desc(orderExpr) : asc(orderExpr))
             .limit(pageSize)
             .offset(offset);
-
-        const paginatedCustomers = await topCustomersQuery;
         const totalCustomersCountResult = await db.select({ count: sql<number>`COUNT(DISTINCT ${historyOrders.customerName})` })
             .from(historyOrders)
             .where(finalWhere);
@@ -217,10 +214,6 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
         };
     } catch (error: unknown) {
         console.error("Failed to fetch R49 dashboard data:", error);
-        if (topCustomersQuery) {
-            // Error logging preserved for telemetry in production if needed, or removed
-            // console.log("Failed SQL:", topCustomersQuery.toSQL().sql);
-        }
         return { success: false, error: "Failed to fetch data" };
     }
 }

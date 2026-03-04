@@ -104,7 +104,9 @@ tar -xzf uploads-backup-20240224.tar.gz -C /mnt/data/one-chitra/uploads/
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 
 # Auth
-BETTER_AUTH_SECRET=your_secret_key_here
+# Generate with:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+BETTER_AUTH_SECRET=replace_with_64_hex_chars_generated_secret
 BETTER_AUTH_URL=https://yourdomain.com
 NEXT_PUBLIC_BETTER_AUTH_URL=https://yourdomain.com
 

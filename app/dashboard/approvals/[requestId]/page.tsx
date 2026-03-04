@@ -42,10 +42,15 @@ export default async function ApprovalRequestDetailPage({
     const basePath = normalizedModulePath.endsWith("/create")
         ? normalizedModulePath.replace(/\/create$/, "")
         : normalizedModulePath
+    const resolvedPreviewEntityUrl = typeof detail.previewEntityUrl === "string"
+        ? detail.previewEntityUrl.trim()
+        : ""
 
     const candidateEmbedUrls = [
+        resolvedPreviewEntityUrl,
         basePath ? `${basePath}/${detail.entityId}` : "",
         basePath ? `${basePath}?id=${encodeURIComponent(detail.entityId)}` : "",
+        basePath ? `${basePath}?quotationNumber=${encodeURIComponent(detail.entityId)}` : "",
         normalizedModulePath ? `${normalizedModulePath}?id=${encodeURIComponent(detail.entityId)}` : "",
         normalizedModulePath ? `${normalizedModulePath}?entityId=${encodeURIComponent(detail.entityId)}` : "",
     ].filter((url, index, arr): url is string => Boolean(url) && arr.indexOf(url) === index)

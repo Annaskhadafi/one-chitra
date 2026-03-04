@@ -47,7 +47,6 @@ export type QuotationItem = InferSelectModel<typeof quotationItems>
 export type NewQuotationItem = InferInsertModel<typeof quotationItems>
 
 export type BillingRecordDisplay = {
-    deliveryItemId: number
     billingRecordId: number | null
     no: string | null
     year: number | null
@@ -79,9 +78,9 @@ export type BillingRecordDisplay = {
     receiverDate: Date | null
     recvDateApproved: Date | null
     eFaktur: string | null
-    status: string
+    status: string | null
     deliveryNumber: string | null
-    originalPrice: string
+    originalPrice: string | null
 }
 
 export type StockMovement = InferSelectModel<typeof stockMovements> & {

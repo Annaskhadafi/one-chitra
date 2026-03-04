@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input"
 import { updateBillingRecord } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import type { BillingRecordDisplay } from "@/lib/types"
 
 interface EditableCellProps {
     row: {
         getValue: (column: string) => unknown;
-        original: Record<string, unknown>;
+        original: BillingRecordDisplay;
     }
     column: string
     type?: "text" | "number" | "date"
@@ -49,7 +50,7 @@ export function EditableCell({ row, column, type = "text" }: EditableCellProps) 
     const onKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter") {
             e.preventDefault()
-            e.currentTarget.blur()
+            ;(e.currentTarget as HTMLElement).blur()
         }
     }
 
@@ -75,7 +76,11 @@ export function EditableCell({ row, column, type = "text" }: EditableCellProps) 
             )}
             onClick={() => setIsEditing(true)}
         >
-            {type === "date" && value ? new Date(value as string).toLocaleDateString() : (value || "-")}
+            {type === "date" && value
+                ? new Date(value as string).toLocaleDateString()
+                : value == null || value === ""
+                    ? "-"
+                    : String(value)}
         </div>
     )
 }

@@ -118,7 +118,7 @@ export async function createStockOpnameSession(
         const validation = createOpnameSessionSchema.safeParse(data)
         
         if (!validation.success) {
-            const firstError = validation.error.errors?.[0]
+            const firstError = validation.error.issues?.[0]
             return { success: false, error: firstError?.message || "Validation failed" }
         }
         
@@ -210,6 +210,29 @@ export async function createStockOpnameSession(
                 const qty = Math.max(0, Math.round(Number(row.total_stock ?? 0)))
                 const currentQty = sapQtyByProductId.get(productId) ?? 0
                 sapQtyByProductId.set(productId, currentQty + qty)
+            }
+
+            // Fallback for environments/tests where SAP snapshot is unavailable:
+            // use current stock levels from local inventory table.
+            if (sapQtyByProductId.size === 0) {
+                const fallbackStockLevels = await tx.query.stockLevels.findMany({
+                    where: and(
+                        eq(stockLevels.warehouseId, validatedData.warehouseId),
+                        sql`${stockLevels.totalStock} > 0`
+                    ),
+                    columns: {
+                        productId: true,
+                        totalStock: true,
+                    },
+                })
+
+                for (const row of fallbackStockLevels) {
+                    const qty = Math.max(0, Math.round(Number(row.totalStock ?? 0)))
+                    if (qty <= 0) continue
+
+                    const currentQty = sapQtyByProductId.get(row.productId) ?? 0
+                    sapQtyByProductId.set(row.productId, currentQty + qty)
+                }
             }
 
             if (sapQtyByProductId.size > 0) {
