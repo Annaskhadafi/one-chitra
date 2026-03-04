@@ -16,9 +16,17 @@ import { toast } from "sonner"
 import Papa from "papaparse"
 import { importCustomers } from "@/app/actions/customer"
 import { NewCustomer } from "@/lib/types"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 type RawCustomerData = Record<string, string>
 type CustomerData = NewCustomer
+type MappableField = "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5"
 
 const COLUMN_CANDIDATES: Record<keyof Pick<CustomerData, "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5">, string[]> = {
     customerCode: ["customercode", "customer_code", "customerid", "code", "kode", "kodepelanggan", "idcustomer", "customer", "kodecustomer", "codecustomer", "customer_no", "customerno", "custcode", "sapcode"],
@@ -68,11 +76,79 @@ const normalizeBirthday = (value: unknown) => {
     return null
 }
 
+const MAPPING_FIELDS: { key: MappableField; label: string; required?: boolean }[] = [
+    { key: "customerCode", label: "Customer Code", required: true },
+    { key: "name", label: "Name", required: true },
+    { key: "contactName", label: "Contact Name" },
+    { key: "email", label: "Email" },
+    { key: "birthday", label: "Birthday" },
+    { key: "address1", label: "Address 1" },
+    { key: "address2", label: "Address 2" },
+    { key: "address3", label: "Address 3" },
+    { key: "address4", label: "Address 4" },
+    { key: "address5", label: "Address 5" },
+]
+
 export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [preview, setPreview] = useState<CustomerData[]>([])
     const [isOpen, setIsOpen] = useState(false)
+    const [rawData, setRawData] = useState<RawCustomerData[]>([])
+    const [headers, setHeaders] = useState<string[]>([])
+    const [manualMapping, setManualMapping] = useState<Record<MappableField, string>>({
+        customerCode: "",
+        name: "",
+        contactName: "",
+        email: "",
+        birthday: "",
+        address1: "",
+        address2: "",
+        address3: "",
+        address4: "",
+        address5: "",
+    })
+    const [showManualMapping, setShowManualMapping] = useState(false)
+
+    const parseRowsWithMapping = (data: RawCustomerData[], resolver: (item: RawCustomerData, field: MappableField) => string | null) => {
+        return data.map((item) => {
+            const mappedCustomerCode = normalizeText(resolver(item, "customerCode"))
+            const mappedName = normalizeText(resolver(item, "name"))
+
+            if (!mappedCustomerCode || !mappedName) {
+                return null
+            }
+
+            return {
+                customerCode: mappedCustomerCode,
+                name: mappedName,
+                contactName: normalizeText(resolver(item, "contactName")),
+                email: normalizeText(resolver(item, "email")),
+                birthday: normalizeBirthday(resolver(item, "birthday")),
+                address1: normalizeText(resolver(item, "address1")),
+                address2: normalizeText(resolver(item, "address2")),
+                address3: normalizeText(resolver(item, "address3")),
+                address4: normalizeText(resolver(item, "address4")),
+                address5: normalizeText(resolver(item, "address5")),
+                id: undefined,
+                createdAt: undefined,
+                updatedAt: undefined,
+            } as CustomerData
+        }).filter(Boolean) as CustomerData[]
+    }
+
+    const buildInitialManualMapping = (detectedHeaders: string[]) => {
+        const next = { ...manualMapping }
+
+        MAPPING_FIELDS.forEach((field) => {
+            const detected = detectedHeaders.find((header) =>
+                COLUMN_CANDIDATES[field.key].some((candidate) => isHeaderMatch(header, candidate))
+            )
+            next[field.key] = detected || ""
+        })
+
+        setManualMapping(next)
+    }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
@@ -88,47 +164,31 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             skipEmptyLines: true,
             complete: (results) => {
                 const data = results.data as RawCustomerData[]
+                const detectedHeaders = (results.meta.fields && results.meta.fields.length > 0)
+                    ? results.meta.fields
+                    : (data[0] ? Object.keys(data[0]) : [])
 
-                const normalized = data.map((item) => {
+                setRawData(data)
+                setHeaders(detectedHeaders)
+                buildInitialManualMapping(detectedHeaders)
+
+                const normalized = parseRowsWithMapping(data, (item, field) => {
                     const keys = Object.keys(item)
-                    const findValue = (candidates: string[]) => {
-                        const keyFound = keys.find((keyName) => {
-                            return candidates.some((candidate) => isHeaderMatch(keyName, candidate))
-                        })
-
-                        return keyFound ? item[keyFound] : null
-                    }
-
-                    const mappedCustomerCode = normalizeText(findValue(COLUMN_CANDIDATES.customerCode))
-                    const mappedName = normalizeText(findValue(COLUMN_CANDIDATES.name))
-
-                    if (!mappedCustomerCode || !mappedName) {
-                        return null
-                    }
-
-                    return {
-                        customerCode: mappedCustomerCode,
-                        name: mappedName,
-                        contactName: normalizeText(findValue(COLUMN_CANDIDATES.contactName)),
-                        email: normalizeText(findValue(COLUMN_CANDIDATES.email)),
-                        birthday: normalizeBirthday(findValue(COLUMN_CANDIDATES.birthday)),
-                        address1: normalizeText(findValue(COLUMN_CANDIDATES.address1)),
-                        address2: normalizeText(findValue(COLUMN_CANDIDATES.address2)),
-                        address3: normalizeText(findValue(COLUMN_CANDIDATES.address3)),
-                        address4: normalizeText(findValue(COLUMN_CANDIDATES.address4)),
-                        address5: normalizeText(findValue(COLUMN_CANDIDATES.address5)),
-                        id: undefined,
-                        createdAt: undefined,
-                        updatedAt: undefined,
-                    } as CustomerData
-                }).filter(Boolean) as CustomerData[]
+                    const keyFound = keys.find((keyName) =>
+                        COLUMN_CANDIDATES[field].some((candidate) => isHeaderMatch(keyName, candidate))
+                    )
+                    return keyFound ? item[keyFound] : null
+                })
 
                 if (normalized.length === 0 && data.length > 0) {
-                    // Diagnostic: Check what headers were actually found
-                    const firstRowHeaders = Object.keys(data[0]).join(", ")
-                    toast.error(`No valid rows found. Detected headers: ${firstRowHeaders}. Required mapped fields: Customer Code & Name.`)
+                    setShowManualMapping(true)
+                    const firstRowHeaders = detectedHeaders.join(", ")
+                    toast.error(`Auto mapping gagal. Silakan manual mapping. Detected headers: ${firstRowHeaders}`)
                 } else if (normalized.length === 0) {
+                    setShowManualMapping(false)
                     toast.error("File appears to be empty or could not be parsed.")
+                } else {
+                    setShowManualMapping(false)
                 }
 
                 setPreview(normalized)
@@ -159,6 +219,28 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         } finally {
             setIsUploading(false)
         }
+    }
+
+    const applyManualMapping = () => {
+        if (rawData.length === 0) return
+        if (!manualMapping.customerCode || !manualMapping.name) {
+            toast.error("Manual mapping wajib memilih Customer Code dan Name")
+            return
+        }
+
+        const normalized = parseRowsWithMapping(rawData, (item, field) => {
+            const selectedHeader = manualMapping[field]
+            return selectedHeader ? item[selectedHeader] ?? null : null
+        })
+
+        setPreview(normalized)
+
+        if (normalized.length === 0) {
+            toast.error("Tidak ada row valid setelah manual mapping")
+            return
+        }
+
+        toast.success(`Manual mapping berhasil: ${normalized.length} valid rows`)
     }
 
     return (
@@ -214,11 +296,55 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     onClick={() => {
                                         setFile(null)
                                         setPreview([])
+                                        setRawData([])
+                                        setHeaders([])
+                                        setShowManualMapping(false)
                                     }}
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
+
+                            {showManualMapping && headers.length > 0 && (
+                                <div className="border rounded-lg p-3 space-y-3">
+                                    <div className="text-sm font-medium">Manual Mapping CSV</div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {MAPPING_FIELDS.map((field) => (
+                                            <div key={field.key} className="space-y-1">
+                                                <div className="text-xs text-muted-foreground">
+                                                    {field.label}{field.required ? " *" : ""}
+                                                </div>
+                                                <Select
+                                                    value={manualMapping[field.key] || "__none__"}
+                                                    onValueChange={(value) => {
+                                                        setManualMapping((prev) => ({
+                                                            ...prev,
+                                                            [field.key]: value === "__none__" ? "" : value,
+                                                        }))
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder="Pilih kolom CSV" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">(Tidak dipakai)</SelectItem>
+                                                        {headers.map((header) => (
+                                                            <SelectItem key={`${field.key}-${header}`} value={header}>
+                                                                {header}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <Button type="button" variant="secondary" onClick={applyManualMapping}>
+                                            Apply Mapping
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
 
                             {preview.length > 0 && (
                                 <div className="max-h-[300px] overflow-auto border rounded-lg">
@@ -256,6 +382,9 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     onClick={() => {
                                         setFile(null)
                                         setPreview([])
+                                        setRawData([])
+                                        setHeaders([])
+                                        setShowManualMapping(false)
                                     }}
                                 >
                                     Reset
