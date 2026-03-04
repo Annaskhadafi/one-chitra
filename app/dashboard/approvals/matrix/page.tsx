@@ -102,30 +102,37 @@ export default async function ApprovalMatrixPage() {
     ])
 
     const handleCreateStructure = async (formData: FormData): Promise<void> => {
+        "use server"
         await createApprovalOrgStructure(formData)
     }
 
     const handleSeedSampleData = async (): Promise<void> => {
+        "use server"
         await seedApprovalOrgSampleData()
     }
 
     const handleImportMatrix = async (formData: FormData): Promise<void> => {
+        "use server"
         await importApprovalMatrix(formData)
     }
 
     const handleUpdateStructure = async (formData: FormData): Promise<void> => {
+        "use server"
         await updateApprovalOrgStructure(formData)
     }
 
     const handleDeleteStructure = async (formData: FormData): Promise<void> => {
+        "use server"
         await deleteApprovalOrgStructure(formData)
     }
 
     const handleUpdateNode = async (formData: FormData): Promise<void> => {
+        "use server"
         await updateApprovalOrgNode(formData)
     }
 
     const handleDeleteNode = async (formData: FormData): Promise<void> => {
+        "use server"
         await deleteApprovalOrgNode(formData)
     }
 
