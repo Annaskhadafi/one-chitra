@@ -81,22 +81,6 @@ function buildPrintHTML(
             padding: 30mm 20mm 15mm 20mm;
             position: relative;
         }
-        .watermark {
-            text-align: center;
-            color: #e6b800;
-            font-size: 8pt;
-            letter-spacing: 2px;
-            font-weight: bold;
-            margin-bottom: 8mm;
-        }
-        .watermark-footer {
-            text-align: center;
-            color: #e6b800;
-            font-size: 8pt;
-            letter-spacing: 2px;
-            font-weight: bold;
-            margin-top: 10pt;
-        }
         .header-row {
             display: flex;
             justify-content: space-between;
@@ -144,8 +128,6 @@ function buildPrintHTML(
 </head>
 <body>
 <div class="page">
-    <div class="watermark">Internal Information - Yellow - Paratama Group</div>
-
     <div class="header-row">
         <em>Ref. CP Ref. ${refNumber}</em>
         <em>${formatDateLong(letterDate)}</em>
@@ -194,7 +176,6 @@ function buildPrintHTML(
     </div>
 
     <div class="footer-note"><strong>Please sign and sent it back to PT. Chitra Paratama Balikpapan via fax (0542) 7588100</strong></div>
-    <div class="watermark-footer">Internal Information - Yellow - Paratama Group</div>
 </div>
 <script>window.onload = function() { window.print(); }</script>
 </body>

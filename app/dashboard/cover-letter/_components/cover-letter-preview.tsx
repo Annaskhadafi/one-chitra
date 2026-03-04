@@ -66,15 +66,6 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
                 position: "relative",
                 boxShadow: "0 0 20px rgba(0,0,0,0.15)",
             }}>
-                {/* Watermark Header */}
-                <div style={{
-                    position: "absolute", top: "8mm", left: 0, right: 0,
-                    textAlign: "center", color: "#e6b800",
-                    fontSize: "8pt", letterSpacing: "2px", fontWeight: "bold"
-                }}>
-                    Internal Information - Yellow - Paratama Group
-                </div>
-
                 {/* Ref + Tanggal */}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "14pt" }}>
                     <em style={{ fontSize: "10pt" }}>Ref. CP Ref. {refNumber}</em>
@@ -183,11 +174,6 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
                 {/* Footer note */}
                 <div style={{ marginTop: "10pt", fontWeight: "bold", fontSize: "9.5pt" }}>
                     <strong>Please sign and sent it back to PT. Chitra Paratama Balikpapan via fax (0542) 7588100</strong>
-                </div>
-
-                {/* Watermark Footer */}
-                <div style={{ position: "absolute", bottom: "6mm", left: 0, right: 0, textAlign: "center", color: "#e6b800", fontSize: "8pt", letterSpacing: "2px", fontWeight: "bold" }}>
-                    Internal Information - Yellow - Paratama Group
                 </div>
             </div>
         </>
