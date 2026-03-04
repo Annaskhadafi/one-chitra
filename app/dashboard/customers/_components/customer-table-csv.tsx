@@ -20,6 +20,45 @@ import { NewCustomer } from "@/lib/types"
 type RawCustomerData = Record<string, string>
 type CustomerData = NewCustomer
 
+const COLUMN_CANDIDATES: Record<keyof Pick<CustomerData, "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5">, string[]> = {
+    customerCode: ["customercode", "customer_code", "customerid", "code", "kode", "kodepelanggan", "idcustomer", "customer"],
+    name: ["name", "customername", "customer_name", "nama", "namapelanggan", "custname"],
+    contactName: ["contactname", "contact_name", "contact", "kontak", "cp", "pic"],
+    email: ["email", "mail", "surel"],
+    birthday: ["birthday", "birthdate", "dateofbirth", "tanggal_lahir", "tanggallahir", "dob"],
+    address1: ["address1", "address_1", "address", "alamat1", "alamat"],
+    address2: ["address2", "address_2", "alamat2"],
+    address3: ["address3", "address_3", "alamat3", "city", "kota"],
+    address4: ["address4", "address_4", "alamat4", "state", "provinsi"],
+    address5: ["address5", "address_5", "alamat5", "postalcode", "zip", "kodepos"],
+}
+
+const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const normalizeText = (value: unknown) => {
+    const trimmed = value?.toString().trim()
+    return trimmed ? trimmed : null
+}
+
+const normalizeBirthday = (value: unknown) => {
+    const text = value?.toString().trim()
+    if (!text) return null
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return text
+    }
+
+    const dateParts = text.split(/[\/\-\.]/)
+    if (dateParts.length === 3) {
+        const [first, second, third] = dateParts
+        if (first.length === 2 && second.length === 2 && third.length === 4) {
+            return `${third}-${second}-${first}`
+        }
+    }
+
+    return null
+}
+
 export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
     const [isUploading, setIsUploading] = useState(false)
@@ -41,55 +80,45 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             complete: (results) => {
                 const data = results.data as RawCustomerData[]
 
-                // Helper to find key case-insensitively and ignoring special chars
-                const findKey = (obj: Record<string, string>, candidates: string[]) => {
-                    const keys = Object.keys(obj)
-                    return keys.find(k => {
-                        const normalizedKey = k.toLowerCase().replace(/[^a-z0-9]/g, "")
-                        return candidates.some(c => normalizedKey === c.replace(/[^a-z0-9]/g, ""))
-                    })
-                }
+                const normalized = data.map((item) => {
+                    const keys = Object.keys(item)
+                    const findValue = (candidates: string[]) => {
+                        const keyFound = keys.find((keyName) => {
+                            const keyNormalized = normalizeKey(keyName)
+                            return candidates.some((candidate) => keyNormalized === normalizeKey(candidate))
+                        })
 
-                const normalized = data.map(item => {
-                    // Extended candidate list for flexibility
-                    const codeKey = findKey(item, [
-                        "customercode", "customerid", "code", "id", "kode", "kodepelanggan", "no", "nomor", "customer"
-                    ])
-                    const nameKey = findKey(item, [
-                        "customername", "name", "nama", "namapelanggan", "custname"
-                    ])
-                    const contactKey = findKey(item, ["contactname", "contact", "kontak", "cp"])
-                    const emailKey = findKey(item, ["email", "mail", "surel"])
+                        return keyFound ? item[keyFound] : null
+                    }
 
-                    // Address fields
-                    const addr1Key = findKey(item, ["address1", "address", "alamat1", "alamat"])
-                    const addr2Key = findKey(item, ["address2", "alamat2"])
-                    const addr3Key = findKey(item, ["address3", "alamat3"])
-                    const addr4Key = findKey(item, ["address4", "alamat4"])
-                    const addr5Key = findKey(item, ["address5", "alamat5"])
+                    const mappedCustomerCode = normalizeText(findValue(COLUMN_CANDIDATES.customerCode))
+                    const mappedName = normalizeText(findValue(COLUMN_CANDIDATES.name))
 
-                    // Only return if we found at least one meaningful field, 
-                    // relying on loose matching for the import to be useful.
-                    // However, we MUST have at least a Name or Code to create a customer.
-                    if (!codeKey && !nameKey) return null;
+                    if (!mappedCustomerCode || !mappedName) {
+                        return null
+                    }
 
                     return {
-                        customerCode: codeKey ? item[codeKey].toString() : `GEN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, // Fallback if needed, though usually required
-                        name: nameKey ? item[nameKey].toString() : (codeKey ? item[codeKey].toString() : "Unknown"),
-                        contactName: contactKey ? item[contactKey].toString() : null,
-                        email: emailKey ? item[emailKey].toString() : null,
-                        address1: addr1Key ? item[addr1Key].toString() : null,
-                        address2: addr2Key ? item[addr2Key].toString() : null,
-                        address3: addr3Key ? item[addr3Key].toString() : null,
-                        address4: addr4Key ? item[addr4Key].toString() : null,
-                        address5: addr5Key ? item[addr5Key].toString() : null,
-                    }
+                        customerCode: mappedCustomerCode,
+                        name: mappedName,
+                        contactName: normalizeText(findValue(COLUMN_CANDIDATES.contactName)),
+                        email: normalizeText(findValue(COLUMN_CANDIDATES.email)),
+                        birthday: normalizeBirthday(findValue(COLUMN_CANDIDATES.birthday)),
+                        address1: normalizeText(findValue(COLUMN_CANDIDATES.address1)),
+                        address2: normalizeText(findValue(COLUMN_CANDIDATES.address2)),
+                        address3: normalizeText(findValue(COLUMN_CANDIDATES.address3)),
+                        address4: normalizeText(findValue(COLUMN_CANDIDATES.address4)),
+                        address5: normalizeText(findValue(COLUMN_CANDIDATES.address5)),
+                        id: undefined,
+                        createdAt: undefined,
+                        updatedAt: undefined,
+                    } as CustomerData
                 }).filter(Boolean) as CustomerData[]
 
                 if (normalized.length === 0 && data.length > 0) {
                     // Diagnostic: Check what headers were actually found
                     const firstRowHeaders = Object.keys(data[0]).join(", ")
-                    toast.error(`No valid rows found. Detected headers: ${firstRowHeaders}. Expected 'Name' or 'Customer Code'.`)
+                    toast.error(`No valid rows found. Detected headers: ${firstRowHeaders}. Required mapped fields: Customer Code & Name.`)
                 } else if (normalized.length === 0) {
                     toast.error("File appears to be empty or could not be parsed.")
                 }
@@ -157,7 +186,7 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 <FileUp className="h-12 w-12 text-muted-foreground mb-4" />
                                 <span className="text-sm font-medium">Click to upload CSV</span>
                                 <span className="text-xs text-muted-foreground mt-1">
-                                    Must include Customer Code and Name columns
+                                    Must include Customer Code and Name (other fields can be auto-mapped)
                                 </span>
                             </label>
                         </div>
