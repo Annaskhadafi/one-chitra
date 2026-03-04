@@ -29,6 +29,7 @@ export { deliveries, deliveryItems, deliveriesRelations, deliveryItemsRelations 
 export { billingRecords } from "./billing";
 export { auditLogs } from "./audit-logs";
 export { customers } from "./customers";
+export { coverLetters, coverLetterItems } from "./cover-letters";
 export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRelations } from "./sales-orders";
 export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, goodReceiveManualItemsRelations } from "./good-receive-manual";
 export { fleetDrivers, fleetVehicles } from "./fleet";

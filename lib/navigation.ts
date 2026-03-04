@@ -114,6 +114,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "billing",
                     },
                     {
+                        title: "Cover Letter",
+                        url: "/dashboard/cover-letter",
+                        resource: "cover-letter",
+                    },
+                    {
                         title: "Fleet Management",
                         url: "/dashboard/fleet-management",
                         resource: "fleet-management",
