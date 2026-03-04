@@ -50,20 +50,34 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
 
         setIsLoading(true)
         try {
-            // Exclude properties that are not part of BillingRecordUpdate (e.g. items)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { items, ...updatePayload } = formData as any
+            // Hanya ekstrak properties yang diperbolehkan di skema Drizzle UpdateBillingRecord
+            const allowedFields = [
+                "dateInvoice", "noInvSap", "eFaktur", "ddpAddress", "paymentType", "custId",
+                "dateSendInvoice", "tglDoFaktur", "nomorDoSap", "modeDelivery", "noResi",
+                "statusDelivery", "receiverDate", "scanInvUrl"
+            ]
 
-            await updateBillingRecord({
-                poNo: record.poNo as string,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const updatePayload: any = {}
+            for (const key of allowedFields) {
+                if (formData[key] !== undefined) {
+                    updatePayload[key] = formData[key] // Ambil nilai state terakhir
+                }
+            }
+
+            const result = await updateBillingRecord({
+                poNo: formData.poNo || record.poNo,
                 ...updatePayload
             })
+
+            // Jika API merespons success: false, lempar Error spesifik
+            if (!result || !result.success) throw new Error(result?.error || "Gagal memperbarui row DB")
 
             toast.success("Record updated successfully")
             onOpenChange(false)
             onSuccess?.()
-        } catch (_error) {
-            toast.error("Failed to update record")
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update record")
         } finally {
             setIsLoading(false)
         }
@@ -98,7 +112,7 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (!file) return
+        if (!file || !record?.poNo) return
 
         setIsLoading(true)
         try {
@@ -106,9 +120,21 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
             FormPayload.append("file", file)
 
             const result = await uploadFile(FormPayload)
-            if (result.success) {
+            if (result.success && result.url) {
                 handleChange("scanInvUrl", result.url)
-                toast.success("File uploaded successfully")
+
+                // AUTO SAVE langsung ke DB tanpa harus klik tombol Save
+                const saveResult = await updateBillingRecord({
+                    poNo: record.poNo as string,
+                    scanInvUrl: result.url
+                })
+
+                if (saveResult && saveResult.success) {
+                    toast.success("Dokumen Scan Inv terunggah dan tersimpan otomatis")
+                    onSuccess?.()
+                } else {
+                    toast.error(saveResult?.error || "Berhasil unggah tapi gagal simpan ke DB")
+                }
             } else {
                 toast.error(result.error || "Failed to upload file")
             }
