@@ -33,6 +33,7 @@ export type SavedCoverLetter = {
     customerName: string | null;
     signerName: string | null;
     signerTitle: string | null;
+    location: string | null;
     createdAt: Date;
     items: SavedCoverLetterItem[];
 };
@@ -152,6 +153,7 @@ export async function saveCoverLetter(data: {
     customerName: string;
     signerName: string;
     signerTitle: string;
+    location?: string;
     items: Array<{
         poNo: string;
         noInvSap: string;
@@ -169,6 +171,7 @@ export async function saveCoverLetter(data: {
             customerName: data.customerName,
             signerName: data.signerName,
             signerTitle: data.signerTitle,
+            location: data.location || "balikpapan",
         }).returning({ id: coverLetters.id });
 
         if (data.items.length > 0) {
@@ -201,6 +204,7 @@ export async function updateCoverLetter(id: number, data: {
     customerName: string;
     signerName: string;
     signerTitle: string;
+    location?: string;
     items: Array<{
         poNo: string;
         noInvSap: string;
@@ -218,6 +222,7 @@ export async function updateCoverLetter(id: number, data: {
             customerName: data.customerName,
             signerName: data.signerName,
             signerTitle: data.signerTitle,
+            location: data.location || "balikpapan",
             updatedAt: new Date(),
         }).where(eq(coverLetters.id, id));
 

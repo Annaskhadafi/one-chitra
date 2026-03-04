@@ -9,6 +9,7 @@ export const coverLetters = pgTable("cover_letters", {
     customerName: text("customer_name"),
     signerName: text("signer_name"),
     signerTitle: text("signer_title"),
+    location: text("location").default("balikpapan"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

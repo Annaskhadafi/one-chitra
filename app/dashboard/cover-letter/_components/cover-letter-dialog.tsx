@@ -16,6 +16,7 @@ interface CoverLetterDialogProps {
     letterDate: string;
     signerName: string;
     signerTitle: string;
+    location?: string;
 }
 
 function formatDate(date: Date | string | null | undefined): string {
@@ -38,7 +39,8 @@ function buildPrintHTML(
     refNumber: string,
     letterDate: string,
     signerName: string,
-    signerTitle: string
+    signerTitle: string,
+    location: string = "balikpapan"
 ): string {
     const grandTotal = items.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
     const addressLines = [
@@ -47,15 +49,15 @@ function buildPrintHTML(
     ].filter(Boolean);
 
     const tableRows = items.length === 0
-        ? `<tr><td colspan="6" style="border:1px solid #ccc;padding:8pt;text-align:center;color:#999;font-style:italic;">Belum ada invoice</td></tr>`
+        ? `<tr><td colspan="6" style="border:1px solid #ccc;padding:6pt;text-align:center;color:#999;font-style:italic;">Belum ada invoice</td></tr>`
         : items.map((inv, idx) => `
             <tr>
-                <td style="border:1px solid #ccc;padding:4pt 3pt;text-align:center;">${idx + 1}</td>
-                <td style="border:1px solid #ccc;padding:4pt 6pt;text-align:center;">${inv.noInvSap || "-"}</td>
-                <td style="border:1px solid #ccc;padding:4pt 6pt;text-align:center;">${formatDate(inv.dateInvoice)}</td>
-                <td style="border:1px solid #ccc;padding:4pt 6pt;text-align:center;">${inv.poNo || "-"}</td>
-                <td style="border:1px solid #ccc;padding:4pt 6pt;text-align:center;">${formatDate(inv.datePo)}</td>
-                <td style="border:1px solid #ccc;padding:4pt 6pt;text-align:right;">Rp&nbsp;&nbsp;${inv.amountIncludeTax.toLocaleString("id-ID")}</td>
+                <td style="border:1px solid #ccc;padding:3pt 2pt;text-align:center;">${idx + 1}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${inv.noInvSap || "-"}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${formatDate(inv.dateInvoice)}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${inv.poNo || "-"}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${formatDate(inv.datePo)}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:right;">Rp&nbsp;&nbsp;${inv.amountIncludeTax.toLocaleString("id-ID")}</td>
             </tr>`).join("");
 
     return `<!DOCTYPE html>
@@ -68,7 +70,7 @@ function buildPrintHTML(
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: Arial, sans-serif;
-            font-size: 10pt;
+            font-size: 8pt;
             color: #000;
             background: #fff;
             -webkit-print-color-adjust: exact;
@@ -78,31 +80,31 @@ function buildPrintHTML(
             width: 210mm;
             min-height: 297mm;
             margin: 0 auto;
-            padding: 30mm 20mm 15mm 20mm;
+            padding: 50mm 20mm 15mm 20mm;
             position: relative;
         }
         .header-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 14pt;
+            margin-bottom: 12pt;
             font-style: italic;
         }
         .customer-block {
             margin-bottom: 10pt;
             max-width: 50%;
         }
-        .customer-name { font-weight: bold; font-size: 11pt; margin-bottom: 3pt; }
-        .customer-address { font-size: 9pt; font-style: italic; line-height: 1.5; }
-        .attn { font-weight: bold; font-style: italic; margin-bottom: 10pt; font-size: 10.5pt; }
-        .re { font-weight: bold; font-size: 11pt; margin-bottom: 10pt; }
+        .customer-name { font-weight: bold; font-size: 9pt; margin-bottom: 2pt; }
+        .customer-address { font-size: 7.5pt; font-style: italic; line-height: 1.4; }
+        .attn { font-weight: bold; font-style: italic; margin-bottom: 8pt; font-size: 8.5pt; }
+        .re { font-weight: bold; font-size: 9pt; margin-bottom: 8pt; }
         .re u { text-decoration: underline; }
-        .dear { font-style: italic; margin-bottom: 10pt; }
-        .body-text { font-style: italic; margin-bottom: 12pt; line-height: 1.5; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-size: 9pt; }
+        .dear { font-style: italic; margin-bottom: 8pt; }
+        .body-text { font-style: italic; margin-bottom: 10pt; line-height: 1.4; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12pt; font-size: 7.5pt; }
         .tbl-header { background-color: #1a6b7c !important; color: #fff; }
         .tbl-header th {
             border: 1px solid #1a6b7c;
-            padding: 5pt 4pt;
+            padding: 4pt 3pt;
             text-align: center;
             font-style: italic;
         }
@@ -112,14 +114,14 @@ function buildPrintHTML(
             font-weight: bold;
             font-style: italic;
         }
-        .tbl-total td { border: 1px solid #1a6b7c; padding: 5pt 6pt; }
-        .closing { font-style: italic; margin-bottom: 24pt; line-height: 1.5; }
-        .yours { font-style: italic; margin-bottom: 52pt; }
+        .tbl-total td { border: 1px solid #1a6b7c; padding: 4pt 6pt; }
+        .closing { font-style: italic; margin-bottom: 20pt; line-height: 1.4; }
+        .yours { font-style: italic; margin-bottom: 40pt; }
         .signature-row { display: flex; justify-content: space-between; align-items: flex-end; }
-        .signer-name { font-weight: bold; font-size: 10.5pt; }
-        .signer-title { font-size: 9.5pt; }
-        .sig-right { font-style: italic; font-size: 10pt; }
-        .footer-note { margin-top: 10pt; font-weight: bold; font-size: 9.5pt; }
+        .signer-name { font-weight: bold; font-size: 8.5pt; }
+        .signer-title { font-size: 7.5pt; }
+        .sig-right { font-style: italic; font-size: 8pt; }
+        .footer-note { margin-top: 12pt; font-weight: bold; font-size: 7.5pt; font-style: italic; }
         @media print {
             body { background: #fff; }
             .page { margin: 0; }
@@ -146,10 +148,10 @@ function buildPrintHTML(
     <table>
         <thead>
             <tr class="tbl-header">
-                <th rowspan="2" style="width:28pt;">No</th>
+                <th rowspan="2" style="width:24pt;">No</th>
                 <th colspan="2">Ref Invoice</th>
                 <th colspan="2">Ref PO</th>
-                <th rowspan="2" style="width:75pt;">Amount</th>
+                <th rowspan="2" style="width:70pt;">Amount</th>
             </tr>
             <tr class="tbl-header">
                 <th>No</th><th>Date</th><th>No</th><th>Date</th>
@@ -175,7 +177,9 @@ function buildPrintHTML(
         <div class="sig-right"><em>(Name, Signature, Date &amp; Stamp)</em></div>
     </div>
 
-    <div class="footer-note"><strong>Please sign and sent it back to PT. Chitra Paratama Balikpapan via fax (0542) 7588100</strong></div>
+    <div class="footer-note">
+        <em>Please sign and sent it back to PT. Chitra Paratama ${location === "jakarta" ? "Jakarta" : "Balikpapan"} via fax ${location === "jakarta" ? "(021) 29976661" : "(0542) 7588100"}</em>
+    </div>
 </div>
 <script>window.onload = function() { window.print(); }</script>
 </body>
@@ -183,11 +187,11 @@ function buildPrintHTML(
 }
 
 export function CoverLetterDialog({
-    open, onOpenChange, customer, items, refNumber, letterDate, signerName, signerTitle
+    open, onOpenChange, customer, items, refNumber, letterDate, signerName, signerTitle, location = "balikpapan"
 }: CoverLetterDialogProps) {
 
     const handleOpenPrintTab = () => {
-        const html = buildPrintHTML(customer, items, refNumber, letterDate, signerName, signerTitle);
+        const html = buildPrintHTML(customer, items, refNumber, letterDate, signerName, signerTitle, location);
         const win = window.open("", "_blank");
         if (win) {
             win.document.write(html);
@@ -220,6 +224,7 @@ export function CoverLetterDialog({
                         letterDate={letterDate}
                         signerName={signerName}
                         signerTitle={signerTitle}
+                        location={location}
                     />
                 </div>
             </DialogContent>

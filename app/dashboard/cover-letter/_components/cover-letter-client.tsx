@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
     Check, ChevronsUpDown, Eye, Loader2, Pencil, Plus,
-    Save, Trash2, X, FileText, UserPlus
+    Save, Trash2, X, FileText, UserPlus, MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CoverLetterDialog } from "./cover-letter-dialog";
@@ -225,7 +225,8 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const [letterDate, setLetterDate] = useState(getTodayStr());
     const [signerName, setSignerName] = useState("");
     const [signerTitle, setSignerTitle] = useState("");
-    const [savedPreviewForDialog, setSavedPreviewForDialog] = useState<{ cust: CoverLetterCustomer | null; items: PreviewInvoiceItem[] } | null>(null);
+    const [sendLocation, setSendLocation] = useState("balikpapan");
+    const [savedPreviewForDialog, setSavedPreviewForDialog] = useState<{ cust: CoverLetterCustomer | null; items: PreviewInvoiceItem[]; location?: string } | null>(null);
 
     useEffect(() => {
         if (!selectedCustomer) { setBillingData([]); setSelectedPoNos(new Set()); return; }
@@ -259,7 +260,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const resetForm = () => {
         setSelectedCustomer(null); setSelectedPoNos(new Set());
         setRefNumber(getDefaultRef()); setLetterDate(getTodayStr());
-        setSignerName(""); setSignerTitle(""); setEditingId(null);
+        setSignerName(""); setSignerTitle(""); setSendLocation("balikpapan"); setEditingId(null);
     };
 
     const handleNewLetter = () => { resetForm(); setShowForm(true); };
@@ -271,6 +272,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         setLetterDate(letter.letterDate ? new Date(letter.letterDate).toISOString().slice(0, 10) : getTodayStr());
         setSignerName(letter.signerName ?? "");
         setSignerTitle(letter.signerTitle ?? "");
+        setSendLocation(letter.location ?? "balikpapan");
         setEditingId(letter.id);
         setShowForm(true);
         startFetching(async () => {
@@ -293,7 +295,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         if (!selectedCustomer) { toast.error("Pilih customer terlebih dahulu"); return; }
         if (previewItems.length === 0) { toast.error("Pilih minimal 1 invoice"); return; }
         startSaving(async () => {
-            const payload = { refNumber, letterDate, custId: selectedCustomer.customerCode, customerName: selectedCustomer.name, signerName, signerTitle, items: previewItems };
+            const payload = { refNumber, letterDate, custId: selectedCustomer.customerCode, customerName: selectedCustomer.name, signerName, signerTitle, location: sendLocation, items: previewItems };
             const result = editingId ? await updateCoverLetter(editingId, payload) : await saveCoverLetter(payload);
             if (result.success) {
                 toast.success(editingId ? "Cover letter diperbarui" : "Cover letter disimpan");
@@ -317,6 +319,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         const cust = customers.find(c => c.customerCode === letter.custId) ?? null;
         setSignerName(letter.signerName ?? "");
         setSignerTitle(letter.signerTitle ?? "");
+        setSendLocation(letter.location ?? "balikpapan");
         setRefNumber(letter.refNumber ?? "");
         setLetterDate(letter.letterDate ? new Date(letter.letterDate).toISOString().slice(0, 10) : getTodayStr());
         setSavedPreviewForDialog({
@@ -327,12 +330,14 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                 amountBeforeTax: parseFloat(item.amountBeforeTax ?? "0"),
                 amountIncludeTax: parseFloat(item.amountIncludeTax ?? "0"),
             })),
+            location: letter.location ?? "balikpapan",
         });
         setPreviewOpen(true);
     };
 
     const dialogCustomer = savedPreviewForDialog !== null ? savedPreviewForDialog.cust : selectedCustomer;
     const dialogItems = savedPreviewForDialog !== null ? savedPreviewForDialog.items : previewItems;
+    const dialogLocation = savedPreviewForDialog !== null ? savedPreviewForDialog.location : sendLocation;
     const onDialogClose = (open: boolean) => { setPreviewOpen(open); if (!open) setSavedPreviewForDialog(null); };
 
     return (
@@ -536,6 +541,31 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                                 </div>
                             </div>
 
+                            <div className="space-y-2">
+                                <Label>Lokasi Kirim (Footer)</Label>
+                                <div className="flex gap-2 max-w-md">
+                                    <Button
+                                        type="button"
+                                        variant={sendLocation === "balikpapan" ? "default" : "outline"}
+                                        className="flex-1 gap-2"
+                                        onClick={() => setSendLocation("balikpapan")}
+                                    >
+                                        <MapPin className="h-4 w-4" /> Balikpapan
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={sendLocation === "jakarta" ? "default" : "outline"}
+                                        className="flex-1 gap-2"
+                                        onClick={() => setSendLocation("jakarta")}
+                                    >
+                                        <MapPin className="h-4 w-4" /> Jakarta
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground italic">
+                                    Memilih lokasi akan mengubah alamat tujuan pengembalian di bagian bawah surat.
+                                </p>
+                            </div>
+
                             {/* Signer Selector */}
                             <div className="rounded-md border p-4 space-y-3 bg-muted/20">
                                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -572,6 +602,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                 customer={dialogCustomer} items={dialogItems}
                 refNumber={refNumber} letterDate={letterDate}
                 signerName={signerName} signerTitle={signerTitle}
+                location={dialogLocation}
             />
         </div>
     );
