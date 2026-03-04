@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     // Allow production builds with pre-existing type errors
     ignoreBuildErrors: true,
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
   async headers() {
     return [
       {
