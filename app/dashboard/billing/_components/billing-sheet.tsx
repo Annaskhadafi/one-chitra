@@ -26,9 +26,10 @@ interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     record: BillingRecordDisplay | null
+    onSuccess?: () => void
 }
 
-export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
+export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [formData, setFormData] = useState<any>({})
@@ -60,6 +61,7 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
             toast.success("Record updated successfully")
             onOpenChange(false)
+            onSuccess?.()
         } catch (_error) {
             toast.error("Failed to update record")
         } finally {
@@ -121,7 +123,7 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[400px] sm:w-[540px]">
+            <SheetContent className="w-full sm:max-w-3xl sm:w-[800px] p-6 sm:p-10">
                 <SheetHeader>
                     <SheetTitle>Billing Details</SheetTitle>
                     <SheetDescription>
@@ -129,7 +131,7 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
                     </SheetDescription>
                 </SheetHeader>
                 <ScrollArea className="h-[calc(100vh-120px)] pr-4">
-                    <div className="grid gap-4 py-4">
+                    <div className="grid gap-6 py-4 px-1 sm:px-4">
                         <div className="space-y-4">
                             <h3 className="font-medium">Basic Info</h3>
                             <div className="grid grid-cols-2 gap-4">

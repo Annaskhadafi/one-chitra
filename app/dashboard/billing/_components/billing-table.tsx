@@ -345,7 +345,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
 
     return (
         <div className="w-full space-y-4">
-            <BillingSheet open={sheetOpen} onOpenChange={setSheetOpen} record={selectedRecord} />
+            <BillingSheet open={sheetOpen} onOpenChange={setSheetOpen} record={selectedRecord} onSuccess={() => refetch()} />
 
             <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center gap-2">
