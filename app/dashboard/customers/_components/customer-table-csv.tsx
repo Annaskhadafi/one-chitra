@@ -21,7 +21,7 @@ type RawCustomerData = Record<string, string>
 type CustomerData = NewCustomer
 
 const COLUMN_CANDIDATES: Record<keyof Pick<CustomerData, "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5">, string[]> = {
-    customerCode: ["customercode", "customer_code", "customerid", "code", "kode", "kodepelanggan", "idcustomer", "customer"],
+    customerCode: ["customercode", "customer_code", "customerid", "code", "kode", "kodepelanggan", "idcustomer", "customer", "kodecustomer", "codecustomer", "customer_no", "customerno", "custcode", "sapcode"],
     name: ["name", "customername", "customer_name", "nama", "namapelanggan", "custname"],
     contactName: ["contactname", "contact_name", "contact", "kontak", "cp", "pic"],
     email: ["email", "mail", "surel"],
@@ -34,6 +34,15 @@ const COLUMN_CANDIDATES: Record<keyof Pick<CustomerData, "customerCode" | "name"
 }
 
 const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const isHeaderMatch = (header: string, candidate: string) => {
+    const normalizedHeader = normalizeKey(header)
+    const normalizedCandidate = normalizeKey(candidate)
+
+    return normalizedHeader === normalizedCandidate
+        || normalizedHeader.includes(normalizedCandidate)
+        || normalizedCandidate.includes(normalizedHeader)
+}
 
 const normalizeText = (value: unknown) => {
     const trimmed = value?.toString().trim()
@@ -84,8 +93,7 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                     const keys = Object.keys(item)
                     const findValue = (candidates: string[]) => {
                         const keyFound = keys.find((keyName) => {
-                            const keyNormalized = normalizeKey(keyName)
-                            return candidates.some((candidate) => keyNormalized === normalizeKey(candidate))
+                            return candidates.some((candidate) => isHeaderMatch(keyName, candidate))
                         })
 
                         return keyFound ? item[keyFound] : null
