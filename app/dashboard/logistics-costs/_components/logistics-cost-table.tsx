@@ -33,6 +33,8 @@ import { formatCurrency } from "@/lib/utils"
 import { usePermissions } from "@/hooks/use-permissions"
 import { clearLogisticsCosts } from "@/app/actions/delivery"
 import { toast } from "sonner"
+import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 
 interface LogisticsCost {
     id: number
@@ -51,6 +53,9 @@ interface LogisticsCost {
     costMaintenance: string | null
     costOthers: string | null
     invoiceNumber: string | null
+    settlementId?: number | null
+    settlementNumber?: string | null
+    settlementStatus?: "draft" | "submitted" | "approved" | "rejected" | "posted" | null
 }
 
 interface LogisticsCostTableProps {
@@ -87,6 +92,31 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 accessorKey: "invoiceNumber",
                 header: "Invoice #",
                 cell: ({ row }) => row.original.invoiceNumber || "-",
+            },
+            {
+                id: "settlement",
+                header: "Settlement",
+                cell: ({ row }) => {
+                    if (!row.original.settlementId) {
+                        return <span className="text-muted-foreground">-</span>
+                    }
+
+                    return (
+                        <div className="flex items-center gap-2">
+                            <Link
+                                href={`/dashboard/cost-settlements/${row.original.settlementId}`}
+                                className="font-medium text-primary hover:underline"
+                            >
+                                {row.original.settlementNumber || `STL-${row.original.settlementId}`}
+                            </Link>
+                            {row.original.settlementStatus ? (
+                                <Badge variant="outline" className="capitalize">
+                                    {row.original.settlementStatus}
+                                </Badge>
+                            ) : null}
+                        </div>
+                    )
+                },
             },
             {
                 accessorKey: "deliveryDate",

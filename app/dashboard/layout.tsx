@@ -19,6 +19,80 @@ import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 
+const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isLogisticsGroup = item.title === "Logistics & Cost" || item.url === "/dashboard/logistics-costs"
+      if (!isLogisticsGroup) {
+        return item
+      }
+
+      const existingItems = item.items ?? []
+      const hasLogisticsCostLog = existingItems.some((subItem) => subItem.url === "/dashboard/logistics-costs")
+      const hasCostSettlement = existingItems.some((subItem) => subItem.url === "/dashboard/cost-settlements")
+
+      const mergedItems = [...existingItems]
+      if (!hasLogisticsCostLog) {
+        mergedItems.unshift({
+          id: `${item.id}-logistics-cost-log`,
+          title: "Logistics Cost Log",
+          url: "/dashboard/logistics-costs",
+          resource: "logistics-costs",
+          hidden: false,
+        })
+      }
+      if (!hasCostSettlement) {
+        mergedItems.push({
+          id: `${item.id}-cost-settlement`,
+          title: "Cost Settlement",
+          url: "/dashboard/cost-settlements",
+          resource: "cost-settlements",
+          hidden: false,
+        })
+      }
+
+      return {
+        ...item,
+        url: "#",
+        resource: item.resource ?? "logistics-costs",
+        items: mergedItems,
+      }
+    }),
+  }))
+}
+
+const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  const allowedMasterDataUrls = new Set(["/dashboard/products", "/dashboard/warehouse"])
+
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isMasterDataGroup = item.title === "Master Data & Umum"
+      if (!isMasterDataGroup) {
+        return item
+      }
+
+      const seen = new Set<string>()
+      const filteredItems = (item.items ?? [])
+        .filter((subItem) => allowedMasterDataUrls.has(subItem.url))
+        .filter((subItem) => {
+          if (seen.has(subItem.url)) {
+            return false
+          }
+          seen.add(subItem.url)
+          return true
+        })
+
+      return {
+        ...item,
+        url: "#",
+        items: filteredItems,
+      }
+    }),
+  }))
+}
+
 // ... imports
 
 export default async function DashboardLayout({
@@ -46,7 +120,9 @@ export default async function DashboardLayout({
     getNavbarTheme(),
     getNavbarMenuSettingsAction(),
   ])
-  const runtimeNavigationSections = toRuntimeNavigationConfig(navbarMenuSettings)
+  const runtimeNavigationSections = ensureMasterDataMenu(
+    ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+  )
 
   const user = session?.user as {
     name: string;

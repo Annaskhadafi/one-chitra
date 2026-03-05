@@ -165,9 +165,21 @@ export const navigationConfig: NavSection[] = [
             },
             {
                 title: "Logistics & Cost",
-                url: "/dashboard/logistics-costs",
+                url: "#",
                 icon: BarChart3,
                 resource: "logistics-costs",
+                items: [
+                    {
+                        title: "Logistics Cost Log",
+                        url: "/dashboard/logistics-costs",
+                        resource: "logistics-costs",
+                    },
+                    {
+                        title: "Cost Settlement",
+                        url: "/dashboard/cost-settlements",
+                        resource: "cost-settlements",
+                    },
+                ],
             },
         ],
     },

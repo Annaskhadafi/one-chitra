@@ -85,6 +85,19 @@ export {
     approvalOrgStructuresRelations,
     approvalOrgStructureNodesRelations,
 } from "./approval-workflows";
+export {
+    costSettlementTypeEnum,
+    costSettlementStatusEnum,
+    costSettlementCategoryEnum,
+    costSettlements,
+    costSettlementItems,
+    costSettlementReceipts,
+    costSettlementSignatories,
+    costSettlementsRelations,
+    costSettlementItemsRelations,
+    costSettlementReceiptsRelations,
+    costSettlementSignatoriesRelations,
+} from "./cost-settlements";
 
 // Core Auth Table Relations
 import { user } from "./auth";

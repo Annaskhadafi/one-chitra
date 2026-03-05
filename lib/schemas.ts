@@ -160,6 +160,65 @@ export const fleetTripSchema = z.object({
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
 })
 
+export const costSettlementItemSchema = z.object({
+    id: z.number().optional(),
+    costCategory: z.enum(["gasoline", "toll", "parking", "meals", "maintenance", "others"]),
+    description: z.string().min(1, "Description is required"),
+    amount: z.number().min(0, "Amount must be >= 0"),
+    receiptDate: z.string().or(z.date()).optional().nullable(),
+    vendorName: z.string().optional().nullable(),
+    deliveryItemId: z.number().optional().nullable(),
+    sortOrder: z.number().int().min(0).default(0),
+})
+
+export const costSettlementReceiptSchema = z.object({
+    id: z.number().optional(),
+    settlementItemId: z.number().optional(),
+    fileUrl: z.string().min(1, "File URL is required"),
+    originalFileName: z.string().min(1, "Original filename is required"),
+    fileSize: z.number().int().min(0).default(0),
+})
+
+export const costSettlementSignatorySchema = z.object({
+    id: z.number().optional(),
+    signatoryName: z.string().min(1, "Name is required"),
+    signatoryPosition: z.string().min(1, "Position is required"),
+    signatoryRole: z.string().min(1, "Role is required"),
+    sortOrder: z.number().int().min(0).default(0),
+})
+
+export const costSettlementSchema = z.object({
+    settlementNumber: z.string().optional(),
+    settlementType: z.enum(["trip", "delivery"]),
+    fleetTripId: z.number().optional().nullable(),
+    deliveryId: z.number().optional().nullable(),
+    settlementDate: z.string().or(z.date()),
+    remarks: z.string().optional().nullable(),
+    items: z.array(costSettlementItemSchema).min(1, "At least one settlement item is required"),
+    signatories: z.array(costSettlementSignatorySchema).min(1, "At least one signatory is required"),
+}).superRefine((data, ctx) => {
+    if (data.settlementType === "trip" && !data.fleetTripId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Fleet trip is required for trip settlement",
+            path: ["fleetTripId"],
+        })
+    }
+
+    if (data.settlementType === "delivery" && !data.deliveryId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Delivery is required for delivery settlement",
+            path: ["deliveryId"],
+        })
+    }
+})
+
+export type CostSettlementInput = z.infer<typeof costSettlementSchema>
+export type CostSettlementItemInput = z.infer<typeof costSettlementItemSchema>
+export type CostSettlementReceiptInput = z.infer<typeof costSettlementReceiptSchema>
+export type CostSettlementSignatoryInput = z.infer<typeof costSettlementSignatorySchema>
+
 // ─── Price Management ─────────────────────────────────────────────────────────
 
 export const priceListSchema = z.object({

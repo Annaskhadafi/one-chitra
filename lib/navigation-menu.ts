@@ -474,6 +474,56 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
     }))
 }
 
+const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): EditableNavSection[] => {
+    const defaults = getDefaultEditableNavigationConfig()
+    const merged = [...config]
+
+    for (const defaultSection of defaults) {
+        const existingSectionIndex = merged.findIndex((section) => section.title === defaultSection.title)
+
+        if (existingSectionIndex === -1) {
+            merged.push(defaultSection)
+            continue
+        }
+
+        const existingSection = merged[existingSectionIndex]
+        const sectionItems = [...existingSection.items]
+
+        for (const defaultItem of defaultSection.items) {
+            const existingItemIndex = sectionItems.findIndex((item) => item.title === defaultItem.title || item.url === defaultItem.url)
+
+            if (existingItemIndex === -1) {
+                sectionItems.push(defaultItem)
+                continue
+            }
+
+            const existingItem = sectionItems[existingItemIndex]
+            const subItems = [...existingItem.items]
+
+            for (const defaultSubItem of defaultItem.items) {
+                const hasSubItem = subItems.some(
+                    (subItem) => subItem.title === defaultSubItem.title || subItem.url === defaultSubItem.url,
+                )
+                if (!hasSubItem) {
+                    subItems.push(defaultSubItem)
+                }
+            }
+
+            sectionItems[existingItemIndex] = {
+                ...existingItem,
+                items: subItems,
+            }
+        }
+
+        merged[existingSectionIndex] = {
+            ...existingSection,
+            items: sectionItems,
+        }
+    }
+
+    return merged
+}
+
 export const parseNavigationConfigFromSetting = (rawSetting: string | null): EditableNavSection[] => {
     if (!rawSetting) {
         return getDefaultEditableNavigationConfig()
@@ -481,7 +531,8 @@ export const parseNavigationConfigFromSetting = (rawSetting: string | null): Edi
 
     try {
         const parsed = JSON.parse(rawSetting) as unknown
-        return normalizeEditableNavigationConfig(parsed)
+        const normalized = normalizeEditableNavigationConfig(parsed)
+        return mergeWithDefaultNavigationConfig(normalized)
     } catch {
         return getDefaultEditableNavigationConfig()
     }
