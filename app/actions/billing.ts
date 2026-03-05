@@ -167,7 +167,7 @@ export async function trackJneResi(awb: string) {
         if (!awb) throw new Error("No Resi (AWB) is required");
 
         const apiKey = "1bc106532ff5009faabb538c268f886e9920fcc76b41c27e7eb361635265053b";
-        const url = `https://api.binderbyte.com/v1/track?api_key=${apiKey}=jne&awb=${awb}`;
+        const url = `https://api.binderbyte.com/v1/track?api_key=${apiKey}&courier=jne&awb=${awb}`;
 
         const res = await fetch(url);
         const data = await res.json();

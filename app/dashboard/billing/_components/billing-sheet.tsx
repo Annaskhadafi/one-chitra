@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Sheet,
@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { uploadFile } from "@/app/actions/upload"
 import { toast } from "sonner"
-import { Loader2, Search, UploadCloud } from "lucide-react"
+import { Loader2, UploadCloud } from "lucide-react"
 import type { BillingRecordDisplay } from "@/lib/types"
 
 interface BillingSheetProps {
@@ -31,14 +31,47 @@ interface BillingSheetProps {
 
 export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
+    const [isTracking, setIsTracking] = useState(false)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [formData, setFormData] = useState<any>({})
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
         if (record) {
             setFormData(record)
         }
     }, [record])
+
+    // Auto-track JNE resi saat noResi berubah (debounce 1.5 detik)
+    useEffect(() => {
+        if (formData.modeDelivery !== 'JNE' || !formData.noResi || formData.noResi.trim().length < 10) return
+
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+
+        debounceRef.current = setTimeout(async () => {
+            setIsTracking(true)
+            try {
+                const result = await trackJneResi(formData.noResi.trim())
+                if (result.success && result.data) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    setFormData((prev: any) => ({
+                        ...prev,
+                        statusDelivery: result.data.statusAction,
+                        receiverDate: result.data.receiverDate || prev.receiverDate
+                    }))
+                }
+            } catch {
+                // Gagal silent — user tidak perlu tahu gagal auto-track
+            } finally {
+                setIsTracking(false)
+            }
+        }, 1500)
+
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.noResi, formData.modeDelivery])
 
     const handleChange = (key: string, value: unknown) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,32 +116,6 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
         }
     }
 
-    const handleTrackJne = async () => {
-        if (formData.modeDelivery !== 'JNE' || !formData.noResi) {
-            toast.error("Please fill Mode Delivery as JNE and enter No. Resi")
-            return
-        }
-
-        setIsLoading(true)
-        try {
-            const result = await trackJneResi(formData.noResi)
-            if (result.success && result.data) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                setFormData((prev: any) => ({
-                    ...prev,
-                    statusDelivery: result.data.statusAction,
-                    receiverDate: result.data.receiverDate || prev.receiverDate
-                }))
-                toast.success("Tracking data received")
-            } else {
-                toast.error(result.error || "Failed to track AWB")
-            }
-        } catch (error) {
-            toast.error("An error occurred while tracking")
-        } finally {
-            setIsLoading(false)
-        }
-    }
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -231,14 +238,17 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
                                 </div>
                                 <div className="space-y-2">
                                     <Label>No. Resi</Label>
-                                    <div className="flex gap-2">
-                                        <Input value={formData.noResi || ""} onChange={e => handleChange("noResi", e.target.value)} />
-                                        {formData.modeDelivery === 'JNE' && (
-                                            <Button type="button" variant="outline" size="icon" onClick={handleTrackJne} disabled={isLoading || !formData.noResi}>
-                                                <Search className="h-4 w-4" />
-                                            </Button>
+                                    <div className="relative">
+                                        <Input value={formData.noResi || ""} onChange={e => handleChange("noResi", e.target.value)} placeholder={formData.modeDelivery === 'JNE' ? "Input resi → auto track..." : ""} />
+                                        {isTracking && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                            </div>
                                         )}
                                     </div>
+                                    {formData.modeDelivery === 'JNE' && (
+                                        <p className="text-xs text-muted-foreground">Status & receiver date akan terisi otomatis setelah input resi.</p>
+                                    )}
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Status Delivery</Label>

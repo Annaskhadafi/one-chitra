@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
-import { updateBillingRecord } from "@/app/actions/billing"
+import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -46,6 +46,44 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
         // Optimistic UI Update immediately
         if (tableMeta?.updateData) {
             tableMeta.updateData(poNo, column, finalValue)
+        }
+
+        // Auto-track JNE: jika kolom noResi & modeDelivery row ini JNE
+        if (column === "noResi" && row.original.modeDelivery === "JNE" && finalValue && String(finalValue).trim().length >= 10) {
+            const noResi = String(finalValue).trim()
+            toast.promise(
+                (async () => {
+                    // Simpan noResi dulu
+                    await updateBillingRecord({ poNo, noResi: finalValue as string })
+                    // Lalu track
+                    const result = await trackJneResi(noResi)
+                    if (result.success && result.data) {
+                        const updates = {
+                            poNo,
+                            statusDelivery: result.data.statusAction,
+                            ...(result.data.receiverDate ? { receiverDate: result.data.receiverDate } : {})
+                        }
+                        // Update optimistic UI
+                        if (tableMeta?.updateData) {
+                            tableMeta.updateData(poNo, "statusDelivery", result.data.statusAction)
+                            if (result.data.receiverDate) {
+                                tableMeta.updateData(poNo, "receiverDate", result.data.receiverDate)
+                            }
+                        }
+                        // Simpan ke DB
+                        await updateBillingRecord(updates)
+                        return result.data.statusAction
+                    } else {
+                        throw new Error(result.error || "Tracking gagal")
+                    }
+                })(),
+                {
+                    loading: "Tracking resi JNE...",
+                    success: (status) => `JNE: ${status}`,
+                    error: (err) => err.message || "Gagal tracking resi"
+                }
+            )
+            return // Sudah di-handle di atas termasuk save noResi
         }
 
         const promise = updateBillingRecord({
@@ -111,21 +149,25 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
 
     if (isEditing) {
         if (type === "select" && options) {
+            const listId = `dl-${column}-${row.original.poNo}`
             return (
-                <select
-                    value={value as string || ""}
-                    onChange={e => setValue(e.target.value)}
-                    onBlur={onBlur}
-                    onKeyDown={onKeyDown}
-                    onPaste={handlePaste}
-                    autoFocus
-                    className="h-8 w-full rounded border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                    <option value="" disabled>Select...</option>
-                    {options.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                </select>
+                <>
+                    <input
+                        list={listId}
+                        value={value as string || ""}
+                        onChange={e => setValue(e.target.value)}
+                        onBlur={onBlur}
+                        onKeyDown={onKeyDown}
+                        autoFocus
+                        placeholder="Pilih atau ketik baru..."
+                        className="h-8 w-full rounded border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <datalist id={listId}>
+                        {options.map(opt => (
+                            <option key={opt} value={opt} />
+                        ))}
+                    </datalist>
+                </>
             )
         }
 

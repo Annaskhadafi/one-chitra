@@ -13,7 +13,7 @@ import {
     getPaginationRowModel,
     useReactTable,
 } from "@tanstack/react-table"
-import { ChevronDown, Download, Loader2, Maximize2, Minimize2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
+import { ChevronDown, Download, Loader2, Maximize2, Minimize2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,7 +35,7 @@ import {
 import { getColumns } from "./billing-columns"
 import { BillingImportDialog } from "./billing-import-dialog"
 import { BillingSheet } from "./billing-sheet"
-import { deleteBillingRecord, getBillingRecords, updateBillingRecord } from "@/app/actions/billing"
+import { deleteBillingRecord, getBillingRecords, updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -110,6 +110,59 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 toast.error("Failed to delete billing data")
             }
         }
+    }
+
+    const [isRefreshingJne, setIsRefreshingJne] = React.useState(false)
+
+    const handleRefreshJne = async () => {
+        // Filter: JNE + ada noResi + statusDelivery BUKAN "DELIVERED"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const toRefresh = records.filter((r: any) =>
+            r.modeDelivery === 'JNE' &&
+            r.noResi &&
+            String(r.noResi).trim().length >= 10 &&
+            r.statusDelivery?.toUpperCase() !== 'DELIVERED'
+        )
+
+        if (toRefresh.length === 0) {
+            toast.info("Tidak ada resi JNE yang perlu di-refresh (semua sudah DELIVERED atau kosong)")
+            return
+        }
+
+        setIsRefreshingJne(true)
+        let success = 0
+        let failed = 0
+        const toastId = toast.loading(`Refreshing 0/${toRefresh.length} resi JNE...`)
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of toRefresh) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const result = await trackJneResi(String((r as any).noResi).trim())
+                if (result.success && result.data) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const updates: any = { poNo: (r as any).poNo, statusDelivery: result.data.statusAction }
+                    if (result.data.receiverDate) updates.receiverDate = result.data.receiverDate
+                    await updateBillingRecord(updates)
+                    success++
+                } else {
+                    failed++
+                }
+            } catch {
+                failed++
+            }
+            toast.loading(`Refreshing ${success + failed}/${toRefresh.length} resi JNE...`, { id: toastId })
+        }
+
+        setIsRefreshingJne(false)
+        toast.dismiss(toastId)
+
+        if (failed === 0) {
+            toast.success(`${success} resi JNE berhasil di-refresh`)
+        } else {
+            toast.warning(`${success} berhasil, ${failed} gagal`)
+        }
+        refetch()
     }
 
     const handleExport = () => {
@@ -450,6 +503,17 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                         <Button variant="outline" onClick={handleExport} className="h-[36px]">
                             <Download className="mr-2 h-4 w-4" />
                             Export CSV
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={handleRefreshJne}
+                            disabled={isRefreshingJne}
+                            className="h-[36px] text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                            {isRefreshingJne
+                                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Refresh JNE
                         </Button>
                         {canCreate && <BillingImportDialog />}
                         <DropdownMenu>
