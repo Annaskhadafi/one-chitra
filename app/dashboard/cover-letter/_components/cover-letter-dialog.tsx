@@ -1,9 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, ImageIcon, X } from "lucide-react";
 import { CoverLetterPreview, type PreviewInvoiceItem } from "./cover-letter-preview";
 import type { CoverLetterCustomer } from "@/app/actions/cover-letter";
 
@@ -40,7 +40,8 @@ function buildPrintHTML(
     letterDate: string,
     signerName: string,
     signerTitle: string,
-    location: string = "balikpapan"
+    location: string = "balikpapan",
+    withBackground: boolean = false
 ): string {
     const grandTotal = items.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
     const addressLines = [
@@ -72,7 +73,6 @@ function buildPrintHTML(
             font-family: Arial, sans-serif;
             font-size: 8pt;
             color: #000;
-            background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
@@ -82,6 +82,7 @@ function buildPrintHTML(
             margin: 0 auto;
             padding: 50mm 20mm 15mm 20mm;
             position: relative;
+            ${withBackground ? `background-image: url('/ChitraParatama_Stationery_Letterhead_jkt.jpg'); background-size: cover; background-repeat: no-repeat;` : ""}
         }
         .header-row {
             display: flex;
@@ -123,8 +124,17 @@ function buildPrintHTML(
         .sig-right { font-style: italic; font-size: 8pt; }
         .footer-note { margin-top: 12pt; font-weight: bold; font-size: 7.5pt; font-style: italic; }
         @media print {
-            body { background: #fff; }
+            body { margin: 0; }
             .page { margin: 0; }
+            ${withBackground ? `
+            body {
+                background-image: url('/ChitraParatama_Stationery_Letterhead_jkt.jpg') !important;
+                background-size: cover !important;
+                background-repeat: no-repeat !important;
+                background-attachment: fixed !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }` : ""}
         }
     </style>
 </head>
@@ -190,8 +200,10 @@ export function CoverLetterDialog({
     open, onOpenChange, customer, items, refNumber, letterDate, signerName, signerTitle, location = "balikpapan"
 }: CoverLetterDialogProps) {
 
+    const [withBackground, setWithBackground] = useState(false);
+
     const handleOpenPrintTab = () => {
-        const html = buildPrintHTML(customer, items, refNumber, letterDate, signerName, signerTitle, location);
+        const html = buildPrintHTML(customer, items, refNumber, letterDate, signerName, signerTitle, location, withBackground);
         const win = window.open("", "_blank");
         if (win) {
             win.document.write(html);
@@ -206,9 +218,22 @@ export function CoverLetterDialog({
                     <div className="flex items-center justify-between">
                         <DialogTitle className="text-lg font-semibold">Preview Cover Letter</DialogTitle>
                         <div className="flex items-center gap-2">
+                            {/* Toggle background */}
+                            <button
+                                type="button"
+                                onClick={() => setWithBackground(p => !p)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${withBackground
+                                    ? "bg-teal-600 text-white border-teal-600 hover:bg-teal-700"
+                                    : "bg-muted text-muted-foreground border-input hover:bg-accent"
+                                    }`}
+                                title={withBackground ? "Nonaktifkan background letterhead" : "Aktifkan background letterhead"}
+                            >
+                                <ImageIcon className="h-3.5 w-3.5" />
+                                {withBackground ? "Dengan Background" : "Tanpa Background"}
+                            </button>
                             <Button variant="default" onClick={handleOpenPrintTab} className="gap-2">
                                 <ExternalLink className="h-4 w-4" />
-                                Buka & Print di Tab Baru
+                                Buka &amp; Print di Tab Baru
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
                                 <X className="h-4 w-4" />
@@ -225,6 +250,7 @@ export function CoverLetterDialog({
                         signerName={signerName}
                         signerTitle={signerTitle}
                         location={location}
+                        withBackground={withBackground}
                     />
                 </div>
             </DialogContent>

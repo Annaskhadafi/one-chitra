@@ -20,6 +20,7 @@ interface CoverLetterPreviewProps {
     signerName: string;
     signerTitle: string;
     location?: string;
+    withBackground?: boolean;
 }
 
 function formatDate(date: Date | string | null | undefined): string {
@@ -36,7 +37,7 @@ function formatDateLong(dateStr: string): string {
     return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-export function CoverLetterPreview({ customer, items, refNumber, letterDate, signerName, signerTitle, location = "balikpapan" }: CoverLetterPreviewProps) {
+export function CoverLetterPreview({ customer, items, refNumber, letterDate, signerName, signerTitle, location = "balikpapan", withBackground = false }: CoverLetterPreviewProps) {
     const grandTotal = items.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
 
     const addressLines = [
@@ -49,9 +50,17 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
             <style>{`
                 @media print {
                     @page { size: A4; margin: 15mm; }
-                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    body {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        ${withBackground ? `
+                        background-image: url('/ChitraParatama_Stationery_Letterhead_jkt.jpg') !important;
+                        background-size: cover !important;
+                        background-repeat: no-repeat !important;
+                        background-attachment: fixed !important;` : ""}
+                    }
                     .no-print { display: none !important; }
-                    .pdf-wrapper { box-shadow: none !important; }
+                    .pdf-wrapper { box-shadow: none !important; background: transparent !important; }
                 }
             `}</style>
             <div className="pdf-wrapper bg-white" style={{
@@ -61,12 +70,16 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
                 width: "210mm",
                 minHeight: "297mm",
                 margin: "0 auto",
-                /* Margin: atas lebih besar (50mm), kiri/kanan/bawah normal */
                 padding: "50mm 20mm 15mm 20mm",
                 boxSizing: "border-box",
                 position: "relative",
                 boxShadow: "0 0 20px rgba(0,0,0,0.15)",
                 lineHeight: "1.4",
+                ...(withBackground ? {
+                    backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
+                    backgroundSize: "cover",
+                    backgroundRepeat: "no-repeat",
+                } : {}),
             }}>
                 {/* Ref + Tanggal */}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12pt" }}>
