@@ -85,8 +85,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                         background-color: white;
                     }
                     .pdf-wrapper * { box-sizing: border-box; }
-                    .pdf-wrapper .container { padding: 10mm; width: 100%; display: flex; flex-direction: column; min-height: 279mm; box-sizing: border-box; }
-                    .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 40px; }
+                    .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; display: flex; flex-direction: column; min-height: 279mm; box-sizing: border-box; }
                     .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                     .pdf-wrapper .ship-to { width: 55%; }
                     .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
@@ -120,7 +119,6 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
                     .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
                     .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
-                    .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; width: 100%; position: absolute; bottom: 5mm; }
                     @media print {
                         .no-print { display: none !important; }
                     }
@@ -181,9 +179,8 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 box-sizing: border-box;
                             }
                             .pdf-wrapper * { box-sizing: border-box; }
-                            .pdf-wrapper .container { padding: 10mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 259mm; }
+                            .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 259mm; }
                             
-                            .pdf-wrapper .internal-info { color: #eab308; font-size: 8pt; text-align: center; margin-bottom: 60px; margin-top: 20px; }
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                             .pdf-wrapper .ship-to { width: 55%; }
                             .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
@@ -220,22 +217,17 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .sig-name { font-weight: normal; margin-bottom: 0px; }
                             .pdf-wrapper .sig-placeholder { margin-top: auto; font-size: 8pt; }
                             .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
-                            
-                            .pdf-wrapper .internal-info-footer { color: #eab308; font-size: 8pt; text-align: center; position: absolute; bottom: 5mm; width: 100%; left: 0; }
 
                             @media print {
                                 @page { size: letter; margin: 0; }
                                 body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; background-color: transparent !important; }
                                 .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: 100vh !important; padding-bottom: 0 !important; }
                                 .pdf-wrapper .container { padding: 10mm !important; min-height: 259mm !important; }
-                                .pdf-wrapper .internal-info-footer { position: fixed; bottom: 5mm; }
                                 .no-print { display: none !important; }
                             }
                         ` }} />
 
                         <div className="container">
-                            <div className="internal-info">Internal information - Yellow - Mahadasha Group.</div>
-
                             <div className="header-section">
                                 <div className="ship-to">
                                     <span className="ship-to-label">Ship To:</span>
@@ -392,8 +384,6 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 </div>
                             </div>
                         </div>
-
-                        <div className="internal-info-footer">Internal information - Yellow - Mahadasha Group.</div>
                     </div>
                 </div>
             </DialogContent>
