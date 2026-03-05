@@ -18,6 +18,7 @@ type Zmc9StockSapRow = {
     value_stock: string | number | null
     currency: string | null
     extracted_at: Date | string | null
+    updated_at: Date | string | null
 }
 
 export async function GET() {
@@ -36,7 +37,8 @@ export async function GET() {
                 base_unit_of_measure,
                 value_stock,
                 currency,
-                extracted_at
+                extracted_at,
+                updated_at
             FROM public.zmc9_stock_sap
             ORDER BY stock_id DESC
         `)
@@ -55,6 +57,7 @@ export async function GET() {
             valueStock: Number(row.value_stock ?? 0),
             currency: row.currency ?? "",
             extractedAt: row.extracted_at ? new Date(row.extracted_at).toISOString() : null,
+            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
         }))
 
         return NextResponse.json({

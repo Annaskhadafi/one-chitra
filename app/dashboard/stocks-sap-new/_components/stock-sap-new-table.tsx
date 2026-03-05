@@ -52,6 +52,7 @@ type StockSAPNewItem = {
     valueStock: number
     currency: string
     extractedAt: string | null
+    updatedAt: string | null
 }
 
 type StockSAPNewResponse = {
@@ -133,15 +134,17 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         staleTime: 5 * 60 * 1000,
     })
 
-    // Menghitung status last update
+    // Menghitung status last update berdasarkan kapan data benar-benar berubah
     const updateStatus = useMemo(() => {
         if (!data || data.length === 0) return null;
 
-        // Cari extractedAt yang paling baru (terbesar/max)
+        // Cari updatedAt yang paling baru (terbesar/max)
         let latestDate = new Date(0);
         for (const item of data) {
-            if (item.extractedAt) {
-                const date = new Date(item.extractedAt);
+            // Gunakan updatedAt jika tersedia, fallback ke extractedAt
+            const dateStr = item.updatedAt || item.extractedAt;
+            if (dateStr) {
+                const date = new Date(dateStr);
                 if (date > latestDate) latestDate = date;
             }
         }
@@ -278,11 +281,15 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                 cell: ({ row }) => <div className="text-right font-mono text-[10px]">{row.original.currency || "USD"} {safeNumber(row.original.valueStock).toLocaleString()}</div>,
             },
             {
-                accessorKey: "extractedAt",
-                header: "Extracted At",
+                accessorKey: "updatedAt",
+                header: "Updated At",
                 cell: ({ row }) => (
                     <span className="text-xs text-muted-foreground">
-                        {row.original.extractedAt ? new Date(row.original.extractedAt).toLocaleString() : "-"}
+                        {row.original.updatedAt
+                            ? new Date(row.original.updatedAt).toLocaleString()
+                            : row.original.extractedAt
+                                ? new Date(row.original.extractedAt).toLocaleString()
+                                : "-"}
                     </span>
                 ),
             },
@@ -433,7 +440,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                         {updateStatus && (
                             <div className="flex flex-col items-end text-right">
                                 <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                    Last Extracted At
+                                    Last Data Update
                                 </span>
                                 <div className="flex items-center gap-2 mt-0.5">
                                     <span className="text-sm font-semibold">{updateStatus.dateStr}</span>
