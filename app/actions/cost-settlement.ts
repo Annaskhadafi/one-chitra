@@ -39,6 +39,15 @@ const mapSettlementErrorMessage = (error: unknown) => {
     return message || "Gagal membuat settlement"
 }
 
+async function getSettlementSession(action: "view" | "create" | "edit" | "delete") {
+    try {
+        return await getAuthenticatedSession("cost-settlements", action)
+    } catch {
+        // Backward compatibility for existing roles that only have deliveries permissions.
+        return await getAuthenticatedSession("deliveries", action)
+    }
+}
+
 const toDateOnly = (value: string | Date) => {
     const d = typeof value === "string" ? new Date(value) : value
     return d.toISOString().slice(0, 10)
@@ -246,7 +255,7 @@ export async function getSettlementById(id: number) {
 
 export async function createSettlement(data: z.infer<typeof costSettlementSchema>) {
     try {
-        const session = await getAuthenticatedSession("cost-settlements", "create")
+        const session = await getSettlementSession("create")
         const parsed = costSettlementSchema.parse(data)
 
         const settlementNumber = parsed.settlementNumber || await generateSettlementNumber()
@@ -323,7 +332,7 @@ export async function createSettlement(data: z.infer<typeof costSettlementSchema
 }
 
 export async function updateSettlement(id: number, data: z.infer<typeof costSettlementSchema>) {
-    await getAuthenticatedSession("cost-settlements", "edit")
+    await getSettlementSession("edit")
     const parsed = costSettlementSchema.parse(data)
 
     const existing = await db.query.costSettlements.findFirst({
@@ -402,7 +411,7 @@ export async function updateSettlement(id: number, data: z.infer<typeof costSett
 }
 
 export async function deleteSettlement(id: number) {
-    await getAuthenticatedSession("cost-settlements", "delete")
+    await getSettlementSession("delete")
 
     const existing = await db.query.costSettlements.findFirst({
         where: and(eq(costSettlements.id, id), isNull(costSettlements.deletedAt)),
@@ -432,7 +441,7 @@ export async function deleteSettlement(id: number) {
 }
 
 export async function submitSettlement(id: number) {
-    const session = await getAuthenticatedSession("cost-settlements", "edit")
+    const session = await getSettlementSession("edit")
 
     const settlement = await db.query.costSettlements.findFirst({
         where: and(eq(costSettlements.id, id), isNull(costSettlements.deletedAt)),
@@ -488,7 +497,7 @@ export async function submitSettlement(id: number) {
 }
 
 export async function postSettlement(id: number) {
-    await getAuthenticatedSession("cost-settlements", "edit")
+    await getSettlementSession("edit")
 
     const settlement = await db.query.costSettlements.findFirst({
         where: and(eq(costSettlements.id, id), isNull(costSettlements.deletedAt)),
@@ -615,7 +624,7 @@ export async function getLatestSettlementByDeliveryIds(deliveryIds: number[]) {
 }
 
 export async function uploadSettlementReceipt(formData: FormData) {
-    const session = await getAuthenticatedSession("cost-settlements", "edit")
+    const session = await getSettlementSession("edit")
     const settlementItemIdRaw = formData.get("settlementItemId")
     const settlementItemId = Number(settlementItemIdRaw)
 

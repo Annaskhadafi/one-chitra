@@ -124,6 +124,26 @@ export function SettlementCreateForm({
 
     const onSubmit = () => {
         startTransition(async () => {
+            if (settlementType === "trip" && !fleetTripId) {
+                toast.error("Pilih Fleet Trip terlebih dahulu")
+                return
+            }
+
+            if (settlementType === "delivery" && !deliveryId) {
+                toast.error("Pilih Delivery terlebih dahulu")
+                return
+            }
+
+            if (items.some((item) => !item.description.trim())) {
+                toast.error("Deskripsi item biaya wajib diisi")
+                return
+            }
+
+            if (signatories.some((signatory) => !signatory.signatoryName.trim() || !signatory.signatoryPosition.trim() || !signatory.signatoryRole.trim())) {
+                toast.error("Semua field penandatangan wajib diisi")
+                return
+            }
+
             const payload = {
                 settlementType,
                 fleetTripId: settlementType === "trip" ? fleetTripId : null,
@@ -179,8 +199,9 @@ export function SettlementCreateForm({
                     toast.success(`${uploadedCount} file nota berhasil diupload`)
                 }
                 router.push(`/dashboard/cost-settlements/${result.id}`)
-            } catch (_error) {
-                toast.error("Gagal membuat settlement")
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Gagal membuat settlement"
+                toast.error(message)
             }
         })
     }
