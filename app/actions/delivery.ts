@@ -52,6 +52,7 @@ export async function getDeliveries() {
             salesOrder: {
                 with: {
                     customer: true,
+                    items: true,
                 },
             },
             warehouse: true,

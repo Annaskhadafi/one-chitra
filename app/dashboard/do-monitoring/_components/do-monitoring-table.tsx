@@ -34,6 +34,12 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -44,7 +50,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw } from "lucide-react"
+import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw, Calendar as CalendarIcon, X } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -59,13 +65,77 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product } from "@/lib/types"
+import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product, SalesOrderItem } from "@/lib/types"
 
 export interface DeliveryWithRelations extends Delivery {
-    salesOrder: (SalesOrder & { customer: Customer }) | null
+    salesOrder: (SalesOrder & { customer: Customer, items: SalesOrderItem[] }) | null
     warehouse: Warehouse | null
     createdByUser: User | null
     items: (DeliveryItem & { product: Product })[]
+}
+
+function calculateGrandTotal(salesOrder: SalesOrder & { items: SalesOrderItem[] } | null) {
+    if (!salesOrder || !salesOrder.items) return 0
+    const subtotal = salesOrder.items.reduce((sum, item) => {
+        const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+        return sum + lineTotal
+    }, 0)
+    return subtotal - Number(salesOrder.discount) + Number(salesOrder.shipping)
+}
+
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(value)
+}
+
+// Helper functions for date range presets
+function getDateRangePreset(preset: string): { from: Date; to: Date } | null {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    switch (preset) {
+        case "this-week": {
+            const dayOfWeek = today.getDay()
+            const monday = new Date(today)
+            monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+            return { from: monday, to: today }
+        }
+        case "last-week": {
+            const dayOfWeek = today.getDay()
+            const lastMonday = new Date(today)
+            lastMonday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) - 7)
+            const lastSunday = new Date(lastMonday)
+            lastSunday.setDate(lastMonday.getDate() + 6)
+            return { from: lastMonday, to: lastSunday }
+        }
+        case "this-month": {
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+            return { from: firstDay, to: today }
+        }
+        case "last-month": {
+            const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+            const lastDay = new Date(today.getFullYear(), today.getMonth(), 0)
+            return { from: firstDay, to: lastDay }
+        }
+        case "this-quarter": {
+            const quarter = Math.floor(today.getMonth() / 3)
+            const firstDay = new Date(today.getFullYear(), quarter * 3, 1)
+            return { from: firstDay, to: today }
+        }
+        case "last-quarter": {
+            const quarter = Math.floor(today.getMonth() / 3)
+            const lastQuarter = quarter === 0 ? 3 : quarter - 1
+            const year = quarter === 0 ? today.getFullYear() - 1 : today.getFullYear()
+            const firstDay = new Date(year, lastQuarter * 3, 1)
+            const lastDay = new Date(year, lastQuarter * 3 + 3, 0)
+            return { from: firstDay, to: lastDay }
+        }
+        default:
+            return null
+    }
 }
 
 export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRelations[] }) {
@@ -85,6 +155,8 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [statusFilter, setStatusFilter] = useState("all")
     const [invoiceFilter, setInvoiceFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
+    const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined })
+    const [datePreset, setDatePreset] = useState<string>("all")
 
 
     const [editDelivery, setEditDelivery] = useState<DeliveryWithRelations | null>(null)
@@ -289,6 +361,18 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             cell: ({ row }) => row.original.salesOrder?.customer?.name || "-",
         },
         {
+            id: "grandOrder",
+            header: "Grand Order",
+            cell: ({ row }) => {
+                const grandTotal = calculateGrandTotal(row.original.salesOrder)
+                return (
+                    <span className="font-medium text-sm">
+                        {grandTotal > 0 ? formatCurrency(grandTotal) : "-"}
+                    </span>
+                )
+            },
+        },
+        {
             accessorKey: "remark",
             header: "Remark",
             cell: ({ row }) => (
@@ -390,9 +474,34 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
                 (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== ""))
 
-            return matchesSearch && matchesStatus && matchesInvoice
+            // Date range filtering
+            let matchesDateRange = true
+            if (dateRange.from || dateRange.to) {
+                const deliveryDate = d.deliveryDate ? new Date(d.deliveryDate) : null
+                if (deliveryDate) {
+                    if (dateRange.from && dateRange.to) {
+                        const from = new Date(dateRange.from)
+                        const to = new Date(dateRange.to)
+                        from.setHours(0, 0, 0, 0)
+                        to.setHours(23, 59, 59, 999)
+                        matchesDateRange = deliveryDate >= from && deliveryDate <= to
+                    } else if (dateRange.from) {
+                        const from = new Date(dateRange.from)
+                        from.setHours(0, 0, 0, 0)
+                        matchesDateRange = deliveryDate >= from
+                    } else if (dateRange.to) {
+                        const to = new Date(dateRange.to)
+                        to.setHours(23, 59, 59, 999)
+                        matchesDateRange = deliveryDate <= to
+                    }
+                } else {
+                    matchesDateRange = false
+                }
+            }
+
+            return matchesSearch && matchesStatus && matchesInvoice && matchesDateRange
         })
-    }, [data, globalFilter, statusFilter, invoiceFilter])
+    }, [data, globalFilter, statusFilter, invoiceFilter, dateRange])
 
     const table = useReactTable({
         data: filteredData,
@@ -497,6 +606,23 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         }
     }
 
+    const handleDatePresetChange = (preset: string) => {
+        setDatePreset(preset)
+        if (preset === "all") {
+            setDateRange({ from: undefined, to: undefined })
+        } else {
+            const range = getDateRangePreset(preset)
+            if (range) {
+                setDateRange(range)
+            }
+        }
+    }
+
+    const clearDateRange = () => {
+        setDateRange({ from: undefined, to: undefined })
+        setDatePreset("all")
+    }
+
 
     return (
 
@@ -511,7 +637,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         className="pl-10"
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Button variant="outline" onClick={handleExport}>
                         <Download className="mr-2 h-4 w-4" />
                         Export CSV
@@ -546,7 +672,56 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                             <SelectItem value="invoiced">Invoice</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Select value={datePreset} onValueChange={handleDatePresetChange}>
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="Pilih Periode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua Tanggal</SelectItem>
+                            <SelectItem value="this-week">Minggu Ini</SelectItem>
+                            <SelectItem value="last-week">Minggu Lalu</SelectItem>
+                            <SelectItem value="this-month">Bulan Ini</SelectItem>
+                            <SelectItem value="last-month">Bulan Lalu</SelectItem>
+                            <SelectItem value="this-quarter">Quartal Ini</SelectItem>
+                            <SelectItem value="last-quarter">Quartal Lalu</SelectItem>
+                        </SelectContent>
+                    </Select>
 
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-[280px] justify-start text-left font-normal">
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dateRange.from ? (
+                                    dateRange.to ? (
+                                        <>
+                                            {dateRange.from.toLocaleDateString("id-ID")} - {dateRange.to.toLocaleDateString("id-ID")}
+                                        </>
+                                    ) : (
+                                        dateRange.from.toLocaleDateString("id-ID")
+                                    )
+                                ) : (
+                                    <span>Pilih tanggal</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="range"
+                                selected={dateRange}
+                                onSelect={(range) => {
+                                    setDateRange(range || { from: undefined, to: undefined })
+                                    setDatePreset("all")
+                                }}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {(dateRange.from || dateRange.to) && (
+                        <Button variant="ghost" size="icon" onClick={clearDateRange} title="Clear date filter">
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
 
             </div>
