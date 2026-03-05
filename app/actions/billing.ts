@@ -3,7 +3,10 @@
 import { db } from "@/db";
 import {
     billingRecords,
-    historyOrders
+    historyOrders,
+    deliveries,
+    salesOrders,
+    customers
 } from "@/db/schema";
 import { eq, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -159,6 +162,136 @@ export async function getBillingRecordByPo(poNo: string) {
     } catch (error) {
         console.error("Error fetching single billing record:", error);
         return { success: false, error: "Failed to fetch record" };
+    }
+}
+
+export async function getInvoiceInfoByPoNo(
+    poNo: string,
+    customerName?: string | null
+): Promise<{
+    success: boolean;
+    data?: { noInvSap: string | null; dateInvoice: Date | null };
+    error?: string;
+}> {
+    try {
+        if (!poNo) return { success: false, error: "PO Number is required" };
+
+        // Priority 1: Check billing_records table (manually overridden data)
+        // Match by poNo only (billing_records is keyed by poNo unique)
+        const billingRecord = await db.query.billingRecords.findFirst({
+            where: eq(billingRecords.poNo, poNo),
+            columns: { noInvSap: true, dateInvoice: true, customer: true }
+        });
+
+        if (billingRecord?.noInvSap) {
+            // If customerName given, validate customer matches (loose ilike match)
+            const customerMatch = !customerName ||
+                !billingRecord.customer ||
+                billingRecord.customer.toLowerCase().includes(customerName.toLowerCase().substring(0, 10)) ||
+                customerName.toLowerCase().includes((billingRecord.customer || '').toLowerCase().substring(0, 10));
+
+            if (customerMatch) {
+                return {
+                    success: true,
+                    data: {
+                        noInvSap: billingRecord.noInvSap,
+                        dateInvoice: billingRecord.dateInvoice,
+                    }
+                };
+            }
+        }
+
+        // Priority 2: Fallback to historyOrders (SAP raw data)
+        // Match by PO number only — PO dari SAP sudah unik per customer
+        // Menggunakan raw SQL execute untuk stabilitas agregat MAX dan konversi to_date
+        const query = sql`
+            SELECT 
+                MAX(${historyOrders.billingNo}) as "noInvSap",
+                MAX(to_date(NULLIF(${historyOrders.billingDate}, ''), 'MM/DD/YYYY')) as "dateInvoice"
+            FROM ${historyOrders}
+            WHERE ${historyOrders.poNo} = ${poNo}
+            AND ${historyOrders.billingDate} IS NOT NULL AND ${historyOrders.billingDate} != ''
+            AND ${historyOrders.billingNo} IS NOT NULL AND ${historyOrders.billingNo} != ''
+            AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
+        `;
+
+        const historyResult: any = await db.execute(query);
+        const row = historyResult.rows?.[0] || historyResult[0];
+
+        if (row && row.noInvSap) {
+            return {
+                success: true,
+                data: {
+                    noInvSap: row.noInvSap as string,
+                    dateInvoice: row.dateInvoice ? new Date(row.dateInvoice) : null,
+                }
+            };
+        }
+
+        // No match found
+        return { success: true, data: { noInvSap: null, dateInvoice: null } };
+    } catch (error) {
+        console.error("Error fetching invoice info by PO:", error);
+        return { success: false, error: "Failed to fetch invoice info" };
+    }
+}
+
+export async function batchSyncInvoiceFromBilling(): Promise<{
+    success: boolean;
+    updated: number;
+    notFound: number;
+    total: number;
+    error?: string;
+}> {
+    try {
+        await checkPermission('deliveries', 'edit');
+
+        // Get all deliveries with a customerPo AND customer name via joins
+        const deliveriesWithPo = await db
+            .select({
+                id: deliveries.id,
+                customerPo: salesOrders.customerPo,
+                customerName: customers.name,
+            })
+            .from(deliveries)
+            .innerJoin(salesOrders, eq(deliveries.salesOrderId, salesOrders.id))
+            .leftJoin(customers, eq(salesOrders.customerId, customers.id))
+            .where(isNotNull(salesOrders.customerPo));
+
+        let updated = 0;
+        let notFound = 0;
+        const total = deliveriesWithPo.length;
+
+        for (const delivery of deliveriesWithPo) {
+            if (!delivery.customerPo) { notFound++; continue; }
+
+            // Pass customerName for stricter matching (PO + Customer)
+            const invoiceInfo = await getInvoiceInfoByPoNo(
+                delivery.customerPo,
+                delivery.customerName ?? undefined
+            );
+            if (!invoiceInfo.success || !invoiceInfo.data?.noInvSap) {
+                notFound++;
+                continue;
+            }
+
+            // Directly update the delivery record
+            await db.update(deliveries)
+                .set({
+                    invoiceNumber: invoiceInfo.data.noInvSap,
+                    invoiceDate: invoiceInfo.data.dateInvoice,
+                    updatedAt: new Date(),
+                })
+                .where(eq(deliveries.id, delivery.id));
+
+            updated++;
+        }
+
+        revalidatePath("/dashboard/do-monitoring");
+        return { success: true, updated, notFound, total };
+    } catch (error) {
+        console.error("Error batch syncing invoice from billing:", error);
+        return { success: false, updated: 0, notFound: 0, total: 0, error: "Gagal sync invoice dari billing" };
     }
 }
 

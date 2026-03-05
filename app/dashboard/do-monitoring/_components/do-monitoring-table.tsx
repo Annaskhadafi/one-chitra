@@ -6,6 +6,7 @@ import { ScanDoPreview } from "./scan-do-preview"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
 import { deleteDelivery, updateDoMonitoringFields, getDeliveries } from "@/app/actions/delivery"
+import { batchSyncInvoiceFromBilling } from "@/app/actions/billing"
 import {
     Table,
     TableBody,
@@ -43,7 +44,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText } from "lucide-react"
+import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -98,6 +99,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
+    const [isSyncingInvoice, setIsSyncingInvoice] = useState(false)
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -468,6 +470,33 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         })
     }
 
+    const handleSyncInvoiceFromSap = async () => {
+        setIsSyncingInvoice(true)
+        try {
+            const result = await batchSyncInvoiceFromBilling()
+            if (result.success) {
+                queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+                if (result.updated > 0) {
+                    toast.success(`${result.updated} invoice berhasil diperbarui`, {
+                        description: result.notFound > 0
+                            ? `${result.notFound} DO tidak ada match di Billing (total diperiksa: ${result.total})`
+                            : `Semua ${result.total} DO berhasil dicocokkan dari Billing`,
+                        duration: 6000,
+                    })
+                } else {
+                    toast.info("Tidak ada invoice baru dari Billing", {
+                        description: `${result.total} DO diperiksa — tidak ada PO yang cocok dengan data Billing`,
+                        duration: 6000,
+                    })
+                }
+            } else {
+                toast.error(result.error || "Gagal sync invoice dari Billing")
+            }
+        } finally {
+            setIsSyncingInvoice(false)
+        }
+    }
+
 
     return (
 
@@ -486,6 +515,15 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                     <Button variant="outline" onClick={handleExport}>
                         <Download className="mr-2 h-4 w-4" />
                         Export CSV
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleSyncInvoiceFromSap}
+                        disabled={isSyncingInvoice}
+                        title="Refresh / Sync Invoice dari data Billing & SAP"
+                    >
+                        <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingInvoice ? 'animate-spin' : ''}`} />
+                        {isSyncingInvoice ? "Syncing..." : "Refresh Invoice"}
                     </Button>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                         <SelectTrigger className="w-[150px]">

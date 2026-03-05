@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { updateDoMonitoringFields } from "@/app/actions/delivery"
+import { getInvoiceInfoByPoNo } from "@/app/actions/billing"
 import { uploadFile } from "@/app/actions/upload"
 import { useQueryClient } from "@tanstack/react-query"
 import { ScanDoPreview } from "./scan-do-preview"
@@ -25,15 +26,21 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { Upload, FileText, ExternalLink, Maximize2 } from "lucide-react"
+import type { SalesOrder, Customer } from "@/lib/types"
+
+type DeliveryWithSalesOrder = Delivery & {
+    salesOrder?: (SalesOrder & { customer: Customer }) | null
+}
 
 export function EditDoDialog({
     delivery,
     open,
     onOpenChange
 }: {
-    delivery: Delivery | null,
+    delivery: DeliveryWithSalesOrder | null,
     open: boolean,
     onOpenChange: (open: boolean) => void
 }) {
@@ -51,18 +58,58 @@ export function EditDoDialog({
     const [uploadProgress, setUploadProgress] = useState(0)
     const [saving, setSaving] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+    // SAP auto-fill state
+    const [invoiceFromSap, setInvoiceFromSap] = useState(false)
+
     const queryClient = useQueryClient()
+
+    // Fetch invoice info from billing by PO number + customerName
+    const fetchInvoiceFromBilling = useCallback(async (poNo: string, customerName?: string, overrideExisting = false) => {
+        if (!poNo) return null
+
+        const result = await getInvoiceInfoByPoNo(poNo, customerName)
+        if (!result.success || !result.data) return null
+
+        const { noInvSap, dateInvoice } = result.data
+
+        if (noInvSap) {
+            if (overrideExisting) {
+                setInvoiceNumber(noInvSap)
+                setInvoiceDate(dateInvoice ? new Date(dateInvoice).toISOString().slice(0, 10) : "")
+                setInvoiceFromSap(true)
+                return { noInvSap, dateInvoice }
+            }
+            return { noInvSap, dateInvoice }
+        }
+
+        return null
+    }, [])
 
     // Sync state when dialog opens with selected delivery
     useEffect(() => {
         if (delivery && open) {
+            const currentInvoiceNumber = delivery.invoiceNumber || ""
+            const currentInvoiceDate = delivery.invoiceDate
+                ? new Date(delivery.invoiceDate).toISOString().slice(0, 10)
+                : ""
+
             setReturnDoDate(delivery.returnDoDate ? new Date(delivery.returnDoDate).toISOString().slice(0, 10) : "")
-            setInvoiceNumber(delivery.invoiceNumber || "")
-            setInvoiceDate(delivery.invoiceDate ? new Date(delivery.invoiceDate).toISOString().slice(0, 10) : "")
+            setInvoiceNumber(currentInvoiceNumber)
+            setInvoiceDate(currentInvoiceDate)
             setDoStatus(delivery.doStatus || "Pending")
             setRemark(delivery.remark || "")
             setScanDoDocument(delivery.scanDoDocument || "")
+            setInvoiceFromSap(false)
+
+            // Auto-fill invoice ONLY if invoice field is currently empty
+            const poNo = (delivery as DeliveryWithSalesOrder).salesOrder?.customerPo
+            const customerName = (delivery as DeliveryWithSalesOrder).salesOrder?.customer?.name
+            if (poNo && !currentInvoiceNumber) {
+                fetchInvoiceFromBilling(poNo, customerName ?? undefined, true)
+            }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [delivery, open])
 
     const handleSave = async () => {
@@ -114,7 +161,7 @@ export function EditDoDialog({
             }, 150)
 
             const result = await uploadFile(formData)
-            
+
             // Clear interval and complete progress
             clearInterval(progressInterval)
 
@@ -139,7 +186,7 @@ export function EditDoDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[460px]">
                 <DialogHeader>
                     <DialogTitle>Edit DO Monitoring Info</DialogTitle>
                     <DialogDescription>
@@ -169,24 +216,46 @@ export function EditDoDialog({
                             className="col-span-3"
                         />
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">Invoice No.</Label>
-                        <Input
-                            value={invoiceNumber}
-                            onChange={(e) => setInvoiceNumber(e.target.value)}
-                            className="col-span-3"
-                            placeholder="INV-..."
-                        />
+
+                    {/* Invoice No */}
+                    <div className="grid grid-cols-4 items-start gap-4">
+                        <div className="text-right pt-2">
+                            <Label>Invoice No.</Label>
+                        </div>
+                        <div className="col-span-3 space-y-1.5">
+                            <Input
+                                value={invoiceNumber}
+                                onChange={(e) => {
+                                    setInvoiceNumber(e.target.value)
+                                    setInvoiceFromSap(false) // User edited manually
+                                }}
+                                placeholder="INV-..."
+                            />
+                            {invoiceFromSap && (
+                                <div className="flex items-center gap-1.5">
+                                    <Badge variant="secondary" className="text-[10px] h-5 bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                        🔗 Dari SAP/Billing
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground">Bisa diedit manual</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {/* Invoice Date */}
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">Invoice Date</Label>
                         <Input
                             type="date"
                             value={invoiceDate}
-                            onChange={(e) => setInvoiceDate(e.target.value)}
+                            onChange={(e) => {
+                                setInvoiceDate(e.target.value)
+                                setInvoiceFromSap(false) // User edited manually
+                            }}
                             className="col-span-3"
                         />
                     </div>
+
                     <div className="grid grid-cols-4 items-start gap-4">
                         <Label className="text-right mt-3">Remark</Label>
                         <Textarea
@@ -222,7 +291,7 @@ export function EditDoDialog({
                             </div>
                             {isUploading && (
                                 <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                    <div 
+                                    <div
                                         className="bg-blue-600 h-2 transition-all duration-300 ease-out"
                                         style={{ width: `${uploadProgress}%` }}
                                     />
