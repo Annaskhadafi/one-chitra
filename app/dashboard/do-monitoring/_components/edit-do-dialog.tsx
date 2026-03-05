@@ -54,6 +54,7 @@ export function EditDoDialog({
     const [doStatus, setDoStatus] = useState(delivery?.doStatus || "Pending")
     const [remark, setRemark] = useState(delivery?.remark || "")
     const [scanDoDocument, setScanDoDocument] = useState(delivery?.scanDoDocument || "")
+    const [doSap, setDoSap] = useState(delivery?.doSap || "")
     const [isUploading, setIsUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [saving, setSaving] = useState(false)
@@ -100,6 +101,7 @@ export function EditDoDialog({
             setDoStatus(delivery.doStatus || "Pending")
             setRemark(delivery.remark || "")
             setScanDoDocument(delivery.scanDoDocument || "")
+            setDoSap(delivery.doSap || "")
             setInvoiceFromSap(false)
 
             // Auto-fill invoice ONLY if invoice field is currently empty
@@ -121,7 +123,8 @@ export function EditDoDialog({
             invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
             doStatus,
             remark,
-            scanDoDocument
+            scanDoDocument,
+            doSap
         })
 
         if (res.success) {
@@ -214,6 +217,15 @@ export function EditDoDialog({
                             value={returnDoDate}
                             onChange={(e) => setReturnDoDate(e.target.value)}
                             className="col-span-3"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">DO SAP</Label>
+                        <Input
+                            value={doSap}
+                            onChange={(e) => setDoSap(e.target.value)}
+                            className="col-span-3 font-mono"
+                            placeholder="Manual SAP Ref..."
                         />
                     </div>
 

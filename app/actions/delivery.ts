@@ -5,6 +5,7 @@ import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTra
 import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { saveCustomerAddress } from "./customer"
 import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
@@ -95,6 +96,7 @@ export async function getDeliveryItemsFlat() {
             serialNumbers: item.serialNumbers,
             deliveryId: delivery.id,
             deliveryNumber: delivery.deliveryNumber,
+            doSap: delivery.doSap,
             scheduledDate: delivery.scheduledDate,
             deliveryDate: delivery.deliveryDate,
             status: delivery.status,
@@ -304,6 +306,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             const [newDelivery] = await tx.insert(deliveries)
                 .values({
                     deliveryNumber,
+                    doSap: data.doSap || null,
                     salesOrderId: data.salesOrderId,
                     createdBy: userId,
                     scheduledDate: new Date(data.scheduledDate),
@@ -335,6 +338,17 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 .returning()
 
             console.log("[CREATE DELIVERY] Delivery created, ID:", newDelivery.id)
+
+            // Save Address to history
+            if (data.shippingAddress) {
+                const so = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, data.salesOrderId),
+                    columns: { customerId: true }
+                })
+                if (so?.customerId) {
+                    await saveCustomerAddress(so.customerId, data.shippingAddress)
+                }
+            }
 
             if (data.items.length > 0) {
                 console.log("[CREATE DELIVERY] Inserting items...")
@@ -459,8 +473,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             })
 
             if (!originalDelivery) {
+                console.error("[UPDATE DELIVERY] Delivery not found:", id)
                 return { success: false, error: "Delivery not found" }
             }
+            console.log("[UPDATE DELIVERY] Found original delivery:", id)
 
             // Revert stock if it was previously committed (not cancelled)
             // Check if original was VHS/Consignment
@@ -524,6 +540,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             await tx.update(deliveries)
                 .set({
                     deliveryNumber: data.deliveryNumber || undefined,
+                    doSap: data.doSap || null,
                     salesOrderId: data.salesOrderId,
                     scheduledDate: new Date(data.scheduledDate),
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
@@ -553,6 +570,19 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     updatedAt: new Date(),
                 })
                 .where(eq(deliveries.id, id))
+
+            // Save Address to history
+            if (data.shippingAddress) {
+                console.log("[UPDATE DELIVERY] Saving address to history...")
+                const so = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, originalDelivery.salesOrderId),
+                    columns: { customerId: true }
+                })
+                if (so?.customerId) {
+                    const addrRes = await saveCustomerAddress(so.customerId, data.shippingAddress)
+                    console.log("[UPDATE DELIVERY] Address save result:", addrRes)
+                }
+            }
 
             // Sync automated Stock Transfer
             const hasDestination = data.warehouseToId && data.warehouseToId !== 0
@@ -674,8 +704,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             return { success: true }
         })
     } catch (error) {
-        console.error("Failed to update delivery:", error)
-        return { success: false, error: "Failed to update delivery" }
+        console.error("Failed to update delivery (GLOBAL CATCH):", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to update delivery" }
     }
 }
 

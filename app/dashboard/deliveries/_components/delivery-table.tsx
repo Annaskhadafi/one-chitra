@@ -77,6 +77,7 @@ import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 interface DeliveryWithRelations {
     id: number
     deliveryNumber: string | null
+    doSap: string | null
     salesOrderId: number
     scheduledDate: Date
     deliveryDate: Date | null
@@ -318,6 +319,11 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 </Button>
             ),
             cell: ({ row }) => <span className="font-mono text-sm">{row.original.deliveryNumber || "-"}</span>,
+        },
+        {
+            accessorKey: "doSap",
+            header: "DO SAP",
+            cell: ({ row }) => <span className="font-mono text-sm">{row.original.doSap || "-"}</span>,
         },
         {
             id: "customerPo",
@@ -619,6 +625,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             const d = row.original
             return !!(
                 d.deliveryNumber?.toLowerCase().includes(search) ||
+                d.doSap?.toLowerCase().includes(search) ||
                 d.salesOrder?.invoiceNumber?.toLowerCase().includes(search) ||
                 d.salesOrder?.customer?.name?.toLowerCase().includes(search) ||
                 d.driverName?.toLowerCase().includes(search) ||
@@ -680,11 +687,12 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     }
 
     const handleExport = () => {
-        const headers = ["Delivery No", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
+        const headers = ["Delivery No", "DO SAP", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
         const csvData = table.getFilteredRowModel().rows.map(r => {
             const d = r.original
             return [
                 d.deliveryNumber || "",
+                d.doSap || "",
                 d.salesOrder?.customerPo || "",
                 d.salesOrder?.customer?.name || "",
                 new Date(d.scheduledDate).toLocaleDateString("id-ID"),

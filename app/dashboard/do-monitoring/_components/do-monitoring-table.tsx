@@ -256,6 +256,11 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                                 <FileText className="h-4 w-4" />
                             </Button>
                         </div>
+                        {row.original.doSap && (
+                            <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 font-mono">
+                                DO SAP: {row.original.doSap}
+                            </div>
+                        )}
                         <div className="text-xs text-muted-foreground">
                             SO: {row.original.salesOrder?.invoiceNumber || "-"}
                         </div>
@@ -464,6 +469,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         return (data || []).filter(d => {
             const matchesSearch = !term || (
                 (d.deliveryNumber?.toLowerCase().includes(term)) ||
+                (d.doSap?.toLowerCase().includes(term)) ||
                 (d.salesOrder?.customer?.name?.toLowerCase().includes(term)) ||
                 (d.invoiceNumber?.toLowerCase().includes(term)) ||
                 (d.salesOrder?.customerPo?.toLowerCase().includes(term))
@@ -533,11 +539,12 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Delivery No", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Customer", "Remark"]
+        const headers = ["Delivery No", "DO SAP", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Customer", "Remark"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const d = row.original
             return [
                 d.deliveryNumber || "",
+                d.doSap || "",
                 d.salesOrder?.invoiceNumber || "",
                 d.salesOrder?.customerPo || "",
                 d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",

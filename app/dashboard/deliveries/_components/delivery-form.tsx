@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
+import { getCustomerAddresses } from "@/app/actions/customer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -105,6 +106,7 @@ interface DeliveryFormProps {
     initialData?: {
         id: number
         deliveryNumber: string | null
+        doSap: string | null
         salesOrderId: number
         scheduledDate: Date
         deliveryDate: Date | null
@@ -172,6 +174,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Delivery Number
     const [generatedDeliveryNumber, setGeneratedDeliveryNumber] = useState(initialData?.deliveryNumber || "")
+    const [doSap, setDoSap] = useState(initialData?.doSap || "")
 
     useEffect(() => {
         if (!isEdit) {
@@ -268,12 +271,30 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState("")
     const [saving, setSaving] = useState(false)
     const [whToOpen, setWhToOpen] = useState(false)
+    const [addrOpen, setAddrOpen] = useState(false)
+    const [savedAddresses, setSavedAddresses] = useState<{ id: number; address: string; label: string | null }[]>([])
+    const [loadingAddresses, setLoadingAddresses] = useState(false)
 
     // Selected SO
     const selectedSO = useMemo(() =>
         salesOrders.find(so => so.id === salesOrderId),
         [salesOrders, salesOrderId]
     )
+
+    // Load saved addresses when customer changes
+    useEffect(() => {
+        if (selectedSO?.customerId) {
+            setLoadingAddresses(true)
+            getCustomerAddresses(selectedSO.customerId).then(res => {
+                if (res.success && res.data) {
+                    setSavedAddresses(res.data)
+                }
+                setLoadingAddresses(false)
+            })
+        } else {
+            setSavedAddresses([])
+        }
+    }, [selectedSO?.customerId])
 
     // When SO changes
     const handleSOChange = useCallback((soId: number) => {
@@ -443,6 +464,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         setSaving(true)
         const payload = {
             deliveryNumber: generatedDeliveryNumber || undefined,
+            doSap: doSap || null,
             salesOrderId,
             scheduledDate,
             deliveryDate: deliveryDate || null,
@@ -502,7 +524,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, totalInternalCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -658,7 +680,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                         </CardHeader>
                         <CardContent>
                             <div className="grid gap-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="space-y-2">
                                         <Label className="text-sm font-medium">Delivery Order Number</Label>
                                         <Input
@@ -666,6 +688,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                             readOnly
                                             className="h-11 bg-slate-50 dark:bg-slate-900 border-dashed font-mono font-medium text-blue-700 dark:text-blue-400"
                                             placeholder="Generating..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-medium">DO SAP / Manual Ref</Label>
+                                        <Input
+                                            value={doSap}
+                                            onChange={(e) => setDoSap(e.target.value)}
+                                            className="h-11 font-mono"
+                                            placeholder="Enter DO SAP..."
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -1134,7 +1165,66 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             )}
 
                             <div className="space-y-2">
-                                <Label>Shipping Address</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label>Shipping Address</Label>
+                                    {selectedSO && (
+                                        <Popover open={addrOpen} onOpenChange={setAddrOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                                    <MapPin className="h-3 w-3" />
+                                                    Alamat Sebelumnya
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[400px] p-0" align="end">
+                                                <Command>
+                                                    <CommandInput placeholder="Cari alamat..." />
+                                                    <CommandList>
+                                                        <CommandEmpty>Belum ada riwayat alamat.</CommandEmpty>
+                                                        <CommandGroup heading="Alamat Tersimpan">
+                                                            {savedAddresses.map((addr) => (
+                                                                <CommandItem
+                                                                    key={addr.id}
+                                                                    onSelect={() => {
+                                                                        setShippingAddress(addr.address)
+                                                                        setAddrOpen(false)
+                                                                        toast.success("Alamat dipilih")
+                                                                    }}
+                                                                    className="py-3 cursor-pointer"
+                                                                >
+                                                                    <div className="flex flex-col gap-0.5">
+                                                                        {addr.label && <span className="font-semibold text-xs">{addr.label}</span>}
+                                                                        <span className="text-sm line-clamp-2">{addr.address}</span>
+                                                                    </div>
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                        <Separator />
+                                                        <CommandGroup heading="Alamat Utama Customer">
+                                                            <CommandItem
+                                                                onSelect={() => {
+                                                                    const addr = [selectedSO.customer.address1, selectedSO.customer.address2, selectedSO.customer.address3, selectedSO.customer.address4, selectedSO.customer.address5]
+                                                                        .filter(Boolean).join(", ")
+                                                                    setShippingAddress(addr)
+                                                                    setAddrOpen(false)
+                                                                    toast.success("Alamat utama dipilih")
+                                                                }}
+                                                                className="py-3 cursor-pointer"
+                                                            >
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span className="font-semibold text-xs text-blue-600 italic">Head Office / Primary</span>
+                                                                    <span className="text-sm">
+                                                                        {[selectedSO.customer.address1, selectedSO.customer.address2, selectedSO.customer.address3, selectedSO.customer.address4, selectedSO.customer.address5]
+                                                                            .filter(Boolean).join(", ")}
+                                                                    </span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    )}
+                                </div>
                                 <Textarea
                                     placeholder="Destination address..."
                                     value={shippingAddress}

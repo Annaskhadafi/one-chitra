@@ -77,6 +77,7 @@ export const deliveryItemSchema = z.object({
 
 export const deliverySchema = z.object({
     deliveryNumber: z.string().optional(),
+    doSap: z.string().optional().nullable(),
     salesOrderId: z.number().min(1, "Sales Order is required"),
     scheduledDate: z.string().or(z.date()),
     deliveryDate: z.string().or(z.date()).optional().nullable(),

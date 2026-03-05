@@ -159,6 +159,15 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     const [productOpen, setProductOpen] = useState(false)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const uniqueProducts = useMemo(() => {
+        const seen = new Set()
+        return products.filter(p => {
+            const key = p.materialNumber
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+    }, [products])
 
     const selectedCustomer = useMemo(
         () => customers.find(c => c.id === customerId),
@@ -673,7 +682,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                         <CommandList>
                                             <CommandEmpty>No product found.</CommandEmpty>
                                             <CommandGroup>
-                                                {products.map(product => (
+                                                {uniqueProducts.map(product => (
                                                     <CommandItem
                                                         key={product.id}
                                                         value={`${product.materialNumber} ${product.materialDescription}`}

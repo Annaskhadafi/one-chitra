@@ -14,6 +14,7 @@ import type { Product, Warehouse, Customer } from "@/lib/types"
 interface DeliveryPdfData {
     id: number
     deliveryNumber: string | null
+    doSap: string | null
     scheduledDate: Date
     deliveryDate: Date | null
     status: string
@@ -255,8 +256,15 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                         <div className="do-row">
                                             <div className="do-label">Delivery No</div>
                                             <div className="do-separator">:</div>
-                                            <div className="do-value">{delivery.deliveryNumber}</div>
+                                            <div className="do-value">{delivery.doSap || delivery.deliveryNumber}</div>
                                         </div>
+                                        {delivery.doSap && (
+                                            <div className="do-row">
+                                                <div className="do-label">Internal No</div>
+                                                <div className="do-separator">:</div>
+                                                <div className="do-value">{delivery.deliveryNumber}</div>
+                                            </div>
+                                        )}
                                         <div className="do-row">
                                             <div className="do-label">Delivery Date</div>
                                             <div className="do-separator">:</div>

@@ -9,6 +9,7 @@ import { fleetTrips } from "./fleet-trips";
 export const deliveries = pgTable("deliveries", {
     id: serial("id").primaryKey(),
     deliveryNumber: varchar("delivery_number", { length: 50 }).unique(),
+    doSap: varchar("do_sap", { length: 100 }),
     salesOrderId: integer("sales_order_id").references(() => salesOrders.id).notNull(),
     scheduledDate: timestamp("scheduled_date").notNull(),
     deliveryDate: timestamp("delivery_date"),

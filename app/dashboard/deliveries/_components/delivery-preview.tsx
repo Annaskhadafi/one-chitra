@@ -38,6 +38,7 @@ import type { Product, Warehouse, Customer } from "@/lib/types"
 interface DeliveryWithRelations {
     id: number
     deliveryNumber: string | null
+    doSap: string | null
     salesOrderId: number
     scheduledDate: Date
     deliveryDate: Date | null
@@ -106,7 +107,14 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                         <div className="flex flex-col gap-1">
                             <SheetTitle className="text-xl font-bold flex items-center gap-2">
                                 <Truck className="h-5 w-5 text-primary" />
-                                {delivery.deliveryNumber || "New Delivery"}
+                                {delivery.doSap ? (
+                                    <div className="flex flex-col">
+                                        <span>{delivery.doSap}</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">Ref: {delivery.deliveryNumber}</span>
+                                    </div>
+                                ) : (
+                                    delivery.deliveryNumber || "New Delivery"
+                                )}
                             </SheetTitle>
                             <SheetDescription className="flex items-center gap-2">
                                 <Badge variant={statusVariants[delivery.status] || "secondary"} className="uppercase text-[10px] tracking-wider">
