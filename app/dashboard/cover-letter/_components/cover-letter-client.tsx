@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import {
     getCoverLetterBillingData, saveCoverLetter, updateCoverLetter, deleteCoverLetter,
-    getSigners, saveSigner, deleteSigner,
+    getSigners, saveSigner, deleteSigner, generateNextRefNumber,
     type CoverLetterCustomer, type CoverLetterBillingItem, type SavedCoverLetter, type CoverLetterSigner,
 } from "@/app/actions/cover-letter";
 import { Button } from "@/components/ui/button";
@@ -48,13 +48,6 @@ function formatDate(date: Date | string | null | undefined): string {
     return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }).replace(/ /g, "-");
 }
 function getTodayStr() { return new Date().toISOString().slice(0, 10); }
-function getDefaultRef() {
-    const t = new Date();
-    const d = String(t.getDate()).padStart(2, "0");
-    const m = String(t.getMonth() + 1).padStart(2, "0");
-    const y = t.getFullYear();
-    return `CP/BPN - ${d}${m}${y}/001`;
-}
 
 // ── Signer Selector Component ─────────────────────────────────────────────────
 interface SignerSelectorProps {
@@ -221,11 +214,12 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const [selectedCustomer, setSelectedCustomer] = useState<CoverLetterCustomer | null>(null);
     const [customerOpen, setCustomerOpen] = useState(false);
     const [selectedPoNos, setSelectedPoNos] = useState<Set<string>>(new Set());
-    const [refNumber, setRefNumber] = useState(getDefaultRef());
+    const [refNumber, setRefNumber] = useState("");
     const [letterDate, setLetterDate] = useState(getTodayStr());
     const [signerName, setSignerName] = useState("");
     const [signerTitle, setSignerTitle] = useState("");
     const [sendLocation, setSendLocation] = useState("balikpapan");
+    const [isGeneratingRef, setIsGeneratingRef] = useState(false);
     const [savedPreviewForDialog, setSavedPreviewForDialog] = useState<{ cust: CoverLetterCustomer | null; items: PreviewInvoiceItem[]; location?: string } | null>(null);
 
     useEffect(() => {
@@ -257,9 +251,19 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     }));
     const grandTotal = previewItems.reduce((acc, inv) => acc + inv.amountIncludeTax, 0);
 
+    // Auto-generate ref number saat lokasi berubah (hanya ketika membuat baru, bukan edit)
+    useEffect(() => {
+        if (!showForm || editingId !== null) return; // jangan auto-generate saat edit
+        setIsGeneratingRef(true);
+        generateNextRefNumber(sendLocation, letterDate ? new Date(letterDate) : undefined)
+            .then(ref => setRefNumber(ref))
+            .finally(() => setIsGeneratingRef(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sendLocation, showForm]);
+
     const resetForm = () => {
         setSelectedCustomer(null); setSelectedPoNos(new Set());
-        setRefNumber(getDefaultRef()); setLetterDate(getTodayStr());
+        setRefNumber(""); setLetterDate(getTodayStr());
         setSignerName(""); setSignerTitle(""); setSendLocation("balikpapan"); setEditingId(null);
     };
 
@@ -268,7 +272,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const handleEdit = async (letter: SavedCoverLetter) => {
         const cust = customers.find(c => c.customerCode === letter.custId) ?? null;
         setSelectedCustomer(cust);
-        setRefNumber(letter.refNumber ?? getDefaultRef());
+        setRefNumber(letter.refNumber ?? "");
         setLetterDate(letter.letterDate ? new Date(letter.letterDate).toISOString().slice(0, 10) : getTodayStr());
         setSignerName(letter.signerName ?? "");
         setSignerTitle(letter.signerTitle ?? "");
@@ -531,9 +535,16 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                         <CardContent className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="refNumber">Nomor Referensi</Label>
-                                    <Input id="refNumber" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="CP/BPN - 04032026/001" />
-                                    <p className="text-xs text-muted-foreground">Format: CP/BPN - TANGGAL/NOMOR</p>
+                                    <Label htmlFor="refNumber">
+                                        Nomor Referensi
+                                        {isGeneratingRef && (
+                                            <span className="ml-2 text-xs text-muted-foreground font-normal inline-flex items-center gap-1">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Generating...
+                                            </span>
+                                        )}
+                                    </Label>
+                                    <Input id="refNumber" value={refNumber} onChange={e => setRefNumber(e.target.value)} placeholder="CP/BPN/001/03/2026" />
+                                    <p className="text-xs text-muted-foreground">Format: CP/BPN/[urutan]/[bulan]/[tahun] · Bisa diedit manual</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="letterDate">Tanggal Surat</Label>

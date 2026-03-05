@@ -2,8 +2,31 @@
 
 import { db } from "@/db";
 import { billingRecords, historyOrders, customers, coverLetters, coverLetterItems } from "@/db/schema";
-import { eq, isNotNull, ne, and, sql, desc, notInArray } from "drizzle-orm";
+import { eq, isNotNull, ne, and, sql, desc, notInArray, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+/**
+ * Generate nomor referensi surat otomatis.
+ * Format: CP/BPN/001/03/2026 atau CP/JKT/001/03/2026
+ * Nomor urut dihitung dari cover letter yang sudah ada di bulan & tahun yang sama.
+ */
+export async function generateNextRefNumber(location: string, date?: Date): Promise<string> {
+    const d = date ?? new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const prefix = location === "jakarta" ? "CP/JKT" : "CP/BPN";
+    // Pola: CP/BPN/XXX/MM/YYYY
+    const pattern = `${prefix}/%/${month}/${year}`;
+
+    const result = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(coverLetters)
+        .where(like(coverLetters.refNumber, pattern));
+
+    const count = Number(result[0]?.count ?? 0);
+    const seq = String(count + 1).padStart(3, "0");
+    return `${prefix}/${seq}/${month}/${year}`;
+}
 
 export type CoverLetterBillingItem = {
     poNo: string;
