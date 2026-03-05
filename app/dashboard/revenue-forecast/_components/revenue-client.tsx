@@ -72,21 +72,25 @@ function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
     const radius = 32; const circ = Math.PI * radius
     const dashOffset = circ - (Math.min(p, 100) / 100) * circ
     return (
-        <div className="bg-card border rounded-lg p-3 flex flex-col">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase">{label}</div>
-            <div className="flex items-center gap-2 mt-1">
-                <div className="relative w-[70px] h-[38px] shrink-0">
+        <div className="bg-card border rounded-lg p-2 flex flex-col hover:bg-muted/10 transition-colors">
+            <div className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-tight leading-none mb-1">{label}</div>
+            <div className="flex items-center gap-2">
+                <div className="relative w-[50px] h-[30px] shrink-0">
                     <svg viewBox="0 0 74 40" className="w-full h-full">
-                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className="stroke-muted" strokeWidth="8" strokeLinecap="round" />
-                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className={`${strokeColor(p)} transition-all`} strokeWidth="8" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
+                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className="stroke-muted/30" strokeWidth="10" strokeLinecap="round" />
+                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className={`${strokeColor(p)} transition-all`} strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
                     </svg>
-                    <div className={`absolute bottom-0 left-0 w-full text-center text-xs font-black ${pctColor(p)}`}>{p.toFixed(0)}%</div>
+                    <div className={`absolute -bottom-1 left-0 w-full text-center text-[10px] font-black ${pctColor(p)}`}>{p.toFixed(0)}%</div>
                 </div>
-                <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-muted-foreground">Forecast</div>
-                    <div className="text-xs font-bold truncate">{fmt(data.forecast, true)}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">Revenue</div>
-                    <div className="text-xs font-semibold truncate text-primary">{fmt(data.revenue, true)}</div>
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex flex-col">
+                        <span className="text-[8px] text-muted-foreground leading-none">Forecast</span>
+                        <span className="text-[10px] font-black truncate">{fmt(data.forecast, true)}</span>
+                    </div>
+                    <div className="flex flex-col mt-0.5">
+                        <span className="text-[8px] text-muted-foreground leading-none text-primary/70">Revenue</span>
+                        <span className="text-[10px] font-black truncate text-primary">{fmt(data.revenue, true)}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -99,21 +103,27 @@ function CustomerGauge({ label, data, color = "#6366f1", textColor = "text-indig
     const radius = 48; const circ = Math.PI * radius
     const dashOffset = circ - (Math.min(p, 100) / 100) * circ
     return (
-        <div className="bg-card border rounded-xl p-3 flex flex-col items-center">
-            <div className="text-right w-full mb-1">
-                <div className="text-xs font-bold text-muted-foreground">Forecast {label}</div>
-                <div className="text-base font-black">{fmt(data.forecast, true)}</div>
+        <div className="bg-card border rounded-xl p-2.5 flex flex-col items-center relative overflow-hidden">
+            <div className="flex w-full justify-between items-start z-10">
+                <div className="flex flex-col">
+                    <div className="text-[10px] font-black text-muted-foreground tracking-tight">FORECAST {label}</div>
+                    <div className="text-lg font-black leading-none mt-0.5">{fmt(data.forecast, true)}</div>
+                </div>
             </div>
-            <div className="relative w-[100px] h-[54px]">
+
+            <div className="relative w-[110px] h-[60px] my-1">
                 <svg viewBox="0 0 104 58" className="w-full h-full">
-                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" className="stroke-muted" strokeWidth="10" strokeLinecap="round" />
-                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={color} className="transition-all" />
+                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" className="stroke-muted/30" strokeWidth="12" strokeLinecap="round" />
+                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={color} className="transition-all" />
                 </svg>
-                <div className={`absolute bottom-0 left-0 w-full text-center text-lg font-black ${textColor}`}>{p.toFixed(1)}%</div>
+                <div className={`absolute -bottom-1 left-0 w-full text-center text-2xl font-black ${textColor}`}>{p.toFixed(1)}%</div>
             </div>
-            <div className="text-right w-full mt-2">
-                <div className="text-xs text-muted-foreground">Revenue {label}</div>
-                <div className="text-base font-black text-primary">{fmt(data.revenue, true)}</div>
+
+            <div className="flex w-full justify-end items-end mt-1 z-10">
+                <div className="flex flex-col items-end">
+                    <div className="text-[10px] font-black text-muted-foreground tracking-tight leading-none uppercase">Revenue {label}</div>
+                    <div className="text-lg font-black leading-none text-primary mt-1">{fmt(data.revenue, true)}</div>
+                </div>
             </div>
         </div>
     )
@@ -153,18 +163,24 @@ function ConsolidateGauge({ data }: { data: TargetData }) {
     const radius = 80; const circ = Math.PI * radius
     const dashOffset = circ - (Math.min(p, 100) / 100) * circ
     return (
-        <div className="bg-card border rounded-xl p-5 flex flex-col items-center gap-2">
-            <div className="text-sm font-bold text-muted-foreground uppercase tracking-wide">Forecast Consolidate</div>
-            <div className="text-2xl font-black">{fmt(data.forecast)}</div>
-            <div className="relative w-[200px] h-[110px]">
-                <svg viewBox="0 0 200 110" className="w-full h-full">
-                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className="stroke-muted" strokeWidth="16" strokeLinecap="round" />
-                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className={`${strokeColor(p)} transition-all duration-1000`} strokeWidth="16" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
-                </svg>
-                <div className={`absolute bottom-0 left-0 w-full text-center text-3xl font-black ${pctColor(p)}`}>{p.toFixed(1)}%</div>
+        <div className="bg-card border rounded-xl p-4 flex flex-col items-center gap-1.5 h-full justify-between">
+            <div className="text-center">
+                <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Forecast Consolidate</div>
+                <div className="text-2xl font-black leading-tight">{fmt(data.forecast)}</div>
             </div>
-            <div className="text-sm text-muted-foreground">Revenue Consolidate</div>
-            <div className="text-xl font-black text-primary">{fmt(data.revenue)}</div>
+
+            <div className="relative w-[180px] h-[100px] mx-auto">
+                <svg viewBox="0 0 200 110" className="w-full h-full">
+                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className="stroke-muted/30" strokeWidth="18" strokeLinecap="round" />
+                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className={`${strokeColor(p)} transition-all duration-1000`} strokeWidth="18" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
+                </svg>
+                <div className={`absolute -bottom-2 left-0 w-full text-center text-4xl font-black ${pctColor(p)}`}>{p.toFixed(1)}%</div>
+            </div>
+
+            <div className="text-center">
+                <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Revenue Consolidate</div>
+                <div className="text-2xl font-black text-primary leading-tight">{fmt(data.revenue)}</div>
+            </div>
         </div>
     )
 }
@@ -221,14 +237,14 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
             </div>
 
             {/* ─── ROW 1: Consolidate + Salesman + Customer ─────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
                 {/* Consolidate Gauge */}
                 <div className="lg:col-span-3">
                     <ConsolidateGauge data={targets.consolidate} />
                 </div>
 
                 {/* Salesman Grid 2x3 */}
-                <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <SalesmanCard label="MA OC" data={targets.ma_oc} />
                     <SalesmanCard label="MA WIS" data={targets.ma_wis} />
                     <SalesmanCard label="MA AG" data={targets.ma_ag} />
@@ -238,9 +254,9 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                 </div>
 
                 {/* CK & SIS */}
-                <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div className="lg:col-span-4 grid grid-cols-2 gap-2">
                     <CustomerGauge label="CK" data={targets.ck} color="#6b7280" textColor="text-gray-600" />
-                    <CustomerGauge label="SIS" data={targets.sis} color="#a855f7" textColor="text-purple-600" />
+                    <CustomerGauge label="SIS" data={targets.sis} color="#9333ea" textColor="text-purple-600" />
                 </div>
             </div>
 
