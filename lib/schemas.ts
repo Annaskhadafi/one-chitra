@@ -163,9 +163,9 @@ export const fleetTripSchema = z.object({
 export const costSettlementItemSchema = z.object({
     id: z.number().optional(),
     costCategory: z.enum(["gasoline", "toll", "parking", "meals", "maintenance", "others"]),
-    description: z.string().min(1, "Description is required"),
-    amount: z.number().min(0, "Amount must be >= 0"),
-    receiptDate: z.string().or(z.date()).optional().nullable(),
+    description: z.string().optional().or(z.literal("")),
+    amount: z.number().min(0.01, "Jumlah harus lebih dari 0"),
+    receiptDate: z.string().or(z.date()),
     vendorName: z.string().optional().nullable(),
     deliveryItemId: z.number().optional().nullable(),
     sortOrder: z.number().int().min(0).default(0),
@@ -181,9 +181,9 @@ export const costSettlementReceiptSchema = z.object({
 
 export const costSettlementSignatorySchema = z.object({
     id: z.number().optional(),
-    signatoryName: z.string().min(1, "Name is required"),
-    signatoryPosition: z.string().min(1, "Position is required"),
-    signatoryRole: z.string().min(1, "Role is required"),
+    signatoryName: z.string().optional().or(z.literal("")),
+    signatoryPosition: z.string().optional().or(z.literal("")),
+    signatoryRole: z.string().optional().or(z.literal("")),
     sortOrder: z.number().int().min(0).default(0),
 })
 
@@ -195,24 +195,8 @@ export const costSettlementSchema = z.object({
     settlementDate: z.string().or(z.date()),
     remarks: z.string().optional().nullable(),
     items: z.array(costSettlementItemSchema).min(1, "At least one settlement item is required"),
-    signatories: z.array(costSettlementSignatorySchema).min(1, "At least one signatory is required"),
-}).superRefine((data, ctx) => {
-    if (data.settlementType === "trip" && !data.fleetTripId) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Fleet trip is required for trip settlement",
-            path: ["fleetTripId"],
-        })
-    }
-
-    if (data.settlementType === "delivery" && !data.deliveryId) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Delivery is required for delivery settlement",
-            path: ["deliveryId"],
-        })
-    }
-})
+    signatories: z.array(costSettlementSignatorySchema).default([]),
+}) // Removed .superRefine required trip/delivery logic
 
 export type CostSettlementInput = z.infer<typeof costSettlementSchema>
 export type CostSettlementItemInput = z.infer<typeof costSettlementItemSchema>

@@ -154,8 +154,11 @@ async function resolveSettlementContext(input: z.infer<typeof costSettlementSche
             vehicleNumber: delivery.vehicleNumber || null,
         }
     }
-
-    throw new Error("Invalid settlement source")
+    return {
+        advanceAmount: 0,
+        driverName: null,
+        vehicleNumber: null,
+    }
 }
 
 export async function getSettlements(filters?: {
@@ -287,7 +290,7 @@ export async function createSettlement(data: z.infer<typeof costSettlementSchema
                     parsed.items.map((item, index) => ({
                         settlementId: created.id,
                         costCategory: item.costCategory,
-                        description: item.description,
+                        description: item.description || "",
                         amount: String(item.amount),
                         receiptDate: item.receiptDate ? toDateOnly(item.receiptDate) : null,
                         vendorName: item.vendorName || null,
@@ -310,9 +313,9 @@ export async function createSettlement(data: z.infer<typeof costSettlementSchema
                 await tx.insert(costSettlementSignatories).values(
                     parsed.signatories.map((signatory, index) => ({
                         settlementId: created.id,
-                        signatoryName: signatory.signatoryName,
-                        signatoryPosition: signatory.signatoryPosition,
-                        signatoryRole: signatory.signatoryRole,
+                        signatoryName: signatory.signatoryName || "",
+                        signatoryPosition: signatory.signatoryPosition || "",
+                        signatoryRole: signatory.signatoryRole || "",
                         sortOrder: signatory.sortOrder ?? index,
                     }))
                 )
@@ -382,7 +385,7 @@ export async function updateSettlement(id: number, data: z.infer<typeof costSett
                 parsed.items.map((item, index) => ({
                     settlementId: id,
                     costCategory: item.costCategory,
-                    description: item.description,
+                    description: item.description || "",
                     amount: String(item.amount),
                     receiptDate: item.receiptDate ? toDateOnly(item.receiptDate) : null,
                     vendorName: item.vendorName || null,
@@ -396,9 +399,9 @@ export async function updateSettlement(id: number, data: z.infer<typeof costSett
             await tx.insert(costSettlementSignatories).values(
                 parsed.signatories.map((signatory, index) => ({
                     settlementId: id,
-                    signatoryName: signatory.signatoryName,
-                    signatoryPosition: signatory.signatoryPosition,
-                    signatoryRole: signatory.signatoryRole,
+                    signatoryName: signatory.signatoryName || "",
+                    signatoryPosition: signatory.signatoryPosition || "",
+                    signatoryRole: signatory.signatoryRole || "",
                     sortOrder: signatory.sortOrder ?? index,
                 }))
             )
