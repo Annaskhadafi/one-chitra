@@ -17,7 +17,7 @@ import {
 
 import { navigationConfig } from "@/lib/navigation"
 
-export const NAVBAR_MENU_SETTING_KEY = "navbar_menu_config_v1"
+export const NAVBAR_MENU_SETTING_KEY = "navbar_menu_config_v2"
 
 export const NAVBAR_ICON_OPTIONS = [
     "Circle",

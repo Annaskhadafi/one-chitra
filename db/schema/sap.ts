@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, decimal, doublePrecision, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, decimal, doublePrecision, date, index } from "drizzle-orm/pg-core";
 
 // SAP Stock Table
 export const zmc9StockSap = pgTable("zmc9_stock_sap", {
@@ -20,10 +20,40 @@ export const zmc9StockSap = pgTable("zmc9_stock_sap", {
 
 // SAP Purchasing Documents
 export const me2lPurchDocsSap = pgTable("me2l_purch_docs_sap", {
-    id: serial("id").primaryKey(),
-    // Definisi minimal agar drizzle tidak menghapus tabel
-    // User bisa menambahkan kolom spesifik jika diperlukan
-});
+    purchDocId: integer("purch_doc_id").primaryKey(),
+    item: integer("item"),
+    purchGroup: text("purch_group"),
+    docDate: date("doc_date"),
+    orderQty: doublePrecision("order_qty"),
+    netPrice: doublePrecision("net_price"),
+    priceUnit: integer("price_unit"),
+    deliveredQty: doublePrecision("delivered_qty"),
+    deliveredVal: doublePrecision("delivered_val"),
+    invoicedQty: doublePrecision("invoiced_qty"),
+    invoicedVal: doublePrecision("invoiced_val"),
+    netOrderValue: doublePrecision("net_order_value"),
+    purchOrg: text("purch_org"),
+    extractedAt: timestamp("extracted_at"),
+    plant: text("plant"),
+    purchasingDoc: text("purchasing_doc"),
+    vendorName: text("vendor_name"),
+    material: text("material"),
+    trackingNo: text("tracking_no"),
+    poHistory: text("po_history"),
+    currency: text("currency"),
+    docType: text("doc_type"),
+    docCat: text("doc_cat"),
+    storageLoc: text("storage_loc"),
+    orderUnit: text("order_unit"),
+    releaseState: text("release_state"),
+    shortText: text("short_text"),
+    materialGroup: text("material_group"),
+    // Internal Tracker for Add To Stock
+    grProcessedDate: timestamp("gr_processed_date"),
+    grWarehouseId: integer("gr_warehouse_id"),
+}, (table) => ({
+    docDateIdx: index("doc_date_idx").on(table.docDate),
+}));
 
 // SAP Sales Revenue
 export const salesRevenueSap = pgTable("sales_revenue_sap", {

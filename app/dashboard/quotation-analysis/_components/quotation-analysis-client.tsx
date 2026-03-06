@@ -1,0 +1,334 @@
+"use client"
+
+import { useState, useMemo } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    Cell
+} from "recharts"
+import {
+    TrendingUp,
+    TrendingDown,
+    Package,
+    ShoppingCart,
+    Percent,
+    ArrowRight,
+    Search,
+    Filter,
+    FileText,
+    History,
+    ChevronRight,
+    Sparkles,
+    AlertCircle
+} from "lucide-react"
+import { ScoreCard } from "@/components/score-card"
+import { cn } from "@/lib/utils"
+import Link from "next/link"
+
+interface QuotationAnalysisClientProps {
+    initialData: any
+}
+
+const CHART_COLORS = [
+    "hsl(217, 91%, 60%)", // Blue
+    "hsl(270, 76%, 53%)", // Purple
+    "hsl(160, 84%, 39%)", // Emerald
+    "hsl(43, 96%, 56%)",  // Amber
+    "hsl(346, 77%, 49%)", // Rose
+    "hsl(199, 89%, 48%)", // Sky
+    "hsl(32, 95%, 44%)",  // Orange
+]
+
+export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClientProps) {
+    const [data, setData] = useState(initialData)
+    const [searchQuery, setSearchQuery] = useState("")
+
+    const filteredLostAnalysis = useMemo(() => {
+        if (!data?.lostAnalysis) return []
+        return data.lostAnalysis.filter((item: any) =>
+            item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.quotationNumber.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+    }, [data, searchQuery])
+
+    if (!data) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 border rounded-xl bg-card gap-4">
+                <AlertCircle className="h-10 w-10 text-muted-foreground" />
+                <p className="text-muted-foreground font-medium">Gagal memuat data analisis.</p>
+                <Button variant="outline" onClick={() => window.location.reload()}>Coba Lagi</Button>
+            </div>
+        )
+    }
+
+    const { summary, topItems, monthlyTrend } = data
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col gap-2">
+                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                    Quotation Analysis Report
+                </h1>
+                <p className="text-muted-foreground">
+                    Analisis konversi penjualan dan rekomendasi barang sejenis untuk peluang yang hilang.
+                </p>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ScoreCard
+                    title="Total Quotations"
+                    value={summary.totalQuotes}
+                    icon={FileText}
+                    description="Total penawaran dibuat"
+                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50"
+                />
+                <ScoreCard
+                    title="Conversion Rate"
+                    value={`${summary.conversionRate.toFixed(1)}%`}
+                    icon={Percent}
+                    description={`${summary.totalConverted} kuotasi disetujui`}
+                    gradient={summary.conversionRate > 20 ? "from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50" : "from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50"}
+                />
+                <ScoreCard
+                    title="Potential Opportunities"
+                    value={data.lostAnalysis.length}
+                    icon={Package}
+                    description="Item dari kuotasi lost"
+                    gradient="from-purple-500/10 via-purple-400/5 to-pink-500/10 border-purple-200/50"
+                />
+                <ScoreCard
+                    title="Winning Items"
+                    value={topItems[0]?.count || 0}
+                    icon={ShoppingCart}
+                    description={`Top: ${topItems[0]?.name.slice(0, 20)}...`}
+                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50"
+                />
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid gap-4 md:grid-cols-2">
+                {/* Conversion Trend */}
+                <Card className="overflow-hidden border-none shadow-premium bg-card/50 backdrop-blur-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-primary" />
+                            Conversion Trend
+                        </CardTitle>
+                        <CardDescription>Persentase kuotasi yang disetujui vs dikirim (6 bulan terakhir)</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="h-[300px] w-100%">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={monthlyTrend}>
+                                    <defs>
+                                        <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                                    <XAxis
+                                        dataKey="month"
+                                        tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                        axisLine={false}
+                                    />
+                                    <YAxis
+                                        tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                        axisLine={false}
+                                        tickFormatter={(val) => `${val}%`}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px",
+                                            boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
+                                        }}
+                                        formatter={(value: any) => [`${parseFloat(value).toFixed(1)}%`, 'Conversion Rate']}
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="rate"
+                                        stroke="hsl(var(--primary))"
+                                        strokeWidth={3}
+                                        fillOpacity={1}
+                                        fill="url(#colorRate)"
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Top Quoted Items */}
+                <Card className="overflow-hidden border-none shadow-premium bg-card/50 backdrop-blur-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-amber-500" />
+                            Most Quoted Products
+                        </CardTitle>
+                        <CardDescription>10 barang yang paling sering masuk dalam kuotasi</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="h-[300px] w-100%">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={topItems} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                                    <XAxis type="number" hide />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        width={120}
+                                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                        tickFormatter={(val) => val.length > 20 ? `${val.slice(0, 17)}...` : val}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "hsl(var(--card))",
+                                            border: "1px solid hsl(var(--border))",
+                                            borderRadius: "8px"
+                                        }}
+                                    />
+                                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                                        {topItems.map((entry: any, index: number) => (
+                                            <Cell key={`cell-${index}`} fill={index < 3 ? "hsl(var(--primary))" : "hsl(var(--primary) / 0.4)"} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Lost Opportunity Table */}
+            <Card className="border-none shadow-premium bg-card/50 backdrop-blur-sm overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <History className="h-5 w-5 text-destructive" />
+                            Lost Opportunity Recovery
+                        </CardTitle>
+                        <CardDescription>Peluang dari kuotasi lost yang bisa dipulihkan dengan barang sejenis</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="relative w-[300px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Cari pelanggan atau produk..."
+                                className="pl-9 bg-background/50"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader className="bg-muted/50">
+                            <TableRow>
+                                <TableHead className="pl-6 w-[20%]">Customer & Quotation</TableHead>
+                                <TableHead className="w-[25%]">Lost Product</TableHead>
+                                <TableHead className="w-[10%] text-center">Qty</TableHead>
+                                <TableHead className="w-[45%] pr-6">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="h-4 w-4 text-amber-500 fill-amber-500/20" />
+                                        <span>Recommended Alternatives (Smart Match)</span>
+                                    </div>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredLostAnalysis.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                                        Tidak ada data yang ditemukan.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredLostAnalysis.map((item: any, idx: number) => (
+                                    <TableRow key={`${item.quotationId}-${idx}`} className="group hover:bg-muted/30 transition-colors">
+                                        <TableCell className="pl-6 align-top py-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-semibold text-sm group-hover:text-primary transition-colors">{item.customerName}</span>
+                                                <Link
+                                                    href={`/dashboard/quotations/${item.quotationId}`}
+                                                    className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                                                >
+                                                    {item.quotationNumber}
+                                                    <ChevronRight className="h-3 w-3" />
+                                                </Link>
+                                                <Badge variant="outline" className="w-fit text-[10px] mt-1 uppercase">
+                                                    {item.status}
+                                                </Badge>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="align-top py-4">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-sm font-medium leading-tight">{item.productName}</span>
+                                                <span className="text-xs text-muted-foreground uppercase">{item.category}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-center align-top py-4">
+                                            <span className="text-sm font-mono">{item.quantity}</span>
+                                        </TableCell>
+                                        <TableCell className="pr-6 align-top py-4">
+                                            <div className="flex flex-wrap gap-2">
+                                                {item.recommendations.length > 0 ? (
+                                                    item.recommendations.map((rec: any) => (
+                                                        <div
+                                                            key={rec.id}
+                                                            className="flex flex-col gap-1 p-2 rounded-lg border bg-background/30 hover:bg-background/80 hover:border-primary/50 transition-all w-[calc(50%-8px)]"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <span className="text-[11px] font-semibold line-clamp-2 leading-tight">
+                                                                    {rec.materialDescription}
+                                                                </span>
+                                                                <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[9px] px-1 h-4">
+                                                                    Match
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-auto pt-1 border-t border-dashed border-muted-foreground/20">
+                                                                <span className="font-mono">{rec.materialNumber}</span>
+                                                                {rec.brand && (
+                                                                    <span className="italic font-medium text-primary/80">{rec.brand}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground italic">Tidak ada rekomendasi stok serupa.</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}

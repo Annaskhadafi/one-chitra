@@ -39,6 +39,12 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+} from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 import { fetchGoodReceiveFromSAP, processGoodReceive, type SAPGoodReceiveItem } from "@/app/actions/good-receive"
@@ -60,20 +66,60 @@ interface GoodReceiveClientProps {
 
 export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps) {
     const router = useRouter()
+    const [period, setPeriod] = useState<string>("this-month")
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [rawData, setRawData] = useState<SAPGoodReceiveItem[]>([])
     const [isFetching, setIsFetching] = useState(false)
     const [targetWarehouseId, setTargetWarehouseId] = useState<string>("")
     const [isProcessing, setIsProcessing] = useState(false)
+    const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending')
 
     const [sorting, setSorting] = useState<SortingState>([])
     const [globalFilter, setGlobalFilter] = useState("")
     const [rowSelection, setRowSelection] = useState({})
+    const [isHydrated, setIsHydrated] = useState(false)
 
-    const handleFetch = async () => {
+    React.useEffect(() => {
+        setIsHydrated(true)
+    }, [])
+
+    // Watch period changes and update date pickers
+    React.useEffect(() => {
+        if (period === "custom") return;
+
+        const today = new Date()
+        let fetchStart = ""
+        let fetchEnd = ""
+
+        if (period === "today") {
+            const dateStr = today.toISOString().split('T')[0]
+            fetchStart = dateStr
+            fetchEnd = dateStr
+        } else if (period === "this-week") {
+            const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)))
+            const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7))
+            fetchStart = firstDay.toISOString().split('T')[0]
+            fetchEnd = lastDay.toISOString().split('T')[0]
+        } else if (period === "this-month") {
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+            const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+            fetchStart = firstDay.toISOString().split('T')[0]
+            fetchEnd = lastDay.toISOString().split('T')[0]
+        } else if (period === "this-year") {
+            const firstDay = new Date(today.getFullYear(), 0, 1)
+            const lastDay = new Date(today.getFullYear(), 11, 31)
+            fetchStart = firstDay.toISOString().split('T')[0]
+            fetchEnd = lastDay.toISOString().split('T')[0]
+        }
+
+        setStartDate(fetchStart)
+        setEndDate(fetchEnd)
+    }, [period])
+
+    const handleFetch = React.useCallback(async () => {
         if (!startDate || !endDate) {
-            toast.error("Please select both start and end dates")
+            toast.error("Format tanggal tidak valid.")
             return
         }
 
@@ -82,22 +128,29 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         setRowSelection({})
 
         try {
-            const result = await fetchGoodReceiveFromSAP(startDate, endDate)
+            const result = await fetchGoodReceiveFromSAP(startDate, endDate, activeTab)
+
             if (result.success && result.data) {
                 setRawData(result.data)
-                toast.success(`Fetched ${result.data.length} items`)
+                toast.success(`Berhasil menarik ${result.data.length} item SAP (${activeTab})`)
             } else {
-                toast.error(result.error || "Failed to fetch data")
+                toast.error(result.error || "Gagal menarik data")
             }
         } catch {
-            toast.error("An unexpected error occurred")
+            toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsFetching(false)
         }
-    }
+    }, [startDate, endDate, activeTab])
+
+    React.useEffect(() => {
+        if (isHydrated && startDate && endDate) {
+            handleFetch()
+        }
+    }, [isHydrated, handleFetch])
 
     const itemHasMaterial = (item: SAPGoodReceiveItem) => {
-        return !!(item.materialnumb && item.materialnumb !== "-")
+        return !!(item.materialnumb && item.materialnumb !== "-") && !item.isProcessed
     }
 
     const handleProcess = async () => {
@@ -117,24 +170,41 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
             const item = row.original
             return {
                 materialNumber: item.materialnumb!.trim(),
-                quantity: item.togr
+                quantity: item.togr,
+                ponumb: item.ponumb,
+                itemIndex: item.item || 0
             }
         })
 
         try {
-            const result = await processGoodReceive(itemsToProcess, parseInt(targetWarehouseId))
+            const warehouseIdInt = parseInt(targetWarehouseId)
+            const result = await processGoodReceive(itemsToProcess, warehouseIdInt)
             if (result.success) {
-                toast.success(`Successfully processed ${result.processed} items`)
-                if (result.errors) {
-                    toast.warning(`Some items had errors: ${result.errors.length}`)
-                }
+                toast.success(`Berhasil memproses ${result.processed} item ke stok`)
+
+                // Update local state to show remarks and disable items
+                setRawData(prev => prev.map(item => {
+                    const isProcessedNow = itemsToProcess.some(it =>
+                        it.ponumb === item.ponumb && it.itemIndex === item.item
+                    )
+                    if (isProcessedNow) {
+                        return {
+                            ...item,
+                            isProcessed: true,
+                            processedDate: new Date(),
+                            warehouseId: warehouseIdInt
+                        }
+                    }
+                    return item
+                }))
+
                 router.refresh()
                 setRowSelection({})
             } else {
-                toast.error(result.error || "Failed to process items")
+                toast.error(result.error || "Gagal memproses item")
             }
         } catch {
-            toast.error("An unexpected error occurred")
+            toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsProcessing(false)
         }
@@ -154,7 +224,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                 <Checkbox
                     checked={row.getIsSelected()}
                     onCheckedChange={(value) => row.toggleSelected(!!value)}
-                    disabled={!itemHasMaterial(row.original)}
+                    disabled={activeTab === 'history' || !itemHasMaterial(row.original)}
                     aria-label="Select row"
                 />
             ),
@@ -168,7 +238,12 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                     {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-3 w-3" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-3 w-3" /> : null}
                 </Button>
             ),
-            cell: ({ row }) => <span className="font-mono text-xs">{row.getValue("ponumb")}</span>,
+            cell: ({ row }) => (
+                <div className="flex flex-col">
+                    <span className="font-mono text-xs font-semibold">{row.getValue("ponumb")}</span>
+                    <span className="text-[10px] text-muted-foreground">Item: {row.original.item}</span>
+                </div>
+            ),
         },
         {
             accessorKey: "podate",
@@ -217,9 +292,31 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         {
             accessorKey: "togr",
             header: () => <div className="text-right text-xs font-semibold uppercase tracking-wider">To GR</div>,
-            cell: ({ row }) => <div className="text-right text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">{row.getValue("togr")}</div>,
+            cell: ({ row }) => {
+                const isProcessed = row.original.isProcessed
+                const warehouseId = row.original.warehouseId
+                const dateProcessed = row.original.processedDate
+
+                if (isProcessed) {
+                    const warehouseName = warehouses.find(w => w.id === warehouseId)?.description || `WH-${warehouseId}`
+                    const dateStr = dateProcessed ? new Date(dateProcessed).toLocaleDateString() : ""
+                    return (
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="text-right text-sm tabular-nums text-muted-foreground line-through decoration-1 decoration-muted-foreground/50">
+                                {row.getValue("togr")}
+                            </div>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded leading-tight whitespace-nowrap text-right">
+                                Masuk {warehouseName} <br />
+                                {dateStr}
+                            </span>
+                        </div>
+                    )
+                }
+
+                return <div className="text-right text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">{row.getValue("togr")}</div>
+            },
         },
-    ], [])
+    ], [activeTab, warehouses])
 
     const table = useReactTable({
         data: rawData,
@@ -260,266 +357,336 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
     const selectedCount = Object.keys(rowSelection).length
     const validItemsCount = rawData.filter(itemHasMaterial).length
 
+    if (!isHydrated) {
+        return (
+            <div className="flex flex-col gap-6 p-6 animate-pulse">
+                <div className="h-24 bg-muted rounded-xl" />
+                <div className="h-12 w-[400px] bg-muted rounded-lg" />
+                <div className="h-40 bg-muted rounded-xl" />
+                <div className="h-96 bg-muted rounded-xl" />
+            </div>
+        )
+    }
+
     return (
         <TooltipProvider>
             <div className="flex flex-col gap-6 p-6">
 
                 {/* Page Header */}
-                <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                            <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2">
-                                <Warehouse className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold tracking-tight">SAP Good Receive</h1>
-                                <p className="text-muted-foreground text-sm">Synchronize incoming goods from SAP to local inventory.</p>
-                            </div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2">
+                            <Warehouse className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">SAP Good Receive</h1>
+                            <p className="text-muted-foreground text-sm">Synchronize incoming goods from SAP to local inventory.</p>
                         </div>
                     </div>
-                    <Badge variant="outline" className="flex items-center gap-1.5 text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5">
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        SAP Connected
-                    </Badge>
+
+                    <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="flex items-center gap-1.5 text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5 shadow-sm">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            SAP Connected
+                        </Badge>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleFetch}
+                            disabled={isFetching}
+                            className="h-9 shadow-sm"
+                        >
+                            {isFetching ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Refresh
+                        </Button>
+                    </div>
                 </div>
 
-                {/* Fetch Card */}
-                <Card className="shadow-sm border bg-gradient-to-br from-indigo-50/50 to-background dark:from-indigo-950/20 dark:to-background">
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center gap-2">
-                            <CalendarDays className="h-4 w-4 text-indigo-500" />
-                            <CardTitle className="text-base">Fetch Data from SAP</CardTitle>
-                        </div>
-                        <CardDescription className="text-xs">Select a date range to retrieve Purchase Order data from the SAP system.</CardDescription>
-                    </CardHeader>
-                    <Separator />
-                    <CardContent className="pt-5">
-                        <div className="flex flex-col sm:flex-row gap-4 items-end">
-                            <div className="grid gap-1.5 w-full sm:w-auto">
-                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
-                                <div className="relative">
-                                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                                    <Input
-                                        type="date"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="pl-9 w-full sm:w-[200px] focus-visible:ring-indigo-500"
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-1.5 w-full sm:w-auto">
-                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
-                                <div className="relative">
-                                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                                    <Input
-                                        type="date"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="pl-9 w-full sm:w-[200px] focus-visible:ring-indigo-500"
-                                    />
-                                </div>
-                            </div>
-                            <Button
-                                onClick={handleFetch}
-                                disabled={isFetching}
-                                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-                            >
-                                {isFetching
-                                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Fetching...</>
-                                    : <><RefreshCw className="mr-2 h-4 w-4" />Fetch SAP Data</>
-                                }
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-2">
+                        <TabsList className="grid w-full md:w-[400px] grid-cols-2 shadow-sm">
+                            <TabsTrigger value="pending" className="flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                SAP Pending
+                                {activeTab === 'pending' && rawData.length > 0 && (
+                                    <Badge variant="secondary" className="h-5 px-1.5 min-w-[20px] justify-center text-[10px] ml-1">
+                                        {rawData.length}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
+                            <TabsTrigger value="history" className="flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4" />
+                                SAP History
+                            </TabsTrigger>
+                        </TabsList>
 
-                {/* Stats Strip — shown after successful fetch */}
-                {rawData.length > 0 && (
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
-                            <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/40 p-2">
-                                <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-muted-foreground font-medium">Total Items</p>
-                                <p className="text-xl font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">{rawData.length}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
-                            <div className="rounded-lg bg-emerald-100 dark:bg-emerald-950/40 p-2">
-                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-muted-foreground font-medium">Valid Items</p>
-                                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{validItemsCount}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
-                            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/40 p-2">
-                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-muted-foreground font-medium">Selected</p>
-                                <p className="text-xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">{selectedCount}</p>
+                        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border">
+                                <Select value={period} onValueChange={setPeriod}>
+                                    <SelectTrigger className="w-[140px] h-8 border-none bg-transparent shadow-none focus:ring-0 text-xs">
+                                        <CalendarDays className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                        <SelectValue placeholder="Pilih Periode" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="today">Hari Ini</SelectItem>
+                                        <SelectItem value="this-week">Minggu Ini</SelectItem>
+                                        <SelectItem value="this-month">Bulan Ini</SelectItem>
+                                        <SelectItem value="this-year">Tahun Ini</SelectItem>
+                                        <SelectItem value="custom">Custom Range</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                {period === "custom" && (
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            className="h-7 w-[120px] text-[10px] px-2 focus-visible:ring-indigo-500"
+                                        />
+                                        <span className="text-muted-foreground">-</span>
+                                        <Input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            className="h-7 w-[120px] text-[10px] px-2 focus-visible:ring-indigo-500"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* PO Items Table */}
-                {rawData.length > 0 && (
-                    <Card className="shadow-sm border">
-                        <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div>
-                                <CardTitle className="text-base">PO Items List</CardTitle>
-                                <CardDescription className="text-xs">
-                                    Found <span className="font-semibold text-foreground">{rawData.length}</span> items from SAP.
-                                    Select valid items to add to stock.
-                                </CardDescription>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                                <div className="relative w-full sm:w-64">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Filter by PO, vendor, material..."
-                                        value={globalFilter}
-                                        onChange={(e) => setGlobalFilter(e.target.value)}
-                                        className="pl-9 focus-visible:ring-indigo-500"
-                                    />
+                    {/* Stats Strip */}
+                    {rawData.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm border-l-4 border-l-indigo-500">
+                                <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/40 p-2">
+                                    <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                                 </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto rounded-xl border bg-muted/30 p-1.5">
-                                    <Select value={targetWarehouseId} onValueChange={setTargetWarehouseId}>
-                                        <SelectTrigger className="w-full sm:w-[200px] border-none bg-transparent shadow-none focus:ring-0 text-sm">
-                                            <Warehouse className="mr-2 h-4 w-4 text-muted-foreground shrink-0" />
-                                            <SelectValue placeholder="Target Warehouse" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {warehouses.map((w) => (
-                                                <SelectItem key={w.id} value={w.id.toString()}>
-                                                    {w.sloc} - {w.description}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span>
-                                                <Button
-                                                    onClick={handleProcess}
-                                                    disabled={isProcessing || selectedCount === 0 || !targetWarehouseId}
-                                                    className="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-                                                >
-                                                    {isProcessing
-                                                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
-                                                        : <><Package className="mr-2 h-4 w-4" />Add to Stock ({selectedCount})</>
-                                                    }
-                                                </Button>
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="bottom" className="max-w-[200px] text-center">
-                                            {!targetWarehouseId
-                                                ? "Select a target warehouse first"
-                                                : selectedCount === 0
-                                                    ? "Select items from the table to process"
-                                                    : `Process ${selectedCount} selected item(s) into stock`
-                                            }
-                                        </TooltipContent>
-                                    </Tooltip>
+                                <div>
+                                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total Items</p>
+                                    <p className="text-xl font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">{rawData.length}</p>
                                 </div>
                             </div>
-                        </CardHeader>
-                        <Separator />
-                        <CardContent className="pt-0 px-0 pb-0">
-                            <div className="relative">
-                                <div
-                                    ref={parentRef}
-                                    className="h-[500px] overflow-auto relative"
-                                >
-                                    <Table>
-                                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                                            {table.getHeaderGroups().map((headerGroup) => (
-                                                <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50">
-                                                    {headerGroup.headers.map((header) => (
-                                                        <TableHead key={header.id}>
-                                                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                        </TableHead>
+                            <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm border-l-4 border-l-emerald-500">
+                                <div className="rounded-lg bg-emerald-100 dark:bg-emerald-950/40 p-2">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valid Items</p>
+                                    <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{validItemsCount}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm border-l-4 border-l-amber-500">
+                                <div className="rounded-lg bg-amber-100 dark:bg-amber-950/40 p-2">
+                                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Selected</p>
+                                    <p className="text-xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">{selectedCount}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Main Content Areas */}
+                    <TabsContent value="pending" className="m-0 focus-visible:ring-0">
+                        {rawData.length > 0 ? (
+                            <Card className="shadow-sm border bg-card/50">
+                                <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
+                                    <div>
+                                        <CardTitle className="text-base">Pending PO Items</CardTitle>
+                                        <CardDescription className="text-xs">Daftar barang dari SAP yang siap masuk stok.</CardDescription>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                                        <div className="relative w-full sm:w-64">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                            <Input
+                                                placeholder="Cari PO, material..."
+                                                value={globalFilter}
+                                                onChange={(e) => setGlobalFilter(e.target.value)}
+                                                className="pl-9 h-9"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2 w-full sm:w-auto rounded-lg border bg-muted/20 p-1">
+                                            <Select value={targetWarehouseId} onValueChange={setTargetWarehouseId}>
+                                                <SelectTrigger className="w-full sm:w-[180px] h-8 border-none bg-transparent shadow-none focus:ring-0 text-sm">
+                                                    <Warehouse className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                                    <SelectValue placeholder="Gudang Tujuan" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {warehouses.map((w) => (
+                                                        <SelectItem key={w.id} value={w.id.toString()}>
+                                                            {w.sloc} - {w.description}
+                                                        </SelectItem>
                                                     ))}
-                                                </TableRow>
-                                            ))}
-                                        </TableHeader>
-                                        <TableBody>
-                                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                                <>
-                                                    <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
-                                                        <TableCell colSpan={columns.length} className="p-0" />
+                                                </SelectContent>
+                                            </Select>
+                                            <Button
+                                                onClick={handleProcess}
+                                                disabled={isProcessing || selectedCount === 0 || !targetWarehouseId}
+                                                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                                                size="sm"
+                                            >
+                                                {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5 mr-1" />}
+                                                Add to Stock ({selectedCount})
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <Separator />
+                                <div className="relative overflow-hidden rounded-b-xl border-t">
+                                    <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 z-20 bg-muted/80 backdrop-blur-md">
+                                                {table.getHeaderGroups().map((headerGroup) => (
+                                                    <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
+                                                        {headerGroup.headers.map((header) => (
+                                                            <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                            </TableHead>
+                                                        ))}
                                                     </TableRow>
-                                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                        const row = rows[virtualRow.index]
-                                                        const isSelectable = itemHasMaterial(row.original)
-                                                        return (
-                                                            <TableRow
-                                                                key={row.id}
-                                                                data-state={row.getIsSelected() && "selected"}
-                                                                className={cn(
-                                                                    "group transition-colors hover:bg-muted/30",
-                                                                    !isSelectable && "opacity-50 bg-muted/20"
-                                                                )}
-                                                            >
-                                                                {row.getVisibleCells().map((cell) => (
-                                                                    <TableCell key={cell.id}>
-                                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                                    </TableCell>
-                                                                ))}
-                                                            </TableRow>
-                                                        )
-                                                    })}
-                                                    <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
-                                                        <TableCell colSpan={columns.length} className="p-0" />
+                                                ))}
+                                            </TableHeader>
+                                            <TableBody>
+                                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                                    <>
+                                                        <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                        </TableRow>
+                                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                            const row = rows[virtualRow.index]
+                                                            const isSelectable = itemHasMaterial(row.original)
+                                                            return (
+                                                                <TableRow
+                                                                    key={row.id}
+                                                                    data-state={row.getIsSelected() && "selected"}
+                                                                    className={cn(
+                                                                        "group hover:bg-muted/30 transition-colors h-10 border-b",
+                                                                        !isSelectable && "opacity-50"
+                                                                    )}
+                                                                >
+                                                                    {row.getVisibleCells().map((cell) => (
+                                                                        <TableCell key={cell.id} className="py-2">
+                                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                                        </TableCell>
+                                                                    ))}
+                                                                </TableRow>
+                                                            )
+                                                        })}
+                                                        <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                        </TableRow>
+                                                    </>
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
+                                                            No items found.
+                                                        </TableCell>
                                                     </TableRow>
-                                                </>
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
-                                                        {globalFilter ? "No matching items found." : "No data fetched yet."}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
+                            </Card>
+                        ) : !isFetching && (
+                            <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60">
+                                <Package className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                                <h3 className="font-medium text-muted-foreground">No Pending Items</h3>
+                                <p className="text-xs text-muted-foreground mt-1">Gunakan fetch di atas untuk menarik data terbaru.</p>
                             </div>
-                            <Separator />
-                            <div className="px-4 py-3 flex items-center justify-between text-sm text-muted-foreground">
-                                <div className="flex items-center gap-1.5">
-                                    Selected
-                                    <Badge variant="secondary" className="tabular-nums font-semibold">{selectedCount}</Badge>
-                                    of
-                                    <span className="font-medium text-foreground">{table.getFilteredRowModel().rows.filter(r => itemHasMaterial(r.original)).length}</span>
-                                    valid items
-                                </div>
-                                <div className="text-xs">
-                                    Total valid items: <span className="font-semibold text-foreground">{validItemsCount}</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        )}
+                    </TabsContent>
 
-                {/* Empty State — dates set but no fetch yet */}
-                {!rawData.length && !isFetching && startDate && endDate && (
-                    <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-indigo-200 dark:border-indigo-800 rounded-xl bg-indigo-50/30 dark:bg-indigo-950/10">
-                        <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-5 mb-4 shadow-sm">
-                            <ArrowRight className="h-8 w-8 text-indigo-500" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-foreground">Ready to Fetch</h3>
-                        <p className="text-muted-foreground text-sm max-w-xs text-center mt-1">
-                            Click <span className="font-medium text-indigo-600 dark:text-indigo-400">&quot;Fetch SAP Data&quot;</span> to retrieve Purchase Order items for the selected date range.
-                        </p>
-                    </div>
-                )}
+                    <TabsContent value="history" className="m-0 focus-visible:ring-0">
+                        {rawData.length > 0 ? (
+                            <Card className="shadow-sm border bg-card/50">
+                                <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
+                                    <div>
+                                        <CardTitle className="text-base text-emerald-700 dark:text-emerald-400">Processed Items History</CardTitle>
+                                        <CardDescription className="text-xs">Barang yang sudah berhasil masuk ke stok lokal.</CardDescription>
+                                    </div>
+                                    <div className="relative w-full sm:w-64">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                        <Input
+                                            placeholder="Cari riwayat..."
+                                            value={globalFilter}
+                                            onChange={(e) => setGlobalFilter(e.target.value)}
+                                            className="pl-9 h-9"
+                                        />
+                                    </div>
+                                </CardHeader>
+                                <Separator />
+                                <div className="relative overflow-hidden rounded-b-xl border-t">
+                                    <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 z-20 bg-muted/80 backdrop-blur-md">
+                                                {table.getHeaderGroups().map((headerGroup) => (
+                                                    <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
+                                                        {headerGroup.headers.map((header) => (
+                                                            <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                            </TableHead>
+                                                        ))}
+                                                    </TableRow>
+                                                ))}
+                                            </TableHeader>
+                                            <TableBody>
+                                                {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                                    <>
+                                                        <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                        </TableRow>
+                                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                            const row = rows[virtualRow.index]
+                                                            return (
+                                                                <TableRow
+                                                                    key={row.id}
+                                                                    className="group hover:bg-muted/30 transition-colors h-10 border-b"
+                                                                >
+                                                                    {row.getVisibleCells().map((cell) => (
+                                                                        <TableCell key={cell.id} className="py-2">
+                                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                                        </TableCell>
+                                                                    ))}
+                                                                </TableRow>
+                                                            )
+                                                        })}
+                                                        <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                        </TableRow>
+                                                    </>
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
+                                                            No history for this period.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            </Card>
+                        ) : !isFetching && (
+                            <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60">
+                                <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                                <h3 className="font-medium text-muted-foreground">No History Data</h3>
+                                <p className="text-xs text-muted-foreground mt-1">Data riwayat akan muncul di sini setelah item diproses.</p>
+                            </div>
+                        )}
+                    </TabsContent>
+                </Tabs>
             </div>
         </TooltipProvider>
     )

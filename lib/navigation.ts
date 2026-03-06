@@ -187,10 +187,10 @@ export const navigationConfig: NavSection[] = [
         title: "Business & Analytics",
         items: [
             {
-                title: "Sales & Marketing",
+                title: "Marketing",
                 url: "#",
-                icon: ShoppingCart,
-                resource: "sales-marketing",
+                icon: LayoutGrid,
+                resource: "marketing",
                 items: [
                     {
                         title: "Marketing Calendar",
@@ -212,6 +212,14 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/customers",
                         resource: "customers",
                     },
+                ],
+            },
+            {
+                title: "Sales",
+                url: "#",
+                icon: ShoppingCart,
+                resource: "sales",
+                items: [
                     {
                         title: "Price Management",
                         url: "/dashboard/price-management",
@@ -274,6 +282,11 @@ export const navigationConfig: NavSection[] = [
                         title: "ABC Analysis",
                         url: "/dashboard/abc-analysis",
                         resource: "abc-analysis",
+                    },
+                    {
+                        title: "Quotation Analysis",
+                        url: "/dashboard/quotation-analysis",
+                        resource: "quotation-analysis",
                     },
                 ],
             },
