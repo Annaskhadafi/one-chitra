@@ -55,6 +55,7 @@ import { getFleetList } from "@/app/actions/fleet"
 import { useQuery } from "@tanstack/react-query"
 import Fuse from "fuse.js"
 import { FleetDetailSheet, type FleetItem } from "./fleet-detail-sheet"
+import { CustomerHistorySheet } from "./customer-history-sheet"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -101,6 +102,10 @@ export function CustomerSegmentationClient() {
     const [isInitialized, setIsInitialized] = useState(false);
     const [selectedFleetData, setSelectedFleetData] = useState<FleetItem[]>([]);
     const [fleetSheetOpen, setFleetSheetOpen] = useState(false);
+
+    // History Sheet States
+    const [historySheetOpen, setHistorySheetOpen] = useState(false);
+    const [historyCustomerName, setHistoryCustomerName] = useState("");
 
     // Fetch fleet data
     const { data: fleetData = [] } = useQuery({
@@ -276,6 +281,11 @@ export function CustomerSegmentationClient() {
         }
     }, [getMatchingFleets])
 
+    const handleHistoryClick = React.useCallback((customerName: string) => {
+        setHistoryCustomerName(customerName)
+        setHistorySheetOpen(true)
+    }, [])
+
     // --- TanStack Table ---
     const columns = useMemo<ColumnDef<CustomerData>[]>(() => [
         {
@@ -304,13 +314,13 @@ export function CustomerSegmentationClient() {
         },
         {
             id: "fleet",
-            header: "Fleet List",
+            header: "Fleet",
             cell: ({ row }) => {
                 const cust = row.original
                 const matchingFleets = getMatchingFleets(cust.name)
-                
+
                 if (matchingFleets.length === 0) {
-                    return <span className="text-xs text-muted-foreground">No fleet data</span>
+                    return <span className="text-[10px] text-muted-foreground italic px-1">No Fleet</span>
                 }
 
                 return (
@@ -318,9 +328,26 @@ export function CustomerSegmentationClient() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleFleetClick(cust.name)}
+                        className="h-7 text-xs bg-muted/50"
+                    >
+                        Fleet ({matchingFleets.length})
+                    </Button>
+                )
+            }
+        },
+        {
+            id: "history",
+            header: "History",
+            cell: ({ row }) => {
+                const cust = row.original
+                return (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleHistoryClick(cust.name)}
                         className="h-7 text-xs"
                     >
-                        View {matchingFleets.length} Fleet{matchingFleets.length > 1 ? 's' : ''}
+                        Cek History
                     </Button>
                 )
             }
@@ -366,7 +393,7 @@ export function CustomerSegmentationClient() {
                 return rowA.original.monetary - rowB.original.monetary
             }
         }
-    ], [getMatchingFleets, handleFleetClick])
+    ], [getMatchingFleets, handleFleetClick, handleHistoryClick])
 
     const filteredData = useMemo(() => {
         const data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
@@ -669,6 +696,12 @@ export function CustomerSegmentationClient() {
                 open={fleetSheetOpen}
                 onOpenChange={setFleetSheetOpen}
                 fleetData={selectedFleetData}
+            />
+
+            <CustomerHistorySheet
+                open={historySheetOpen}
+                onOpenChange={setHistorySheetOpen}
+                customerName={historyCustomerName}
             />
         </div>
     );

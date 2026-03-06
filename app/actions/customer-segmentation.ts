@@ -91,3 +91,77 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
         return { success: false, error: "Failed to fetch history order" };
     }
 }
+
+export type OrderHistoryItem = {
+    materialNo: string;
+    materialDescription: string;
+    category: string;
+    revenue: number;
+    lastPurchaseDate: string | null;
+    totalQty: number;
+}
+
+export async function getCustomerOrderHistory(customerName: string) {
+    try {
+        // Clean name for better matching (remove PT/CV/TBK and special chars)
+        let cleanName = customerName
+            .replace(/\bpt\.?\s*/gi, '')
+            .replace(/\bcv\.?\s*/gi, '')
+            .replace(/\btbk\.?\s*/gi, '')
+            .replace(/[.,\-_]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // If it gets too short, just use the original without punctuation
+        if (cleanName.length < 3) cleanName = customerName.replace(/[.,\-_]/g, ' ').trim();
+
+        const data = await db.select({
+            materialNo: historyOrders.materialNo,
+            materialDescription: historyOrders.materialDescription,
+            category: historyOrders.matGrpDesc,
+            revenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
+            lastPurchaseDate: sql<string>`MAX(${historyOrders.billingDate})`,
+            totalQty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`
+        })
+            .from(historyOrders)
+            .where(sql`${historyOrders.customerName} ILIKE ${'%' + cleanName + '%'}`)
+            .groupBy(
+                historyOrders.materialNo,
+                historyOrders.materialDescription,
+                historyOrders.matGrpDesc
+            );
+
+        // Group by category and pick top 10
+        const grouped: Record<string, OrderHistoryItem[]> = {};
+
+        for (const item of data) {
+            const cat = item.category || "Uncategorized";
+            if (!grouped[cat]) grouped[cat] = [];
+
+            grouped[cat].push({
+                materialNo: item.materialNo || "",
+                materialDescription: item.materialDescription || "",
+                category: cat,
+                revenue: Number(item.revenue || 0),
+                lastPurchaseDate: item.lastPurchaseDate ? new Date(item.lastPurchaseDate).toISOString() : null,
+                totalQty: Number(item.totalQty || 0)
+            });
+        }
+
+        // Sort descending by lastPurchaseDate and take top 10
+        for (const cat of Object.keys(grouped)) {
+            grouped[cat].sort((a, b) => {
+                const timeA = a.lastPurchaseDate ? new Date(a.lastPurchaseDate).getTime() : 0;
+                const timeB = b.lastPurchaseDate ? new Date(b.lastPurchaseDate).getTime() : 0;
+                return timeB - timeA; // Descending
+            });
+            grouped[cat] = grouped[cat].slice(0, 10);
+        }
+
+        return { success: true, data: grouped };
+    } catch (error) {
+        console.error("Failed to fetch order history for customer:", error);
+        return { success: false, error: "Failed to fetch order history" };
+    }
+}
+
