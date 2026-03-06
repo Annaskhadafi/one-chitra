@@ -215,12 +215,17 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const [customerOpen, setCustomerOpen] = useState(false);
     const [selectedPoNos, setSelectedPoNos] = useState<Set<string>>(new Set());
     const [refNumber, setRefNumber] = useState("");
-    const [letterDate, setLetterDate] = useState(getTodayStr());
+    const [letterDate, setLetterDate] = useState(""); // Initialize empty for hydration stability
     const [signerName, setSignerName] = useState("");
     const [signerTitle, setSignerTitle] = useState("");
     const [sendLocation, setSendLocation] = useState("balikpapan");
     const [isGeneratingRef, setIsGeneratingRef] = useState(false);
     const [savedPreviewForDialog, setSavedPreviewForDialog] = useState<{ cust: CoverLetterCustomer | null; items: PreviewInvoiceItem[]; location?: string } | null>(null);
+
+    // Initial date setup (Client side only to avoid hydration mismatch)
+    useEffect(() => {
+        setLetterDate(getTodayStr());
+    }, []);
 
     useEffect(() => {
         if (!selectedCustomer) { setBillingData([]); setSelectedPoNos(new Set()); return; }
@@ -345,7 +350,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     const onDialogClose = (open: boolean) => { setPreviewOpen(open); if (!open) setSavedPreviewForDialog(null); };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" suppressHydrationWarning>
             {/* ── Riwayat Cover Letter ── */}
             <Card>
                 <CardHeader className="pb-3">

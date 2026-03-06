@@ -92,12 +92,18 @@ export const deliverySchema = z.object({
     awbNumber: z.string().optional().nullable(),
     shippingCost: z.number().min(0).default(0),
     // Internal Cost Breakdown
+    tripDestination: z.string().optional().nullable(),
     costGasoline: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),
     costMaintenance: z.number().min(0).default(0),
     costOthers: z.number().min(0).default(0),
+    costRapidTest: z.number().min(0).default(0),
+    costFerry: z.number().min(0).default(0),
+    costPortal: z.number().min(0).default(0),
+    costWashing: z.number().min(0).default(0),
+    costEscort: z.number().min(0).default(0),
 
     warehouseId: z.number().min(1, "Warehouse is required"),
     warehouseToId: z.number().optional().nullable(),
@@ -150,19 +156,25 @@ export const fleetTripSchema = z.object({
     date: z.string().or(z.date()),
     notes: z.string().optional().nullable(),
     // Costs
+    tripDestination: z.string().optional().nullable(),
     costGasoline: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),
     costMaintenance: z.number().min(0).default(0),
     costOthers: z.number().min(0).default(0),
+    costRapidTest: z.number().min(0).default(0),
+    costFerry: z.number().min(0).default(0),
+    costPortal: z.number().min(0).default(0),
+    costWashing: z.number().min(0).default(0),
+    costEscort: z.number().min(0).default(0),
     // Linked Deliveries (Sales Orders to deliver)
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
 })
 
 export const costSettlementItemSchema = z.object({
     id: z.number().optional(),
-    costCategory: z.enum(["gasoline", "toll", "parking", "meals", "maintenance", "others"]),
+    costCategory: z.enum(["gasoline", "toll", "parking", "meals", "maintenance", "others", "rapid_test", "ferry", "portal", "washing", "escort"]),
     description: z.string().optional().or(z.literal("")),
     amount: z.number().min(0.01, "Jumlah harus lebih dari 0"),
     receiptDate: z.string().or(z.date()),

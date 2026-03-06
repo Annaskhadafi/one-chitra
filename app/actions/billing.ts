@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import {
     billingRecords,
-    historyOrders,
+    salesRevenueSap as historyOrders,
     deliveries,
     salesOrders,
     customers
@@ -54,7 +54,7 @@ export async function getBillingRecords(poNoFilter?: string) {
         const groupedHistorySubquery = db.select({
             poNo: historyOrders.poNo,
             customer: sql<string>`MAX(${historyOrders.customerName})`.as("customer"),
-            datePo: sql<Date>`MAX(to_date(${historyOrders.poDate}, 'MM/DD/YYYY'))`.as("datePo"),
+            datePo: sql<Date>`MAX(${historyOrders.poDate})`.as("datePo"),
             materialNumber: sql<string>`STRING_AGG(DISTINCT ${historyOrders.materialNo}, ', ')`.as("materialNumber"),
             materialDescription: sql<string>`STRING_AGG(DISTINCT ${historyOrders.materialDescription}, ', ')`.as("materialDescription"),
             matGrpDesc: sql<string>`STRING_AGG(DISTINCT ${historyOrders.matGrpDesc}, ', ')`.as("matGrpDesc"),
@@ -62,7 +62,7 @@ export async function getBillingRecords(poNoFilter?: string) {
             qty: sql<number>`SUM(${historyOrders.qty})`.as("qty"),
             curr: sql<string>`MAX(${historyOrders.curr})`.as("curr"),
             plant: sql<string>`MAX(${historyOrders.plant})`.as("plant"),
-            dateInvoice: sql<Date>`MAX(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'))`.as("dateInvoice"),
+            dateInvoice: sql<Date>`MAX(${historyOrders.billingDate})`.as("dateInvoice"),
             salesName: sql<string>`MAX(${historyOrders.salesman})`.as("salesName"),
             noInvSap: sql<string>`MAX(${historyOrders.billingNo})`.as("noInvSap"),
             custId: sql<string>`MAX(${historyOrders.customer})`.as("custId"),
@@ -85,8 +85,7 @@ export async function getBillingRecords(poNoFilter?: string) {
             .where(
                 and(
                     isNotNull(historyOrders.billingDate),
-                    ne(historyOrders.billingDate, ''),
-                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= '2026-01-01'`,
+                    sql`${historyOrders.billingDate} >= '2026-01-01'`,
                     isNotNull(historyOrders.poNo),
                     ne(historyOrders.poNo, ''),
                     poNoFilter ? eq(historyOrders.poNo, poNoFilter) : undefined
@@ -207,10 +206,10 @@ export async function getInvoiceInfoByPoNo(
         const query = sql`
             SELECT 
                 MAX(${historyOrders.billingNo}) as "noInvSap",
-                MAX(to_date(NULLIF(${historyOrders.billingDate}, ''), 'MM/DD/YYYY')) as "dateInvoice"
+                MAX(${historyOrders.billingDate}) as "dateInvoice"
             FROM ${historyOrders}
             WHERE ${historyOrders.poNo} = ${poNo}
-            AND ${historyOrders.billingDate} IS NOT NULL AND ${historyOrders.billingDate} != ''
+            AND ${historyOrders.billingDate} IS NOT NULL
             AND ${historyOrders.billingNo} IS NOT NULL AND ${historyOrders.billingNo} != ''
             AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
         `;

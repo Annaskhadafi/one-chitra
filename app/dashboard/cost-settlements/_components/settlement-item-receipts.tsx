@@ -17,9 +17,23 @@ type SettlementItemReceipt = {
 type SettlementItem = {
     id: number
     description: string
-    costCategory: "gasoline" | "toll" | "parking" | "meals" | "maintenance" | "others"
+    costCategory: "gasoline" | "toll" | "parking" | "meals" | "maintenance" | "others" | "rapid_test" | "ferry" | "portal" | "washing" | "escort"
     amount: string
     receipts: SettlementItemReceipt[]
+}
+
+const categoryLabels: Record<SettlementItem["costCategory"], string> = {
+    gasoline: "BBM",
+    toll: "Tol",
+    parking: "Parkir / Retribusi",
+    meals: "Uang Makan",
+    maintenance: "Perbaikan",
+    others: "Lain-lain",
+    rapid_test: "Rapid Test",
+    ferry: "Tiket Kapal Ferry",
+    portal: "Portal (Kuli/Kawal)",
+    washing: "Cuci Mobil",
+    escort: "Pengawalan"
 }
 
 
@@ -99,7 +113,7 @@ export function SettlementItemReceipts({
                         <div>
                             <p className="font-medium">{item.description}</p>
                             <p className="text-muted-foreground">
-                                {item.costCategory} - {formatCurrency(item.amount)}
+                                {categoryLabels[item.costCategory] || item.costCategory} - {formatCurrency(item.amount)}
                             </p>
                         </div>
                         {canUpload ? (

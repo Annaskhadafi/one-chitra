@@ -23,6 +23,7 @@ export {
     stockTransferItemsRelations,
 } from "./transfers";
 export { sapSyncLogs } from "./sap-sync";
+export * from "./sap";
 export { rfidScans } from "./rfid-scans";
 export { quotations, quotationItems, quotationsRelations, quotationItemsRelations } from "./quotations";
 export { deliveries, deliveryItems, deliveriesRelations, deliveryItemsRelations } from "./deliveries";
@@ -35,7 +36,7 @@ export { salesOrders, salesOrderItems, salesOrdersRelations, salesOrderItemsRela
 export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, goodReceiveManualItemsRelations } from "./good-receive-manual";
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
-export { historyOrders } from "./history-orders";
+// Old historyOrders removed, aliased from sap.ts below
 export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
@@ -98,6 +99,7 @@ export {
     costSettlementReceiptsRelations,
     costSettlementSignatoriesRelations,
 } from "./cost-settlements";
+export { zmc9StockSap, me2lPurchDocsSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
 
 // Core Auth Table Relations
 import { user } from "./auth";

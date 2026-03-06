@@ -96,6 +96,12 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
             costMeals: 0,
             costMaintenance: 0,
             costOthers: 0,
+            costRapidTest: 0,
+            costFerry: 0,
+            costPortal: 0,
+            costWashing: 0,
+            costEscort: 0,
+            tripDestination: "",
             salesOrderIds: [],
         },
     })
@@ -326,6 +332,24 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                         </FormItem>
                                     )}
                                 />
+
+                                <FormField
+                                    control={form.control}
+                                    name="tripDestination"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Trip Destination</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="e.g. Jakarta Pusat, Bandung..."
+                                                    {...field}
+                                                    value={field.value || ""}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </CardContent>
                         </Card>
 
@@ -432,6 +456,96 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Others</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costRapidTest"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Rapid Test</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costFerry"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Ferry Ticket</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costPortal"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Portal (Gate)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costWashing"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Car Washing</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costEscort"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Escort (Pengawalan)</FormLabel>
                                                 <FormControl>
                                                     <Input
                                                         type="number"

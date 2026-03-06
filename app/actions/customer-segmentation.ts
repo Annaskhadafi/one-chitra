@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
+import { salesRevenueSap as historyOrders } from "@/db/schema/sap"
 import { desc, notIlike, isNull, or, sql, and } from "drizzle-orm"
 
 export interface CustomerRFMAggregate {
@@ -15,7 +15,7 @@ export interface CustomerRFMAggregate {
 export async function getMaxBillingDate() {
     try {
         const result = await db.select({
-            max_date: sql<string>`MAX(TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY'))`
+            max_date: sql<string>`MAX(${historyOrders.billingDate})`
         })
             .from(historyOrders)
             .where(
@@ -44,11 +44,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
         // 1. Dapatkan global first purchase per customer
         const globalFirstPurchaseQuery = db.select({
             customer_name: historyOrders.customerName,
-            global_first_purchase: sql<string>`MIN(CASE 
-                WHEN ${historyOrders.billingDate} IS NOT NULL AND ${historyOrders.billingDate} != '' 
-                THEN TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY') 
-                ELSE NULL 
-            END)`.as('global_first_purchase')
+            global_first_purchase: sql<string>`MIN(${historyOrders.billingDate})`.as('global_first_purchase')
         })
             .from(historyOrders)
             .where(
@@ -63,7 +59,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
         // 2. Aggregate metrics dalam range terpilih
         const data = await db.select({
             customer_name: historyOrders.customerName,
-            last_date: sql<string>`MAX(TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY'))`,
+            last_date: sql<string>`MAX(${historyOrders.billingDate})`,
             frequency: sql<number>`COUNT(*)::int`,
             monetary: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
             global_first_purchase: globalFirstPurchaseQuery.global_first_purchase
@@ -76,7 +72,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
                         isNull(historyOrders.customerName),
                         notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
                     ),
-                    sql`TO_DATE(${historyOrders.billingDate}, 'MM/DD/YYYY') BETWEEN TO_DATE(${start}, 'YYYY-MM-DD') AND TO_DATE(${end}, 'YYYY-MM-DD')`
+                    sql`${historyOrders.billingDate} BETWEEN ${start} AND ${end}`
                 )
             )
             .groupBy(historyOrders.customerName, globalFirstPurchaseQuery.global_first_purchase);

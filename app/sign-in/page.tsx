@@ -44,10 +44,10 @@ export default function SignInPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900">
-            <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] overflow-hidden flex flex-col md:flex-row min-h-[640px] border border-gray-100/50">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900" suppressHydrationWarning>
+            <div className="w-full max-w-5xl bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] overflow-hidden flex flex-col md:flex-row min-h-[640px] border border-gray-100/50" suppressHydrationWarning>
                 {/* Left Pane - Gradient */}
-                <div className="w-full md:w-[45%] lg:w-[48%] bg-gradient-to-br from-[#1A4BFF] via-[#5C24FF] to-[#D6B4FF] p-10 md:p-14 flex flex-col justify-between relative overflow-hidden text-white rounded-l-3xl md:rounded-r-none md:rounded-3xl m-2 md:m-3">
+                <div className="w-full md:w-[45%] lg:w-[48%] bg-gradient-to-br from-[#1A4BFF] via-[#5C24FF] to-[#D6B4FF] p-10 md:p-14 flex flex-col justify-between relative overflow-hidden text-white rounded-l-3xl md:rounded-r-none md:rounded-3xl m-2 md:m-3" suppressHydrationWarning>
                     {/* Abstract glows for visual interest */}
                     <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-400 opacity-30 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
                     <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-fuchsia-300 opacity-30 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
@@ -66,7 +66,7 @@ export default function SignInPage() {
                 </div>
 
                 {/* Right Pane - Form */}
-                <div className="w-full md:w-[55%] lg:w-[52%] px-8 py-10 md:py-16 md:px-14 lg:px-20 flex flex-col justify-center bg-white">
+                <div className="w-full md:w-[55%] lg:w-[52%] px-8 py-10 md:py-16 md:px-14 lg:px-20 flex flex-col justify-center bg-white" suppressHydrationWarning>
                     <div className="mb-10 lg:mb-12">
                         <div className="flex items-center gap-3 mb-6">
                             <img src="/brand/Chitra-Paratama.png" alt="One Chitra Logo" className="h-10 md:h-12 w-auto object-contain" />

@@ -18,7 +18,7 @@ import { approvalRequests } from "./approval-workflows";
 
 export const costSettlementTypeEnum = pgEnum("cost_settlement_type", ["trip", "delivery"]);
 export const costSettlementStatusEnum = pgEnum("cost_settlement_status", ["draft", "submitted", "approved", "rejected", "posted"]);
-export const costSettlementCategoryEnum = pgEnum("cost_settlement_category", ["gasoline", "toll", "parking", "meals", "maintenance", "others"]);
+export const costSettlementCategoryEnum = pgEnum("cost_settlement_category", ["gasoline", "toll", "parking", "meals", "maintenance", "others", "rapid_test", "ferry", "portal", "washing", "escort"]);
 
 export const costSettlements = pgTable("cost_settlements", {
     id: serial("id").primaryKey(),

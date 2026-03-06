@@ -18,6 +18,11 @@ export default async function CreateCostSettlementPage() {
         costMeals?: string | number | null
         costMaintenance?: string | number | null
         costOthers?: string | number | null
+        costRapidTest?: string | number | null
+        costFerry?: string | number | null
+        costPortal?: string | number | null
+        costWashing?: string | number | null
+        costEscort?: string | number | null
     }) => (
         toNumber(payload.costGasoline)
         + toNumber(payload.costToll)
@@ -25,6 +30,11 @@ export default async function CreateCostSettlementPage() {
         + toNumber(payload.costMeals)
         + toNumber(payload.costMaintenance)
         + toNumber(payload.costOthers)
+        + toNumber(payload.costRapidTest)
+        + toNumber(payload.costFerry)
+        + toNumber(payload.costPortal)
+        + toNumber(payload.costWashing)
+        + toNumber(payload.costEscort)
     )
 
     const tripOptions = fleetTrips.map((trip) => ({

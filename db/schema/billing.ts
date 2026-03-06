@@ -14,7 +14,7 @@ export const billingRecords = pgTable("billing_records", {
     month: text("month"),
     plant: text("plant"),
     customer: text("customer"),
-    poNo: text("po_no").unique(),
+    poNo: text("po_no"),
     datePo: timestamp("date_po"),
     materialNumber: text("material_number"),
     materialDescription: text("material_description"),

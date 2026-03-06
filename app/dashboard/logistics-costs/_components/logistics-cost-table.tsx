@@ -52,6 +52,11 @@ interface LogisticsCost {
     costMeals: string | null
     costMaintenance: string | null
     costOthers: string | null
+    costRapidTest?: string | null
+    costFerry?: string | null
+    costPortal?: string | null
+    costWashing?: string | null
+    costEscort?: string | null
     invoiceNumber: string | null
     settlementId?: number | null
     settlementNumber?: string | null
@@ -167,6 +172,31 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 cell: ({ row }) => formatCurrency(Number(row.original.costOthers || 0)),
             },
             {
+                accessorKey: "costRapidTest",
+                header: "Rapid Test",
+                cell: ({ row }) => formatCurrency(Number(row.original.costRapidTest || 0)),
+            },
+            {
+                accessorKey: "costFerry",
+                header: "Ferry",
+                cell: ({ row }) => formatCurrency(Number(row.original.costFerry || 0)),
+            },
+            {
+                accessorKey: "costPortal",
+                header: "Portal",
+                cell: ({ row }) => formatCurrency(Number(row.original.costPortal || 0)),
+            },
+            {
+                accessorKey: "costWashing",
+                header: "Washing",
+                cell: ({ row }) => formatCurrency(Number(row.original.costWashing || 0)),
+            },
+            {
+                accessorKey: "costEscort",
+                header: "Escort",
+                cell: ({ row }) => formatCurrency(Number(row.original.costEscort || 0)),
+            },
+            {
                 id: "total_internal",
                 header: "Total Internal",
                 cell: ({ row }) => {
@@ -176,7 +206,12 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                         Number(row.original.costParking || 0) +
                         Number(row.original.costMeals || 0) +
                         Number(row.original.costMaintenance || 0) +
-                        Number(row.original.costOthers || 0)
+                        Number(row.original.costOthers || 0) +
+                        Number(row.original.costRapidTest || 0) +
+                        Number(row.original.costFerry || 0) +
+                        Number(row.original.costPortal || 0) +
+                        Number(row.original.costWashing || 0) +
+                        Number(row.original.costEscort || 0)
                     return <span className="font-bold">{formatCurrency(total)}</span>
                 },
             },
@@ -216,11 +251,16 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
             Number(curr.costParking || 0) +
             Number(curr.costMeals || 0) +
             Number(curr.costMaintenance || 0) +
-            Number(curr.costOthers || 0)
+            Number(curr.costOthers || 0) +
+            Number(curr.costRapidTest || 0) +
+            Number(curr.costFerry || 0) +
+            Number(curr.costPortal || 0) +
+            Number(curr.costWashing || 0) +
+            Number(curr.costEscort || 0)
     }, 0), [data])
 
     const exportToCSV = () => {
-        const headers = ["Delivery #", "Invoice #", "Date", "Driver/Vendor", "Ext Cost", "Gas", "Toll", "Parking", "Meals", "Maint", "Others", "Total Internal"]
+        const headers = ["Delivery #", "Invoice #", "Date", "Driver/Vendor", "Ext Cost", "Gas", "Toll", "Parking", "Meals", "Maint", "Others", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Total Internal"]
         const csvRows = data.map(row => {
             const date = row.deliveryDate || row.scheduledDate
             const total =
@@ -229,7 +269,12 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 Number(row.costParking || 0) +
                 Number(row.costMeals || 0) +
                 Number(row.costMaintenance || 0) +
-                Number(row.costOthers || 0)
+                Number(row.costOthers || 0) +
+                Number(row.costRapidTest || 0) +
+                Number(row.costFerry || 0) +
+                Number(row.costPortal || 0) +
+                Number(row.costWashing || 0) +
+                Number(row.costEscort || 0)
 
             return [
                 row.deliveryNumber,
@@ -243,6 +288,11 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 row.costMeals || 0,
                 row.costMaintenance || 0,
                 row.costOthers || 0,
+                row.costRapidTest || 0,
+                row.costFerry || 0,
+                row.costPortal || 0,
+                row.costWashing || 0,
+                row.costEscort || 0,
                 total
             ].join(",")
         })

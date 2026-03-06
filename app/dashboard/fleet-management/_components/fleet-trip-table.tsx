@@ -69,6 +69,11 @@ interface FleetTripWithRelations {
     costMeals: string | null
     costMaintenance: string | null
     costOthers: string | null
+    costRapidTest: string | null
+    costFerry: string | null
+    costPortal: string | null
+    costWashing: string | null
+    costEscort: string | null
 }
 
 interface FleetTripTableProps {
@@ -105,7 +110,12 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
             (Number(trip.costParking) || 0) +
             (Number(trip.costMeals) || 0) +
             (Number(trip.costMaintenance) || 0) +
-            (Number(trip.costOthers) || 0)
+            (Number(trip.costOthers) || 0) +
+            (Number(trip.costRapidTest) || 0) +
+            (Number(trip.costFerry) || 0) +
+            (Number(trip.costPortal) || 0) +
+            (Number(trip.costWashing) || 0) +
+            (Number(trip.costEscort) || 0)
     }
 
     const columns = useMemo<ColumnDef<FleetTripWithRelations>[]>(() => [
@@ -322,7 +332,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "Total Cost"]
+        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "BBM", "Toll", "Parkir", "Meals", "Maintenance", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Others", "Total Cost"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const trip = row.original
             return [
@@ -332,6 +342,17 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.driver?.name || "",
                 trip.vehicle?.policeNumber || "",
                 trip.deliveries.length,
+                trip.costGasoline || 0,
+                trip.costToll || 0,
+                trip.costParking || 0,
+                trip.costMeals || 0,
+                trip.costMaintenance || 0,
+                trip.costRapidTest || 0,
+                trip.costFerry || 0,
+                trip.costPortal || 0,
+                trip.costWashing || 0,
+                trip.costEscort || 0,
+                trip.costOthers || 0,
                 calculateTotalCost(trip)
             ]
         })

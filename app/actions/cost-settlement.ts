@@ -60,6 +60,11 @@ const sumCostFields = (payload: {
     costMeals?: string | number | null
     costMaintenance?: string | number | null
     costOthers?: string | number | null
+    costRapidTest?: string | number | null
+    costFerry?: string | number | null
+    costPortal?: string | number | null
+    costWashing?: string | number | null
+    costEscort?: string | number | null
 }) => {
     return parseDecimal(payload.costGasoline)
         + parseDecimal(payload.costToll)
@@ -67,6 +72,11 @@ const sumCostFields = (payload: {
         + parseDecimal(payload.costMeals)
         + parseDecimal(payload.costMaintenance)
         + parseDecimal(payload.costOthers)
+        + parseDecimal(payload.costRapidTest)
+        + parseDecimal(payload.costFerry)
+        + parseDecimal(payload.costPortal)
+        + parseDecimal(payload.costWashing)
+        + parseDecimal(payload.costEscort)
 }
 
 export async function generateSettlementNumber() {
@@ -91,6 +101,11 @@ async function resolveSettlementContext(input: z.infer<typeof costSettlementSche
                 costMeals: true,
                 costMaintenance: true,
                 costOthers: true,
+                costRapidTest: true,
+                costFerry: true,
+                costPortal: true,
+                costWashing: true,
+                costEscort: true,
                 driverId: true,
                 vehicleId: true,
             },
@@ -130,6 +145,11 @@ async function resolveSettlementContext(input: z.infer<typeof costSettlementSche
                 costMeals: true,
                 costMaintenance: true,
                 costOthers: true,
+                costRapidTest: true,
+                costFerry: true,
+                costPortal: true,
+                costWashing: true,
+                costEscort: true,
                 isExternal: true,
                 driverName: true,
                 vehicleNumber: true,

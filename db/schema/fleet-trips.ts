@@ -14,12 +14,18 @@ export const fleetTrips = pgTable("fleet_trips", {
     notes: text("notes"),
 
     // Cost Fields
+    tripDestination: varchar("trip_destination", { length: 255 }),
     costGasoline: decimal("cost_gasoline", { precision: 15, scale: 2 }).default("0"),
     costToll: decimal("cost_toll", { precision: 15, scale: 2 }).default("0"),
     costParking: decimal("cost_parking", { precision: 15, scale: 2 }).default("0"),
     costMeals: decimal("cost_meals", { precision: 15, scale: 2 }).default("0"),
     costMaintenance: decimal("cost_maintenance", { precision: 15, scale: 2 }).default("0"),
     costOthers: decimal("cost_others", { precision: 15, scale: 2 }).default("0"),
+    costRapidTest: decimal("cost_rapid_test", { precision: 15, scale: 2 }).default("0"),
+    costFerry: decimal("cost_ferry", { precision: 15, scale: 2 }).default("0"),
+    costPortal: decimal("cost_portal", { precision: 15, scale: 2 }).default("0"),
+    costWashing: decimal("cost_washing", { precision: 15, scale: 2 }).default("0"),
+    costEscort: decimal("cost_escort", { precision: 15, scale: 2 }).default("0"),
 
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),

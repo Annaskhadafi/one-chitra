@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
+import { salesRevenueSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, ne, or, isNull, notIlike, ilike } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
@@ -43,34 +43,33 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
 
         // 2. Date filter
         const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
-        const dateFilter = sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), ${dateFormat}) = ${periodStr}`;
+        const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
         const baseFilter = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
+            isNotNull(salesRevenueSap.billingDate),
             dateFilter,
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             )
         );
 
         // Customer NOT (ITC008 or 100289)
         const customerNotExcluded = and(
-            notIlike(historyOrders.customer!, '%ITC008%'),
-            notIlike(historyOrders.customer!, '%100289%')
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%100289%')
         );
 
         // ─── A. Revenue Prime Product ───────────────────────────────────────────
         // Filter: rev_type = 'Trading', mat_grp_desc IN (Tire list)
-        const primeProdMatGrpFilter = sql`upper(trim(${historyOrders.matGrpDesc})) = ANY(ARRAY[${sql.raw(
+        const primeProdMatGrpFilter = sql`upper(trim(${salesRevenueSap.matGrpDesc})) = ANY(ARRAY[${sql.raw(
             PRIME_PRODUCT_MAT_GRPS.map(g => `'${g}'`).join(', ')
         )}]::text[])`;
 
         const primeProductData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(and(
             baseFilter,
-            ilike(historyOrders.revType!, 'Trading'),
+            ilike(salesRevenueSap.revType, 'Trading'),
             primeProdMatGrpFilter
         ));
         const revenuePrimeProduct = Number(primeProductData[0]?.total || 0);
@@ -78,25 +77,25 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         // ─── B. Revenue Service ─────────────────────────────────────────────────
         // Filter: rev_type != 'Trading', exclude customer ITC008/100289
         const serviceData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(and(
             baseFilter,
-            notIlike(historyOrders.revType!, 'Trading'),
+            notIlike(salesRevenueSap.revType, 'Trading'),
             customerNotExcluded
         ));
         const revenueService = Number(serviceData[0]?.total || 0);
 
         // ─── C. Revenue PA (Product Accessories) ───────────────────────────────
         // Filter: rev_type = 'Trading', mat_grp_desc ILIKE CP*, exclude ITC008/100289
-        const paMtGrpFilter = sql`upper(trim(${historyOrders.matGrpDesc})) = ANY(ARRAY[${sql.raw(
+        const paMtGrpFilter = sql`upper(trim(${salesRevenueSap.matGrpDesc})) = ANY(ARRAY[${sql.raw(
             PA_MAT_GRPS.map(g => `'${g}'`).join(', ')
         )}]::text[])`;
 
         const paData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(and(
             baseFilter,
-            ilike(historyOrders.revType!, 'Trading'),
+            ilike(salesRevenueSap.revType, 'Trading'),
             paMtGrpFilter,
             customerNotExcluded
         ));
@@ -113,9 +112,9 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
 
         // ─── F. Revenue By Customer (CK vs SIS) ────────────────────────────────
         const customerRevenueData = await db.select({
-            cust: historyOrders.customerName,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.customerName);
+            cust: salesRevenueSap.customerName,
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.customerName);
 
         let revenueCK = 0;
         let revenueSIS = 0;
@@ -127,9 +126,9 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
 
         // ─── G. Salesman Revenue ────────────────────────────────────────────────
         const salesData = await db.select({
-            salesman: historyOrders.salesman,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.salesman);
+            salesman: salesRevenueSap.salesman,
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.salesman);
 
         const salesmanRevenue: Record<string, number> = {
             ma_oc: 0, ma_wis: 0, ma_fq: 0, ma_bur: 0, ma_ag: 0, ma_mic: 0
@@ -146,9 +145,9 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
 
         // ─── H. Rev Type Table ──────────────────────────────────────────────────
         const revTypeData = await db.select({
-            type: historyOrders.revType,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.revType);
+            type: salesRevenueSap.revType,
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.revType);
 
         const revTypeTable = revTypeData.map(r => ({
             type: r.type || "Unknown",
@@ -157,41 +156,40 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
 
         // ─── I. Product Accessories Detail ─────────────────────────────────────
         const matGrp1Data = await db.select({
-            desc: historyOrders.matGrp1Desc,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(baseFilter, paMtGrpFilter, ilike(historyOrders.revType!, 'Trading')))
-            .groupBy(historyOrders.matGrp1Desc)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0)) DESC`);
+            desc: salesRevenueSap.matGrp1Desc,
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(and(baseFilter, paMtGrpFilter, ilike(salesRevenueSap.revType, 'Trading')))
+            .groupBy(salesRevenueSap.matGrp1Desc)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`);
 
         // ─── J. Top Materials (Rank Material Sell Out) ─────────────────────────
         const materialsData = await db.select({
-            materialDesc: historyOrders.materialDescription,
-            totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`,
-            qty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`
-        }).from(historyOrders)
+            materialDesc: salesRevenueSap.materialDescription,
+            totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`,
+            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
+        }).from(salesRevenueSap)
             .where(baseFilter)
-            .groupBy(historyOrders.materialDescription)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0)) DESC`)
+            .groupBy(salesRevenueSap.materialDescription)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`)
             .limit(20);
 
         // ─── K. YTD Revenue Chart ───────────────────────────────────────────────
         const baseFilterYTD = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
-            sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY') = ${year}`,
+            isNotNull(salesRevenueSap.billingDate),
+            sql`to_char(${salesRevenueSap.billingDate}, 'YYYY') = ${year}`,
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             )
         );
 
         const ytdData = await db.select({
-            month: sql<string>`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`,
-            rev: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders)
+            month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`,
+            rev: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap)
             .where(baseFilterYTD)
-            .groupBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`)
-            .orderBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`)
+            .orderBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`);
 
         // ─── Build Result ───────────────────────────────────────────────────────
         return {

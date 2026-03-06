@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { historyOrders } from "../db/schema";
+import { salesRevenueSap as historyOrders } from "../db/schema/sap";
 import fs from "fs";
 import Papa from "papaparse";
 
@@ -31,9 +31,26 @@ async function main() {
                     // Parse numeric fields safely
                     const parseNumber = (val: string | undefined | null) => {
                         if (!val) return null;
-                        const cleanStr = val.replace(/\./g, "").replace(/,/g, ".");
+                        const cleanStr = String(val).replace(/\./g, "").replace(/,/g, ".");
                         const parsed = parseFloat(cleanStr);
                         return isNaN(parsed) ? null : parsed;
+                    };
+
+                    const parseInteger = (val: string | undefined | null) => {
+                        if (!val) return null;
+                        const parsed = parseInt(String(val).replace(/\./g, ""));
+                        return isNaN(parsed) ? null : parsed;
+                    };
+
+                    const parseDate = (val: string | undefined | null) => {
+                        if (!val) return null;
+                        // Expected format from CSV: M/D/YYYY or MM/DD/YYYY
+                        const parts = String(val).split('/');
+                        if (parts.length === 3) {
+                            const [m, d, y] = parts;
+                            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+                        }
+                        return val;
                     };
 
                     batch.push({
@@ -43,8 +60,6 @@ async function main() {
                         customer: item['Customer'] || null,
                         customerName: item['Customer Name'] || null,
                         salesman: item['Salesman'] || null,
-                        item: item['Item'] || null,
-                        sloc: item['Sloc'] || null,
                         plant: item['Plant'] || null,
                         materialNo: item['Material No'] || null,
                         materialDescription: item['Material Description'] || null,
@@ -61,7 +76,7 @@ async function main() {
                         matGrp4Desc: item['Mat Grp4 Desc.'] || null,
                         matGrp5: item['Mat Grp5'] || null,
                         matGrp5Desc: item['Mat Grp5 Desc.'] || null,
-                        qty: parseNumber(item['Qty']),
+                        qty: parseInteger(item['Qty']),
                         uom: item['UOM'] || null,
                         curr: item['Curr'] || null,
                         basePrice: parseNumber(item['Base Price']),
@@ -70,7 +85,7 @@ async function main() {
                         revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.']),
                         revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.']),
                         billingNo: item['Billing No'] || null,
-                        billingDate: item['Billing Date'] || item['BillingDate'] || null,
+                        billingDate: parseDate(item['Billing Date'] || item['BillingDate']),
                         inco1: item['INCO1'] || null,
                         inco2: item['INCO2'] || null,
                         c: item['C'] || null,
@@ -79,7 +94,7 @@ async function main() {
                         salesOrder: item['Sales Order'] || null,
                         workOrder: item['Work Order'] || null,
                         poNo: item['PO No.'] || null,
-                        poDate: item['PO Date'] || null,
+                        poDate: parseDate(item['PO Date']),
                         poType: item['PO Type'] || null,
                         costOfSales: parseNumber(item['Cost Of Sales']),
                         profitMargin: parseNumber(item['Profit Margin'])

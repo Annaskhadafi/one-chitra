@@ -28,7 +28,7 @@ type DeliveryOption = {
 }
 
 type ItemDraft = {
-    costCategory: "gasoline" | "toll" | "parking" | "meals" | "maintenance" | "others"
+    costCategory: "gasoline" | "toll" | "parking" | "meals" | "maintenance" | "others" | "rapid_test" | "ferry" | "portal" | "washing" | "escort"
     description: string
     amount: number
     vendorName: string
@@ -42,7 +42,7 @@ type SignatoryDraft = {
     signatoryRole: string
 }
 
-const categoryOptions: ItemDraft["costCategory"][] = ["gasoline", "toll", "parking", "meals", "maintenance", "others"]
+const categoryOptions: ItemDraft["costCategory"][] = ["gasoline", "toll", "parking", "meals", "maintenance", "others", "rapid_test", "ferry", "portal", "washing", "escort"]
 const categoryLabels: Record<ItemDraft["costCategory"], string> = {
     gasoline: "BBM",
     toll: "Tol",
@@ -50,6 +50,11 @@ const categoryLabels: Record<ItemDraft["costCategory"], string> = {
     meals: "Uang Makan",
     maintenance: "Perbaikan",
     others: "Lain-lain",
+    rapid_test: "Rapid Test",
+    ferry: "Tiket Kapal Ferry",
+    portal: "Portal (Kuli/Kawal)",
+    washing: "Cuci Mobil",
+    escort: "Pengawalan"
 }
 
 export function SettlementCreateForm({

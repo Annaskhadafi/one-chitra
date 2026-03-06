@@ -169,6 +169,20 @@
       "when": 1772715354174,
       "tag": "0023_huge_captain_america",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772781622132,
+      "tag": "0024_loud_rafael_vega",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772782321138,
+      "tag": "0025_cynical_white_queen",
+      "breakpoints": true
     }
   ]
 }

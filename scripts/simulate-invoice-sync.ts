@@ -5,7 +5,7 @@
  */
 
 import { db } from "../db"
-import { historyOrders, billingRecords, salesOrders, deliveries, customers } from "../db/schema"
+import { salesRevenueSap as historyOrders, billingRecords, salesOrders, deliveries, customers } from "../db/schema"
 import { eq, and, isNotNull, ne, sql } from "drizzle-orm"
 
 // ---- Replika getInvoiceInfoByPoNo ----
@@ -38,7 +38,7 @@ async function getInvoiceInfoByPoNo(poNo: string, customerName?: string | null) 
         SELECT 
             MAX(billing_no) as "noInvSap",
             MAX(to_date(NULLIF(billing_date, ''), 'MM/DD/YYYY')) as "dateInvoice"
-        FROM history_orders
+        FROM sales_revenue_sap
         WHERE po_no = ${poNo}
         AND billing_date IS NOT NULL AND billing_date != ''
         AND billing_no IS NOT NULL AND billing_no != ''

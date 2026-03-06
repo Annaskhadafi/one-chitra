@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { historyOrders } from "../db/schema/history-orders";
+import { salesRevenueSap as historyOrders } from "../db/schema/sap";
 import { ilike, sql, and, or } from "drizzle-orm";
 
 async function inspectR49() {

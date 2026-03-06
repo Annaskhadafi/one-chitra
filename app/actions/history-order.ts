@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
-import { desc, notIlike, isNull, isNotNull, or, and, eq, ne, gte, SQL } from "drizzle-orm"
+import { salesRevenueSap } from "@/db/schema/sap"
+import { desc, asc, notIlike, isNull, isNotNull, or, and, eq, ne, gte, inArray, SQL } from "drizzle-orm"
 import { getSetting } from "./settings"
 
 export interface HistoryOrderItem {
@@ -36,32 +36,30 @@ export interface HistoryOrderFilters {
 export async function getHistoryOrderFilters() {
     try {
         const baseWhere = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
+            isNotNull(salesRevenueSap.billingDate),
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             )
         );
 
         const [customers, plants, matGrps] = await Promise.all([
-            db.selectDistinct({ name: historyOrders.customerName }).from(historyOrders).where(baseWhere).orderBy(historyOrders.customerName),
-            db.selectDistinct({ name: historyOrders.plant }).from(historyOrders).where(baseWhere).orderBy(historyOrders.plant),
-            db.selectDistinct({ name: historyOrders.matGrpDesc }).from(historyOrders).where(baseWhere).orderBy(historyOrders.matGrpDesc),
+            db.selectDistinct({ name: salesRevenueSap.customerName }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.customerName),
+            db.selectDistinct({ name: salesRevenueSap.plant }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.plant),
+            db.selectDistinct({ name: salesRevenueSap.matGrpDesc }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.matGrpDesc),
         ]);
 
-        // Get years and months from billingDate (text format M/D/YYYY)
-        // This is a bit expensive but only run once on page load
-        const dates = await db.selectDistinct({ date: historyOrders.billingDate }).from(historyOrders).where(baseWhere);
+        // Get years and months from billingDate (date format YYYY-MM-DD)
+        const dates = await db.selectDistinct({ date: salesRevenueSap.billingDate }).from(salesRevenueSap).where(baseWhere);
         const years = new Set<string>();
         const months = new Set<string>();
 
         dates.forEach(d => {
             if (d.date) {
-                const parts = d.date.split('/');
-                if (parts.length === 3) {
-                    years.add(parts[2]);
-                    months.add(parts[0].padStart(2, '0'));
+                const dateObj = new Date(d.date);
+                if (!isNaN(dateObj.getTime())) {
+                    years.add(dateObj.getFullYear().toString());
+                    months.add((dateObj.getMonth() + 1).toString().padStart(2, '0'));
                 }
             }
         });
@@ -105,11 +103,10 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
         const filterArray: SQL[] = [];
 
         const baseFilter = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
+            isNotNull(salesRevenueSap.billingDate),
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             )
         );
 
@@ -119,11 +116,11 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
 
         if (search) {
             const searchFilter = or(
-                sql`${historyOrders.customerName} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.materialNo} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.materialDescription} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.poNo} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.salesman} ILIKE ${`%${search}%`}`
+                sql`${salesRevenueSap.customerName} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.materialNo} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.materialDescription} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.poNo} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.salesman} ILIKE ${`%${search}%`}`
             );
 
             if (searchFilter) {
@@ -131,19 +128,19 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
             }
         }
 
-        if (customers.length > 0) filterArray.push(sql`${historyOrders.customerName} IN ${customers}`);
-        if (plants.length > 0) filterArray.push(sql`${historyOrders.plant} IN ${plants}`);
-        if (matGrps.length > 0) filterArray.push(sql`${historyOrders.matGrpDesc} IN ${matGrps}`);
+        if (customers.length > 0) filterArray.push(inArray(salesRevenueSap.customerName, customers));
+        if (plants.length > 0) filterArray.push(inArray(salesRevenueSap.plant, plants));
+        if (matGrps.length > 0) filterArray.push(inArray(salesRevenueSap.matGrpDesc, matGrps));
 
-        // Date filters for MM/DD/YYYY text format
+        // Date filters for proper date types
         if (years.length > 0) {
-            const yearFilter = or(...years.map(y => sql`${historyOrders.billingDate} LIKE ${`%/%/${y}`} `));
+            const yearFilter = or(...years.map(y => sql`EXTRACT(YEAR FROM ${salesRevenueSap.billingDate}) = ${parseInt(y)}`));
             if (yearFilter) {
                 filterArray.push(yearFilter);
             }
         }
         if (months.length > 0) {
-            const monthFilter = or(...months.map(m => sql`${historyOrders.billingDate} LIKE ${`${parseInt(m)}/%/%`} `));
+            const monthFilter = or(...months.map(m => sql`EXTRACT(MONTH FROM ${salesRevenueSap.billingDate}) = ${parseInt(m)}`));
             if (monthFilter) {
                 filterArray.push(monthFilter);
             }
@@ -152,66 +149,65 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
         const finalWhere = and(...filterArray);
 
         // 1. Fetch Paginated Data
-        const dataQuery = db.select().from(historyOrders).where(finalWhere);
+        const dataQuery = db.select().from(salesRevenueSap).where(finalWhere);
 
-        // Handle logical sorting for text dates
+        // Handle logical sorting for dates
         if (sortField === 'billing_date') {
             dataQuery.orderBy(
                 sortOrder === 'desc'
-                    ? sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') DESC`
-                    : sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') ASC`
+                    ? desc(salesRevenueSap.billingDate)
+                    : asc(salesRevenueSap.billingDate)
             );
         } else {
-            // Add other sort fields if needed, default to billing date
-            dataQuery.orderBy(sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') DESC`);
+            dataQuery.orderBy(desc(salesRevenueSap.billingDate));
         }
 
         const data = await dataQuery.limit(pageSize).offset(offset);
 
         // 2. Fetch Aggregations (Scorecards)
         const aggregation = await db.select({
-            totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
-            totalQty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`,
-            uniqueCust: sql<number>`COUNT(DISTINCT ${historyOrders.customerName})`,
-            uniqueOrders: sql<number>`COUNT(DISTINCT ${historyOrders.poNo})`,
+            totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
+            totalQty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            uniqueCust: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})`,
+            uniqueOrders: sql<number>`COUNT(DISTINCT ${salesRevenueSap.poNo})`,
             totalCount: sql<number>`COUNT(*)`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere);
 
         const stats = aggregation[0] || { totalRevenue: 0, totalQty: 0, uniqueCust: 0, uniqueOrders: 0, totalCount: 0 };
 
         // 3. Fetch Chart Data (Top 10 Customers)
         const topCustomers = await db.select({
-            name: historyOrders.customerName,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: salesRevenueSap.customerName,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.customerName)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0)) DESC`)
+            .groupBy(salesRevenueSap.customerName)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) DESC`)
             .limit(10);
 
         // 4. Fetch Chart Data (Revenue by Plant)
         const plantStats = await db.select({
-            name: historyOrders.plant,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: salesRevenueSap.plant,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.plant)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0)) DESC`);
+            .groupBy(salesRevenueSap.plant)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) DESC`);
 
         // 5. Fetch Chart Data (Monthly Trend)
         // Grouping by YYYY-MM from MM/DD/YYYY text
         const monthlyTrend = await db.select({
-            name: sql<string>`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`)
-            .orderBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`)
+            .orderBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`);
 
         const formattedData: HistoryOrderItem[] = data.map((item) => {
             const revenue = item.revenueInDocCurr || 0;
@@ -276,6 +272,24 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             return isNaN(parsed) ? null : parsed;
         };
 
+        const parseInteger = (val: string | undefined | null) => {
+            if (!val) return null;
+            const parsed = parseInt(String(val).replace(/\./g, ""));
+            return isNaN(parsed) ? null : parsed;
+        };
+
+        const parseDate = (val: string | undefined | null) => {
+            if (!val) return null;
+            // Expected format from CSV might be M/D/YYYY or MM/DD/YYYY
+            // Drizzle/Postgres date column usually expects YYYY-MM-DD
+            const parts = String(val).split('/');
+            if (parts.length === 3) {
+                const [m, d, y] = parts;
+                return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+            }
+            return val; // Fallback
+        };
+
         const mappedBatch = batchData.map(item => ({
             sorg: (item['Sorg.'] as string) || null,
             billTy: (item['BillTy'] as string) || null,
@@ -283,7 +297,7 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             customer: (item['Customer'] as string) || null,
             customerName: (item['Customer Name'] as string) || null,
             salesman: (item['Salesman'] as string) || null,
-            item: (item['Item'] as string) || null,
+            item: parseInteger(item['Item'] as string),
             sloc: (item['Sloc'] as string) || null,
             plant: (item['Plant'] as string) || null,
             materialNo: (item['Material No'] as string) || null,
@@ -301,7 +315,7 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             matGrp4Desc: (item['Mat Grp4 Desc.'] as string) || null,
             matGrp5: (item['Mat Grp5'] as string) || null,
             matGrp5Desc: (item['Mat Grp5 Desc.'] as string) || null,
-            qty: parseNumber(item['Qty'] as string),
+            qty: parseInteger(item['Qty'] as string),
             uom: (item['UOM'] as string) || null,
             curr: (item['Curr'] as string) || null,
             basePrice: parseNumber(item['Base Price'] as string),
@@ -310,7 +324,7 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.'] as string),
             revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.'] as string),
             billingNo: (item['Billing No'] as string) || null,
-            billingDate: (item['Billing Date'] as string) || (item['BillingDate'] as string) || null,
+            billingDate: parseDate((item['Billing Date'] as string) || (item['BillingDate'] as string)),
             inco1: (item['INCO1'] as string) || null,
             inco2: (item['INCO2'] as string) || null,
             c: (item['C'] as string) || null,
@@ -319,13 +333,13 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             salesOrder: (item['Sales Order'] as string) || null,
             workOrder: (item['Work Order'] as string) || null,
             poNo: (item['PO No.'] as string) || null,
-            poDate: (item['PO Date'] as string) || null,
+            poDate: parseDate(item['PO Date'] as string),
             poType: (item['PO Type'] as string) || null,
             costOfSales: parseNumber(item['Cost Of Sales'] as string),
             profitMargin: parseNumber(item['Profit Margin'] as string)
         }));
 
-        await db.insert(historyOrders).values(mappedBatch);
+        await db.insert(salesRevenueSap).values(mappedBatch);
         return { success: true, count: mappedBatch.length };
     } catch (error) {
         console.error("Failed to import history orders batch:", error);
@@ -342,10 +356,19 @@ export async function getProductHistoryForQuotation(materialNo: string, costSap:
         const threeYearsAgo = new Date()
         threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3)
 
-        // Fetch all history for this material
-        const data = await db.select()
-            .from(historyOrders)
-            .where(eq(historyOrders.materialNo, materialNo));
+        // Fetch all history for this material using Raw SQL for stability
+        const historyRows: any = await db.execute(sql`
+            SELECT 
+                customer_name as "customerName",
+                revenue_in_doc_curr as "revenueInDocCurr",
+                qty as "qty",
+                billing_date as "billingDate",
+                po_no as "poNo"
+            FROM sales_revenue_sap
+            WHERE material_no = ${materialNo}
+        `);
+
+        const data = historyRows.rows || historyRows;
 
         // Filter and sort in JS because of string dates and complex multi-column sorting
         const processedData = data

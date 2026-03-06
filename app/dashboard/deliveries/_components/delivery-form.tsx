@@ -120,12 +120,18 @@ interface DeliveryFormProps {
         shippingAddress: string | null
         notes: string | null
         // Internal Cost Breakdown
+        tripDestination?: string | null
         costGasoline: number | string | null
         costToll: number | string | null
         costParking: number | string | null
         costMeals: number | string | null
         costMaintenance: number | string | null
         costOthers: number | string | null
+        costRapidTest?: number | string | null
+        costFerry?: number | string | null
+        costPortal?: number | string | null
+        costWashing?: number | string | null
+        costEscort?: number | string | null
         // External fields
         isExternal: boolean | null
         vendorName: string | null
@@ -217,12 +223,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [notes, setNotes] = useState(initialData?.notes || "")
 
     // Internal Cost Breakdown State
+    const [tripDestination, setTripDestination] = useState(initialData?.tripDestination || "")
     const [costGasoline, setCostGasoline] = useState(initialData?.costGasoline ? String(initialData.costGasoline) : "0")
     const [costToll, setCostToll] = useState(initialData?.costToll ? String(initialData.costToll) : "0")
     const [costParking, setCostParking] = useState(initialData?.costParking ? String(initialData.costParking) : "0")
     const [costMeals, setCostMeals] = useState(initialData?.costMeals ? String(initialData.costMeals) : "0")
     const [costMaintenance, setCostMaintenance] = useState(initialData?.costMaintenance ? String(initialData.costMaintenance) : "0")
     const [costOthers, setCostOthers] = useState(initialData?.costOthers ? String(initialData.costOthers) : "0")
+    const [costRapidTest, setCostRapidTest] = useState(initialData?.costRapidTest ? String(initialData.costRapidTest) : "0")
+    const [costFerry, setCostFerry] = useState(initialData?.costFerry ? String(initialData.costFerry) : "0")
+    const [costPortal, setCostPortal] = useState(initialData?.costPortal ? String(initialData.costPortal) : "0")
+    const [costWashing, setCostWashing] = useState(initialData?.costWashing ? String(initialData.costWashing) : "0")
+    const [costEscort, setCostEscort] = useState(initialData?.costEscort ? String(initialData.costEscort) : "0")
 
     // External Delivery State
     const [isExternal, setIsExternal] = useState(initialData?.isExternal || false)
@@ -238,8 +250,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         const meals = Number(costMeals) || 0
         const maintenance = Number(costMaintenance) || 0
         const others = Number(costOthers) || 0
-        return gasoline + toll + parking + meals + maintenance + others
-    }, [costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers])
+        const rapidTest = Number(costRapidTest) || 0
+        const ferry = Number(costFerry) || 0
+        const portal = Number(costPortal) || 0
+        const washing = Number(costWashing) || 0
+        const escort = Number(costEscort) || 0
+        return gasoline + toll + parking + meals + maintenance + others + rapidTest + ferry + portal + washing + escort
+    }, [costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort])
 
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
@@ -480,12 +497,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             // For internal, save total calculated cost. For external, save input shippingCost
             shippingCost: isExternal ? Number(shippingCost) : totalInternalCost,
             // Internal Cost Breakdown
+            tripDestination: !isExternal ? (tripDestination || undefined) : undefined,
             costGasoline: !isExternal ? Number(costGasoline) : 0,
             costToll: !isExternal ? Number(costToll) : 0,
             costParking: !isExternal ? Number(costParking) : 0,
             costMeals: !isExternal ? Number(costMeals) : 0,
             costMaintenance: !isExternal ? Number(costMaintenance) : 0,
             costOthers: !isExternal ? Number(costOthers) : 0,
+            costRapidTest: !isExternal ? Number(costRapidTest) : 0,
+            costFerry: !isExternal ? Number(costFerry) : 0,
+            costPortal: !isExternal ? Number(costPortal) : 0,
+            costWashing: !isExternal ? Number(costWashing) : 0,
+            costEscort: !isExternal ? Number(costEscort) : 0,
 
             warehouseId,
             warehouseToId: selectedSO?.categoryPo === "VHS/Consignment" ? warehouseToId : null,
@@ -524,7 +547,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -1486,6 +1509,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                         </div>
                                     </div>
                                     <div className="space-y-3 pt-2">
+                                        <div className="space-y-1 mb-4">
+                                            <Label className="text-xs">Trip Destination</Label>
+                                            <Input
+                                                placeholder="e.g. Jakarta Pusat, Bandung..."
+                                                value={tripDestination}
+                                                onChange={e => setTripDestination(e.target.value)}
+                                                className="h-9"
+                                            />
+                                        </div>
                                         <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                                             Operational Costs
                                         </Label>
@@ -1547,6 +1579,56 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                     min={0}
                                                     value={costOthers}
                                                     onChange={e => setCostOthers(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Rapid Test</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costRapidTest}
+                                                    onChange={e => setCostRapidTest(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Ferry Ticket</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costFerry}
+                                                    onChange={e => setCostFerry(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Portal (Gate)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costPortal}
+                                                    onChange={e => setCostPortal(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Car Washing</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costWashing}
+                                                    onChange={e => setCostWashing(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Escort (Pengawalan)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costEscort}
+                                                    onChange={e => setCostEscort(e.target.value)}
                                                     className="h-8 font-mono text-right"
                                                 />
                                             </div>

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { billingRecords, historyOrders, customers, coverLetters, coverLetterItems } from "@/db/schema";
+import { billingRecords, salesRevenueSap as historyOrders, customers, coverLetters, coverLetterItems } from "@/db/schema";
 import { eq, isNotNull, ne, and, sql, desc, notInArray, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -110,12 +110,12 @@ export async function getCoverLetterBillingData(
     }
 
     // Filter: billing_date >= 15 Januari 2026
-    const minDateFilter = sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= to_date('01/15/2026', 'MM/DD/YYYY')`;
+    const minDateFilter = sql`${historyOrders.billingDate} >= '2026-01-15'`;
 
     const groupedHistorySubquery = db.select({
         poNo: historyOrders.poNo,
-        datePo: sql<Date>`MAX(to_date(${historyOrders.poDate}, 'MM/DD/YYYY'))`.as("datePo"),
-        dateInvoice: sql<Date>`MAX(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'))`.as("dateInvoice"),
+        datePo: sql<Date>`MAX(${historyOrders.poDate})`.as("datePo"),
+        dateInvoice: sql<Date>`MAX(${historyOrders.billingDate})`.as("dateInvoice"),
         noInvSap: sql<string>`MAX(${historyOrders.billingNo})`.as("noInvSap"),
         custId: sql<string>`MAX(${historyOrders.customer})`.as("custId"),
         // Gunakan revenueInDocCurr (Doc Currency) sebagai basis amount + pajak 11%
