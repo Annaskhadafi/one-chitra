@@ -179,6 +179,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/cost-settlements",
                         resource: "cost-settlements",
                     },
+                    {
+                        title: "Request Cost Delivery",
+                        url: "/dashboard/delivery-cost-request",
+                        resource: "delivery-cost-request",
+                    },
                 ],
             },
         ],

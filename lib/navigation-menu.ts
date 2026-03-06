@@ -490,7 +490,7 @@ const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): Editabl
         const sectionItems = [...existingSection.items]
 
         for (const defaultItem of defaultSection.items) {
-            const existingItemIndex = sectionItems.findIndex((item) => item.title === defaultItem.title || item.url === defaultItem.url)
+            const existingItemIndex = sectionItems.findIndex((item) => item.title === defaultItem.title || (item.url === defaultItem.url && defaultItem.url !== "#" && defaultItem.url !== ""))
 
             if (existingItemIndex === -1) {
                 sectionItems.push(defaultItem)
@@ -502,7 +502,7 @@ const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): Editabl
 
             for (const defaultSubItem of defaultItem.items) {
                 const hasSubItem = subItems.some(
-                    (subItem) => subItem.title === defaultSubItem.title || subItem.url === defaultSubItem.url,
+                    (subItem) => subItem.title === defaultSubItem.title || (subItem.url === defaultSubItem.url && defaultSubItem.url !== "#" && defaultSubItem.url !== ""),
                 )
                 if (!hasSubItem) {
                     subItems.push(defaultSubItem)
