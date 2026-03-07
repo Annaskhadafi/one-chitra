@@ -161,6 +161,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/stock-alerts",
                         resource: "stock-alerts",
                     },
+                    {
+                        title: "AI & Predictions",
+                        url: "/dashboard/inventory-ai",
+                        resource: "inventory",
+                    },
                 ],
             },
             {
@@ -276,6 +281,11 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Revenue vs Forecast",
                         url: "/dashboard/revenue-forecast",
+                        resource: "revenue-forecast",
+                    },
+                    {
+                        title: "ML Revenue Forecast",
+                        url: "/dashboard/revenue-ml",
                         resource: "revenue-forecast",
                     },
                     {

@@ -101,6 +101,7 @@ export {
     costSettlementSignatoriesRelations,
 } from "./cost-settlements";
 export { zmc9StockSap, me2lPurchDocsSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
+export { aiInventoryPredictions } from "./ai-predictions";
 
 // Core Auth Table Relations
 import { user } from "./auth";
