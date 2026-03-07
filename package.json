@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "test:approval": "npx tsx scripts/test-approval-e2e.ts && npx tsx scripts/test-approval-reject-email.ts",
     "test:approval:graph": "npx tsx scripts/test-approval-graph-routing.ts",
+    "audit:actions": "node scripts/audit-server-actions.js",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",

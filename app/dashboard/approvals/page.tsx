@@ -24,6 +24,11 @@ export const metadata = {
     title: "Approval Inbox – One Chitra",
 }
 
+async function submitApprovalDecisionVoid(formData: FormData): Promise<void> {
+    "use server"
+    await submitApprovalDecision(formData)
+}
+
 export default async function ApprovalInboxPage() {
     const inbox = await getApprovalInbox()
     const pendingTasks = inbox.pendingTasks
@@ -125,9 +130,7 @@ export default async function ApprovalInboxPage() {
                                                 <div className="flex flex-col items-end gap-2">
                                                     <span className="text-[10px] text-muted-foreground">{noteHint}</span>
                                                     <form
-                                                        action={async (formData: FormData): Promise<void> => {
-                                                            await submitApprovalDecision(formData)
-                                                        }}
+                                                        action={submitApprovalDecisionVoid}
                                                         className="flex items-center justify-end gap-2"
                                                     >
                                                         <input type="hidden" name="assignmentId" value={task.assignmentId} />
