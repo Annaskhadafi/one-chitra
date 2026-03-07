@@ -19,11 +19,11 @@ interface RevenueClientProps {
             ck: TargetData
             sis: TargetData
             ma_oc: TargetData
-            ma_wis: TargetData
+            ma_ws: TargetData
             ma_fq: TargetData
-            ma_bur: TargetData
+            ma_br: TargetData
             ma_ag: TargetData
-            ma_mic: TargetData
+            ma_mc: TargetData
         }
         materials: Array<{ desc: string; revenue: number; qty: number }>
         revTypes: Array<{ type: string; total: number }>
@@ -47,111 +47,137 @@ const strokeColor = (p: number) => p >= 100 ? "stroke-green-500" : p >= 80 ? "st
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#14b8a6']
 
 // Mini horizontal gauge bar
-function MiniGauge({ label, data, color = "#6366f1" }: { label: string; data: TargetData; color?: string }) {
+function MiniGauge({ label, data, colorClass = "bg-indigo-500", textClass = "text-indigo-600" }: { label: string; data: TargetData; colorClass?: string; textClass?: string }) {
     const p = pct(data.revenue, data.forecast)
     return (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
             <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-foreground">{label}</span>
-                <span className="font-black" style={{ color }}>{p.toFixed(1)}%</span>
+                <span className="font-bold text-foreground truncate max-w-[140px]" title={label}>{label}</span>
+                <span className={`font-black ${textClass}`}>{p.toFixed(1)}%</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(p, 100)}%`, backgroundColor: color }} />
+            <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(p, 100)}%` }} />
             </div>
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>Rev: {fmt(data.revenue, true)}</span>
-                <span>Fc: {fmt(data.forecast, true)}</span>
+            <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                <span>R: {fmt(data.revenue, true)}</span>
+                <span>F: {fmt(data.forecast, true)}</span>
             </div>
         </div>
     )
 }
 
-// Half-donut gauge card (compact style like reference)
+// Compact percentage badge card
 function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
     const p = pct(data.revenue, data.forecast)
-    const radius = 32; const circ = Math.PI * radius
+    const getTheme = (val: number) => {
+        if (val >= 100) return { bg: 'text-emerald-500', stroke: '#10b981', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30' }
+        if (val >= 80) return { bg: 'text-blue-500', stroke: '#3b82f6', lightBg: 'bg-blue-50 dark:bg-blue-950/30' }
+        if (val >= 50) return { bg: 'text-amber-500', stroke: '#f59e0b', lightBg: 'bg-amber-50 dark:bg-amber-950/30' }
+        return { bg: 'text-red-500', stroke: '#ef4444', lightBg: 'bg-red-50 dark:bg-red-950/30' }
+    }
+    const theme = getTheme(p)
+
+    const radius = 36; const circ = Math.PI * radius
     const dashOffset = circ - (Math.min(p, 100) / 100) * circ
+
     return (
-        <div className="bg-card border rounded-lg p-2.5 flex flex-col hover:bg-muted/10 transition-colors">
-            <div className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-tight leading-none mb-1.5">{label}</div>
-            <div className="flex items-center gap-3">
-                <div className="relative w-[54px] h-[32px] shrink-0">
-                    <svg viewBox="0 0 74 40" className="w-full h-full">
-                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className="stroke-muted/30" strokeWidth="10" strokeLinecap="round" />
-                        <path d="M 7,37 A 32,32 0 0,1 67,37" fill="none" className={`${strokeColor(p)} transition-all`} strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
+        <div className="bg-card border rounded-xl p-3.5 flex flex-col hover:border-primary/50 transition-colors shadow-sm relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-2 z-10 w-full relative">
+                <div className="text-xs font-black text-muted-foreground uppercase tracking-tight w-full">{label}</div>
+            </div>
+
+            <div className="relative w-full h-[54px] flex justify-center items-center mb-2 z-10">
+                <div className="relative w-[100px] h-[54px]">
+                    <svg viewBox="0 0 84 46" className="w-full h-full drop-shadow-sm">
+                        <path d="M 6,40 A 36,36 0 0,1 78,40" fill="none" className="stroke-muted/30" strokeWidth="10" strokeLinecap="round" />
+                        <path d="M 6,40 A 36,36 0 0,1 78,40" fill="none" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={theme.stroke} className="transition-all duration-1000" />
                     </svg>
-                    <div className={`absolute -bottom-1 left-0 w-full text-center text-xs font-black ${pctColor(p)}`}>{p.toFixed(0)}%</div>
-                </div>
-                <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-                    <div className="flex flex-col">
-                        <span className="text-[9px] text-muted-foreground leading-none">Forecast</span>
-                        <span className="text-xs font-black truncate">{fmt(data.forecast, true)}</span>
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] text-muted-foreground leading-none text-primary/70">Revenue</span>
-                        <span className="text-xs font-black truncate text-primary">{fmt(data.revenue, true)}</span>
+                    <div className={`absolute bottom-0 left-0 w-full text-center text-lg font-black ${theme.bg}`}>
+                        {p.toFixed(0)}%
                     </div>
                 </div>
             </div>
-        </div>
-    )
-}
 
-// Customer gauge (CK/SIS) - bigger half donut
-function CustomerGauge({ label, data, color = "#6366f1", textColor = "text-indigo-600" }: { label: string; data: TargetData; color?: string; textColor?: string }) {
-    const p = pct(data.revenue, data.forecast)
-    const radius = 48; const circ = Math.PI * radius
-    const dashOffset = circ - (Math.min(p, 100) / 100) * circ
-    return (
-        <div className="bg-card border rounded-xl p-3 flex flex-col items-center relative overflow-hidden">
-            <div className="flex w-full justify-between items-start z-10">
+            <div className="flex justify-between items-end gap-2 mt-auto z-10">
                 <div className="flex flex-col">
-                    <div className="text-xs font-black text-muted-foreground tracking-tight uppercase">FORECAST {label}</div>
-                    <div className="text-xl font-black leading-none mt-1">{fmt(data.forecast, true)}</div>
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Forecast</span>
+                    <span className="text-xs font-extrabold truncate">{fmt(data.forecast, true)}</span>
                 </div>
-            </div>
-
-            <div className="relative w-[120px] h-[64px] my-2">
-                <svg viewBox="0 0 104 58" className="w-full h-full">
-                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" className="stroke-muted/30" strokeWidth="12" strokeLinecap="round" />
-                    <path d="M 8,54 A 48,48 0 0,1 96,54" fill="none" strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={color} className="transition-all" />
-                </svg>
-                <div className={`absolute -bottom-1 left-0 w-full text-center text-3xl font-black ${textColor}`}>{p.toFixed(1)}%</div>
-            </div>
-
-            <div className="flex w-full justify-end items-end mt-1 z-10">
-                <div className="flex flex-col items-end">
-                    <div className="text-xs font-black text-muted-foreground tracking-tight leading-none uppercase">Revenue {label}</div>
-                    <div className="text-xl font-black leading-none text-primary mt-1">{fmt(data.revenue, true)}</div>
+                <div className="flex flex-col text-right">
+                    <span className="text-[9px] font-bold text-primary/70 uppercase">Revenue</span>
+                    <span className="text-sm font-black text-primary truncate leading-none">{fmt(data.revenue, true)}</span>
                 </div>
             </div>
         </div>
     )
 }
 
-// Big category card (Service / PA / PA+Service) - colored left border + big pct
-function CategoryCard({ label, data, borderColor = "border-blue-500", bgColor = "bg-blue-50 dark:bg-blue-950/30", textColor = "text-blue-600" }: {
-    label: string; data: TargetData; borderColor?: string; bgColor?: string; textColor?: string
+// Customer details (CK/SIS)
+function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "text-gray-700 dark:text-gray-300", strokeColor = "#6b7280" }: { label: string; data: TargetData; colorClass?: string; textClass?: string; strokeColor?: string }) {
+    const p = pct(data.revenue, data.forecast)
+    const radius = 56; const circ = Math.PI * radius
+    const dashOffset = circ - (Math.min(p, 100) / 100) * circ
+
+    return (
+        <div className={`bg-card border rounded-xl p-5 flex flex-col justify-between shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+            {/* Top color bar */}
+            <div className={`absolute top-0 left-0 w-full h-1 ${colorClass} opacity-80 z-10`} />
+
+            <div className="flex justify-between items-start mb-2 mt-1 z-10 w-full relative">
+                <div className="flex flex-col">
+                    <div className="text-xs font-black text-muted-foreground uppercase tracking-wider">{label}</div>
+                    <div className="text-2xl font-black mt-1 tracking-tight">{fmt(data.forecast, true)}</div>
+                    <div className="text-[10px] uppercase text-muted-foreground font-bold mt-0.5">Forecast</div>
+                </div>
+            </div>
+
+            <div className="relative w-full h-[80px] flex justify-center items-center my-3 z-10">
+                <div className="relative w-[150px] h-[80px]">
+                    <svg viewBox="0 0 128 72" className="w-full h-full drop-shadow-md">
+                        <path d="M 8,64 A 56,56 0 0,1 120,64" fill="none" className="stroke-muted/30" strokeWidth="12" strokeLinecap="round" />
+                        <path d="M 8,64 A 56,56 0 0,1 120,64" fill="none" strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={strokeColor} className="transition-all duration-1000" />
+                    </svg>
+                    <div className={`absolute bottom-0 left-0 w-full text-center text-3xl font-black ${textClass}`}>
+                        {p.toFixed(1)}%
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col items-end z-10">
+                <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue, true)}</div>
+                <div className="text-[10px] uppercase text-primary/70 font-bold mt-0.5">Revenue</div>
+            </div>
+        </div>
+    )
+}
+
+// Big category card (Service / PA / PA+Service)
+function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "text-blue-700 dark:text-blue-400", lightBg = "bg-blue-50/50 dark:bg-blue-950/20" }: {
+    label: string; data: TargetData; colorClass?: string; textClass?: string; lightBg?: string
 }) {
     const p = pct(data.revenue, data.forecast)
     return (
-        <div className={`rounded-xl border-l-4 ${borderColor} ${bgColor} p-4 flex flex-col gap-2`}>
-            <div className="flex justify-between items-center">
-                <div className={`text-4xl font-black ${textColor}`}>{p.toFixed(2)}%</div>
+        <div className={`rounded-xl border ${lightBg} p-5 flex flex-col gap-3 shadow-sm relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5`}>
+            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorClass}`} />
+
+            <div className="flex justify-between items-start">
+                <div className="text-[11px] font-black uppercase text-muted-foreground tracking-wider line-clamp-2 max-w-[65%] pl-2">{label}</div>
+                <div className={`text-3xl font-black ${textClass} drop-shadow-sm`}>{p.toFixed(1)}%</div>
             </div>
-            <div className="text-xs font-bold uppercase text-muted-foreground">{label}</div>
-            <div className="flex gap-4 text-sm">
-                <div>
-                    <div className="text-[10px] text-muted-foreground">Forecast</div>
-                    <div className="font-bold">{fmt(data.forecast, true)}</div>
+
+            <div className="flex justify-between items-end mt-4 pl-2">
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase">Forecast</span>
+                    <span className="text-lg font-black tracking-tight">{fmt(data.forecast, true)}</span>
                 </div>
-                <div>
-                    <div className="text-[10px] text-muted-foreground">Revenue</div>
-                    <div className="font-bold text-primary">{fmt(data.revenue, true)}</div>
+                <div className="flex flex-col text-right">
+                    <span className="text-[10px] text-primary/70 font-bold uppercase">Revenue</span>
+                    <span className="text-lg font-black text-primary tracking-tight truncate max-w-[120px]">{fmt(data.revenue, true)}</span>
                 </div>
             </div>
-            <div className="h-1.5 bg-white/50 dark:bg-black/20 rounded-full">
-                <div className={`h-full rounded-full border-l-4 ${borderColor} bg-current transition-all`} style={{ width: `${Math.min(p, 100)}%` }} />
+
+            <div className="h-1.5 bg-black/5 dark:bg-white/10 rounded-full w-[calc(100%-8px)] ml-2 overflow-hidden mt-3">
+                <div className={`h-full rounded-full ${colorClass} transition-all`} style={{ width: `${Math.min(p, 100)}%` }} />
             </div>
         </div>
     )
@@ -160,26 +186,32 @@ function CategoryCard({ label, data, borderColor = "border-blue-500", bgColor = 
 // Big consolidate gauge (center piece)
 function ConsolidateGauge({ data }: { data: TargetData }) {
     const p = pct(data.revenue, data.forecast)
-    const radius = 80; const circ = Math.PI * radius
-    const dashOffset = circ - (Math.min(p, 100) / 100) * circ
     return (
-        <div className="bg-card border rounded-xl p-5 flex flex-col items-center gap-2 h-full justify-between">
-            <div className="text-center">
-                <div className="text-xs font-black text-muted-foreground uppercase tracking-wider">Forecast Consolidate</div>
-                <div className="text-3xl font-black leading-tight">{fmt(data.forecast)}</div>
+        <div className="bg-card border-2 border-primary/10 rounded-xl p-6 flex flex-col items-center justify-center h-full shadow-md relative overflow-hidden">
+            {/* Background effects */}
+            <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none" />
+
+            <h2 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-6 relative z-10 text-center">Consolidate Summary</h2>
+
+            <div className="flex flex-col items-center justify-center relative z-10 mb-8 w-full">
+                <div className={`text-5xl lg:text-6xl font-black tracking-tighter ${pctColor(p)} drop-shadow-sm flex items-baseline`}>
+                    {p.toFixed(1)}<span className="text-3xl font-bold">%</span>
+                </div>
+                <div className="h-2 w-48 bg-muted/50 mt-5 rounded-full overflow-hidden shadow-inner">
+                    <div className={`h-full rounded-full ${p >= 100 ? 'bg-emerald-500' : p >= 80 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(p, 100)}%` }} />
+                </div>
             </div>
 
-            <div className="relative w-[210px] h-[115px] mx-auto">
-                <svg viewBox="0 0 200 110" className="w-full h-full">
-                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className="stroke-muted/30" strokeWidth="18" strokeLinecap="round" />
-                    <path d="M 20,100 A 80,80 0 0,1 180,100" fill="none" className={`${strokeColor(p)} transition-all duration-1000`} strokeWidth="18" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} />
-                </svg>
-                <div className={`absolute -bottom-2 left-0 w-full text-center text-5xl font-black ${pctColor(p)}`}>{p.toFixed(1)}%</div>
-            </div>
-
-            <div className="text-center">
-                <div className="text-xs font-black text-muted-foreground uppercase tracking-wider">Revenue Consolidate</div>
-                <div className="text-3xl font-black text-primary leading-tight">{fmt(data.revenue)}</div>
+            <div className="grid grid-cols-2 gap-4 w-full relative z-10 bg-muted/30 p-4 rounded-xl border border-muted/50">
+                <div className="text-center">
+                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Forecast</div>
+                    <div className="text-xl font-black text-foreground tracking-tight">{fmt(data.forecast)}</div>
+                </div>
+                <div className="text-center border-l border-border/50">
+                    <div className="text-[10px] font-bold text-primary/70 uppercase tracking-wider mb-1">Revenue</div>
+                    <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
+                </div>
             </div>
         </div>
     )
@@ -246,17 +278,17 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                 {/* Salesman Grid 2x3 */}
                 <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <SalesmanCard label="MA OC" data={targets.ma_oc} />
-                    <SalesmanCard label="MA WIS" data={targets.ma_wis} />
+                    <SalesmanCard label="MA WS" data={targets.ma_ws} />
                     <SalesmanCard label="MA AG" data={targets.ma_ag} />
-                    <SalesmanCard label="MA BUR" data={targets.ma_bur} />
+                    <SalesmanCard label="MA BR" data={targets.ma_br} />
                     <SalesmanCard label="MA FQ" data={targets.ma_fq} />
-                    <SalesmanCard label="MA MIC" data={targets.ma_mic} />
+                    <SalesmanCard label="MA MC" data={targets.ma_mc} />
                 </div>
 
                 {/* CK & SIS */}
                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
-                    <CustomerGauge label="CK" data={targets.ck} color="#6b7280" textColor="text-gray-600" />
-                    <CustomerGauge label="SIS" data={targets.sis} color="#9333ea" textColor="text-purple-600" />
+                    <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" />
+                    <CustomerGauge label="MA SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" />
                 </div>
             </div>
 
@@ -265,23 +297,23 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                 <CategoryCard
                     label="Forecast Service"
                     data={targets.service}
-                    borderColor="border-blue-500"
-                    bgColor="bg-blue-50/60 dark:bg-blue-950/20"
-                    textColor="text-blue-600"
+                    colorClass="bg-blue-500"
+                    textClass="text-blue-700 dark:text-blue-400"
+                    lightBg="bg-blue-50/50 dark:bg-blue-950/20"
                 />
                 <CategoryCard
                     label="Forecast PA"
                     data={targets.pa}
-                    borderColor="border-emerald-500"
-                    bgColor="bg-emerald-50/60 dark:bg-emerald-950/20"
-                    textColor="text-emerald-600"
+                    colorClass="bg-emerald-500"
+                    textClass="text-emerald-700 dark:text-emerald-400"
+                    lightBg="bg-emerald-50/50 dark:bg-emerald-950/20"
                 />
                 <CategoryCard
                     label="Forecast PA & Service"
                     data={targets.paService}
-                    borderColor="border-teal-500"
-                    bgColor="bg-teal-50/60 dark:bg-teal-950/20"
-                    textColor="text-teal-600"
+                    colorClass="bg-teal-500"
+                    textClass="text-teal-700 dark:text-teal-400"
+                    lightBg="bg-teal-50/50 dark:bg-teal-950/20"
                 />
             </div>
 
@@ -320,15 +352,15 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                 </div>
 
                 {/* Prime Product vs Forecast mini panel + mini gauge */}
-                <div className="bg-card border rounded-xl p-4 flex flex-col gap-3">
-                    <h3 className="text-sm font-bold">Prime Product & Overall Summary</h3>
+                <div className="bg-card border rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+                    <h3 className="text-sm font-black uppercase tracking-tight">Prime Product & Overall Summary</h3>
                     <div className="space-y-4">
-                        <MiniGauge label="Prime Product" data={targets.primeProduct} color="#6366f1" />
-                        <MiniGauge label="Service" data={targets.service} color="#3b82f6" />
-                        <MiniGauge label="PA (Product Accessories)" data={targets.pa} color="#10b981" />
-                        <MiniGauge label="PA + Service" data={targets.paService} color="#14b8a6" />
-                        <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} color="#6b7280" />
-                        <MiniGauge label="SIS (Saptaindra Sejati)" data={targets.sis} color="#a855f7" />
+                        <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" />
+                        <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" />
+                        <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
+                        <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />
+                        <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" />
+                        <MiniGauge label="MA SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
                     </div>
                 </div>
             </div>

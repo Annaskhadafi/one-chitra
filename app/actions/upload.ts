@@ -4,13 +4,7 @@ import { writeFile, mkdir, unlink } from "fs/promises"
 import { join, resolve } from "path"
 import { v4 as uuidv4 } from "uuid"
 
-// Resolve the upload directory:
-// - In production (Dokploy), set UPLOAD_DIR=/app/uploads and mount volume at /app/uploads
-// - In development (no UPLOAD_DIR set), falls back to <project>/public/uploads
-function getUploadDir(): string {
-    if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR
-    return resolve(process.cwd(), "public", "uploads")
-}
+import { getUploadDir } from "@/lib/upload-dir"
 
 export async function uploadFile(formData: FormData) {
     const uploadDir = getUploadDir()

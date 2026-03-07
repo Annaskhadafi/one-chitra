@@ -21,8 +21,10 @@ import { uploadFile } from "./upload"
 const parseDecimal = (value: string | number | null | undefined) => Number(value ?? 0)
 
 const mapSettlementErrorMessage = (error: unknown) => {
+    console.error("[Create Settlement Error]", error);
+
     if (error instanceof z.ZodError) {
-        return error.issues[0]?.message || "Data settlement tidak valid"
+        return error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join(", ") || "Data settlement tidak valid"
     }
 
     const message = error instanceof Error ? error.message : "Unknown error"

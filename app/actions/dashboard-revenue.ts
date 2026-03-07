@@ -53,10 +53,16 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             )
         );
 
-        // Customer NOT (ITC008 or 100289)
-        const customerNotExcluded = and(
+        // Filter Service & PA: exclude ITC008 and 100289
+        const customerExcludePA = and(
             notIlike(salesRevenueSap.customer, '%ITC008%'),
             notIlike(salesRevenueSap.customer, '%100289%')
+        );
+
+        // Filter MA (Salesman) & Customer Name: exclude ITC008 and 1000289A
+        const customerExcludeMA = and(
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%')
         );
 
         // ─── A. Revenue Prime Product ───────────────────────────────────────────
@@ -81,7 +87,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         }).from(salesRevenueSap).where(and(
             baseFilter,
             notIlike(salesRevenueSap.revType, 'Trading'),
-            customerNotExcluded
+            customerExcludePA
         ));
         const revenueService = Number(serviceData[0]?.total || 0);
 
@@ -97,7 +103,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             baseFilter,
             ilike(salesRevenueSap.revType, 'Trading'),
             paMtGrpFilter,
-            customerNotExcluded
+            customerExcludePA
         ));
         const revenuePA = Number(paData[0]?.total || 0);
 
@@ -114,33 +120,40 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const customerRevenueData = await db.select({
             cust: salesRevenueSap.customerName,
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.customerName);
+        }).from(salesRevenueSap).where(and(baseFilter, customerExcludeMA)).groupBy(salesRevenueSap.customerName);
 
         let revenueCK = 0;
         let revenueSIS = 0;
         customerRevenueData.forEach(c => {
             const name = (c.cust || "").toUpperCase();
-            if (name.includes('CIPTA KRIDATAMA')) revenueCK += Number(c.total);
-            if (name.includes('SAPTAINDRA SEJATI') || (name.includes('SIS') && !name.includes('SIMPSON'))) revenueSIS += Number(c.total);
+            if (name === 'PT. CIPTA KRIDATAMA') revenueCK += Number(c.total);
+            if (name === 'PT. SAPTAINDRA SEJATI') revenueSIS += Number(c.total);
         });
 
         // ─── G. Salesman Revenue ────────────────────────────────────────────────
         const salesData = await db.select({
             salesman: salesRevenueSap.salesman,
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.salesman);
+        }).from(salesRevenueSap).where(and(baseFilter, customerExcludeMA)).groupBy(salesRevenueSap.salesman);
 
         const salesmanRevenue: Record<string, number> = {
-            ma_oc: 0, ma_wis: 0, ma_fq: 0, ma_bur: 0, ma_ag: 0, ma_mic: 0
+            ma_oc: 0, ma_ws: 0, ma_fq: 0, ma_br: 0, ma_ag: 0, ma_mc: 0
         };
+        const ocNames = ["OCKY HEGAR PRATAMA", "ZULFIKAR", "MUHAMMAD IKBAL LAISA", "NUR SABRINA FAZLIHUL UMAR", "BAMBANG IRAWAN", "TOMMY INDRA ALDINY RAMBE"];
+        const mcNames = ["MICHAEL ADRIAN", "FEBRIAL HARIRI"];
+        const agNames = ["AGUNG ARI PRASERTIO"];
+        const wsNames = ["RIKI DARMAWAN", "GREGORIUS DWIJOSAPUTRA RAHARJO", "KETUT SADHUNATA WISNUKEPAKISAN"];
+        const brNames = ["BURI ANTONI", "HARRIZ ICHWAN"];
+        const fqNames = ["MUHAMMAD FURQON"];
+
         salesData.forEach(s => {
-            const name = (s.salesman || "").toUpperCase();
-            if (name.includes("OCKY") || name === "MA OC") salesmanRevenue.ma_oc += Number(s.total);
-            else if (name.includes("WIS") || name.includes("WISHNU")) salesmanRevenue.ma_wis += Number(s.total);
-            else if (name.includes("FQ") || name.includes("FAQIH")) salesmanRevenue.ma_fq += Number(s.total);
-            else if (name.includes("BUR") || name.includes("BURHAN")) salesmanRevenue.ma_bur += Number(s.total);
-            else if (name.includes("AG ") || name === "MA AG" || name.includes("AGUS")) salesmanRevenue.ma_ag += Number(s.total);
-            else if (name.includes("MIC") || name.includes("MICHAEL")) salesmanRevenue.ma_mic += Number(s.total);
+            const name = (s.salesman || "").toUpperCase().trim();
+            if (ocNames.includes(name)) salesmanRevenue.ma_oc += Number(s.total);
+            else if (wsNames.includes(name)) salesmanRevenue.ma_ws += Number(s.total);
+            else if (fqNames.includes(name)) salesmanRevenue.ma_fq += Number(s.total);
+            else if (brNames.includes(name)) salesmanRevenue.ma_br += Number(s.total);
+            else if (agNames.includes(name)) salesmanRevenue.ma_ag += Number(s.total);
+            else if (mcNames.includes(name)) salesmanRevenue.ma_mc += Number(s.total);
         });
 
         // ─── H. Rev Type Table ──────────────────────────────────────────────────
@@ -209,11 +222,11 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
                     ck: { revenue: revenueCK, forecast: targetMap.get("CK") || 0 },
                     sis: { revenue: revenueSIS, forecast: targetMap.get("SIS") || 0 },
                     ma_oc: { revenue: salesmanRevenue.ma_oc, forecast: targetMap.get("MA OC") || 0 },
-                    ma_wis: { revenue: salesmanRevenue.ma_wis, forecast: targetMap.get("MA WIS") || 0 },
+                    ma_ws: { revenue: salesmanRevenue.ma_ws, forecast: targetMap.get("MA WIS") || targetMap.get("MA WS") || 0 },
                     ma_fq: { revenue: salesmanRevenue.ma_fq, forecast: targetMap.get("MA FQ") || 0 },
-                    ma_bur: { revenue: salesmanRevenue.ma_bur, forecast: targetMap.get("MA BUR") || 0 },
+                    ma_br: { revenue: salesmanRevenue.ma_br, forecast: targetMap.get("MA BUR") || targetMap.get("MA BR") || 0 },
                     ma_ag: { revenue: salesmanRevenue.ma_ag, forecast: targetMap.get("MA AG") || 0 },
-                    ma_mic: { revenue: salesmanRevenue.ma_mic, forecast: targetMap.get("MA MIC") || 0 },
+                    ma_mc: { revenue: salesmanRevenue.ma_mc, forecast: targetMap.get("MA MIC") || targetMap.get("MA MC") || 0 },
                 },
                 materials: materialsData.map(m => ({
                     desc: m.materialDesc || "Unknown",

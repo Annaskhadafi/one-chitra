@@ -3,6 +3,7 @@
 import { useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { FileDown, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { postSettlement, submitSettlement } from "@/app/actions/cost-settlement"
 
@@ -50,6 +51,13 @@ export function SettlementActions({
 
     return (
         <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="outline" asChild>
+                <a href={`/api/settlements/${settlementId}/export`}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Export RPA (ZIP)
+                </a>
+            </Button>
+
             {status === "draft" ? (
                 <Button type="button" onClick={onSubmitApproval} disabled={isPending}>
                     {isPending ? "Memproses..." : "Submit Approval"}

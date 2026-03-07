@@ -23,11 +23,11 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
             ck: { revenue: 0, forecast: 0 },
             sis: { revenue: 0, forecast: 0 },
             ma_oc: { revenue: 0, forecast: 0 },
-            ma_wis: { revenue: 0, forecast: 0 },
+            ma_ws: { revenue: 0, forecast: 0 },
             ma_fq: { revenue: 0, forecast: 0 },
-            ma_bur: { revenue: 0, forecast: 0 },
+            ma_br: { revenue: 0, forecast: 0 },
             ma_ag: { revenue: 0, forecast: 0 },
-            ma_mic: { revenue: 0, forecast: 0 }
+            ma_mc: { revenue: 0, forecast: 0 }
         },
         materials: [],
         revTypes: [],

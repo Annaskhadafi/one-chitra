@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getSettlementById } from "@/app/actions/cost-settlement"
 import { SettlementActions } from "../_components/settlement-actions"
 import { SettlementItemReceipts } from "../_components/settlement-item-receipts"
+import { SettlementPdfPreview } from "./_components/settlement-pdf-preview"
 
 const formatCurrency = (value: string | number) =>
     new Intl.NumberFormat("id-ID", {
@@ -25,11 +26,14 @@ export default async function SettlementDetailPage({ params }: { params: Promise
         <div className="flex-1 space-y-6 p-8 pt-6">
             <PageHeader
                 title={settlement.settlementNumber}
-                subtitle="Detail settlement awal. Ledger preview, approval action, dan PDF export akan ditambahkan berikutnya."
+                subtitle="Detail settlement dan bukti biaya pengiriman."
                 icon={ReceiptText}
             />
 
-            <SettlementActions settlementId={settlement.id} status={settlement.status} />
+            <div className="flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center">
+                <SettlementPdfPreview settlement={settlement} />
+                <SettlementActions settlementId={settlement.id} status={settlement.status} />
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
                 <Card>
