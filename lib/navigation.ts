@@ -260,6 +260,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/forecasts",
                         resource: "forecast-management",
                     },
+                    {
+                        title: "Bundling Builder",
+                        url: "/dashboard/calculator",
+                        resource: "bundling-calculator",
+                    },
                 ],
             },
             {

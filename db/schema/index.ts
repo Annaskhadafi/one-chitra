@@ -10,6 +10,7 @@ export const warehousesRelations = relations(warehouses, ({ many }) => ({
 export { settings } from "./settings";
 
 // Domain tables & Relations
+export { bundlingHistories } from "./bundling-histories";
 export { roles } from "./roles";
 export { permissions } from "./permissions";
 export { rolePermissions } from "./role-permissions";
@@ -38,6 +39,7 @@ export { goodReceiveManual, goodReceiveManualItems, goodReceiveManualRelations, 
 export { fleetDrivers, fleetVehicles } from "./fleet";
 export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
 // Old historyOrders removed, aliased from sap.ts below
+export { historyOrders as oldHistoryOrdersTable } from "./history-orders";
 export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
