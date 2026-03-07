@@ -1,9 +1,9 @@
-CREATE TYPE "public"."approval_approver_type" AS ENUM('role', 'user');--> statement-breakpoint
-CREATE TYPE "public"."approval_assignment_status" AS ENUM('pending', 'approved', 'rejected', 'skipped');--> statement-breakpoint
-CREATE TYPE "public"."approval_decision_action" AS ENUM('approve', 'reject', 'comment', 'escalate', 'cancel');--> statement-breakpoint
-CREATE TYPE "public"."approval_definition_status" AS ENUM('draft', 'active', 'archived');--> statement-breakpoint
-CREATE TYPE "public"."approval_org_structure_type" AS ENUM('enterprise', 'work', 'project');--> statement-breakpoint
-CREATE TYPE "public"."approval_request_status" AS ENUM('pending', 'approved', 'rejected', 'cancelled');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_approver_type" AS ENUM('role', 'user');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_assignment_status" AS ENUM('pending', 'approved', 'rejected', 'skipped');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_decision_action" AS ENUM('approve', 'reject', 'comment', 'escalate', 'cancel');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_definition_status" AS ENUM('draft', 'active', 'archived');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_org_structure_type" AS ENUM('enterprise', 'work', 'project');--> statement-breakpoint
+-- CREATE TYPE "public"."approval_request_status" AS ENUM('pending', 'approved', 'rejected', 'cancelled');--> statement-breakpoint
 CREATE TABLE "approval_assignments" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"request_id" varchar(36) NOT NULL,

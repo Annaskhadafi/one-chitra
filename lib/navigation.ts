@@ -162,6 +162,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "stock-alerts",
                     },
                     {
+                        title: "Dead Stock Analysis",
+                        url: "/dashboard/inventory/dead-stock",
+                        resource: "inventory",
+                    },
+                    {
                         title: "AI & Predictions",
                         url: "/dashboard/inventory-ai",
                         resource: "inventory",
@@ -221,6 +226,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Customers",
                         url: "/dashboard/customers",
                         resource: "customers",
+                    },
+                    {
+                        title: "Campaign Manager",
+                        url: "/dashboard/marketing/campaigns",
+                        resource: "marketing",
                     },
                 ],
             },

@@ -183,6 +183,13 @@
       "when": 1772782321138,
       "tag": "0025_cynical_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772924731128,
+      "tag": "0026_rich_pixie",
+      "breakpoints": true
     }
   ]
 }
