@@ -44,7 +44,7 @@ export async function getBundlingFormDependencies() {
         }
 
         return { success: true, usdRate: rate }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal memuat dependensi", usdRate: 15500 }
     }
 }
@@ -71,7 +71,7 @@ export async function autoMatchCompetitorPrice(materialDescription: string) {
         }
 
         return { success: false, price: 0, reason: "Tire size dianalisa namun kompetitor belum ada" }
-    } catch (e) {
+    } catch (_e) {
         return { success: false, price: 0 }
     }
 }
@@ -102,7 +102,7 @@ export async function getMaxHistoricalPrice(materialNo: string) {
         }
 
         return { success: true, maxPrice }
-    } catch (e) {
+    } catch (_e) {
         return { success: false, maxPrice: 0 }
     }
 }
@@ -120,16 +120,36 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
             return { success: false, error: "Minimal pilih 1 produk Primer (Ban dsb)." }
         }
 
-        // HPP Statis dari Produk Sekunder & Primer Asal
+        // Validasi: Pastikan harga jual primer > HPP primer
+        const invalidPrimaries = primaries.filter(p => p.regularPrice <= p.hppIdr)
+        if (invalidPrimaries.length > 0) {
+            const names = invalidPrimaries.map(p => p.name).join(", ")
+            return { 
+                success: false, 
+                error: `Harga jual produk primer harus lebih besar dari HPP. Produk bermasalah: ${names}` 
+            }
+        }
+
+        // HPP dan Revenue per unit (1x siklus)
+        const basePrimaryHpp = primaries.reduce((sum, item) => sum + (item.hppIdr * item.quantity), 0)
+        const basePrimaryRevenue = primaries.reduce((sum, item) => sum + (item.regularPrice * item.quantity), 0)
+        
         const totalSecondaryHpp = secondaries.reduce((sum, item) => sum + (item.hppIdr * item.quantity), 0)
         const totalSecondaryRevenue = secondaries.reduce((sum, item) => sum + (item.regularPrice * item.quantity), 0)
 
-        const basePrimaryHpp = primaries.reduce((sum, item) => sum + (item.hppIdr * item.quantity), 0)
-        const basePrimaryRevenue = primaries.reduce((sum, item) => sum + (item.regularPrice * item.quantity), 0)
+        // Margin per siklus primer (sebelum dikalikan multiplier)
+        const unitPrimaryMargin = basePrimaryRevenue - basePrimaryHpp
 
-        // Kita asumsikan Qty produk sekunder tetap sebagai konstanta, dan rasio antar produk primer tetap.
-        // Goal Seek: cari multiplier `M` bulat sedemikian hingga:
-        // Margin% = ( (M * basePrimaryRev + totalSecRev) - (M * basePrimaryHpp + totalSecHpp) ) / (M * basePrimaryRev + totalSecRev) 
+        // Validasi: Jika margin primer negatif atau nol, tidak mungkin mencapai target
+        if (unitPrimaryMargin <= 0) {
+            return {
+                success: false,
+                error: "Margin produk primer negatif atau nol. Tidak mungkin mencapai target margin. Naikkan harga jual primer atau kurangi HPP."
+            }
+        }
+
+        // Goal Seek: cari multiplier M bulat sedemikian hingga:
+        // Margin% = ((M * basePrimaryRev + totalSecRev) - (M * basePrimaryHpp + totalSecHpp)) / (M * basePrimaryRev + totalSecRev)
         // Margin% >= targetMarginPercentage / 100
 
         const marginDecimal = targetMarginPercentage / 100
@@ -141,34 +161,57 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
         let totalHpp = 0
         let currentMarginDecimal = -1
 
-        // Loop pencarian (maksimal cap biar tidak infinite misal harga jual primer = HPP)
+        // Loop pencarian dengan batas maksimal yang lebih masuk akal
         const maxIterations = 10000;
+        let foundSolution = false;
 
         for (let m = 1; m <= maxIterations; m++) {
-            finalPrimaryHpp = basePrimaryHpp * m;
-            finalPrimaryRevenue = basePrimaryRevenue * m;
+            // Hitung total dengan multiplier m
+            finalPrimaryHpp = basePrimaryHpp * m
+            finalPrimaryRevenue = basePrimaryRevenue * m
 
-            totalRevenue = finalPrimaryRevenue + totalSecondaryRevenue;
-            totalHpp = finalPrimaryHpp + totalSecondaryHpp;
+            // Total revenue dan HPP (primer dikalikan m, sekunder tetap)
+            totalRevenue = finalPrimaryRevenue + totalSecondaryRevenue
+            totalHpp = finalPrimaryHpp + totalSecondaryHpp
 
+            // Hitung margin
             if (totalRevenue > 0) {
-                currentMarginDecimal = (totalRevenue - totalHpp) / totalRevenue;
+                currentMarginDecimal = (totalRevenue - totalHpp) / totalRevenue
+                
+                // Jika sudah mencapai atau melebihi target margin
                 if (currentMarginDecimal >= marginDecimal) {
-                    multiplier = m;
-                    break;
+                    multiplier = m
+                    foundSolution = true
+                    break
                 }
+            }
+
+            // Early exit: jika margin tidak meningkat lagi (stuck)
+            if (m > 100 && currentMarginDecimal < 0) {
+                break
             }
         }
 
-        let status = "";
-        let isAchievable = false;
+        let status = ""
+        let isAchievable = false
 
-        if (multiplier === maxIterations && currentMarginDecimal < marginDecimal) {
-            status = `Mustahil mencapai target margin ${targetMarginPercentage}% karena selisih Harga Jual Primer dan HPP-nya tidak cukup untuk mensubsidi barang sekunder kapanpun. Coba naikkan harga jual primer.`;
-            isAchievable = false;
+        if (!foundSolution) {
+            // Hitung margin maksimal yang bisa dicapai
+            const maxPossibleMargin = unitPrimaryMargin / (basePrimaryRevenue + (totalSecondaryRevenue / maxIterations))
+            
+            status = `Tidak dapat mencapai target margin ${targetMarginPercentage}%. Margin maksimal yang mungkin: ${(maxPossibleMargin * 100).toFixed(2)}%. Solusi: Naikkan harga jual primer, kurangi harga/qty sekunder, atau turunkan target margin.`
+            isAchievable = false
+            
+            // Set ke nilai terakhir yang dihitung
+            multiplier = 1
+            finalPrimaryHpp = basePrimaryHpp
+            finalPrimaryRevenue = basePrimaryRevenue
+            totalRevenue = finalPrimaryRevenue + totalSecondaryRevenue
+            totalHpp = finalPrimaryHpp + totalSecondaryHpp
+            currentMarginDecimal = totalRevenue > 0 ? (totalRevenue - totalHpp) / totalRevenue : 0
         } else {
-            status = `Tercapai! Anda harus menjual barang Primer sebanyak ${multiplier}x lipat dari qty awal simulasi untuk menutupi biaya subsidi Sekunder dengan Margin bersih ${(currentMarginDecimal * 100).toFixed(2)}%.`;
-            isAchievable = true;
+            status = `Tercapai! Anda harus menjual barang Primer sebanyak ${multiplier}× lipat dari qty awal simulasi untuk menutupi biaya subsidi Sekunder dengan Margin bersih ${(currentMarginDecimal * 100).toFixed(2)}%.`
+            isAchievable = true
         }
 
         const recommendedPrimaryQtyTotal = primaries.reduce((sum, i) => sum + (i.quantity * multiplier), 0)
@@ -177,8 +220,6 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
         const finalMarginPercentage = totalRevenue > 0 ? (finalMarginAmount / totalRevenue) * 100 : 0
 
         // --- Kalkulasi Min Qty Primer agar HPP Sekunder tertutup (Sekunder = GRATIS) ---
-        // Margin bersih per siklus primer = Revenue Primer - HPP Primer
-        const unitPrimaryMargin = basePrimaryRevenue - basePrimaryHpp
         let minMultiplierHppCover: number | null = null
         let minQtyHppCoverTotal: number | null = null
         let minQtyHppCoverPerProduct: Array<{ id: string; name: string; quantity: number }> | null = null
@@ -202,11 +243,11 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
         const finalItemsToSave = [
             ...primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
             ...secondaries
-        ];
+        ]
 
         const safeString = (val: number, decimals = 0) => {
-            if (isNaN(val) || !isFinite(val)) return "0";
-            return val.toFixed(decimals);
+            if (isNaN(val) || !isFinite(val)) return "0"
+            return val.toFixed(decimals)
         }
 
         await db.insert(bundlingHistories).values({
@@ -219,7 +260,7 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
             finalMarginPercentage: safeString(finalMarginPercentage, 2),
             status: status || "Selesai",
             createdById: session.user.id
-        });
+        })
 
         return {
             success: true,
@@ -243,8 +284,9 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
                 secondaryPriceViolations
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Bundling ML Goal-Seek Error:", error)
-        return { success: false, error: error.message || "Gagal mengkalkulasi optimasi bundling" }
+        const errorMessage = error instanceof Error ? error.message : "Gagal mengkalkulasi optimasi bundling"
+        return { success: false, error: errorMessage }
     }
 }
