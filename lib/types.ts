@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, priceLists, priceListItems, priceHistory, calendarEvents } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, priceLists, priceListItems, priceHistory, calendarEvents, aiInventoryPredictions, restockNotifications, aiSettings } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -201,4 +201,74 @@ export type FCEvent = {
         customerName?: string
         dbId?: number
     }
+}
+
+// AI Inventory Forecast types
+export type AIPrediction = InferSelectModel<typeof aiInventoryPredictions>
+export type NewAIPrediction = InferInsertModel<typeof aiInventoryPredictions>
+
+export type RestockNotification = InferSelectModel<typeof restockNotifications> & {
+    prediction?: AIPrediction | null
+}
+export type NewRestockNotification = InferInsertModel<typeof restockNotifications>
+
+export type AISetting = InferSelectModel<typeof aiSettings>
+export type NewAISetting = InferInsertModel<typeof aiSettings>
+
+// Dashboard metrics type
+export type DashboardMetrics = {
+    predictions7Days: number
+    predictions30Days: number
+    predictionsByType: {
+        replenishment: number
+        safetyStock: number
+        customerRecommendation: number
+    }
+    topRestockProducts: Array<{
+        productCode: string
+        productName: string | null
+        recommendedStock: number
+        currentStock: number | null
+    }>
+    productsNearRestock: number
+    averageAccuracy: number | null
+}
+
+// Urgency levels for notifications
+export type UrgencyLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM'
+
+// Prediction types
+export type PredictionType = 'REPLENISHMENT' | 'SAFETY_STOCK' | 'CUSTOMER_RECOMMENDATION'
+
+// Accuracy calculation result
+export type AccuracyResult = {
+    predictionId: number
+    accuracyPercentage: number
+    predicted: number
+    actual: number
+    variance: number
+}
+
+// Bulk prediction result
+export type BulkPredictionResult = {
+    batchId: string
+    totalProcessed: number
+    successful: number
+    failed: number
+    fromCache: number
+    results: Array<{
+        productCode: string
+        status: 'success' | 'failed' | 'cached'
+        predictionId?: number
+        error?: string
+    }>
+}
+
+// AI Settings configuration
+export type AIConfig = {
+    model: string
+    temperature: number
+    maxTokens: number
+    cacheDuration: number // in hours
+    thinkingMode: boolean
 }

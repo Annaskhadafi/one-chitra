@@ -1,37 +1,27 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
+import { useSession } from "@/lib/auth-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Truck, MapPin, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search } from "lucide-react"
-import { generateAIPrediction, getRecentPredictions, searchMaterials, deleteAIPrediction, searchCustomers, generateCustomerRecommendation } from "@/app/actions/inventory-ai"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight } from "lucide-react"
+import { generateAIPrediction, getRecentPredictions, deleteAIPrediction, generateCustomerRecommendation, getAISettings } from "@/app/actions/inventory-ai"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { cn } from "@/lib/utils"
+import { DashboardTab } from "./dashboard-tab"
+import { useMaterialSearch, useCustomerSearch } from "../_hooks/use-sap-data"
+import { AISettingsClient } from "../settings/_components/ai-settings-client"
 
 function CustomerSearch({ value, onChange }: { value: string; onChange: (val: string, name?: string) => void }) {
     const [search, setSearch] = useState("")
-    const [results, setResults] = useState<any[]>([])
-    const [isSearching, setIsSearching] = useState(false)
     const [showResults, setShowResults] = useState(false)
 
-    const doSearch = useCallback(async (q: string) => {
-        if (q.length < 2) { setResults([]); return }
-        setIsSearching(true)
-        try {
-            const res = await searchCustomers(q)
-            if (res.success && res.data) setResults(res.data)
-        } catch { /* ignore */ }
-        setIsSearching(false)
-    }, [])
-
-    useEffect(() => {
-        const timer = setTimeout(() => doSearch(search), 400)
-        return () => clearTimeout(timer)
-    }, [search, doSearch])
+    // Use React Query hook with 1-hour cache (Requirements: 10.3)
+    const { data: searchResult, isLoading: isSearching } = useCustomerSearch(search)
+    const results = searchResult?.data || []
 
     return (
         <div className="relative">
@@ -84,24 +74,11 @@ function CustomerSearch({ value, onChange }: { value: string; onChange: (val: st
 
 function MaterialSearch({ value, onChange }: { value: string; onChange: (val: string) => void }) {
     const [search, setSearch] = useState("")
-    const [results, setResults] = useState<any[]>([])
-    const [isSearching, setIsSearching] = useState(false)
     const [showResults, setShowResults] = useState(false)
 
-    const doSearch = useCallback(async (q: string) => {
-        if (q.length < 2) { setResults([]); return }
-        setIsSearching(true)
-        try {
-            const res = await searchMaterials(q)
-            if (res.success && res.data) setResults(res.data)
-        } catch { /* ignore */ }
-        setIsSearching(false)
-    }, [])
-
-    useEffect(() => {
-        const timer = setTimeout(() => doSearch(search), 400)
-        return () => clearTimeout(timer)
-    }, [search, doSearch])
+    // Use React Query hook with 1-hour cache (Requirements: 10.3)
+    const { data: searchResult, isLoading: isSearching } = useMaterialSearch(search)
+    const results = searchResult?.data || []
 
     return (
         <div className="relative">
@@ -136,8 +113,8 @@ function MaterialSearch({ value, onChange }: { value: string; onChange: (val: st
                                 type="button"
                                 className="w-full text-left px-3 py-2 hover:bg-accent transition-colors text-sm border-b last:border-b-0"
                                 onClick={() => {
-                                    onChange(mat.materialNo)
-                                    setSearch(mat.materialNo)
+                                    onChange(mat.materialNo || "")
+                                    setSearch(mat.materialNo || "")
                                     setShowResults(false)
                                 }}
                             >
@@ -158,13 +135,19 @@ function ReplenishmentTab() {
     const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
     const [history, setHistory] = useState<any[]>([])
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const pageSize = 20
 
-    useEffect(() => { loadHistory() }, [])
+    useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions()
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
         if (res.success && res.data) {
             setHistory(res.data.filter((d: any) => d.predictionType === 'REPLENISHMENT'))
+            setTotalPages(res.totalPages || 1)
+            setTotalCount(res.totalCount || 0)
         }
     }
 
@@ -256,6 +239,9 @@ function ReplenishmentTab() {
                     <CardTitle className="flex items-center gap-2 text-muted-foreground">
                         <History className="w-5 h-5" /> Riwayat Analisis
                     </CardTitle>
+                    <CardDescription>
+                        {totalCount > 0 && `Menampilkan ${history.length} dari ${totalCount} riwayat`}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -283,6 +269,31 @@ function ReplenishmentTab() {
                             </div>
                         ))}
                     </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
@@ -295,13 +306,19 @@ function SafetyStockTab() {
     const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
     const [history, setHistory] = useState<any[]>([])
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const pageSize = 20
 
-    useEffect(() => { loadHistory() }, [])
+    useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions()
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
         if (res.success && res.data) {
             setHistory(res.data.filter((d: any) => d.predictionType === 'SAFETY_STOCK'))
+            setTotalPages(res.totalPages || 1)
+            setTotalCount(res.totalCount || 0)
         }
     }
 
@@ -393,6 +410,9 @@ function SafetyStockTab() {
                     <CardTitle className="flex items-center gap-2 text-muted-foreground">
                         <ShieldAlert className="w-5 h-5" /> History Perhitungan
                     </CardTitle>
+                    <CardDescription>
+                        {totalCount > 0 && `Menampilkan ${history.length} dari ${totalCount} riwayat`}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -422,6 +442,31 @@ function SafetyStockTab() {
                             </div>
                         ))}
                     </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
@@ -435,13 +480,19 @@ function CustomerRecommendationTab() {
     const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
     const [history, setHistory] = useState<any[]>([])
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const pageSize = 20
 
-    useEffect(() => { loadHistory() }, [])
+    useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions()
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
         if (res.success && res.data) {
             setHistory(res.data.filter((d: any) => d.predictionType === 'CUSTOMER_RECOMMENDATION'))
+            setTotalPages(res.totalPages || 1)
+            setTotalCount(res.totalCount || 0)
         }
     }
 
@@ -536,6 +587,9 @@ function CustomerRecommendationTab() {
                     <CardTitle className="flex items-center gap-2 text-muted-foreground">
                         <History className="w-5 h-5" /> Riwayat Rekomendasi
                     </CardTitle>
+                    <CardDescription>
+                        {totalCount > 0 && `Menampilkan ${history.length} dari ${totalCount} riwayat`}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3 max-h-[500px] overflow-y-auto">
@@ -562,6 +616,31 @@ function CustomerRecommendationTab() {
                             </div>
                         ))}
                     </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
@@ -569,13 +648,65 @@ function CustomerRecommendationTab() {
 }
 
 export function InventoryAIClient() {
+    const [activeTab, setActiveTab] = useState("dashboard")
+    const { data: session } = useSession()
+    const [aiSettings, setAISettings] = useState<any>(null)
+    const [isLoadingSettings, setIsLoadingSettings] = useState(false)
+    const [hasSettingsAccess, setHasSettingsAccess] = useState(false)
+    
+    // Check if user has admin or inventory_manager role (Requirement 9.2)
+    // Use useEffect to avoid hydration mismatch
+    useEffect(() => {
+        if (session?.user?.role) {
+            const userRole = session.user.role.toLowerCase()
+            const hasAccess = userRole === "admin" || 
+                              userRole === "superuser" || 
+                              userRole === "inventory_manager" ||
+                              userRole === "inventory manager"
+            setHasSettingsAccess(hasAccess)
+        }
+    }, [session])
+
+    // Load AI settings when settings tab is accessed
+    useEffect(() => {
+        if (activeTab === "settings" && hasSettingsAccess && !aiSettings) {
+            loadAISettings()
+        }
+    }, [activeTab, hasSettingsAccess])
+
+    const loadAISettings = async () => {
+        setIsLoadingSettings(true)
+        try {
+            const settings = await getAISettings()
+            setAISettings(settings)
+        } catch (error) {
+            console.error("Failed to load AI settings:", error)
+            toast.error("Failed to load AI settings")
+        } finally {
+            setIsLoadingSettings(false)
+        }
+    }
+
     return (
-        <Tabs defaultValue="replenishment" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList>
+                <TabsTrigger value="dashboard">
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Dashboard
+                </TabsTrigger>
                 <TabsTrigger value="replenishment">Predictive Replenishment</TabsTrigger>
                 <TabsTrigger value="safetystock">Dynamic Safety Stock</TabsTrigger>
                 <TabsTrigger value="recommendation">Customer Recommendation</TabsTrigger>
+                {hasSettingsAccess && (
+                    <TabsTrigger value="settings">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Settings
+                    </TabsTrigger>
+                )}
             </TabsList>
+            <TabsContent value="dashboard">
+                <DashboardTab onNavigate={setActiveTab} />
+            </TabsContent>
             <TabsContent value="replenishment">
                 <ReplenishmentTab />
             </TabsContent>
@@ -585,6 +716,37 @@ export function InventoryAIClient() {
             <TabsContent value="recommendation">
                 <CustomerRecommendationTab />
             </TabsContent>
+            {hasSettingsAccess && (
+                <TabsContent value="settings">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Settings className="h-5 w-5" />
+                                AI Settings
+                            </CardTitle>
+                            <CardDescription>
+                                Konfigurasi parameter AI untuk optimasi prediksi inventory
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {isLoadingSettings ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : aiSettings ? (
+                                <AISettingsClient 
+                                    initialSettings={aiSettings}
+                                    userId={session?.user?.id || ""}
+                                />
+                            ) : (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    Failed to load settings
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            )}
         </Tabs>
     )
 }

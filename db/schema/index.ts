@@ -102,9 +102,9 @@ export {
     costSettlementReceiptsRelations,
     costSettlementSignatoriesRelations,
 } from "./cost-settlements";
-export { marketingCampaigns, marketingCampaignsRelations } from "./marketing-campaigns";
+export { marketingCampaigns, campaignRecipients, marketingCampaignsRelations, campaignRecipientsRelations } from "./marketing-campaigns";
 export { zmc9StockSap, me2lPurchDocsSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
-export { aiInventoryPredictions } from "./ai-predictions";
+export { aiInventoryPredictions, restockNotifications, aiSettings } from "./ai-predictions";
 
 // Core Auth Table Relations
 import { user } from "./auth";

@@ -1,6 +1,7 @@
 import { Metadata } from "next"
 import { PageHeader } from "@/components/page-header"
 import { InventoryAIClient } from "./_components/inventory-ai-client"
+import { FilterProvider } from "./_components/filter-context"
 
 export const metadata: Metadata = {
     title: "AI Inventory Forecast",
@@ -14,7 +15,9 @@ export default function InventoryAIPage() {
                 title="AI Inventory Forecast"
                 subtitle="AI-powered predictive replenishment and dynamic safety stock optimization."
             />
-            <InventoryAIClient />
+            <FilterProvider>
+                <InventoryAIClient />
+            </FilterProvider>
         </div>
     )
 }

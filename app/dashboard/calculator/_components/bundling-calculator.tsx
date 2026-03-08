@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Check, ChevronsUpDown, Loader2, Plus, Trash2, Calculator, TrendingUp, DollarSign, Target, Sparkles, Percent, Asterisk, Tag } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, Plus, Trash2, Calculator, TrendingUp, DollarSign, Target, Sparkles, Percent, Asterisk, Tag, AlertTriangle, Gift } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -114,10 +114,11 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
         let maxSap = 0;
 
         // Fetch Max SAP Price as limit for Primary
+        // revenueInLocCurr di SAP tersimpan dalam USD → kalikan usdRate agar jadi IDR
         if (p.materialNo) {
             const maxSapResult = await getMaxHistoricalPrice(p.materialNo);
             if (maxSapResult.success && maxSapResult.maxPrice) {
-                maxSap = maxSapResult.maxPrice;
+                maxSap = Math.round(maxSapResult.maxPrice * usdRate);
                 defaultPrice = maxSap; // Autoset to max historical price
             }
         }
@@ -135,7 +136,9 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
             quantity: 1,
             type: type,
             materialNo: p.materialNo,
-            maxPriceSap: maxSap
+            maxPriceSap: maxSap,
+            // Untuk sekunder: set harga maks default dari SAP historis jika ada
+            maxPriceSecondary: type === 'SECONDARY' && maxSap > 0 ? maxSap : undefined
         }
 
         if (type === 'PRIMARY') {
@@ -199,68 +202,112 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
         setLoading(false)
     }
 
-    const TableRows = ({ items, type }: { items: BundlingItem[], type: BundlingItemType }) => (
-        <tbody className="divide-y font-medium text-xs relative">
-            {isFetchingCompetitor && type === 'PRIMARY' && items.length === 0 && (
-                <tr><td colSpan={5} className="py-4 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" /></td></tr>
-            )}
-            {items.map((item) => (
-                <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-3 py-2 text-left">
-                        <div className="font-bold leading-tight max-w-[200px] truncate" title={item.name}>
-                            {item.name}
-                        </div>
-                    </td>
-                    <td className="px-3 py-2">
-                        <Input
-                            type="number"
-                            className="w-14 h-7 text-right font-bold text-xs"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, type, 'quantity', parseInt(e.target.value) || 1)}
-                            min={1}
-                        />
-                    </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                        {fmt(item.hppIdr)}
-                    </td>
-                    <td className="px-3 py-2">
-                        <div className="flex flex-col items-end gap-1">
-                            <Input
-                                type="number"
-                                className={cn(
-                                    "w-32 h-7 text-right font-bold text-xs ring-offset-0 focus-visible:ring-1",
-                                    (item.maxPriceSap && item.regularPrice > item.maxPriceSap) ? "border-rose-500 text-rose-600 focus-visible:ring-rose-500 bg-rose-50" : ""
+    const TableRows = ({ items, type }: { items: BundlingItem[], type: BundlingItemType }) => {
+        const colCount = type === 'SECONDARY' ? 5 : 5
+        return (
+            <tbody className="divide-y font-medium text-xs relative">
+                {isFetchingCompetitor && type === 'PRIMARY' && items.length === 0 && (
+                    <tr><td colSpan={colCount} className="py-4 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" /></td></tr>
+                )}
+                {items.map((item) => (
+                    <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-2 text-left">
+                            <div className="font-bold leading-tight max-w-[200px] truncate" title={item.name}>
+                                {item.name}
+                            </div>
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {fmt(item.hppIdr)}
+                        </td>
+                        <td className="px-3 py-2">
+                            <div className="flex flex-col items-end gap-1">
+                                <Input
+                                    type="number"
+                                    className={cn(
+                                        "w-28 h-7 text-right font-bold text-xs ring-offset-0 focus-visible:ring-1",
+                                        (item.maxPriceSap && item.regularPrice > item.maxPriceSap) ? "border-rose-500 text-rose-600 focus-visible:ring-rose-500 bg-rose-50" : ""
+                                    )}
+                                    value={item.regularPrice}
+                                    onChange={(e) => updateItem(item.id, type, 'regularPrice', parseInt(e.target.value) || 0)}
+                                    min={0}
+                                />
+                                {type === 'PRIMARY' && item.maxPriceSap && item.regularPrice > item.maxPriceSap && (
+                                    <span className="text-[9px] font-bold uppercase text-rose-600 flex items-center gap-0.5">
+                                        <AlertTriangle className="w-2.5 h-2.5" /> Melebihi batas!
+                                    </span>
                                 )}
-                                value={item.regularPrice}
-                                onChange={(e) => updateItem(item.id, type, 'regularPrice', parseInt(e.target.value) || 0)}
-                                min={0}
-                            />
-                            {item.maxPriceSap ? (
-                                <span className={cn(
-                                    "text-[9px] font-bold uppercase",
-                                    item.regularPrice > item.maxPriceSap ? "text-rose-600" : "text-emerald-600"
-                                )}>
-                                    Max SAP: {fmt(item.maxPriceSap)}
-                                </span>
-                            ) : null}
-                        </div>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(item.id, type)} className="h-6 w-6 text-destructive hover:bg-destructive/10">
-                            <Trash2 className="w-3 h-3" />
-                        </Button>
-                    </td>
-                </tr>
-            ))}
-            {items.length === 0 && (
-                <tr>
-                    <td colSpan={5} className="py-4 text-center text-muted-foreground opacity-50 italic">
-                        Belum ada item {type.toLowerCase()} ditambahkan.
-                    </td>
-                </tr>
-            )}
-        </tbody>
-    )
+                            </div>
+                        </td>
+                        {/* Kolom Harga Maks: SAP (read-only) untuk Primer, editable untuk Sekunder */}
+                        {type === 'PRIMARY' && (
+                            <td className="px-3 py-2">
+                                <div className="flex flex-col items-end gap-1">
+                                    {item.maxPriceSap ? (
+                                        <>
+                                            <span className={cn(
+                                                "text-xs font-black whitespace-nowrap",
+                                                item.regularPrice > item.maxPriceSap ? "text-rose-600" : "text-emerald-600"
+                                            )}>
+                                                {fmt(item.maxPriceSap)}
+                                            </span>
+                                            <span className="text-[9px] font-bold uppercase text-muted-foreground">Maks. Hist. SAP</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-[9px] text-muted-foreground font-bold uppercase">Belum ada data</span>
+                                    )}
+                                </div>
+                            </td>
+                        )}
+                        {type === 'SECONDARY' && (
+                            <td className="px-3 py-2">
+                                <div className="flex flex-col items-end gap-1">
+                                    <Input
+                                        type="number"
+                                        className={cn(
+                                            "w-28 h-7 text-right font-bold text-xs ring-offset-0 focus-visible:ring-1",
+                                            (item.maxPriceSecondary && item.maxPriceSecondary > 0 && item.regularPrice > item.maxPriceSecondary)
+                                                ? "border-rose-500 text-rose-600 focus-visible:ring-rose-500 bg-rose-50" : ""
+                                        )}
+                                        value={item.maxPriceSecondary ?? ""}
+                                        placeholder="—"
+                                        onChange={(e) => {
+                                            const v = parseInt(e.target.value)
+                                            updateItem(item.id, type, 'maxPriceSecondary', isNaN(v) ? 0 : v)
+                                        }}
+                                        min={0}
+                                    />
+                                    {item.maxPriceSecondary && item.maxPriceSecondary > 0 ? (
+                                        <span className={cn(
+                                            "text-[9px] font-bold uppercase flex items-center gap-0.5",
+                                            item.regularPrice > item.maxPriceSecondary ? "text-rose-600" : "text-emerald-600"
+                                        )}>
+                                            {item.regularPrice > item.maxPriceSecondary
+                                                ? <><AlertTriangle className="w-2.5 h-2.5" /> Melebihi batas!</>
+                                                : "Harga aman"}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[9px] text-muted-foreground font-bold uppercase">Tidak dibatasi</span>
+                                    )}
+                                </div>
+                            </td>
+                        )}
+                        <td className="px-3 py-2 text-center">
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(item.id, type)} className="h-6 w-6 text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-3 h-3" />
+                            </Button>
+                        </td>
+                    </tr>
+                ))}
+                {items.length === 0 && (
+                    <tr>
+                        <td colSpan={colCount} className="py-4 text-center text-muted-foreground opacity-50 italic">
+                            Belum ada item {type.toLowerCase()} ditambahkan.
+                        </td>
+                    </tr>
+                )}
+            </tbody>
+        )
+    }
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -340,9 +387,9 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
                                 <thead className="bg-muted text-muted-foreground font-bold text-[10px] uppercase border-b">
                                     <tr>
                                         <th className="px-3 py-2 text-left">Produk</th>
-                                        <th className="px-3 py-2 text-right">Qty Simulasi</th>
                                         <th className="px-3 py-2 text-right">Modal/HPP Sat.</th>
-                                        <th className="px-3 py-2 text-right">Harga Jual / Max Sat.</th>
+                                        <th className="px-3 py-2 text-right">Harga Jual Sat.</th>
+                                        <th className="px-3 py-2 text-right">Harga Maks (SAP)</th>
                                         <th className="px-3 py-2 text-center w-10"></th>
                                     </tr>
                                 </thead>
@@ -371,9 +418,9 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
                                 <thead className="bg-muted text-muted-foreground font-bold text-[10px] uppercase border-b">
                                     <tr>
                                         <th className="px-3 py-2 text-left">Produk</th>
-                                        <th className="px-3 py-2 text-right">Qty Simulasi</th>
                                         <th className="px-3 py-2 text-right">Modal/HPP Sat.</th>
-                                        <th className="px-3 py-2 text-right">Harga Jual Sat. (Isi 0 jika Free)</th>
+                                        <th className="px-3 py-2 text-right">Harga Jual Sat. (0 = Gratis)</th>
+                                        <th className="px-3 py-2 text-right">Harga Maks (Batas)</th>
                                         <th className="px-3 py-2 text-center w-10"></th>
                                     </tr>
                                 </thead>
@@ -470,6 +517,68 @@ export function BundlingCalculator({ products, usdRate }: BundlingCalculatorProp
                                                 <div key={p.id} className="flex justify-between text-xs items-center bg-muted/30 p-2 rounded">
                                                     <span className="font-bold truncate max-w-[180px]">{p.name}</span>
                                                     <span className="font-black text-primary bg-primary/10 px-2 py-1 rounded">Jual {p.quantity} Pcs</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Analisis Min Qty Cover HPP Sekunder (Sekunder = Gratis) */}
+                                    {result.minQtyHppCoverTotal != null && result.totalSecondaryHpp > 0 && (
+                                        <div className="pt-4 border-t space-y-3">
+                                            <div className="flex items-center gap-2">
+                                                <Gift className="w-4 h-4 text-amber-500" />
+                                                <span className="text-[10px] font-black uppercase text-amber-700">Min Qty Primer — Sekunder Full Gratis</span>
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground font-medium leading-relaxed">
+                                                Jika semua barang sekunder diberikan <strong>GRATIS</strong> (harga jual = 0), berapa minimum primer yang harus dijual agar margin primer saja sudah menutupi HPP sekunder?
+                                            </p>
+                                            <div className="flex justify-between items-center text-sm py-1">
+                                                <span className="text-muted-foreground font-semibold">Total HPP Sekunder (Biaya Gratis)</span>
+                                                <span className="font-black text-amber-600">{fmt(result.totalSecondaryHpp)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm py-1">
+                                                <span className="text-muted-foreground font-semibold">Margin per Siklus Primer</span>
+                                                <span className="font-black text-emerald-600">{fmt(result.unitPrimaryMargin)}</span>
+                                            </div>
+                                            <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-3 text-center">
+                                                <div className="text-[10px] font-black uppercase text-amber-700 mb-1">Min Qty Primer agar Sekunder Gratis Lunas</div>
+                                                <div className="text-4xl font-black text-amber-600 tracking-tighter">
+                                                    {result.minQtyHppCoverTotal} <span className="text-xl opacity-60">pcs</span>
+                                                </div>
+                                                <div className="text-[10px] text-amber-700/70 font-semibold mt-1">
+                                                    ({result.minMultiplierHppCover}× lipat qty simulasi awal)
+                                                </div>
+                                            </div>
+                                            {result.minQtyHppCoverPerProduct && (
+                                                <div className="space-y-1">
+                                                    {result.minQtyHppCoverPerProduct.map((p: any) => (
+                                                        <div key={p.id} className="flex justify-between text-xs items-center bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 rounded border border-amber-200/50">
+                                                            <span className="font-bold truncate max-w-[160px] text-amber-900 dark:text-amber-200">{p.name}</span>
+                                                            <span className="font-black text-amber-700 bg-amber-200/60 dark:bg-amber-800/60 px-2 py-0.5 rounded text-[11px] whitespace-nowrap">{p.quantity} Pcs</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Warning Harga Maks Sekunder Dilanggar */}
+                                    {result.secondaryPriceViolations && result.secondaryPriceViolations.length > 0 && (
+                                        <div className="pt-4 border-t space-y-2">
+                                            <div className="flex items-center gap-2 text-rose-600">
+                                                <AlertTriangle className="w-4 h-4" />
+                                                <span className="text-[10px] font-black uppercase">Peringatan: Harga Maks Sekunder Terlampaui</span>
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground font-medium">
+                                                Produk sekunder berikut memiliki harga jual yang melebihi batas maksimum yang ditetapkan. Risiko customer lari!
+                                            </p>
+                                            {result.secondaryPriceViolations.map((v: any) => (
+                                                <div key={v.id} className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 rounded-lg px-3 py-2 text-xs">
+                                                    <div className="font-bold text-rose-800 dark:text-rose-300 truncate">{v.name}</div>
+                                                    <div className="flex justify-between mt-0.5 text-[10px] font-semibold">
+                                                        <span className="text-rose-600">Harga Jual: {fmt(v.regularPrice)}</span>
+                                                        <span className="text-muted-foreground">Batas Maks: {fmt(v.maxPriceSecondary)}</span>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>

@@ -58,6 +58,18 @@ type StockSAPNewItem = {
 type StockSAPNewResponse = {
     status: "OK" | "ERROR"
     result?: StockSAPNewItem[]
+    plants?: string[]
+    stats?: {
+        totalCount: number
+        outOfStockCount: number
+        totalValue: number
+    }
+    pagination?: {
+        page: number
+        pageSize: number
+        totalCount: number
+        totalPages: number
+    }
     message?: string
 }
 
@@ -119,20 +131,33 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         return warehouseTypeBySloc.get(normalizeSloc(item.storLoc)) || ""
     }
 
-    const { data = [], isLoading, error, refetch } = useQuery({
-        queryKey: ["zmc9-stock-sap"],
+    const { data: responseData, isLoading, error, refetch } = useQuery({
+        queryKey: ["zmc9-stock-sap", pageIndex, pageSize, searchTerm, activeTab, filterPlant, filterStorLocDesc],
         queryFn: async () => {
-            const response = await fetch(`/api/stocks-sap-new?ts=${Date.now()}`, { cache: "no-store" })
+            const params = new URLSearchParams({
+                page: (pageIndex + 1).toString(),
+                pageSize: pageSize.toString(),
+                search: searchTerm,
+                warehouseType: activeTab,
+                plant: filterPlant,
+                slocDesc: filterStorLocDesc,
+                ts: Date.now().toString()
+            })
+            const response = await fetch(`/api/stocks-sap-new?${params.toString()}`, { cache: "no-store" })
             const result: StockSAPNewResponse = await response.json()
 
             if (!response.ok || result.status !== "OK") {
                 throw new Error(result.message || "Failed to fetch zmc9_stock_sap")
             }
 
-            return result.result ?? []
+            return result
         },
         staleTime: 5 * 60 * 1000,
     })
+
+    const data = useMemo(() => responseData?.result ?? [], [responseData])
+    const pagination = responseData?.pagination
+    const apiStats = responseData?.stats
 
     // Menghitung status last update berdasarkan kapan data benar-benar berubah
     const updateStatus = useMemo(() => {
@@ -164,9 +189,8 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     }, [data]);
 
     const plantOptions = useMemo(() => {
-        const plants = new Set(data.map(item => item.plantCode).filter(Boolean))
-        return ["all", ...Array.from(plants).sort()]
-    }, [data])
+        return ["all", ...(responseData?.plants ?? []).sort()]
+    }, [responseData?.plants])
 
     const warehouseTypeOptions = useMemo(() => {
         const types = new Set<string>()
@@ -182,20 +206,8 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         return ["all", "repair-2002", ...Array.from(types).sort()]
     }, [warehouses, data])
 
-    const preFilteredData = useMemo(() => {
-        return data.filter(item => {
-            const itemWarehouseType = getDerivedWarehouseType(item)
-            const matchesTab =
-                activeTab === "all" ||
-                (activeTab === "repair-2002" && item.plantCode === "2002") ||
-                (activeTab !== "repair-2002" && activeTab === itemWarehouseType)
-
-            const matchesPlant = filterPlant === "all" || item.plantCode === filterPlant
-            const matchesStorLocDesc = !filterStorLocDesc || item.storLocDesc?.toLowerCase().includes(filterStorLocDesc.toLowerCase())
-
-            return matchesTab && matchesPlant && matchesStorLocDesc
-        })
-    }, [data, activeTab, filterPlant, filterStorLocDesc, warehouseTypeBySloc])
+    // Server-side filtering is handled by the API, so we use 'data' directly
+    const preFilteredData = data
 
     const columns = useMemo<ColumnDef<StockSAPNewItem>[]>(
         () => [
@@ -302,14 +314,12 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         columns,
         state: {
             sorting,
-            globalFilter: searchTerm,
             pagination: {
                 pageIndex,
                 pageSize,
             },
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setSearchTerm,
         onPaginationChange: (updater) => {
             const next = typeof updater === "function"
                 ? updater({ pageIndex, pageSize })
@@ -319,25 +329,8 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
         },
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        globalFilterFn: (row, _columnId, filterValue): boolean => {
-            const term = String(filterValue).toLowerCase()
-            const item = row.original
-
-            return !!(
-                item.stockId.toString().toLowerCase().includes(term) ||
-                item.plantCode.toLowerCase().includes(term) ||
-                item.plantName.toLowerCase().includes(term) ||
-                item.materialNo.toLowerCase().includes(term) ||
-                item.oldMaterialNo.toLowerCase().includes(term) ||
-                item.materialDesc.toLowerCase().includes(term) ||
-                item.storLoc.toLowerCase().includes(term) ||
-                formatSloc(item.storLoc).toLowerCase().includes(term) ||
-                item.storLocDesc.toLowerCase().includes(term) ||
-                getDerivedWarehouseType(item).toLowerCase().includes(term)
-            )
-        },
+        manualPagination: true,
+        pageCount: pagination?.totalPages ?? -1,
     })
 
     const parentRef = useRef<HTMLDivElement>(null)
@@ -346,11 +339,11 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     const stats = useMemo(() => {
         return {
-            totalItems: filteredRows.length,
-            outOfStock: filteredRows.filter(row => row.original.totalStock <= 0).length,
-            totalValuationIdr: filteredRows.reduce((sum, row) => sum + (row.original.valueStock * parsedRate), 0),
+            totalItems: apiStats?.totalCount ?? 0,
+            outOfStock: apiStats?.outOfStockCount ?? 0,
+            totalValuationIdr: (apiStats?.totalValue ?? 0) * parsedRate,
         }
-    }, [filteredRows, parsedRate])
+    }, [apiStats, parsedRate])
 
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
@@ -640,7 +633,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                 </div>
 
                 <div className="text-sm text-muted-foreground">
-                    Showing {filteredRows.length} of {data.length} records
+                    Showing {data.length} of {apiStats?.totalCount ?? 0} records
                 </div>
             </Tabs>
         </div>

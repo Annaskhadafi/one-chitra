@@ -17,6 +17,7 @@ export type BundlingItem = {
     type: BundlingItemType
     materialNo?: string
     maxPriceSap?: number
+    maxPriceSecondary?: number // Batas harga maksimum untuk produk sekunder
 }
 
 export type BundlingRequest = {
@@ -175,6 +176,28 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
         const finalMarginAmount = totalRevenue - totalHpp
         const finalMarginPercentage = totalRevenue > 0 ? (finalMarginAmount / totalRevenue) * 100 : 0
 
+        // --- Kalkulasi Min Qty Primer agar HPP Sekunder tertutup (Sekunder = GRATIS) ---
+        // Margin bersih per siklus primer = Revenue Primer - HPP Primer
+        const unitPrimaryMargin = basePrimaryRevenue - basePrimaryHpp
+        let minMultiplierHppCover: number | null = null
+        let minQtyHppCoverTotal: number | null = null
+        let minQtyHppCoverPerProduct: Array<{ id: string; name: string; quantity: number }> | null = null
+
+        if (unitPrimaryMargin > 0 && totalSecondaryHpp > 0) {
+            minMultiplierHppCover = Math.ceil(totalSecondaryHpp / unitPrimaryMargin)
+            minQtyHppCoverTotal = primaries.reduce((sum, i) => sum + (i.quantity * minMultiplierHppCover!), 0)
+            minQtyHppCoverPerProduct = primaries.map(i => ({
+                id: i.id,
+                name: i.name,
+                quantity: i.quantity * minMultiplierHppCover!
+            }))
+        }
+
+        // --- Validasi Harga Maks Sekunder ---
+        const secondaryPriceViolations = secondaries
+            .filter(s => s.maxPriceSecondary != null && s.maxPriceSecondary > 0 && s.regularPrice > s.maxPriceSecondary)
+            .map(s => ({ id: s.id, name: s.name, regularPrice: s.regularPrice, maxPriceSecondary: s.maxPriceSecondary! }))
+
         // Save to History
         const finalItemsToSave = [
             ...primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
@@ -210,7 +233,14 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
                 finalMarginPercentage,
                 status,
                 isAchievable,
-                requiredPrimaries: primaries.map(i => ({ ...i, quantity: i.quantity * multiplier }))
+                requiredPrimaries: primaries.map(i => ({ ...i, quantity: i.quantity * multiplier })),
+                // HPP Cover (Free Secondary) analysis
+                totalSecondaryHpp,
+                unitPrimaryMargin,
+                minMultiplierHppCover,
+                minQtyHppCoverTotal,
+                minQtyHppCoverPerProduct,
+                secondaryPriceViolations
             }
         }
     } catch (error: any) {

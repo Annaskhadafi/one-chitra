@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesRevenueSap as historyOrders } from "@/db/schema/sap"
-import { desc, notIlike, isNull, or, sql, and } from "drizzle-orm"
+import { desc, notIlike, sql, and } from "drizzle-orm"
 
 export interface CustomerRFMAggregate {
     customer_name: string;
@@ -19,8 +19,8 @@ export async function getMaxBillingDate() {
         })
             .from(historyOrders)
             .where(
-                or(
-                    isNull(historyOrders.customerName),
+                and(
+                    sql`${historyOrders.customerName} IS NOT NULL`,
                     notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
                 )
             );
@@ -48,8 +48,8 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
         })
             .from(historyOrders)
             .where(
-                or(
-                    isNull(historyOrders.customerName),
+                and(
+                    sql`${historyOrders.customerName} IS NOT NULL`,
                     notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
                 )
             )
@@ -68,10 +68,8 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
             .innerJoin(globalFirstPurchaseQuery, sql`${historyOrders.customerName} = ${globalFirstPurchaseQuery.customer_name}`)
             .where(
                 and(
-                    or(
-                        isNull(historyOrders.customerName),
-                        notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-                    ),
+                    sql`${historyOrders.customerName} IS NOT NULL`,
+                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
                     sql`${historyOrders.billingDate} BETWEEN ${start} AND ${end}`
                 )
             )
@@ -80,8 +78,8 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
         const formattedData: CustomerRFMAggregate[] = data.map((item) => ({
             customer_name: item.customer_name || 'Unknown',
             last_date: item.last_date ? new Date(item.last_date).toISOString() : '',
-            frequency: item.frequency || 0,
-            monetary: item.monetary || 0,
+            frequency: Number(item.frequency) || 0,
+            monetary: Number(item.monetary) || 0,
             global_first_purchase: item.global_first_purchase ? new Date(item.global_first_purchase).toISOString() : ''
         }));
 

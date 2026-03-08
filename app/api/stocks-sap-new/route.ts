@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { sql } from "drizzle-orm"
 import { db } from "@/db"
 
@@ -21,27 +21,80 @@ type Zmc9StockSapRow = {
     updated_at: Date | string | null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
-        const result = await db.execute(sql`
-            SELECT
-                stock_id,
-                plant_code,
-                plant_name,
-                material_no,
-                old_material_no,
-                material_desc,
-                stor_loc,
-                stor_loc_desc,
-                total_stock,
-                base_unit_of_measure,
-                value_stock,
-                currency,
-                extracted_at,
-                updated_at
-            FROM public.zmc9_stock_sap
-            ORDER BY stock_id DESC
+        const { searchParams } = new URL(req.url)
+        const page = parseInt(searchParams.get("page") || "1")
+        const pageSize = parseInt(searchParams.get("pageSize") || "100")
+        const search = searchParams.get("search") || ""
+        const plant = searchParams.get("plant") || "all"
+        const slocDesc = searchParams.get("slocDesc") || ""
+        const warehouseType = searchParams.get("warehouseType") || "all"
+        const getAll = searchParams.get("all") === "true"
+
+        const offset = (page - 1) * pageSize
+
+        let whereClause = sql`TRUE`
+
+        if (search) {
+            const searchPattern = `%${search.toLowerCase()}%`
+            whereClause = sql`${whereClause} AND (
+                LOWER(material_no) LIKE ${searchPattern} OR 
+                LOWER(material_desc) LIKE ${searchPattern} OR 
+                LOWER(old_material_no) LIKE ${searchPattern} OR
+                LOWER(stor_loc) LIKE ${searchPattern}
+            )`
+        }
+
+        if (plant !== "all") {
+            whereClause = sql`${whereClause} AND plant_code = ${plant}`
+        }
+
+        if (slocDesc) {
+            whereClause = sql`${whereClause} AND LOWER(stor_loc_desc) LIKE ${`%${slocDesc.toLowerCase()}%`}`
+        }
+
+        // For warehouse type filtering, we might need to join or have logic
+        // But since warehouse type is derived in frontend, for now we filter what's easy in SQL
+        if (warehouseType === "repair-2002") {
+            whereClause = sql`${whereClause} AND plant_code = '2002'`
+        }
+
+        // Count total matching records and stats
+        const statsResult = await db.execute(sql`
+            SELECT 
+                COUNT(*) as count,
+                SUM(total_stock) FILTER (WHERE total_stock <= 0) as out_of_stock_count,
+                SUM(value_stock) as total_value
+            FROM public.zmc9_stock_sap 
+            WHERE ${whereClause}
         `)
+
+        const totalCount = Number(statsResult.rows[0].count)
+        const outOfStockCount = Number(statsResult.rows[0].out_of_stock_count || 0)
+        const totalValue = Number(statsResult.rows[0].total_value || 0)
+
+        // Get unique plants for filter
+        const plantsResult = await db.execute(sql`
+            SELECT DISTINCT plant_code FROM public.zmc9_stock_sap WHERE plant_code IS NOT NULL ORDER BY plant_code ASC
+        `)
+        const allPlants = plantsResult.rows.map(r => r.plant_code)
+
+        // Fetch paginated data
+        const query = getAll
+            ? sql`
+                SELECT * FROM public.zmc9_stock_sap 
+                WHERE ${whereClause} 
+                ORDER BY stock_id DESC
+              `
+            : sql`
+                SELECT * FROM public.zmc9_stock_sap 
+                WHERE ${whereClause} 
+                ORDER BY stock_id DESC 
+                LIMIT ${pageSize} OFFSET ${offset}
+              `
+
+        const result = await db.execute(query)
 
         const rows = (result.rows as Zmc9StockSapRow[]).map((row) => ({
             stockId: Number(row.stock_id),
@@ -63,6 +116,18 @@ export async function GET() {
         return NextResponse.json({
             status: "OK",
             result: rows,
+            plants: allPlants,
+            stats: {
+                totalCount,
+                outOfStockCount,
+                totalValue
+            },
+            pagination: {
+                page,
+                pageSize,
+                totalCount,
+                totalPages: Math.ceil(totalCount / pageSize)
+            }
         })
     } catch (error) {
         console.error("Failed to fetch zmc9_stock_sap:", error)

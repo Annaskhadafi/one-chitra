@@ -52,9 +52,10 @@ export function CustomerHistorySheet({ open, onOpenChange, customerName }: Custo
 
     // 2. Fetch SAP Stock for fuzzy matching
     const { data: stockData = [], isLoading: isLoadingStock } = useQuery({
-        queryKey: ["all-stocks-sap"],
+        queryKey: ["all-stocks-sap", "for-history"],
         queryFn: async () => {
-            const res = await fetch("/api/stocks-sap-new")
+            // Gunakan all=true agar semua data diambil untuk fuzzy matching
+            const res = await fetch("/api/stocks-sap-new?all=true")
             if (res.ok) {
                 const json = await res.json()
                 if (json.status === "OK") return json.result
@@ -62,6 +63,7 @@ export function CustomerHistorySheet({ open, onOpenChange, customerName }: Custo
             return []
         },
         enabled: open,
+        staleTime: 10 * 60 * 1000, // cache 10 menit
     })
 
     const isLoading = isLoadingHistory || isLoadingStock

@@ -58,7 +58,10 @@ import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend, BarChart as RechartsBarChart } from "recharts"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
+import { LayoutDashboard, BarChart3 } from "lucide-react"
 
 import {
     useReactTable,
@@ -266,6 +269,32 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             return yearMatch && monthMatch && categoryMatch
         })
     }, [data, selectedYear, selectedMonth, selectedCategory])
+
+    // Status Distribution Data (moved from page.tsx)
+    const statusCounts = useMemo(() => {
+        const scheduled = data.filter(d => d.status.toLowerCase() === "scheduled").length
+        const delivered = data.filter(d => d.status.toLowerCase() === "delivered").length
+        const cancelled = data.filter(d => d.status.toLowerCase() === "cancelled").length
+
+        return [
+            { name: "Scheduled", value: scheduled },
+            { name: "Delivered", value: delivered },
+            { name: "Cancelled", value: cancelled },
+        ].filter(d => d.value > 0)
+    }, [data])
+
+    // Top Customers by Deliveries (moved from page.tsx)
+    const customerCounts = useMemo(() => {
+        const customerMap: Record<string, number> = {}
+        data.forEach(d => {
+            const name = d.salesOrder?.customer?.name || "Unknown"
+            customerMap[name] = (customerMap[name] || 0) + 1
+        })
+        return Object.entries(customerMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 10)
+    }, [data])
 
     const handleUpdateStatus = useCallback(async (id: number, status: string) => {
         updateStatusMutation.mutate({ ids: [id], status })
@@ -789,6 +818,163 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
 
     return (
         <div className="space-y-6">
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="analytics" className="border-none">
+                    <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                <BarChart3 className="h-5 w-5" />
+                            </div>
+                            <div className="text-left">
+                                <h3 className="text-base font-bold text-foreground/90">Ringkasan & Dashboard Analitik</h3>
+                                <p className="text-xs text-muted-foreground font-normal">Klik untuk melihat statistik pengiriman, tren volume, dan performa pelanggan.</p>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="bg-card border border-t-0 rounded-b-xl shadow-sm p-6 overflow-visible">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                            {/* Key Stats Row */}
+                            <div className="grid gap-4 md:grid-cols-4">
+                                <ScoreCard
+                                    title="Total Volume"
+                                    value={totalVolume.toLocaleString()}
+                                    icon={Truck}
+                                    description="Total items delivered"
+                                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30"
+                                    iconColor="text-blue-600 dark:text-blue-400"
+                                    textColor="text-blue-900 dark:text-blue-100"
+                                />
+                                <ScoreCard
+                                    title="On-Time Rate"
+                                    value={`${onTimeRate}%`}
+                                    icon={CalendarClock}
+                                    description="Deliveries on or before schedule"
+                                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30"
+                                    iconColor="text-emerald-600 dark:text-emerald-400"
+                                    textColor="text-emerald-900 dark:text-emerald-100"
+                                />
+                                <ScoreCard
+                                    title="Scheduled"
+                                    value={scheduled}
+                                    icon={CalendarClock}
+                                    description="Pending scheduled"
+                                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30"
+                                    iconColor="text-amber-600 dark:text-amber-400"
+                                    textColor="text-amber-900 dark:text-amber-100"
+                                />
+                                <ScoreCard
+                                    title="In Transit"
+                                    value={inTransit}
+                                    icon={MapPin}
+                                    description="Currently on the way"
+                                    gradient="from-cyan-500/10 via-cyan-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-cyan-400/10 dark:to-blue-500/20 dark:border-cyan-500/30"
+                                    iconColor="text-cyan-600 dark:text-cyan-400"
+                                    textColor="text-cyan-900 dark:text-cyan-100"
+                                />
+                            </div>
+
+                            {/* Status & Customer Comparison Row */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-1">
+                                    <ReportPieChart
+                                        data={statusCounts}
+                                        title="Status Distribusi"
+                                        description="Perbandingan status pengiriman saat ini"
+                                        variant="donut"
+                                        height={300}
+                                    />
+                                </div>
+                                <div className="lg:col-span-2">
+                                    <ReportBarChart
+                                        data={customerCounts}
+                                        title="Top 10 Pelanggan (Pengiriman)"
+                                        description="Berdasarkan jumlah transaksi pengiriman terbanyak"
+                                        height={300}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Trends & Category Mix Row */}
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <Card className="shadow-none border-dashed bg-muted/5">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <div className="h-2 w-2 rounded-full bg-primary" />
+                                            Monthly Volume Trend
+                                        </CardTitle>
+                                        <CardDescription>Item count per month ({selectedYear === "all" ? "All Years" : selectedYear})</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <LineChart data={monthlyTrends}>
+                                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                                                <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "hsl(var(--card))",
+                                                        border: "1px solid hsl(var(--border))",
+                                                        borderRadius: "12px",
+                                                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                                                    }}
+                                                />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="volume"
+                                                    stroke="hsl(var(--primary))"
+                                                    strokeWidth={3}
+                                                    dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--card))" }}
+                                                    activeDot={{ r: 6, strokeWidth: 0 }}
+                                                />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="shadow-none border-dashed bg-muted/5">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <div className="h-2 w-2 rounded-full bg-orange-500" />
+                                            Product Category Mix
+                                        </CardTitle>
+                                        <CardDescription>Item distribution by category</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={categoryMix}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={60}
+                                                    outerRadius={80}
+                                                    paddingAngle={5}
+                                                    dataKey="value"
+                                                    stroke="hsl(var(--card))"
+                                                    strokeWidth={2}
+                                                >
+                                                    {categoryMix.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "hsl(var(--card))",
+                                                        border: "1px solid hsl(var(--border))",
+                                                        borderRadius: "12px",
+                                                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                                                    }}
+                                                />
+                                                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
+
             {/* Tab Switcher: Semua Delivery / By PO */}
             <div className="flex items-center gap-1 border-b pb-0">
                 <button
@@ -860,110 +1046,6 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
 
             {/* Regular List View */}
             {viewMode === "list" && (<>
-
-                <div className="grid gap-4 md:grid-cols-4">
-                    <ScoreCard
-                        title="Total Volume"
-                        value={totalVolume.toLocaleString()}
-                        icon={Truck}
-                        description="Total items delivered"
-                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
-                        iconColor="text-blue-600 dark:text-blue-400"
-                        textColor="text-blue-900 dark:text-blue-100"
-                    />
-                    <ScoreCard
-                        title="On-Time Rate"
-                        value={`${onTimeRate}%`}
-                        icon={CalendarClock}
-                        description="Deliveries on or before schedule"
-                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
-                        iconColor="text-emerald-600 dark:text-emerald-400"
-                        textColor="text-emerald-900 dark:text-emerald-100"
-                    />
-                    <ScoreCard
-                        title="Scheduled"
-                        value={scheduled}
-                        icon={CalendarClock}
-                        description="Pending scheduled"
-                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
-                        iconColor="text-amber-600 dark:text-amber-400"
-                        textColor="text-amber-900 dark:text-amber-100"
-                    />
-                    <ScoreCard
-                        title="In Transit"
-                        value={inTransit}
-                        icon={MapPin}
-                        description="Currently on the way"
-                        gradient="from-cyan-500/10 via-cyan-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-cyan-400/10 dark:to-blue-500/20 dark:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20"
-                        iconColor="text-cyan-600 dark:text-cyan-400"
-                        textColor="text-cyan-900 dark:text-cyan-100"
-                    />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Monthly Volume Trend</CardTitle>
-                            <CardDescription>Item count per month ({selectedYear === "all" ? "All Years" : selectedYear})</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <LineChart data={monthlyTrends}>
-                                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                    <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                            color: "hsl(var(--foreground))",
-                                        }}
-                                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                                    />
-                                    <Line type="monotone" dataKey="volume" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--card))" }} activeDot={{ r: 6, strokeWidth: 0 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Product Category Mix</CardTitle>
-                            <CardDescription>Item distribution by category</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie
-                                        data={categoryMix}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                        stroke="hsl(var(--card))"
-                                        strokeWidth={2}
-                                    >
-                                        {categoryMix.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={STATUS_COLORS[Object.keys(STATUS_COLORS)[index % Object.keys(STATUS_COLORS).length]]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: "hsl(var(--card))",
-                                            border: "1px solid hsl(var(--border))",
-                                            borderRadius: "8px",
-                                            color: "hsl(var(--foreground))",
-                                        }}
-                                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                                    />
-                                    <Legend wrapperStyle={{ fontSize: '12px', color: 'hsl(var(--foreground))' }} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1 max-w-sm">

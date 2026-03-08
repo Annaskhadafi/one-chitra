@@ -144,9 +144,9 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
     })
 
     const { data: sapData = [], isLoading: isLoadingSAP, error: sapError, refetch: refetchSAP } = useQuery({
-        queryKey: ["zmc9-stock-sap"],
+        queryKey: ["zmc9-stock-sap", "all"],
         queryFn: async () => {
-            const response = await fetch(`/api/stocks-sap-new?ts=${Date.now()}`, { cache: "no-store" })
+            const response = await fetch(`/api/stocks-sap-new?all=true&ts=${Date.now()}`, { cache: "no-store" })
             const result = await response.json()
             if (response.ok && result.status === "OK") {
                 return (result.result as RawSAPInventoryItem[]).map((item) => ({
