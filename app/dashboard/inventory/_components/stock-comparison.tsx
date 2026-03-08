@@ -3,8 +3,9 @@
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
 import {
-    Search, Loader2, RefreshCcw,
-    Box, AlertTriangle, TrendingUp, CheckCircle2, BarChart3, ChevronUp, ChevronDown
+    Search, Loader2, RefreshCcw, Download,
+    Box, AlertTriangle, TrendingUp, CheckCircle2, BarChart3, ChevronUp, ChevronDown,
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,6 +36,8 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { Warehouse } from "@/lib/types"
+import { exportInventoryComparisonToExcel } from "@/app/actions/stock"
+import { toast } from "sonner"
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ComparisonRow {
@@ -103,11 +106,17 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
 
     const comparisonData = comparisonResponse?.data || []
     const apiStats = comparisonResponse?.stats
+    
+    // Memoize comparisonData untuk menghindari re-render
+    const memoizedComparisonData = useMemo(() => comparisonData, [comparisonData])
 
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
     const [warehouseTypeFilter, setWarehouseTypeFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "gap", desc: true }])
+    const [pageSize, setPageSize] = useState(100)
+    const [pageIndex, setPageIndex] = useState(0)
+    const [isExporting, setIsExporting] = useState(false)
 
     // Debounce search untuk performa lebih baik
     const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -121,21 +130,21 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
 
     const warehouseTypeOptions = useMemo(() => {
         const types = new Set<string>()
-        for (const row of comparisonData) {
+        for (const row of memoizedComparisonData) {
             if (row.warehouseType?.trim()) {
                 types.add(row.warehouseType.trim())
             }
         }
         return ["all", ...Array.from(types).sort()]
-    }, [comparisonData])
+    }, [memoizedComparisonData])
 
     const filteredComparisonData = useMemo(() => {
-        return comparisonData.filter(item => {
+        return memoizedComparisonData.filter((item: ComparisonRow) => {
             const matchesStatus = statusFilter === "all" || item.status === statusFilter
             const matchesWarehouseType = warehouseTypeFilter === "all" || item.warehouseType === warehouseTypeFilter
             return matchesStatus && matchesWarehouseType
         })
-    }, [comparisonData, statusFilter, warehouseTypeFilter])
+    }, [memoizedComparisonData, statusFilter, warehouseTypeFilter])
 
     const columns = useMemo<ColumnDef<ComparisonRow>[]>(() => [
         {
@@ -229,12 +238,25 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         state: {
             sorting,
             globalFilter: debouncedSearch,
+            pagination: {
+                pageIndex,
+                pageSize,
+            },
         },
+        pageCount: Math.ceil(filteredComparisonData.length / pageSize),
         onSortingChange: setSorting,
         onGlobalFilterChange: setDebouncedSearch,
+        onPaginationChange: (updater) => {
+            if (typeof updater === "function") {
+                const newState = updater({ pageIndex, pageSize })
+                setPageIndex(newState.pageIndex)
+                setPageSize(newState.pageSize)
+            }
+        },
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        manualPagination: false,
         globalFilterFn: (row, _columnId, filterValue): boolean => {
             const term = (filterValue as string).toLowerCase()
             if (!term) return true
@@ -252,9 +274,15 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     // Virtualization dengan overscan yang lebih kecil untuk performa
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
+    
+    // Get paginated rows
+    const paginatedRows = rows.slice(
+        pageIndex * pageSize,
+        (pageIndex + 1) * pageSize
+    )
 
     const rowVirtualizer = useVirtualizer({
-        count: rows.length,
+        count: paginatedRows.length,
         getScrollElement: () => parentRef.current,
         estimateSize: () => 45,
         overscan: 10, // Dikurangi dari 20 ke 10 untuk performa lebih baik
@@ -264,24 +292,24 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     const stats = useMemo(() => {
         if (apiStats) return apiStats
         
-        const matched = comparisonData.filter(r => r.status === "match").length
-        const over = comparisonData.filter(r => r.status === "over").length
-        const under = comparisonData.filter(r => r.status === "under").length
-        const totalAbsGap = comparisonData.reduce((sum, r) => sum + Math.abs(r.gap), 0)
-        const withGap = comparisonData.filter(r => r.gap !== 0).length
+        const matched = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "match").length
+        const over = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "over").length
+        const under = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "under").length
+        const totalAbsGap = memoizedComparisonData.reduce((sum: number, r: ComparisonRow) => sum + Math.abs(r.gap), 0)
+        const withGap = memoizedComparisonData.filter((r: ComparisonRow) => r.gap !== 0).length
 
-        return { total: comparisonData.length, matched, over, under, totalAbsGap, withGap }
-    }, [comparisonData, apiStats])
+        return { total: memoizedComparisonData.length, matched, over, under, totalAbsGap, withGap }
+    }, [memoizedComparisonData, apiStats])
 
     // ─── Chart data dengan memoization yang lebih baik ─────────────────────────────────────────────
     const barChartData = useMemo(() => {
-        const filtered = comparisonData.filter(r => r.gap !== 0)
+        const filtered = memoizedComparisonData.filter((r: ComparisonRow) => r.gap !== 0)
         if (filtered.length === 0) return []
         
         return filtered
-            .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
+            .sort((a: ComparisonRow, b: ComparisonRow) => Math.abs(b.gap) - Math.abs(a.gap))
             .slice(0, 15)
-            .map(r => ({
+            .map((r: ComparisonRow) => ({
                 name: r.materialNumber.length > 12
                     ? r.materialNumber.slice(0, 12) + "…"
                     : r.materialNumber,
@@ -292,7 +320,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                 sapStock: r.sapStock,
                 fill: r.gap > 0 ? "#3b82f6" : "#ef4444",
             }))
-    }, [comparisonData])
+    }, [memoizedComparisonData])
 
     const pieChartData = useMemo(() => {
         if (stats.total === 0) return []
@@ -302,6 +330,50 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
             { name: "Under Stock", value: stats.under, color: "#ef4444" },
         ]
     }, [stats])
+
+    // ─── Export Handler ──────────────────────────────────────────────
+    const handleExportExcel = async () => {
+        setIsExporting(true)
+        try {
+            const result = await exportInventoryComparisonToExcel()
+            
+            if (result.success && result.data) {
+                // Convert base64 to blob and download
+                const byteCharacters = atob(result.data.buffer)
+                const byteNumbers = new Array(byteCharacters.length)
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i)
+                }
+                const byteArray = new Uint8Array(byteNumbers)
+                const blob = new Blob([byteArray], { type: result.data.mimeType })
+                
+                // Create download link
+                const url = window.URL.createObjectURL(blob)
+                const link = document.createElement("a")
+                link.href = url
+                link.download = result.data.filename
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                window.URL.revokeObjectURL(url)
+                
+                toast.success("Export berhasil!", {
+                    description: `File ${result.data.filename} telah diunduh`
+                })
+            } else {
+                toast.error("Export gagal", {
+                    description: result.message || "Terjadi kesalahan saat export"
+                })
+            }
+        } catch (error) {
+            console.error("Export error:", error)
+            toast.error("Export gagal", {
+                description: "Terjadi kesalahan saat export ke Excel"
+            })
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     // ─── Loading state ──────────────────────────────────────────────
     if (isLoadingComparison) {
@@ -488,51 +560,137 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
             </div>
 
             {/* ── Filters ────────────────────────────────────────── */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search material, description, sloc…"
-                        className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm !== debouncedSearch && (
-                        <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search material, description, sloc…"
+                            className="pl-8"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm !== debouncedSearch && (
+                            <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                    </div>
+                    <div className="w-full sm:w-[180px]">
+                        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Filter Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="match">✅ Match</SelectItem>
+                                <SelectItem value="over">🔵 Over Stock</SelectItem>
+                                <SelectItem value="under">🔴 Under Stock</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="w-full sm:w-[220px]">
+                        <Select value={warehouseTypeFilter} onValueChange={setWarehouseTypeFilter}>
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Filter Type Warehouse" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Type Warehouse</SelectItem>
+                                {warehouseTypeOptions.filter(type => type !== "all").map(type => (
+                                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => refetchComparison()} className="shrink-0">
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        Refresh
+                    </Button>
+                    <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={handleExportExcel}
+                        disabled={isExporting || memoizedComparisonData.length === 0}
+                        className="shrink-0"
+                    >
+                        {isExporting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Exporting...
+                            </>
+                        ) : (
+                            <>
+                                <Download className="mr-2 h-4 w-4" />
+                                Export Excel
+                            </>
+                        )}
+                    </Button>
                 </div>
-                <div className="w-full sm:w-[180px]">
-                    <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-                        <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Filter Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="match">✅ Match</SelectItem>
-                            <SelectItem value="over">🔵 Over Stock</SelectItem>
-                            <SelectItem value="under">🔴 Under Stock</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-full sm:w-[220px]">
-                    <Select value={warehouseTypeFilter} onValueChange={setWarehouseTypeFilter}>
-                        <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Filter Type Warehouse" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Type Warehouse</SelectItem>
-                            {warehouseTypeOptions.filter(type => type !== "all").map(type => (
-                                <SelectItem key={type} value={type}>{type}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => refetchComparison()} className="shrink-0">
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Refresh Comparison
-                </Button>
-                <div className="text-xs text-muted-foreground ml-auto">
-                    Showing {table.getFilteredRowModel().rows.length} of {filteredComparisonData.length} items
+                
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t pt-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Rows per page:</span>
+                        <Select 
+                            value={pageSize.toString()} 
+                            onValueChange={(value) => {
+                                setPageSize(Number(value))
+                                setPageIndex(0)
+                            }}
+                        >
+                            <SelectTrigger className="h-8 w-[100px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="100">100</SelectItem>
+                                <SelectItem value="200">200</SelectItem>
+                                <SelectItem value="500">500</SelectItem>
+                                <SelectItem value="1000">1000</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                            Showing {pageIndex * pageSize + 1} to {Math.min((pageIndex + 1) * pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} items
+                        </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPageIndex(0)}
+                            disabled={pageIndex === 0}
+                        >
+                            <ChevronsLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPageIndex(pageIndex - 1)}
+                            disabled={pageIndex === 0}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-sm px-2">
+                            Page {pageIndex + 1} of {Math.max(1, Math.ceil(table.getFilteredRowModel().rows.length / pageSize))}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPageIndex(pageIndex + 1)}
+                            disabled={pageIndex >= Math.ceil(table.getFilteredRowModel().rows.length / pageSize) - 1}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPageIndex(Math.ceil(table.getFilteredRowModel().rows.length / pageSize) - 1)}
+                            disabled={pageIndex >= Math.ceil(table.getFilteredRowModel().rows.length / pageSize) - 1}
+                        >
+                            <ChevronsRight className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -567,7 +725,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                                         <TableCell colSpan={columns.length + 1} className="p-0" />
                                     </TableRow>
                                     {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
+                                        const row = paginatedRows[virtualRow.index]
                                         return (
                                             <TableRow
                                                 key={row.id}
@@ -580,7 +738,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                                                 }
                                             >
                                                 <TableCell className="text-center text-muted-foreground text-xs">
-                                                    {virtualRow.index + 1}
+                                                    {pageIndex * pageSize + virtualRow.index + 1}
                                                 </TableCell>
                                                 {row.getVisibleCells().map((cell) => (
                                                     <TableCell key={cell.id}>

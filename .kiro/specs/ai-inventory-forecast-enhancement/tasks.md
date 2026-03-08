@@ -220,7 +220,7 @@ This implementation plan breaks down the 10 major enhancements into actionable c
     - Test that variance calculation is consistent
     - Test edge cases (zero actual, zero predicted)
 
-- [~] 11. Implement Notification System (Requirement 8)
+- [ ] 11. Implement Notification System (Requirement 8)
   - [x] 11.1 Create notification generation logic
     - Implement `generateRestockAlerts()` server action
     - Query products where current stock < 20% of recommended
@@ -280,7 +280,7 @@ This implementation plan breaks down the 10 major enhancements into actionable c
 - [x] 13. Checkpoint - Verify all new features are integrated
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 14. Implement Performance Optimization dan Caching (Requirement 10)
+- [ ] 14. Implement Performance Optimization dan Caching (Requirement 10)
   - [x] 14.1 Implement lazy loading for history list
     - Add pagination or infinite scroll to prediction history
     - Load 20 items at a time
@@ -325,7 +325,7 @@ This implementation plan breaks down the 10 major enhancements into actionable c
     - Test filter application <1 second
     - _Requirements: 10.1, 10.6, 10.7_
 
-- [~] 15. Update main InventoryAIClient component
+- [ ] 15. Update main InventoryAIClient component
   - [x] 15.1 Integrate all new components
     - Add Dashboard tab as default
     - Update tab structure to include new features
@@ -345,7 +345,7 @@ This implementation plan breaks down the 10 major enhancements into actionable c
     - Test notification → detail flow
     - _Requirements: All requirements_
 
-- [~] 16. Final checkpoint and documentation
+- [ ] 16. Final checkpoint and documentation
   - [x] 16.1 Verify all requirements are met
     - Review each requirement acceptance criteria
     - Test all features manually
