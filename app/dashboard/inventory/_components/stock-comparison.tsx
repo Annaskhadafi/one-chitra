@@ -119,34 +119,23 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         return () => clearTimeout(timer)
     }, [searchTerm])
 
-    // Tidak perlu filter repair lagi karena sudah di-handle di API
-    const warehouseTypeBySloc = useMemo(() => {
-        const mapping = new Map<string, string>()
-        for (const warehouse of warehouses) {
-            const sloc = normalizeSloc(warehouse.sloc)
-            if (!sloc) continue
-            mapping.set(sloc, warehouse.type || "")
-        }
-        return mapping
-    }, [warehouses])
-
     const warehouseTypeOptions = useMemo(() => {
         const types = new Set<string>()
-        for (const row of memoizedComparisonData) {
+        for (const row of comparisonData) {
             if (row.warehouseType?.trim()) {
                 types.add(row.warehouseType.trim())
             }
         }
         return ["all", ...Array.from(types).sort()]
-    }, [memoizedComparisonData])
+    }, [comparisonData])
 
     const filteredComparisonData = useMemo(() => {
-        return memoizedComparisonData.filter(item => {
+        return comparisonData.filter(item => {
             const matchesStatus = statusFilter === "all" || item.status === statusFilter
             const matchesWarehouseType = warehouseTypeFilter === "all" || item.warehouseType === warehouseTypeFilter
             return matchesStatus && matchesWarehouseType
         })
-    }, [memoizedComparisonData, statusFilter, warehouseTypeFilter])
+    }, [comparisonData, statusFilter, warehouseTypeFilter])
 
     const columns = useMemo<ColumnDef<ComparisonRow>[]>(() => [
         {
@@ -275,18 +264,18 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     const stats = useMemo(() => {
         if (apiStats) return apiStats
         
-        const matched = memoizedComparisonData.filter(r => r.status === "match").length
-        const over = memoizedComparisonData.filter(r => r.status === "over").length
-        const under = memoizedComparisonData.filter(r => r.status === "under").length
-        const totalAbsGap = memoizedComparisonData.reduce((sum, r) => sum + Math.abs(r.gap), 0)
-        const withGap = memoizedComparisonData.filter(r => r.gap !== 0).length
+        const matched = comparisonData.filter(r => r.status === "match").length
+        const over = comparisonData.filter(r => r.status === "over").length
+        const under = comparisonData.filter(r => r.status === "under").length
+        const totalAbsGap = comparisonData.reduce((sum, r) => sum + Math.abs(r.gap), 0)
+        const withGap = comparisonData.filter(r => r.gap !== 0).length
 
-        return { total: memoizedComparisonData.length, matched, over, under, totalAbsGap, withGap }
-    }, [memoizedComparisonData, apiStats])
+        return { total: comparisonData.length, matched, over, under, totalAbsGap, withGap }
+    }, [comparisonData, apiStats])
 
     // ─── Chart data dengan memoization yang lebih baik ─────────────────────────────────────────────
     const barChartData = useMemo(() => {
-        const filtered = memoizedComparisonData.filter(r => r.gap !== 0)
+        const filtered = comparisonData.filter(r => r.gap !== 0)
         if (filtered.length === 0) return []
         
         return filtered
@@ -303,7 +292,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                 sapStock: r.sapStock,
                 fill: r.gap > 0 ? "#3b82f6" : "#ef4444",
             }))
-    }, [memoizedComparisonData])
+    }, [comparisonData])
 
     const pieChartData = useMemo(() => {
         if (stats.total === 0) return []
