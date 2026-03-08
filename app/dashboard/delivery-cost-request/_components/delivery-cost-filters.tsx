@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, FilterX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
+type QuickDateType = "thisMonth" | "thisWeek" | "thisYear" | "lastWeek" | "lastMonth" | "custom";
+
 export function DeliveryCostFilters() {
     const router = useRouter();
     const pathname = usePathname();
@@ -16,6 +18,7 @@ export function DeliveryCostFilters() {
     const [from, setFrom] = useState(searchParams.get("from") || "");
     const [to, setTo] = useState(searchParams.get("to") || "");
     const [status, setStatus] = useState(searchParams.get("status") || "Semua");
+    const [quickDate, setQuickDate] = useState<QuickDateType>("custom");
 
     const applyFilters = useCallback((newFrom: string, newTo: string, newStatus: string) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -34,10 +37,17 @@ export function DeliveryCostFilters() {
         setFrom("");
         setTo("");
         setStatus("Semua");
+        setQuickDate("custom");
         router.push(pathname);
     };
 
-    const setQuickDate = (type: "thisMonth" | "thisWeek" | "thisYear" | "lastWeek" | "lastMonth") => {
+    const handleQuickDateChange = (type: QuickDateType) => {
+        setQuickDate(type);
+        
+        if (type === "custom") {
+            return; // User will manually set dates
+        }
+
         const now = new Date();
         let newFrom = new Date();
         let newTo = new Date();
@@ -72,55 +82,68 @@ export function DeliveryCostFilters() {
     };
 
     return (
-        <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-                <div className="grid gap-1">
-                    <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Tanggal Dari</label>
-                    <Input
-                        type="date"
-                        value={from}
-                        onChange={(e) => setFrom(e.target.value)}
-                        className="w-[150px] h-9"
-                    />
-                </div>
-                <div className="grid gap-1">
-                    <label className="text-xs text-muted-foreground">Sampai</label>
-                    <Input
-                        type="date"
-                        value={to}
-                        onChange={(e) => setTo(e.target.value)}
-                        className="w-[150px] h-9"
-                    />
-                </div>
-                <div className="grid gap-1">
-                    <label className="text-xs text-muted-foreground">Status</label>
-                    <Select value={status} onValueChange={setStatus}>
-                        <SelectTrigger className="w-[150px] h-9">
-                            <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Semua">Semua Status</SelectItem>
-                            <SelectItem value="Pengajuan">Pengajuan</SelectItem>
-                            <SelectItem value="Disetujui">Disetujui</SelectItem>
-                            <SelectItem value="Ditolak">Ditolak</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                <div className="flex gap-2">
-                    <Button onClick={handleApply} size="sm" className="h-9">Terapkan</Button>
-                    <Button variant="outline" size="icon" className="h-9" title="Reset Filters" onClick={handleClear}>
-                        <FilterX className="h-4 w-4" />
-                    </Button>
-                </div>
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
+            <div className="grid gap-1">
+                <label className="text-xs text-muted-foreground">Periode</label>
+                <Select value={quickDate} onValueChange={(val) => handleQuickDateChange(val as QuickDateType)}>
+                    <SelectTrigger className="w-[150px] h-9">
+                        <SelectValue placeholder="Pilih Periode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="custom">Custom</SelectItem>
+                        <SelectItem value="thisWeek">Minggu Ini</SelectItem>
+                        <SelectItem value="lastWeek">Minggu Lalu</SelectItem>
+                        <SelectItem value="thisMonth">Bulan Ini</SelectItem>
+                        <SelectItem value="lastMonth">Bulan Lalu</SelectItem>
+                        <SelectItem value="thisYear">Tahun Ini</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setQuickDate("thisWeek")}>Minggu Ini</Button>
-                <Button variant="secondary" size="sm" onClick={() => setQuickDate("lastWeek")}>Minggu Lalu</Button>
-                <Button variant="secondary" size="sm" onClick={() => setQuickDate("thisMonth")}>Bulan Ini</Button>
-                <Button variant="secondary" size="sm" onClick={() => setQuickDate("lastMonth")}>Bulan Lalu</Button>
-                <Button variant="secondary" size="sm" onClick={() => setQuickDate("thisYear")}>Tahun Ini</Button>
+            <div className="grid gap-1">
+                <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Tanggal Dari</label>
+                <Input
+                    type="date"
+                    value={from}
+                    onChange={(e) => {
+                        setFrom(e.target.value);
+                        setQuickDate("custom");
+                    }}
+                    className="w-[150px] h-9"
+                />
+            </div>
+            <div className="grid gap-1">
+                <label className="text-xs text-muted-foreground">Sampai</label>
+                <Input
+                    type="date"
+                    value={to}
+                    onChange={(e) => {
+                        setTo(e.target.value);
+                        setQuickDate("custom");
+                    }}
+                    className="w-[150px] h-9"
+                />
+            </div>
+            <div className="grid gap-1">
+                <label className="text-xs text-muted-foreground">Status</label>
+                <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger className="w-[150px] h-9">
+                        <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Semua">Semua Status</SelectItem>
+                        <SelectItem value="Pengajuan">Pengajuan</SelectItem>
+                        <SelectItem value="Disetujui">Disetujui</SelectItem>
+                        <SelectItem value="Ditolak">Ditolak</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="flex gap-2">
+                <Button onClick={handleApply} size="sm" className="h-9">Terapkan</Button>
+                <Button variant="outline" size="icon" className="h-9" title="Reset Filters" onClick={handleClear}>
+                    <FilterX className="h-4 w-4" />
+                </Button>
             </div>
         </div>
     );

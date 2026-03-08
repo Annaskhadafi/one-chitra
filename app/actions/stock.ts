@@ -11,10 +11,34 @@ import { getAuthenticatedSession } from "@/lib/rbac"
 import { stockSchema } from "@/lib/schemas"
 
 export async function getStocks() {
+    // Optimized query - hanya ambil kolom yang diperlukan
     return await db.query.stockLevels.findMany({
+        columns: {
+            id: true,
+            productId: true,
+            warehouseId: true,
+            totalStock: true,
+            minStock: true,
+            valuationValue: true,
+        },
         with: {
-            product: true,
-            warehouse: true,
+            product: {
+                columns: {
+                    materialNumber: true,
+                    materialDescription: true,
+                    plant: true,
+                    category: true,
+                    oldMaterialNo: true,
+                    costSap: true,
+                }
+            },
+            warehouse: {
+                columns: {
+                    sloc: true,
+                    description: true,
+                    type: true,
+                }
+            },
         },
     })
 }

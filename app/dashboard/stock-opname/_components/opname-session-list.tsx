@@ -5,6 +5,7 @@ import { useState } from "react"
 import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2, FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Select,
     SelectContent,
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { deleteStockOpnameSession } from "@/app/actions/stock-opname"
+import { deleteStockOpnameSession, bulkDeleteStockOpnameSessions } from "@/app/actions/stock-opname"
 import { StockOpnameDocumentPreview } from "./stock-opname-document-preview"
 import type { StockOpnameSession } from "@/lib/types"
 
@@ -57,6 +58,8 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
     const [sessionToDelete, setSessionToDelete] = useState<number | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [previewSession, setPreviewSession] = useState<StockOpnameSession | null>(null)
+    const [selectedSessions, setSelectedSessions] = useState<Set<number>>(new Set())
+    const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
     const filtered = sessions.filter((s) => {
         const q = search.toLowerCase()
@@ -95,6 +98,52 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
         }
     }
 
+    const handleBulkDeleteClick = () => {
+        if (selectedSessions.size === 0) {
+            toast.error("Pilih minimal 1 sesi untuk dihapus")
+            return
+        }
+        setBulkDeleteDialogOpen(true)
+    }
+
+    const handleBulkDeleteConfirm = async () => {
+        if (selectedSessions.size === 0) return
+        
+        setIsDeleting(true)
+        try {
+            const result = await bulkDeleteStockOpnameSessions(Array.from(selectedSessions))
+            if (result.success) {
+                toast.success(`${result.deletedCount} sesi berhasil dihapus`)
+                setBulkDeleteDialogOpen(false)
+                setSelectedSessions(new Set())
+            } else {
+                toast.error(result.error || "Gagal menghapus sesi")
+            }
+        } catch (error) {
+            toast.error("Terjadi kesalahan saat menghapus sesi")
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedSessions.size === filtered.length) {
+            setSelectedSessions(new Set())
+        } else {
+            setSelectedSessions(new Set(filtered.map(s => s.id)))
+        }
+    }
+
+    const toggleSelectSession = (sessionId: number) => {
+        const newSelected = new Set(selectedSessions)
+        if (newSelected.has(sessionId)) {
+            newSelected.delete(sessionId)
+        } else {
+            newSelected.add(sessionId)
+        }
+        setSelectedSessions(newSelected)
+    }
+
     if (sessions.length === 0) {
         return (
             <div className="rounded-xl border border-dashed p-12 text-center">
@@ -127,7 +176,31 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                 </Select>
+                {selectedSessions.size > 0 && (
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleBulkDeleteClick}
+                        className="gap-2"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Hapus {selectedSessions.size} Sesi
+                    </Button>
+                )}
             </div>
+
+            {filtered.length > 0 && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox
+                        checked={selectedSessions.size === filtered.length && filtered.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        id="select-all"
+                    />
+                    <label htmlFor="select-all" className="cursor-pointer">
+                        Pilih semua ({filtered.length})
+                    </label>
+                </div>
+            )}
 
             <div className="flex flex-col gap-2">
                 {filtered.length === 0 ? (
@@ -148,6 +221,12 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                 key={session.id}
                                 className="group rounded-xl border bg-card p-5 flex items-center gap-4 hover:bg-muted/30 transition-colors"
                             >
+                                <Checkbox
+                                    checked={selectedSessions.has(session.id)}
+                                    onCheckedChange={() => toggleSelectSession(session.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex-none"
+                                />
                                 <Link
                                     href={`/dashboard/stock-opname/${session.id}`}
                                     className="flex items-center gap-4 flex-1 min-w-0"
@@ -239,6 +318,27 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             {isDeleting ? "Menghapus..." : "Hapus"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus {selectedSessions.size} Sesi Stock Opname?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tindakan ini tidak dapat dibatalkan. Semua data hitungan dan item terkait dari {selectedSessions.size} sesi akan dihapus permanen.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleBulkDeleteConfirm}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? "Menghapus..." : `Hapus ${selectedSessions.size} Sesi`}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

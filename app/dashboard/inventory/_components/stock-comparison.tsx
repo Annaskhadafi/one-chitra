@@ -164,13 +164,25 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
             }
             throw new Error("Failed to fetch zmc9_stock_sap data")
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: 10 * 60 * 1000, // 10 menit
+        gcTime: 15 * 60 * 1000, // 15 menit
+        refetchOnWindowFocus: false,
     })
 
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
     const [warehouseTypeFilter, setWarehouseTypeFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "gap", desc: true }])
+
+    // Debounce search untuk performa lebih baik
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+    
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchTerm)
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [searchTerm])
 
     const nonRepairLocalStocks = useMemo(() => {
         return localStocks.filter(item => {
@@ -353,15 +365,16 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
         columns,
         state: {
             sorting,
-            globalFilter: searchTerm,
+            globalFilter: debouncedSearch,
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setSearchTerm,
+        onGlobalFilterChange: setDebouncedSearch,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         globalFilterFn: (row, _columnId, filterValue): boolean => {
             const term = (filterValue as string).toLowerCase()
+            if (!term) return true
             const item = row.original
             return !!(
                 item.materialNumber.toLowerCase().includes(term) ||
@@ -373,7 +386,7 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
         }
     })
 
-    // Virtualization
+    // Virtualization dengan overscan yang lebih kecil untuk performa
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
 
@@ -381,7 +394,7 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
         count: rows.length,
         getScrollElement: () => parentRef.current,
         estimateSize: () => 45,
-        overscan: 20,
+        overscan: 10, // Dikurangi dari 20 ke 10 untuk performa lebih baik
     })
 
     // ─── Stats ──────────────────────────────────────────────────────
@@ -395,10 +408,12 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
         return { total: comparisonData.length, matched, over, under, totalAbsGap, withGap }
     }, [comparisonData])
 
-    // ─── Chart data ─────────────────────────────────────────────────
+    // ─── Chart data dengan memoization yang lebih baik ─────────────────────────────────────────────
     const barChartData = useMemo(() => {
-        return [...comparisonData]
-            .filter(r => r.gap !== 0)
+        const filtered = comparisonData.filter(r => r.gap !== 0)
+        if (filtered.length === 0) return []
+        
+        return filtered
             .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
             .slice(0, 15)
             .map(r => ({
@@ -414,11 +429,14 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
             }))
     }, [comparisonData])
 
-    const pieChartData = useMemo(() => [
-        { name: "Match", value: stats.matched, color: "#22c55e" },
-        { name: "Over Stock", value: stats.over, color: "#3b82f6" },
-        { name: "Under Stock", value: stats.under, color: "#ef4444" },
-    ], [stats])
+    const pieChartData = useMemo(() => {
+        if (stats.total === 0) return []
+        return [
+            { name: "Match", value: stats.matched, color: "#22c55e" },
+            { name: "Over Stock", value: stats.over, color: "#3b82f6" },
+            { name: "Under Stock", value: stats.under, color: "#ef4444" },
+        ]
+    }, [stats])
 
     // ─── Loading state ──────────────────────────────────────────────
     if (isLoadingSAP) {
@@ -613,6 +631,9 @@ export function StockComparison({ localStocks: initialLocalStocks, warehouses }:
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    {searchTerm !== debouncedSearch && (
+                        <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
                 </div>
                 <div className="w-full sm:w-[180px]">
                     <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>

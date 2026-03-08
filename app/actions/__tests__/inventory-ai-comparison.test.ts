@@ -13,8 +13,8 @@ import { eq, and } from 'drizzle-orm'
 describe('Comparison Data Aggregation', () => {
   const testProductCode = `TEST-COMP-${Date.now()}`
   const testProductCode2 = `TEST-COMP2-${Date.now()}`
-  let testPredictionIds: number[] = []
-  let testSalesIds: number[] = []
+  const testPredictionIds: number[] = []
+  const testSalesIds: number[] = []
 
   beforeAll(async () => {
     // Create test predictions with actual sales data
