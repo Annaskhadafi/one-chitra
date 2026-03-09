@@ -116,14 +116,14 @@ export async function createStockOpnameSession(
     try {
         // Validate input using Zod schema
         const validation = createOpnameSessionSchema.safeParse(data)
-
+        
         if (!validation.success) {
             const firstError = validation.error.issues?.[0]
             return { success: false, error: firstError?.message || "Validation failed" }
         }
-
+        
         const validatedData = validation.data
-
+        
         const session = await getAuthenticatedSession("stock-opname", "create")
         const userId = session.user.id
 
@@ -419,7 +419,7 @@ export async function deleteStockOpnameSession(sessionId: number) {
             // Delete related items and signatures (cascade should handle this, but explicit is safer)
             await tx.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, sessionId))
             await tx.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, sessionId))
-
+            
             // Delete the session
             await tx.delete(stockOpnameSessions).where(eq(stockOpnameSessions.id, sessionId))
         })
@@ -428,32 +428,6 @@ export async function deleteStockOpnameSession(sessionId: number) {
         return { success: true }
     } catch (error) {
         console.error("Delete opname session error:", error)
-        return { success: false, error: "Gagal menghapus sesi" }
-    }
-}
-
-// ─── Bulk Delete Sessions ───────────────────────────────────────────────────
-
-export async function bulkDeleteStockOpnameSessions(sessionIds: number[]) {
-    try {
-        if (!sessionIds || sessionIds.length === 0) {
-            return { success: false, error: "Tidak ada sesi yang dipilih" }
-        }
-
-        await getAuthenticatedSession("stock-opname", "delete")
-
-        await db.transaction(async (tx) => {
-            // Delete related items and signatures first
-            await tx.delete(stockOpnameItems).where(inArray(stockOpnameItems.sessionId, sessionIds))
-            await tx.delete(stockOpnameSignatures).where(inArray(stockOpnameSignatures.sessionId, sessionIds))
-            // Delete the sessions
-            await tx.delete(stockOpnameSessions).where(inArray(stockOpnameSessions.id, sessionIds))
-        })
-
-        revalidatePath("/dashboard/stock-opname")
-        return { success: true, deletedCount: sessionIds.length }
-    } catch (error) {
-        console.error("Bulk delete opname sessions error:", error)
         return { success: false, error: "Gagal menghapus sesi" }
     }
 }

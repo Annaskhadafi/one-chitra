@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight } from "lucide-react"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, X } from "lucide-react"
 import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings } from "@/app/actions/inventory-ml"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DashboardTab } from "./dashboard-tab"
 import { useMaterialSearch, useCustomerSearch } from "../_hooks/use-sap-data"
 import { MLSettingsClient } from "../settings/_components/ml-settings-client"
@@ -140,6 +141,7 @@ function ReplenishmentTab() {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -243,14 +245,27 @@ function ReplenishmentTab() {
                             <p className="text-sm text-muted-foreground text-center py-8">Belum ada riwayat.</p>
                         ) : history.map((item) => (
                             <div key={item.id} className="p-3 rounded-lg border bg-card shadow-sm space-y-1 text-sm group relative">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                                    onClick={() => handleDelete(item.id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {/* Action buttons */}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-primary hover:bg-primary/10"
+                                        title="Lihat Detail"
+                                        onClick={() => setSelectedDetail(item)}
+                                    >
+                                        <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        title="Hapus"
+                                        onClick={() => handleDelete(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                                 <Accordion type="single" collapsible className="w-full">
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
@@ -299,6 +314,30 @@ function ReplenishmentTab() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Detail Popup Full-Width */}
+            <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
+                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <Box className="w-5 h-5 text-primary" />
+                            Detail Analisis: {selectedDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                                {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedDetail && (
+                        <div className="mt-2 text-left">
+                            <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-muted/50 border">
+                                <span className="text-sm font-medium text-muted-foreground">Stok Rekomendasi ML</span>
+                                <span className="text-2xl font-bold text-primary">{selectedDetail.recommendedStock} Pcs</span>
+                            </div>
+                            <MLReportViewer rationale={selectedDetail.rationale} />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
@@ -312,6 +351,7 @@ function SafetyStockTab() {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -415,14 +455,27 @@ function SafetyStockTab() {
                             <p className="text-sm text-muted-foreground text-center py-8">Belum ada history.</p>
                         ) : history.map((item) => (
                             <div key={item.id} className="p-3 rounded-lg border bg-card shadow-sm space-y-1 text-sm group relative">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                                    onClick={() => handleDelete(item.id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {/* Action buttons */}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-indigo-500 hover:bg-indigo-500/10"
+                                        title="Lihat Detail"
+                                        onClick={() => setSelectedDetail(item)}
+                                    >
+                                        <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        title="Hapus"
+                                        onClick={() => handleDelete(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                                 <Accordion type="single" collapsible className="w-full">
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
@@ -473,6 +526,30 @@ function SafetyStockTab() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Detail Popup Full-Width */}
+            <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
+                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                            Detail Safety Stock: {selectedDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                                {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedDetail && (
+                        <div className="mt-2 text-left">
+                            <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-900/30">
+                                <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Safety Stock Optimal</span>
+                                <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedDetail.recommendedStock} Pcs</span>
+                            </div>
+                            <MLReportViewer rationale={selectedDetail.rationale} />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
@@ -593,14 +670,27 @@ function CustomerRecommendationTab() {
                             <p className="text-sm text-muted-foreground text-center py-8">Belum ada riwayat.</p>
                         ) : history.map((item) => (
                             <div key={item.id} className="p-3 rounded-lg border bg-card shadow-sm space-y-1 text-sm group relative">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                                    onClick={() => handleDelete(item.id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {/* Action buttons */}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-rose-500 hover:bg-rose-500/10"
+                                        title="Lihat Detail"
+                                        onClick={() => setSelectedDetail(item)}
+                                    >
+                                        <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        title="Hapus"
+                                        onClick={() => handleDelete(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                                 <Accordion type="single" collapsible className="w-full">
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
@@ -649,6 +739,27 @@ function CustomerRecommendationTab() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Detail Popup Full-Width */}
+            <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
+                <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <Target className="w-5 h-5 text-rose-500" />
+                            Detail Rekomendasi: {selectedDetail?.productName || selectedDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                                {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedDetail && (
+                        <div className="mt-2 text-left">
+                            <div className="text-sm text-muted-foreground mb-4 px-1">Kode Customer: {selectedDetail.productCode}</div>
+                            <MLReportViewer rationale={selectedDetail.rationale} />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

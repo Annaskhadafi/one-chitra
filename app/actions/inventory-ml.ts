@@ -424,8 +424,8 @@ export async function generateMLPrediction(productCode: string, predictionType: 
     try {
         await getAuthenticatedSession("inventory", "edit");
 
-        // Get AI settings from database (Requirement 9.9)
-        const aiConfig = await getAISettings();
+        // Get ML settings from database (Requirement 9.9)
+        const aiConfig = await getMLSettings();
 
         // 1. Check if prediction within cache duration exists
         const existing = await db.select().from(aiInventoryPredictions)
@@ -678,8 +678,8 @@ export async function generateMLCustomerRecommendation(customerCode: string) {
     try {
         await getAuthenticatedSession("inventory", "edit");
 
-        // Get AI settings from database (Requirement 9.9)
-        const aiConfig = await getAISettings();
+        // Get ML settings from database (Requirement 9.9)
+        const aiConfig = await getMLSettings();
 
         // 1. Check Cache (configurable duration)
         const existing = await db.select().from(aiInventoryPredictions)
