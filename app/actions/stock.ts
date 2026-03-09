@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { stockLevels } from "@/db/schema"
-import { eq, and, inArray } from "drizzle-orm"
+import { stockLevels, products, warehouses } from "@/db/schema"
+import { eq, and, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
@@ -184,6 +184,115 @@ export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to import stocks" }
+    }
+}
+
+export type StockImportItem = {
+    materialNumber: string
+    sloc: string
+    totalStock: number
+    valuationValue: string
+    minStock: number
+}
+
+export type ImportChunkResult = {
+    success: boolean
+    processed: number
+    succeeded: number
+    failed: number
+    errors: string[]
+}
+
+export async function importStockChunk(chunk: StockImportItem[]): Promise<ImportChunkResult> {
+    try {
+        const materialNumbers = chunk.map(i => i.materialNumber).filter(Boolean)
+        const slocs = chunk.map(i => i.sloc).filter(Boolean)
+
+        if (materialNumbers.length === 0 || slocs.length === 0) {
+            return { success: true, processed: 0, succeeded: 0, failed: 0, errors: [] }
+        }
+
+        // Batch lookup
+        const foundProducts = await db.select({ id: products.id, materialNumber: products.materialNumber })
+            .from(products)
+            .where(inArray(products.materialNumber, materialNumbers))
+
+        const foundWarehouses = await db.select({ id: warehouses.id, sloc: warehouses.sloc })
+            .from(warehouses)
+            .where(inArray(warehouses.sloc, slocs))
+
+        const productMap = new Map(foundProducts.map(p => [p.materialNumber, p.id]))
+        const warehouseMap = new Map(foundWarehouses.map(w => [w.sloc, w.id]))
+
+        let succeeded = 0
+        let failed = 0
+        const errors: string[] = []
+
+        for (const item of chunk) {
+            const productId = productMap.get(item.materialNumber)
+            const warehouseId = warehouseMap.get(item.sloc)
+
+            if (!productId) {
+                failed++
+                errors.push(`Material not found: ${item.materialNumber}`)
+                continue
+            }
+            if (!warehouseId) {
+                failed++
+                errors.push(`Sloc not found: ${item.sloc}`)
+                continue
+            }
+
+            try {
+                // Upsert logic
+                const existing = await db.select({ id: stockLevels.id }).from(stockLevels)
+                    .where(and(eq(stockLevels.productId, productId), eq(stockLevels.warehouseId, warehouseId)))
+                    .limit(1)
+
+                if (existing.length > 0) {
+                    await db.update(stockLevels)
+                        .set({
+                            totalStock: item.totalStock,
+                            valuationValue: item.valuationValue,
+                            minStock: item.minStock,
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(stockLevels.id, existing[0].id))
+                } else {
+                    await db.insert(stockLevels)
+                        .values({
+                            productId,
+                            warehouseId,
+                            totalStock: item.totalStock,
+                            valuationValue: item.valuationValue,
+                            minStock: item.minStock,
+                            updatedAt: new Date(),
+                        })
+                }
+                
+                succeeded++
+            } catch (err) {
+                failed++
+                errors.push(`DB Error for ${item.materialNumber}/${item.sloc}: ${err instanceof Error ? err.message : String(err)}`)
+            }
+        }
+
+        return {
+            success: true,
+            processed: chunk.length,
+            succeeded,
+            failed,
+            errors
+        }
+    } catch (error) {
+        console.error("Import chunk error:", error)
+        return {
+            success: false,
+            processed: 0,
+            succeeded: 0,
+            failed: chunk.length,
+            errors: ["Critical server error during import"]
+        }
     }
 }
 

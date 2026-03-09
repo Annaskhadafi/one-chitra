@@ -20,10 +20,15 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { format } from "date-fns"
-import Link from "next/link"
-import { Pencil, Printer, Download, MapPin, Mail, Phone, Calendar, FileText } from "lucide-react"
+import { Pencil, Printer, MapPin, Mail, Calendar, FileText } from "lucide-react"
 import type { SalesOrderWithRelations } from "@/lib/types"
+import Link from "next/link"
 
 
 interface SalesOrderDetailProps {
@@ -107,6 +112,32 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                 <Printer className="h-4 w-4 mr-2" />
                                 Print
                             </Button>
+                            
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button 
+                                        variant="outline" 
+                                        size="icon" 
+                                        className="h-10 w-10 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700"
+                                        onClick={() => {
+                                            // Simpan data ke sessionStorage
+                                            sessionStorage.setItem("proforma_invoice_print_data", JSON.stringify({
+                                                order,
+                                                currentDate: new Date().toISOString()
+                                            }));
+                                            // Buka halaman print di tab baru
+                                            window.open(`/print/proforma/${order.id}`, "_blank");
+                                        }}
+                                    >
+                                        <FileText className="h-4 w-4" />
+                                        <span className="sr-only">Cetak Proforma Invoice</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Cetak Proforma Invoice</p>
+                                </TooltipContent>
+                            </Tooltip>
+
                             <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
                                 <Button className="h-10 px-6">
                                     <Pencil className="h-4 w-4 mr-2" />
