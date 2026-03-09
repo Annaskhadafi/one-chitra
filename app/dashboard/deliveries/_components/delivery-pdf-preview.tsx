@@ -87,22 +87,22 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .pdf-wrapper * { box-sizing: border-box; }
                     .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; display: flex; flex-direction: column; min-height: 279mm; box-sizing: border-box; }
                     .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-                    .pdf-wrapper .ship-to { width: 55%; }
-                    .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
-                    .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
-                    .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; }
-                    .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
+                    .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
+                    .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
+                    .pdf-wrapper .customer-name { font-weight: bold; font-size: 12pt; text-transform: uppercase; margin-bottom: 4px; }
+                    .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; font-size: 10pt; line-height: 1.4; }
+                    .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 10pt; }
                     .pdf-wrapper .contact-info { font-size: 9pt; }
                     .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
-                    .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; letter-spacing: 1px; }
-                    .pdf-wrapper .do-details { padding: 10px; font-size: 9pt; }
-                    .pdf-wrapper .do-row { display: flex; margin-bottom: 3px; }
+                    .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 6px 10px; font-weight: bold; letter-spacing: 1px; font-size: 11pt; }
+                    .pdf-wrapper .do-details { padding: 10px; font-size: 10pt; }
+                    .pdf-wrapper .do-row { display: flex; margin-bottom: 4px; }
                     .pdf-wrapper .do-label { width: 120px; }
                     .pdf-wrapper .do-separator { margin-right: 5px; }
                     .pdf-wrapper .do-value { font-weight: bold; }
                     .pdf-wrapper .items-table { width: 100%; border-collapse: collapse; margin-top: 20px; border-top: 2px solid #000; border-bottom: 2px solid #000; }
-                    .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 9pt; border-bottom: 1px solid #000; }
-                    .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 9pt; vertical-align: top; }
+                    .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 10pt; font-weight: bold; border-bottom: 1px solid #000; }
+                    .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 10pt; font-weight: bold; vertical-align: top; }
                     .pdf-wrapper .col-item { width: 40px; }
                     .pdf-wrapper .col-qty { width: 80px; text-align: center; }
                     .pdf-wrapper .col-part { width: 120px; }
@@ -184,23 +184,23 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 259mm; }
                             
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-                            .pdf-wrapper .ship-to { width: 55%; }
-                            .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
-                            .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
-                            .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; }
-                            .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
+                            .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
+                            .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
+                            .pdf-wrapper .customer-name { font-weight: bold; font-size: 12pt; text-transform: uppercase; margin-bottom: 4px; }
+                            .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; font-size: 10pt; line-height: 1.4; }
+                            .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 10pt; }
                             .pdf-wrapper .contact-info { font-size: 9pt; }
                             .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
-                            .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; letter-spacing: 1px; }
-                            .pdf-wrapper .do-details { padding: 10px; font-size: 9pt; }
-                            .pdf-wrapper .do-row { display: flex; margin-bottom: 3px; }
+                            .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 6px 10px; font-weight: bold; letter-spacing: 1px; font-size: 11pt; }
+                            .pdf-wrapper .do-details { padding: 10px; font-size: 10pt; }
+                            .pdf-wrapper .do-row { display: flex; margin-bottom: 4px; }
                             .pdf-wrapper .do-label { width: 120px; }
                             .pdf-wrapper .do-separator { margin-right: 5px; }
                             .pdf-wrapper .do-value { font-weight: bold; }
                             
                             .pdf-wrapper .items-table { width: 100%; border-collapse: collapse; margin-top: 20px; border-top: 2px solid #000; border-bottom: 2px solid #000; }
-                            .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 9pt; border-bottom: 1px solid #000; }
-                            .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 9pt; vertical-align: top; }
+                            .pdf-wrapper .items-table th { text-align: left; padding: 8px 5px; font-size: 10pt; font-weight: bold; border-bottom: 1px solid #000; }
+                            .pdf-wrapper .items-table td { padding: 10px 5px; font-size: 10pt; font-weight: bold; vertical-align: top; }
                             .pdf-wrapper .col-item { width: 40px; }
                             .pdf-wrapper .col-qty { width: 80px; text-align: center; }
                             .pdf-wrapper .col-part { width: 120px; }
