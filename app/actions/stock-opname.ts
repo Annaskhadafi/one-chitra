@@ -432,33 +432,6 @@ export async function deleteStockOpnameSession(sessionId: number) {
     }
 }
 
-// ─── Bulk Delete Sessions ──────────────────────────────────────────────────
-
-export async function bulkDeleteStockOpnameSessions(sessionIds: number[]) {
-    try {
-        await getAuthenticatedSession("stock-opname", "delete")
-
-        if (!sessionIds || sessionIds.length === 0) {
-            return { success: false, error: "Tidak ada sesi yang dipilih" }
-        }
-
-        await db.transaction(async (tx) => {
-            // Delete related items and signatures for all sessions
-            await tx.delete(stockOpnameItems).where(inArray(stockOpnameItems.sessionId, sessionIds))
-            await tx.delete(stockOpnameSignatures).where(inArray(stockOpnameSignatures.sessionId, sessionIds))
-            
-            // Delete all sessions
-            await tx.delete(stockOpnameSessions).where(inArray(stockOpnameSessions.id, sessionIds))
-        })
-
-        revalidatePath("/dashboard/stock-opname")
-        return { success: true, deletedCount: sessionIds.length }
-    } catch (error) {
-        console.error("Bulk delete opname sessions error:", error)
-        return { success: false, error: "Gagal menghapus sesi" }
-    }
-}
-
 // ─── Bulk update counts (import from CSV / manual list) ───────────────────
 
 export async function bulkUpdateOpnameCounts(

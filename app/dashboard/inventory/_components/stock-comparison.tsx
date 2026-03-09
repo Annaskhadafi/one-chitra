@@ -8,6 +8,7 @@ import {
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -104,11 +105,9 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         refetchOnWindowFocus: false,
     })
 
-    const comparisonData = comparisonResponse?.data || []
+    // Memoize comparisonData untuk menghindari re-render yang tidak perlu
+    const memoizedComparisonData = useMemo(() => comparisonResponse?.data || [], [comparisonResponse?.data])
     const apiStats = comparisonResponse?.stats
-    
-    // Memoize comparisonData untuk menghindari re-render
-    const memoizedComparisonData = useMemo(() => comparisonData, [comparisonData])
 
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<"all" | "match" | "over" | "under">("all")
@@ -120,7 +119,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
 
     // Debounce search untuk performa lebih baik
     const [debouncedSearch, setDebouncedSearch] = useState("")
-    
+
     React.useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchTerm)
@@ -274,7 +273,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     // Virtualization dengan overscan yang lebih kecil untuk performa
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
-    
+
     // Get paginated rows
     const paginatedRows = rows.slice(
         pageIndex * pageSize,
@@ -291,7 +290,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     // ─── Stats dari API atau fallback ke perhitungan lokal ──────────────────────────────────────────────────
     const stats = useMemo(() => {
         if (apiStats) return apiStats
-        
+
         const matched = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "match").length
         const over = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "over").length
         const under = memoizedComparisonData.filter((r: ComparisonRow) => r.status === "under").length
@@ -305,7 +304,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     const barChartData = useMemo(() => {
         const filtered = memoizedComparisonData.filter((r: ComparisonRow) => r.gap !== 0)
         if (filtered.length === 0) return []
-        
+
         return filtered
             .sort((a: ComparisonRow, b: ComparisonRow) => Math.abs(b.gap) - Math.abs(a.gap))
             .slice(0, 15)
@@ -336,7 +335,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         setIsExporting(true)
         try {
             const result = await exportInventoryComparisonToExcel()
-            
+
             if (result.success && result.data) {
                 // Convert base64 to blob and download
                 const byteCharacters = atob(result.data.buffer)
@@ -346,7 +345,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                 }
                 const byteArray = new Uint8Array(byteNumbers)
                 const blob = new Blob([byteArray], { type: result.data.mimeType })
-                
+
                 // Create download link
                 const url = window.URL.createObjectURL(blob)
                 const link = document.createElement("a")
@@ -356,7 +355,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                 link.click()
                 document.body.removeChild(link)
                 window.URL.revokeObjectURL(url)
-                
+
                 toast.success("Export berhasil!", {
                     description: `File ${result.data.filename} telah diunduh`
                 })
@@ -378,10 +377,86 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     // ─── Loading state ──────────────────────────────────────────────
     if (isLoadingComparison) {
         return (
-            <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Loading inventory comparison data…</p>
-                <p className="text-xs text-muted-foreground">This may take a moment for large datasets</p>
+            <div className="space-y-6 animate-in fade-in duration-500">
+                {/* Scorecards Skeleton */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map((i) => (
+                        <Card key={i}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-4 w-4" />
+                            </CardHeader>
+                            <CardContent>
+                                <Skeleton className="h-8 w-16 mb-1" />
+                                <Skeleton className="h-3 w-32" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Charts Skeleton */}
+                <div className="grid gap-6 lg:grid-cols-3">
+                    <Card className="lg:col-span-2">
+                        <CardHeader className="pb-2">
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-4 w-4" />
+                                <Skeleton className="h-4 w-40" />
+                            </div>
+                            <Skeleton className="h-3 w-60 mt-1" />
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-[350px] w-full" />
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-40 mt-1" />
+                        </CardHeader>
+                        <CardContent className="flex justify-center">
+                            <Skeleton className="h-[300px] w-[300px] rounded-full" />
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Filters Skeleton */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <Skeleton className="h-10 flex-1 max-w-sm" />
+                        <Skeleton className="h-10 w-full sm:w-[180px]" />
+                        <Skeleton className="h-10 w-full sm:w-[220px]" />
+                        <Skeleton className="h-9 w-24" />
+                        <Skeleton className="h-9 w-32" />
+                    </div>
+                </div>
+
+                {/* Table Skeleton */}
+                <div className="rounded-md border bg-card overflow-hidden">
+                    <div className="h-10 border-b bg-muted/50 flex items-center px-4 gap-4">
+                        <Skeleton className="h-4 w-8" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-20" />
+                    </div>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="h-12 border-b flex items-center px-4 gap-4 last:border-0">
+                            <Skeleton className="h-4 w-8" />
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-4 flex-1" />
+                            <Skeleton className="h-4 w-20" />
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-4 w-20" />
+                            <Skeleton className="h-4 w-20" />
+                        </div>
+                    ))}
+                </div>
             </div>
         )
     }
@@ -604,9 +679,9 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
-                    <Button 
-                        variant="default" 
-                        size="sm" 
+                    <Button
+                        variant="default"
+                        size="sm"
                         onClick={handleExportExcel}
                         disabled={isExporting || memoizedComparisonData.length === 0}
                         className="shrink-0"
@@ -624,13 +699,13 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                         )}
                     </Button>
                 </div>
-                
+
                 {/* Pagination Controls */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t pt-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">Rows per page:</span>
-                        <Select 
-                            value={pageSize.toString()} 
+                        <Select
+                            value={pageSize.toString()}
                             onValueChange={(value) => {
                                 setPageSize(Number(value))
                                 setPageIndex(0)
@@ -647,13 +722,13 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                             </SelectContent>
                         </Select>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">
                             Showing {pageIndex * pageSize + 1} to {Math.min((pageIndex + 1) * pageSize, table.getFilteredRowModel().rows.length)} of {table.getFilteredRowModel().rows.length} items
                         </span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1">
                         <Button
                             variant="outline"

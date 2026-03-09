@@ -40,14 +40,8 @@ export async function getHistoryOrderFilters() {
             ne(historyOrders.billingDate, ""),
             or(
                 isNull(historyOrders.customerName),
-                and(
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(historyOrders.customerName, '%Chitra Paratama%')
-                )
-            ),
-            // Exclude ITC008 and 1000289A
-            notIlike(historyOrders.customer, '%ITC008%'),
-            notIlike(historyOrders.customer, '%1000289A%')
+                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+            )
         );
 
         const [customers, plants, matGrps] = await Promise.all([
@@ -115,14 +109,8 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
             ne(historyOrders.billingDate, ""),
             or(
                 isNull(historyOrders.customerName),
-                and(
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(historyOrders.customerName, '%Chitra Paratama%')
-                )
-            ),
-            // Exclude ITC008 and 1000289A
-            notIlike(historyOrders.customer, '%ITC008%'),
-            notIlike(historyOrders.customer, '%1000289A%')
+                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+            )
         );
 
         if (baseFilter) {

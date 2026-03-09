@@ -18,7 +18,7 @@ type Zmc9StockSapRow = {
     value_stock: string | number | null
     currency: string | null
     extracted_at: Date | string | null
-    updated_at: Date | string | null
+    updated_at?: Date | string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
             valueStock: Number(row.value_stock ?? 0),
             currency: row.currency ?? "",
             extractedAt: row.extracted_at ? new Date(row.extracted_at).toISOString() : null,
-            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+            updatedAt: row.extracted_at ? new Date(row.extracted_at).toISOString() : null,
         }))
 
         return NextResponse.json({

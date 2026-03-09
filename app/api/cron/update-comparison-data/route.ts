@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { updateComparisonData } from "@/app/actions/inventory-ai"
+import { updateComparisonData } from "@/app/actions/inventory-ml"
 
 /**
  * GET /api/cron/update-comparison-data

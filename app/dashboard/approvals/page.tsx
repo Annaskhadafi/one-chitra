@@ -125,7 +125,9 @@ export default async function ApprovalInboxPage() {
                                                 <div className="flex flex-col items-end gap-2">
                                                     <span className="text-[10px] text-muted-foreground">{noteHint}</span>
                                                     <form
-                                                        action={submitApprovalDecision}
+                                                        action={async (formData: FormData): Promise<void> => {
+                                                            await submitApprovalDecision(formData)
+                                                        }}
                                                         className="flex items-center justify-end gap-2"
                                                     >
                                                         <input type="hidden" name="assignmentId" value={task.assignmentId} />

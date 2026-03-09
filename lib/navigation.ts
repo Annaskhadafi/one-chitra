@@ -167,8 +167,8 @@ export const navigationConfig: NavSection[] = [
                         resource: "inventory",
                     },
                     {
-                        title: "AI & Predictions",
-                        url: "/dashboard/inventory-ai",
+                        title: "ML & Predictions",
+                        url: "/dashboard/inventory-ml",
                         resource: "inventory",
                     },
                 ],

@@ -15,7 +15,6 @@ export const zmc9StockSap = pgTable("zmc9_stock_sap", {
     valueStock: decimal("value_stock", { precision: 20, scale: 3 }),
     currency: text("currency"),
     extractedAt: timestamp("extracted_at"),
-    updatedAt: timestamp("updated_at"),
 });
 
 // SAP Purchasing Documents
