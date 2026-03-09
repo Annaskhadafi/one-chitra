@@ -27,9 +27,13 @@ export async function getR49DashboardFilters() {
                 sql`${historyOrders.customerName} IS NULL`,
                 and(
                     notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%')
+                    notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%'),
+                    notIlike(historyOrders.customerName, '%Chitra Paratama%')
                 )
-            )
+            ),
+            // Exclude ITC008 and 1000289A
+            notIlike(historyOrders.customer, '%ITC008%'),
+            notIlike(historyOrders.customer, '%1000289A%')
         );
 
         const [customers, salesmen] = await Promise.all([
@@ -92,9 +96,13 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
                     sql`${historyOrders.customerName} IS NULL`,
                     and(
                         notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                        notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%')
+                        notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%'),
+                        notIlike(historyOrders.customerName, '%Chitra Paratama%')
                     )
-                )
+                ),
+                // Exclude ITC008 and 1000289A
+                notIlike(historyOrders.customer, '%ITC008%'),
+                notIlike(historyOrders.customer, '%1000289A%')
             )
         ];
 

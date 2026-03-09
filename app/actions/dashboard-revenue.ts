@@ -50,20 +50,17 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             or(
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
-            )
+            ),
+            // Exclude ITC008, 1000289A, and Chitra Paratama
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%'),
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%')
         );
 
-        // Filter Service & PA: exclude ITC008 and 100289
-        const customerExcludePA = and(
-            notIlike(salesRevenueSap.customer, '%ITC008%'),
-            notIlike(salesRevenueSap.customer, '%100289%')
-        );
-
-        // Filter MA (Salesman) & Customer Name: exclude ITC008 and 1000289A
-        const customerExcludeMA = and(
-            notIlike(salesRevenueSap.customer, '%ITC008%'),
-            notIlike(salesRevenueSap.customer, '%1000289A%')
-        );
+        // Note: Customer exclusions (ITC008, 1000289A, Chitra Paratama) are now in baseFilter
+        // These variables kept for backward compatibility but no longer needed
+        const customerExcludePA = undefined;
+        const customerExcludeMA = undefined;
 
         // ─── A. Revenue Prime Product ───────────────────────────────────────────
         // Filter: rev_type = 'Trading', mat_grp_desc IN (Tire list)
@@ -86,8 +83,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
         }).from(salesRevenueSap).where(and(
             baseFilter,
-            notIlike(salesRevenueSap.revType, 'Trading'),
-            customerExcludePA
+            notIlike(salesRevenueSap.revType, 'Trading')
         ));
         const revenueService = Number(serviceData[0]?.total || 0);
 
@@ -102,8 +98,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         }).from(salesRevenueSap).where(and(
             baseFilter,
             ilike(salesRevenueSap.revType, 'Trading'),
-            paMtGrpFilter,
-            customerExcludePA
+            paMtGrpFilter
         ));
         const revenuePA = Number(paData[0]?.total || 0);
 
@@ -120,7 +115,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const customerRevenueData = await db.select({
             cust: salesRevenueSap.customerName,
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(and(baseFilter, customerExcludeMA)).groupBy(salesRevenueSap.customerName);
+        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.customerName);
 
         let revenueCK = 0;
         let revenueSIS = 0;
@@ -134,7 +129,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const salesData = await db.select({
             salesman: salesRevenueSap.salesman,
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(and(baseFilter, customerExcludeMA)).groupBy(salesRevenueSap.salesman);
+        }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.salesman);
 
         const salesmanRevenue: Record<string, number> = {
             ma_oc: 0, ma_ws: 0, ma_fq: 0, ma_br: 0, ma_ag: 0, ma_mc: 0
@@ -193,7 +188,11 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             or(
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
-            )
+            ),
+            // Exclude ITC008, 1000289A, and Chitra Paratama
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%'),
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%')
         );
 
         const ytdData = await db.select({
