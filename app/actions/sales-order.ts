@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers } from "@/db/schema"
-import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
+import { eq, desc, inArray, sql, and, isNotNull, like } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
@@ -71,28 +71,57 @@ export async function getSalesOrder(id: number) {
 export async function generateInvoiceNumber() {
     const now = new Date()
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+    const prefix = `SO-${dateStr}`
 
+    // Count today's orders efficiently using like query
+    // We look for the highest number used today to avoid gaps/duplicates
+    const result = await db
+        .select({ invoiceNumber: salesOrders.invoiceNumber })
+        .from(salesOrders)
+        .where(like(salesOrders.invoiceNumber, `${prefix}%`))
+        .orderBy(desc(salesOrders.invoiceNumber))
+        .limit(1)
 
+    let nextNum = 1
+    if (result.length > 0 && result[0].invoiceNumber) {
+        const lastInvoice = result[0].invoiceNumber
+        const lastNumStr = lastInvoice.split("-").pop()
+        if (lastNumStr && !isNaN(parseInt(lastNumStr))) {
+            nextNum = parseInt(lastNumStr) + 1
+        }
+    }
 
-    // Count today's orders
-    const allOrders = await db.select({ invoiceNumber: salesOrders.invoiceNumber }).from(salesOrders)
-    const todayOrders = allOrders.filter(o => o.invoiceNumber?.startsWith(`SO-${dateStr}`))
-    const nextNum = todayOrders.length + 1
-
-    return `SO-${dateStr}-${String(nextNum).padStart(4, "0")}`
+    return `${prefix}-${String(nextNum).padStart(4, "0")}`
 }
 
 export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     try {
         const session = await getAuthenticatedSession('sales-orders', 'create')
         const userId = session.user.id
-        const invoiceNumber = data.invoiceNumber || await generateInvoiceNumber()
+        
+        // Ensure invoice number is unique (retry if collision happens)
+        let invoiceNumber = data.invoiceNumber
+        if (!invoiceNumber) {
+            invoiceNumber = await generateInvoiceNumber()
+            
+            // Double check if generated number exists (race condition mitigation)
+            const existing = await db.query.salesOrders.findFirst({
+                where: eq(salesOrders.invoiceNumber, invoiceNumber)
+            })
+            
+            if (existing) {
+                // Regenerate if exists
+                const now = new Date()
+                const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+                invoiceNumber = `${invoiceNumber}-${randomSuffix}`
+            }
+        }
 
         // Start transaction
         return await db.transaction(async (tx) => {
             const [newOrder] = await tx.insert(salesOrders)
                 .values({
-                    invoiceNumber,
+                    invoiceNumber: invoiceNumber!,
                     customerPo: data.customerPo || null,
                     createdBy: userId,
                     customerId: data.customerId,
@@ -184,7 +213,13 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     } catch (error: unknown) {
         console.error("Failed to create sales order:", error)
         const message = error instanceof Error ? error.message : String(error)
-        return { success: false, error: `Failed to create sales order: ${message}` }
+        
+        // Check for specific database errors
+        if (message.includes("duplicate key value violates unique constraint")) {
+             return { success: false, error: "Nomor Invoice sudah ada. Silakan coba lagi atau gunakan nomor yang berbeda." }
+        }
+        
+        return { success: false, error: `Gagal membuat Sales Order: ${message}` }
     }
 }
 
@@ -359,7 +394,14 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
         })
     } catch (error) {
         console.error("Failed to update sales order:", error)
-        return { success: false, error: "Failed to update sales order" }
+        const message = error instanceof Error ? error.message : String(error)
+
+        // Check for specific database errors
+        if (message.includes("duplicate key value violates unique constraint")) {
+             return { success: false, error: "Nomor Invoice sudah ada. Silakan gunakan nomor yang berbeda." }
+        }
+
+        return { success: false, error: `Gagal mengupdate Sales Order: ${message}` }
     }
 }
 

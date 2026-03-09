@@ -282,14 +282,43 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         console.log("customerId:", customerId)
         console.log("items:", items)
 
+        // Validation
+        const errors: string[] = []
+
         if (!customerId) {
-            console.log("❌ No customer selected")
-            toast.error("Please select a customer")
-            return
+            errors.push("Customer belum dipilih")
         }
         if (items.length === 0) {
-            console.log("❌ No items")
-            toast.error("Please add at least one product")
+            errors.push("Belum ada produk - Tambahkan minimal 1 produk")
+        }
+        if (customerPo && customerPo.length > 100) {
+            errors.push("Customer PO maksimal 100 karakter")
+        }
+        if (poDocument && poDocument.length > 255) {
+            errors.push("URL Dokumen PO terlalu panjang (maksimal 255 karakter)")
+        }
+        if (poReceive && isNaN(new Date(poReceive).getTime())) {
+            errors.push("Format tanggal PO Receive tidak valid")
+        }
+        
+        // Validate Items
+        items.forEach((item, index) => {
+            if (item.quantity <= 0) {
+                errors.push(`Produk #${index + 1} (${item.productName}) harus memiliki jumlah lebih dari 0`)
+            }
+        })
+
+        if (errors.length > 0) {
+            console.log("❌ Validation failed", errors)
+            toast.error("Validasi Gagal", {
+                description: (
+                    <ul className="list-disc pl-4">
+                        {errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                        ))}
+                    </ul>
+                )
+            })
             return
         }
 
@@ -299,7 +328,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
             const payload = {
                 invoiceNumber: invoiceNumber || undefined,
                 customerPo: customerPo || undefined,
-                customerId,
+                customerId: customerId as number,
                 warehouseId,
                 salesDate,
                 poReceive: poReceive || undefined,
@@ -334,11 +363,16 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 router.refresh()
                 router.push("/dashboard/sales-orders")
             } else {
-                // @ts-expect-error - result type union doesn't always have error
-                toast.error(result.error || "Something went wrong")
+                // Check if result has error property (type guard)
+                if ('error' in result && result.error) {
+                     toast.error(result.error)
+                } else {
+                     toast.error("Terjadi kesalahan yang tidak diketahui")
+                }
             }
-        } catch {
-            toast.error("Failed to save sales order")
+        } catch (err) {
+            console.error("Submit exception:", err)
+            toast.error("Gagal menyimpan sales order. Periksa koneksi internet anda.")
         } finally {
             setIsSubmitting(false)
         }

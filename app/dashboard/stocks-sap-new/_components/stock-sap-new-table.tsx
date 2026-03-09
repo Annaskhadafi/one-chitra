@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
 import { Search, RefreshCcw, ChevronUp, ChevronDown, Box, AlertTriangle, TrendingUp, FilterX, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useDebounce } from "@/hooks/use-debounce"
 import { ScoreCard } from "@/components/score-card"
 import {
     Table,
@@ -80,12 +81,19 @@ interface StockSAPNewTableProps {
 
 export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTableProps) {
     const [searchTerm, setSearchTerm] = useState("")
+    const [committedSearch, setCommittedSearch] = useState("")
     const [sorting, setSorting] = useState<SortingState>([{ id: "totalStock", desc: true }])
     const [activeTab, setActiveTab] = useState("all")
     const [filterPlant, setFilterPlant] = useState("all")
     const [filterStorLocDesc, setFilterStorLocDesc] = useState("")
     const [pageIndex, setPageIndex] = useState(0)
     const [pageSize, setPageSize] = useState(100)
+
+    const debouncedStorLocDesc = useDebounce(filterStorLocDesc, 500)
+
+    useEffect(() => {
+        setPageIndex(0)
+    }, [debouncedStorLocDesc])
 
     const parsedRate = useMemo(() => {
         const rate = parseFloat(defaultRate)
@@ -132,15 +140,15 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     }
 
     const { data: responseData, isLoading, error, refetch } = useQuery({
-        queryKey: ["zmc9-stock-sap", pageIndex, pageSize, searchTerm, activeTab, filterPlant, filterStorLocDesc],
+        queryKey: ["zmc9-stock-sap", pageIndex, pageSize, committedSearch, activeTab, filterPlant, debouncedStorLocDesc],
         queryFn: async () => {
             const params = new URLSearchParams({
                 page: (pageIndex + 1).toString(),
                 pageSize: pageSize.toString(),
-                search: searchTerm,
+                search: committedSearch,
                 warehouseType: activeTab,
                 plant: filterPlant,
-                slocDesc: filterStorLocDesc,
+                slocDesc: debouncedStorLocDesc,
                 ts: Date.now().toString()
             })
             const response = await fetch(`/api/stocks-sap-new?${params.toString()}`, { cache: "no-store" })
@@ -416,7 +424,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     return (
         <div className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setPageIndex(0); }} className="space-y-6">
                 <div className="flex items-center justify-between">
                     <TabsList>
                         <TabsTrigger value="all">All Stocks</TabsTrigger>
@@ -490,7 +498,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                     <div className="flex flex-wrap items-end gap-4">
                         <div className="w-full sm:w-[220px]">
                             <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Plant Filter</label>
-                            <Select value={filterPlant} onValueChange={setFilterPlant}>
+                            <Select value={filterPlant} onValueChange={(v) => { setFilterPlant(v); setPageIndex(0); }}>
                                 <SelectTrigger className="h-9">
                                     <SelectValue placeholder="Select Plant" />
                                 </SelectTrigger>
@@ -519,6 +527,8 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                                 setFilterStorLocDesc("")
                                 setSearchTerm("")
                                 setActiveTab("all")
+                                setCommittedSearch("")
+                                setPageIndex(0)
                             }}
                         >
                             <FilterX className="mr-2 h-4 w-4" />
@@ -530,12 +540,15 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                         <div className="relative flex-1 max-w-sm">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by material or sloc..."
+                                placeholder="Search by material or sloc... (press Enter)"
                                 className="pl-8"
                                 value={searchTerm}
-                                onChange={(e) => {
-                                    setSearchTerm(e.target.value)
-                                    setPageIndex(0)
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        setCommittedSearch(searchTerm.trim())
+                                        setPageIndex(0)
+                                    }
                                 }}
                             />
                         </div>
