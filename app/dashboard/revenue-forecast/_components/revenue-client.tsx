@@ -471,12 +471,6 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                     </ResponsiveContainer>
                 </div>
             </div>
-
-            {/* ─── Footer ───────────────────────────────────────────────────────── */}
-            <div className="text-center text-[10px] text-muted-foreground border-t pt-3">
-                Dashboard Revenue vs Forecast |{" "}
-                <a href="/dashboard/forecasts" className="underline hover:text-primary">Kelolaan Forecast</a>
-            </div>
         </div>
     )
 }

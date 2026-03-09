@@ -1,0 +1,237 @@
+"use client"
+
+import { useState } from "react"
+import { ChevronDown, ChevronUp, Download } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import * as XLSX from "xlsx"
+
+interface SalesRevenueData {
+    salesRevId: number
+    sorg: string | null
+    billTy: string | null
+    revType: string | null
+    customer: string | null
+    customerName: string | null
+    salesman: string | null
+    item: number | null
+    sloc: string | null
+    plant: string | null
+    materialNo: string | null
+    materialDescription: string | null
+    sizeDimen: string | null
+    materialGroup: string | null
+    matGrpDesc: string | null
+    matGrp1: string | null
+    matGrp1Desc: string | null
+    matGrp2: string | null
+    matGrp2Desc: string | null
+    matGrp3: string | null
+    matGrp3Desc: string | null
+    matGrp4: string | null
+    matGrp4Desc: string | null
+    matGrp5: string | null
+    matGrp5Desc: string | null
+    qty: number | null
+    uom: string | null
+    curr: string | null
+    basePrice: number | null
+    intdeptPrice: number | null
+    adjustmentPrice: number | null
+    revenueInDocCurr: number | null
+    revenueInLocCurr: number | null
+    billingNo: string | null
+    billingDate: string | null
+    inco1: string | null
+    inco2: string | null
+    c: string | null
+    cancelled: string | null
+    deliveryNo: string | null
+    salesOrder: string | null
+    workOrder: string | null
+    poNo: string | null
+    poDate: string | null
+    poType: string | null
+    costOfSales: number | null
+    profitMargin: number | null
+    extractedAt: string | null
+}
+
+interface SalesRevenueTableProps {
+    data: SalesRevenueData[]
+    total: number
+    count: number
+    period: string
+}
+
+const fmt = (v: number | null) => {
+    if (v === null) return "-"
+    return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+}
+
+export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTableProps) {
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    const handleExportExcel = () => {
+        // Prepare data for Excel
+        const excelData = data.map((row) => ({
+            "Sales Rev ID": row.salesRevId,
+            "Sorg": row.sorg || "",
+            "Bill Type": row.billTy || "",
+            "Rev Type": row.revType || "",
+            "Customer": row.customer || "",
+            "Customer Name": row.customerName || "",
+            "Salesman": row.salesman || "",
+            "Item": row.item || "",
+            "SLoc": row.sloc || "",
+            "Plant": row.plant || "",
+            "Material No": row.materialNo || "",
+            "Material Description": row.materialDescription || "",
+            "Size Dimen": row.sizeDimen || "",
+            "Material Group": row.materialGroup || "",
+            "Mat Grp Desc": row.matGrpDesc || "",
+            "Mat Grp1": row.matGrp1 || "",
+            "Mat Grp1 Desc": row.matGrp1Desc || "",
+            "Mat Grp2": row.matGrp2 || "",
+            "Mat Grp2 Desc": row.matGrp2Desc || "",
+            "Mat Grp3": row.matGrp3 || "",
+            "Mat Grp3 Desc": row.matGrp3Desc || "",
+            "Mat Grp4": row.matGrp4 || "",
+            "Mat Grp4 Desc": row.matGrp4Desc || "",
+            "Mat Grp5": row.matGrp5 || "",
+            "Mat Grp5 Desc": row.matGrp5Desc || "",
+            "Qty": row.qty || 0,
+            "UOM": row.uom || "",
+            "Currency": row.curr || "",
+            "Base Price": row.basePrice || 0,
+            "Intdept Price": row.intdeptPrice || 0,
+            "Adjustment Price": row.adjustmentPrice || 0,
+            "Revenue in Doc Curr": row.revenueInDocCurr || 0,
+            "Revenue in Loc Curr": row.revenueInLocCurr || 0,
+            "Billing No": row.billingNo || "",
+            "Billing Date": row.billingDate || "",
+            "Inco1": row.inco1 || "",
+            "Inco2": row.inco2 || "",
+            "C": row.c || "",
+            "Cancelled": row.cancelled || "",
+            "Delivery No": row.deliveryNo || "",
+            "Sales Order": row.salesOrder || "",
+            "Work Order": row.workOrder || "",
+            "PO No": row.poNo || "",
+            "PO Date": row.poDate || "",
+            "PO Type": row.poType || "",
+            "Cost of Sales": row.costOfSales || 0,
+            "Profit Margin": row.profitMargin || 0,
+            "Extracted At": row.extractedAt || "",
+        }))
+
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(excelData)
+        
+        // Create workbook
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, "Sales Revenue")
+
+        // Generate filename
+        const filename = `Sales_Revenue_SAP_${period.replace(".", "_")}_${new Date().toISOString().split("T")[0]}.xlsx`
+
+        // Download
+        XLSX.writeFile(wb, filename)
+    }
+
+    return (
+        <div className="bg-card border rounded-xl overflow-hidden">
+            {/* Header with collapse button */}
+            <div className="px-4 py-3 border-b bg-muted/30 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="flex items-center gap-2 hover:text-primary transition-colors"
+                    >
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            Data Validasi Sales Revenue SAP
+                        </h3>
+                    </button>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded">
+                        {count} records
+                    </span>
+                </div>
+                <Button
+                    onClick={handleExportExcel}
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-2"
+                >
+                    <Download className="w-3.5 h-3.5" />
+                    Export Excel
+                </Button>
+            </div>
+
+            {/* Summary bar */}
+            <div className="px-4 py-2 bg-primary/5 border-b flex justify-between items-center">
+                <span className="text-xs font-semibold text-muted-foreground">Total Revenue in Loc Curr:</span>
+                <span className="text-sm font-black text-primary">{fmt(total)}</span>
+            </div>
+
+            {/* Collapsible table */}
+            {isExpanded && (
+                <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-accent">
+                    <table className="w-full text-xs">
+                        <thead className="bg-primary/5 sticky top-0 z-10">
+                            <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r">No</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Billing Date</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Billing No</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Customer</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Customer Name</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Material No</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Material Desc</th>
+                                <th className="px-3 py-2 text-right font-semibold text-primary border-r whitespace-nowrap">Qty</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">UOM</th>
+                                <th className="px-3 py-2 text-right font-semibold text-primary border-r whitespace-nowrap">Revenue in Loc Curr</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Rev Type</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Salesman</th>
+                                <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">PO No</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.length === 0 ? (
+                                <tr>
+                                    <td colSpan={13} className="px-4 py-6 text-center text-muted-foreground">
+                                        No data available
+                                    </td>
+                                </tr>
+                            ) : (
+                                data.map((row, i) => (
+                                    <tr key={row.salesRevId} className="border-t hover:bg-muted/30">
+                                        <td className="px-3 py-2 text-muted-foreground border-r">{i + 1}</td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.billingDate || "-"}</td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.billingNo || "-"}</td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.customer || "-"}</td>
+                                        <td className="px-3 py-2 border-r max-w-[200px] truncate" title={row.customerName || ""}>
+                                            {row.customerName || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.materialNo || "-"}</td>
+                                        <td className="px-3 py-2 border-r max-w-[250px] truncate" title={row.materialDescription || ""}>
+                                            {row.materialDescription || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-right border-r">{row.qty || 0}</td>
+                                        <td className="px-3 py-2 border-r">{row.uom || "-"}</td>
+                                        <td className="px-3 py-2 text-right font-semibold border-r whitespace-nowrap">
+                                            {fmt(row.revenueInLocCurr)}
+                                        </td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.revType || "-"}</td>
+                                        <td className="px-3 py-2 border-r max-w-[150px] truncate" title={row.salesman || ""}>
+                                            {row.salesman || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 whitespace-nowrap">{row.poNo || "-"}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    )
+}

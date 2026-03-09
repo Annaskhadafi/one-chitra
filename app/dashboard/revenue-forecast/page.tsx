@@ -1,5 +1,6 @@
-import { getDashboardRevenueForecast } from "@/app/actions/dashboard-revenue"
+import { getDashboardRevenueForecast, getAllSalesRevenueData } from "@/app/actions/dashboard-revenue"
 import { RevenueClient } from "./_components/revenue-client"
+import { SalesRevenueTable } from "./_components/sales-revenue-table"
 
 export const metadata = {
     title: "Revenue vs Forecast Dashboard - One Chitra",
@@ -10,6 +11,7 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
     const period = params.period || "02.2026"
 
     const response = await getDashboardRevenueForecast({ period })
+    const salesRevenueResponse = await getAllSalesRevenueData({ period })
 
     const defaultData = {
         period,
@@ -36,11 +38,20 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
     }
 
     const data = response.success && response.data ? response.data : defaultData
+    const salesRevenueData = salesRevenueResponse.success && salesRevenueResponse.data ? salesRevenueResponse.data : []
+    const salesRevenueTotal = salesRevenueResponse.success ? salesRevenueResponse.total : 0
+    const salesRevenueCount = salesRevenueResponse.success ? salesRevenueResponse.count : 0
 
     return (
         <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 space-y-4">
                 <RevenueClient initialData={data} selectedPeriod={period} />
+                <SalesRevenueTable 
+                    data={salesRevenueData} 
+                    total={salesRevenueTotal} 
+                    count={salesRevenueCount}
+                    period={period}
+                />
             </div>
         </div>
     )
