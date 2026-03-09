@@ -90,7 +90,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     .pdf-wrapper .ship-to { width: 55%; }
                     .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
                     .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
-                    .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; }
+                    .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; }
                     .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
                     .pdf-wrapper .contact-info { font-size: 9pt; }
                     .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
@@ -140,9 +140,11 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
     }
 
     const customer = delivery.salesOrder?.customer
-    const address = [customer?.address1, customer?.address2, customer?.address3, customer?.address4, customer?.address5]
+    // Use shippingAddress if available, otherwise fallback to customer address
+    const customerAddress = [customer?.address1, customer?.address2, customer?.address3, customer?.address4, customer?.address5]
         .filter(Boolean)
         .join(" ")
+    const address = delivery.shippingAddress || customerAddress
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -185,7 +187,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .ship-to { width: 55%; }
                             .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
                             .pdf-wrapper .customer-name { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 2px; }
-                            .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; }
+                            .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; }
                             .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 9pt; }
                             .pdf-wrapper .contact-info { font-size: 9pt; }
                             .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
@@ -232,8 +234,8 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 <div className="ship-to">
                                     <span className="ship-to-label">Ship To:</span>
                                     <div className="customer-name">{customer?.name}</div>
-                                    <div className="site-info" style={{ fontWeight: "normal" }}>
-                                        ATTN : {address || delivery.shippingAddress || "-"}
+                                    <div className="site-info" style={{ fontWeight: "normal", whiteSpace: "pre-line" }}>
+                                        ATTN : {address || "-"}
                                     </div>
                                 </div>
 
