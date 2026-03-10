@@ -35,11 +35,12 @@ export function UtcClock() {
     }, [])
 
     if (!mounted) {
-        return <div className="hidden sm:block w-[160px] h-7 animate-pulse bg-muted rounded-md shrink-0"></div>
+        return <div suppressHydrationWarning className="hidden sm:block w-[160px] h-7 animate-pulse bg-muted rounded-md shrink-0"></div>
     }
 
     return (
         <div
+            suppressHydrationWarning
             className="text-xs font-medium font-mono text-white hidden sm:flex items-center justify-center whitespace-nowrap px-3 py-1.5 rounded-md shadow-sm shrink-0"
             style={{ backgroundColor: "var(--sidebar-accent)" }}
         >

@@ -254,7 +254,7 @@ export default async function DashboardLayout({
             avatar: user.image || "",
           } : undefined
         } />
-        <SidebarInset>
+        <SidebarInset suppressHydrationWarning>
           <SiteHeader />
           <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
         </SidebarInset>

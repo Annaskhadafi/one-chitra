@@ -21,8 +21,8 @@ export function ScoreCard({
     textColor = "text-blue-900 dark:text-blue-100"
 }: ScoreCardProps) {
     return (
-        <Card className={`bg-gradient-to-br ${gradient} transition-all duration-300`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card suppressHydrationWarning className={`bg-gradient-to-br ${gradient} transition-all duration-300`}>
+            <CardHeader suppressHydrationWarning className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className={`text-sm font-medium ${textColor}`}>
                     {title}
                 </CardTitle>
