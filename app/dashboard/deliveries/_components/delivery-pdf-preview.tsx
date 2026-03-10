@@ -23,6 +23,9 @@ interface DeliveryPdfData {
     vehicleNumber: string | null
     vehicleType: string | null
     shippingAddress: string | null
+    isExternal?: boolean
+    awbNumber?: string | null
+    vendorName?: string | null
     notes: string | null
     salesOrder: {
         id: number
@@ -74,7 +77,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
             <head>
                 <title>Delivery Order ${delivery.deliveryNumber || ""}</title>
                 <style>
-                    @page { size: letter; margin: 0; }
+                    @page { size: 220mm 280mm; margin: 0; }
                     body { margin: 0; padding: 0; background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .pdf-wrapper { 
                         font-family: Arial, sans-serif; 
@@ -85,7 +88,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                         background-color: white;
                     }
                     .pdf-wrapper * { box-sizing: border-box; }
-                    .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; display: flex; flex-direction: column; min-height: 279mm; box-sizing: border-box; }
+                    .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; display: flex; flex-direction: column; min-height: 225mm; box-sizing: border-box; }
                     .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                     .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
                     .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
@@ -169,7 +172,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                 </DialogHeader>
 
                 <div className="p-4 sm:p-8 bg-zinc-100 dark:bg-zinc-800 text-black flex justify-center w-full min-h-full">
-                    <div className="pdf-wrapper bg-white shadow-xl max-w-[210mm] w-full min-h-[297mm] relative shrink-0" ref={printRef}>
+                    <div className="pdf-wrapper bg-white shadow-xl max-w-[220mm] w-full min-h-[280mm] relative shrink-0" ref={printRef}>
                         <style dangerouslySetInnerHTML={{
                             __html: `
                             .pdf-wrapper { 
@@ -181,7 +184,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 box-sizing: border-box;
                             }
                             .pdf-wrapper * { box-sizing: border-box; }
-                            .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 259mm; }
+                            .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 225mm; }
                             
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                             .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
@@ -221,10 +224,10 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
 
                             @media print {
-                                @page { size: letter; margin: 0; }
+                                @page { size: 220mm 280mm; margin: 0; }
                                 body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; background-color: transparent !important; }
                                 .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: 100vh !important; padding-bottom: 0 !important; }
-                                .pdf-wrapper .container { padding: 10mm !important; min-height: 259mm !important; }
+                                .pdf-wrapper .container { padding: 10mm !important; min-height: 225mm !important; }
                                 .no-print { display: none !important; }
                             }
                         ` }} />
@@ -369,11 +372,22 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                         </div>
                                     </div>
                                     <div className="sig-box">
-                                        <div className="sig-label">Forwarder By,</div>
+                                        <div className="sig-label">
+                                            Forwarder By,
+                                            {delivery.isExternal && delivery.vendorName && (
+                                                <div style={{ fontWeight: "bold", marginTop: "2px" }}>{delivery.vendorName}</div>
+                                            )}
+                                        </div>
                                         <div className="sig-placeholder">
-                                            <div className="sig-name">
-                                                ( {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"})
-                                            </div>
+                                            {delivery.isExternal ? (
+                                                <div style={{ fontSize: "24pt", fontWeight: "black", marginBottom: "10px" }}>
+                                                    {delivery.awbNumber || "-"}
+                                                </div>
+                                            ) : (
+                                                <div className="sig-name">
+                                                    ( {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"})
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="sig-box">

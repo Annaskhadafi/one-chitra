@@ -49,6 +49,9 @@ interface DeliveryWithRelations {
     vehicleType: string | null
     warehouseId: number | null
     shippingAddress: string | null
+    isExternal: boolean
+    vendorName: string | null
+    awbNumber: string | null
     notes: string | null
     tripDestination: string | null
     costGasoline: string | number | null
