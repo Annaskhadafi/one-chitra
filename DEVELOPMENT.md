@@ -21,7 +21,11 @@ Host Path
 Mount Path
 /app/.next/standalone/public/uploads
 
-> ⚠️ **Jangan ubah path di `upload.ts` atau `route.ts`** — keduanya menggunakan `process.cwd()` yang sudah secara otomatis resolve ke path yang benar di dev maupun production.
+> ⚠️ **PENTING: Jangan gunakan `process.cwd()` secara langsung di enviroment Production (Dokploy)**
+> Aplikasi Next.js under Dokploy Docker sering me-run CWD di `/app` (bukan di dalam `.next/standalone`), sehingga jika menggunakan `process.cwd()` file akan meleset ke `/app/public/uploads` (temporary) dan tidak masuk ke Bind Mount.
+> **Selalu gunakan deteksi environment:**
+> - Production: Hardcode path absolute ke `/app/.next/standalone/public/uploads`
+> - Development: `resolve(process.cwd(), "public", "uploads")`
 
 ### 2. Upload Action
 Always use the centralized `uploadFile` action. Do NOT use `fs` directly in your components or other actions.

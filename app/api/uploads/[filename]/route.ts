@@ -8,9 +8,13 @@ export async function GET(
     { params }: { params: Promise<{ filename: string }> }
 ) {
     const { filename } = await params;
-    // Resolve upload dir: UPLOAD_DIR env var (set to /app/uploads in production)
-    // or fallback to <cwd>/public/uploads in development
-    const uploadDir = process.env.UPLOAD_DIR ?? join(process.cwd(), "public", "uploads");
+    // Resolve upload dir: 
+    // - In production (Dokploy Next.js standalone), use the mapped volume path
+    // - In development, falls back to <project>/public/uploads
+    let uploadDir = join(process.cwd(), "public", "uploads");
+    if (process.env.NODE_ENV === "production") {
+        uploadDir = "/app/.next/standalone/public/uploads";
+    }
     const filePath = join(uploadDir, filename);
 
     if (!existsSync(filePath)) {
