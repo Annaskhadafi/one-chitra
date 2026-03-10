@@ -352,7 +352,41 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         {
             accessorKey: "invoiceNumber",
             header: "Invoice No",
-            cell: ({ row }) => <span className="font-mono text-sm">{row.original.invoiceNumber || "-"}</span>,
+            cell: ({ row }) => {
+                const invoiceNumber = row.original.invoiceNumber
+                const deliveryType = row.original.deliveryType
+                const doSap = row.original.doSap
+                const isPartial = deliveryType === 'partial'
+                const invoiceList = invoiceNumber
+                    ? invoiceNumber.split('|').map(s => s.trim()).filter(Boolean)
+                    : []
+
+                if (!invoiceNumber) {
+                    return <span className="text-muted-foreground text-xs italic">-</span>
+                }
+
+                return (
+                    <div
+                        className="flex flex-col gap-1 min-w-[120px]"
+                        title={doSap ? `Invoice dari DO SAP: ${doSap}` : undefined}
+                    >
+                        {isPartial && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 w-fit border border-amber-200 dark:border-amber-800">
+                                ▲ PARSIAL
+                            </span>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                            {invoiceList.length > 1 ? (
+                                invoiceList.map((inv) => (
+                                    <span key={inv} className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted border border-border/50">{inv}</span>
+                                ))
+                            ) : (
+                                <span className="font-mono text-sm">{invoiceList[0] || invoiceNumber}</span>
+                            )}
+                        </div>
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "invoiceDate",
@@ -478,7 +512,8 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             const matchesStatus = statusFilter === "all" || (d.doStatus || "Pending") === statusFilter
             const matchesInvoice = invoiceFilter === "all" ||
                 (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
-                (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== ""))
+                (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== "")) ||
+                (invoiceFilter === "partial-invoiced" && d.deliveryType === 'partial' && !!(d.invoiceNumber && d.invoiceNumber.trim() !== ""))
 
             // Date range filtering
             let matchesDateRange = true
@@ -593,7 +628,10 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             if (result.success) {
                 queryClient.invalidateQueries({ queryKey: ["deliveries"] })
                 if (result.updated > 0) {
-                    toast.success(`${result.updated} invoice berhasil diperbarui`, {
+                    const partialInfo = result.partialMatched > 0
+                        ? ` (${result.partialMatched} parsial via DO SAP)`
+                        : ''
+                    toast.success(`${result.updated} invoice berhasil diperbarui${partialInfo}`, {
                         description: result.notFound > 0
                             ? `${result.notFound} DO tidak ada match di Billing (total diperiksa: ${result.total})`
                             : `Semua ${result.total} DO berhasil dicocokkan dari Billing`,
@@ -675,8 +713,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Invoice</SelectItem>
-                            <SelectItem value="uninvoice">Uninvoice</SelectItem>
+                            <SelectItem value="uninvoice">Belum Invoice</SelectItem>
                             <SelectItem value="invoiced">Invoice</SelectItem>
+                            <SelectItem value="partial-invoiced">Partial Invoice</SelectItem>
                         </SelectContent>
                     </Select>
                     <Select value={datePreset} onValueChange={handleDatePresetChange}>

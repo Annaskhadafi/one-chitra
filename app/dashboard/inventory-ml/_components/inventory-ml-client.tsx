@@ -270,8 +270,15 @@ function ReplenishmentTab() {
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
                                             <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <span className="flex items-center gap-1.5 font-bold"><Box className="w-4 h-4" /> {item.productCode}</span>
-                                                <span className="text-primary font-bold">{item.recommendedStock} Pcs</span>
+                                                <span className="flex flex-col items-start gap-0.5 text-left">
+                                                    <span className="flex items-center gap-1.5 font-bold">
+                                                        <Box className="w-4 h-4" /> {item.productCode}
+                                                    </span>
+                                                    {item.productName && (
+                                                        <span className="text-xs font-normal text-muted-foreground">{item.productName}</span>
+                                                    )}
+                                                </span>
+                                                <span className="text-primary font-bold shrink-0 ml-2">{item.recommendedStock} Pcs</span>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent>
@@ -317,7 +324,7 @@ function ReplenishmentTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-lg">
                             <Box className="w-5 h-5 text-primary" />
@@ -480,8 +487,13 @@ function SafetyStockTab() {
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
                                             <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <span className="font-bold">{item.productCode}</span>
-                                                <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded text-xs font-bold">
+                                                <span className="flex flex-col items-start gap-0.5 text-left">
+                                                    <span className="font-bold">{item.productCode}</span>
+                                                    {item.productName && (
+                                                        <span className="text-xs font-normal text-muted-foreground">{item.productName}</span>
+                                                    )}
+                                                </span>
+                                                <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded text-xs font-bold shrink-0 ml-2">
                                                     {item.recommendedStock} Pcs
                                                 </span>
                                             </div>
@@ -529,7 +541,7 @@ function SafetyStockTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-lg">
                             <ShieldCheck className="w-5 h-5 text-indigo-500" />
@@ -564,6 +576,7 @@ function CustomerRecommendationTab() {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -742,7 +755,7 @@ function CustomerRecommendationTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-lg">
                             <Target className="w-5 h-5 text-rose-500" />

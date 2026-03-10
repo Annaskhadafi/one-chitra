@@ -235,22 +235,111 @@ export async function getInvoiceInfoByPoNo(
     }
 }
 
+/**
+ * Mencari invoice dari sales_revenue_sap berdasarkan Nomor DO SAP.
+ * Untuk Delivery Parsial: satu DO bisa menghasilkan beberapa billing number.
+ * Fallback: jika doSap tidak ketemu, cari berdasarkan PO + proximity tanggal (±windowDays hari).
+ */
+export async function getInvoiceInfoByDoSap(
+    doSap: string,
+    customerPo?: string | null,
+    deliveryDate?: Date | null,
+    windowDays: number = 7
+): Promise<{
+    success: boolean;
+    data?: { noInvSap: string | null; dateInvoice: Date | null; isMulti: boolean };
+    error?: string;
+}> {
+    try {
+        if (!doSap) return { success: false, error: "DO SAP is required" };
+
+        // Priority 1: Cari berdasarkan deliveryNo = doSap
+        const doSapQuery = sql`
+            SELECT 
+                STRING_AGG(DISTINCT ${historyOrders.billingNo}, '|' ORDER BY ${historyOrders.billingNo}) as "noInvSap",
+                MAX(${historyOrders.billingDate}) as "dateInvoice",
+                COUNT(DISTINCT ${historyOrders.billingNo}) as "invoiceCount"
+            FROM ${historyOrders}
+            WHERE ${historyOrders.deliveryNo} = ${doSap}
+            AND ${historyOrders.billingDate} IS NOT NULL
+            AND ${historyOrders.billingNo} IS NOT NULL AND ${historyOrders.billingNo} != ''
+            AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
+        `;
+
+        const doSapResult: any = await db.execute(doSapQuery);
+        const doSapRow = doSapResult.rows?.[0] || doSapResult[0];
+
+        if (doSapRow?.noInvSap) {
+            const invoiceCount = parseInt(doSapRow.invoiceCount || '1', 10);
+            return {
+                success: true,
+                data: {
+                    noInvSap: doSapRow.noInvSap as string,
+                    dateInvoice: doSapRow.dateInvoice ? new Date(doSapRow.dateInvoice) : null,
+                    isMulti: invoiceCount > 1,
+                }
+            };
+        }
+
+        // Priority 2: Fallback — cari berdasarkan PO + proximity tanggal (±windowDays hari)
+        if (customerPo && deliveryDate) {
+            const proximityQuery = sql`
+                SELECT 
+                    STRING_AGG(DISTINCT ${historyOrders.billingNo}, '|' ORDER BY ${historyOrders.billingNo}) as "noInvSap",
+                    MAX(${historyOrders.billingDate}) as "dateInvoice",
+                    COUNT(DISTINCT ${historyOrders.billingNo}) as "invoiceCount"
+                FROM ${historyOrders}
+                WHERE ${historyOrders.poNo} = ${customerPo}
+                AND ${historyOrders.billingDate} IS NOT NULL
+                AND ${historyOrders.billingNo} IS NOT NULL AND ${historyOrders.billingNo} != ''
+                AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
+                AND ABS(${historyOrders.billingDate}::date - ${deliveryDate.toISOString().slice(0, 10)}::date) <= ${windowDays}
+            `;
+
+            const proximityResult: any = await db.execute(proximityQuery);
+            const proximityRow = proximityResult.rows?.[0] || proximityResult[0];
+
+            if (proximityRow?.noInvSap) {
+                const invoiceCount = parseInt(proximityRow.invoiceCount || '1', 10);
+                return {
+                    success: true,
+                    data: {
+                        noInvSap: proximityRow.noInvSap as string,
+                        dateInvoice: proximityRow.dateInvoice ? new Date(proximityRow.dateInvoice) : null,
+                        isMulti: invoiceCount > 1,
+                    }
+                };
+            }
+        }
+
+        // No match found
+        return { success: true, data: { noInvSap: null, dateInvoice: null, isMulti: false } };
+    } catch (error) {
+        console.error("Error fetching invoice info by DO SAP:", error);
+        return { success: false, error: "Failed to fetch invoice info by DO SAP" };
+    }
+}
+
 export async function batchSyncInvoiceFromBilling(): Promise<{
     success: boolean;
     updated: number;
     notFound: number;
     total: number;
+    partialMatched: number;
     error?: string;
 }> {
     try {
         await checkPermission('deliveries', 'edit');
 
-        // Get all deliveries with a customerPo AND customer name via joins
+        // Get all deliveries with customerPo, customer name, deliveryType, doSap, deliveryDate
         const deliveriesWithPo = await db
             .select({
                 id: deliveries.id,
                 customerPo: salesOrders.customerPo,
                 customerName: customers.name,
+                deliveryType: deliveries.deliveryType,
+                doSap: deliveries.doSap,
+                deliveryDate: deliveries.deliveryDate,
             })
             .from(deliveries)
             .innerJoin(salesOrders, eq(deliveries.salesOrderId, salesOrders.id))
@@ -259,38 +348,62 @@ export async function batchSyncInvoiceFromBilling(): Promise<{
 
         let updated = 0;
         let notFound = 0;
+        let partialMatched = 0;
         const total = deliveriesWithPo.length;
 
         for (const delivery of deliveriesWithPo) {
             if (!delivery.customerPo) { notFound++; continue; }
 
-            // Pass customerName for stricter matching (PO + Customer)
-            const invoiceInfo = await getInvoiceInfoByPoNo(
-                delivery.customerPo,
-                delivery.customerName ?? undefined
-            );
-            if (!invoiceInfo.success || !invoiceInfo.data?.noInvSap) {
+            let invoiceData: { noInvSap: string | null; dateInvoice: Date | null } | undefined;
+            let isPartialPath = false;
+
+            // Jalur khusus: Delivery Parsial dengan DO SAP → cari berdasarkan deliveryNo
+            if (delivery.deliveryType === 'partial' && delivery.doSap) {
+                const partialInfo = await getInvoiceInfoByDoSap(
+                    delivery.doSap,
+                    delivery.customerPo,
+                    delivery.deliveryDate ? new Date(delivery.deliveryDate) : null
+                );
+                if (partialInfo.success && partialInfo.data?.noInvSap) {
+                    invoiceData = partialInfo.data;
+                    isPartialPath = true;
+                }
+            }
+
+            // Fallback / jalur normal: cari berdasarkan PO Number
+            if (!invoiceData) {
+                const poInfo = await getInvoiceInfoByPoNo(
+                    delivery.customerPo,
+                    delivery.customerName ?? undefined
+                );
+                if (poInfo.success && poInfo.data?.noInvSap) {
+                    invoiceData = poInfo.data;
+                }
+            }
+
+            if (!invoiceData?.noInvSap) {
                 notFound++;
                 continue;
             }
 
-            // Directly update the delivery record
+            // Update delivery record
             await db.update(deliveries)
                 .set({
-                    invoiceNumber: invoiceInfo.data.noInvSap,
-                    invoiceDate: invoiceInfo.data.dateInvoice,
+                    invoiceNumber: invoiceData.noInvSap,
+                    invoiceDate: invoiceData.dateInvoice,
                     updatedAt: new Date(),
                 })
                 .where(eq(deliveries.id, delivery.id));
 
+            if (isPartialPath) partialMatched++;
             updated++;
         }
 
         revalidatePath("/dashboard/do-monitoring");
-        return { success: true, updated, notFound, total };
+        return { success: true, updated, notFound, total, partialMatched };
     } catch (error) {
         console.error("Error batch syncing invoice from billing:", error);
-        return { success: false, updated: 0, notFound: 0, total: 0, error: "Gagal sync invoice dari billing" };
+        return { success: false, updated: 0, notFound: 0, total: 0, partialMatched: 0, error: "Gagal sync invoice dari billing" };
     }
 }
 
