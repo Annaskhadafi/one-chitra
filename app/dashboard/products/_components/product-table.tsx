@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory, getProducts, syncProductCostSapFromStockSapNewPC } from "@/app/actions/product"
+import { deleteProduct, bulkDeleteProducts, bulkUpdateProductCategory, getProducts, syncProductCostSapFromStockSapNew } from "@/app/actions/product"
 import { getSetting, updateSetting, getRealtimeExchangeRate } from "@/app/actions/settings"
 import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
@@ -163,7 +163,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
     })
 
     const syncCostSapMutation = useMutation({
-        mutationFn: syncProductCostSapFromStockSapNewPC,
+        mutationFn: syncProductCostSapFromStockSapNew,
         onSuccess: (result) => {
             if (!result.success) {
                 toast.error(result.error)
@@ -545,7 +545,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                         disabled={syncCostSapMutation.isPending}
                     >
                         <RefreshCcw className={`mr-2 h-4 w-4 ${syncCostSapMutation.isPending ? "animate-spin" : ""}`} />
-                        {syncCostSapMutation.isPending ? "Syncing Cost SAP..." : "Sync Cost SAP (PC)"}
+                        {syncCostSapMutation.isPending ? "Syncing Cost SAP..." : "Sync Cost SAP"}
                     </Button>
                     {canCreate && (
                         <>
@@ -634,7 +634,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                 open={syncInfoOpen}
                 onOpenChange={setSyncInfoOpen}
                 title="Data Sudah Sama dengan SAP"
-                description="Tidak ada perubahan Cost SAP untuk item UoM PC karena data produk saat ini sudah sinkron."
+                description="Tidak ada perubahan Cost SAP karena data produk saat ini sudah sinkron dengan Stock SAP New."
             />
         </div>
     )

@@ -118,31 +118,71 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
     try {
         if (data.length === 0) return { success: true }
 
-        await db.insert(products)
-            .values(data)
-            .onConflictDoUpdate({
-                target: [products.materialNumber, products.sloc],
-                set: {
-                    category: sql`excluded.category`,
-                    oldMaterialNo: sql`excluded.old_material_no`,
-                    materialDescription: sql`excluded.material_description`,
-                    brand: sql`excluded.brand`,
-                    costSap: sql`excluded.cost_sap`,
-                    plant: sql`excluded.plant`,
-                    slocDescription: sql`excluded.sloc_description`,
-                    typeWarehouse: sql`excluded.type_warehouse`,
-                    imageUrl: sql`excluded.image_url`,
-                    updatedAt: new Date()
-                }
-            })
+        console.log(`[importProducts] Received ${data.length} products to import`)
 
+        // De-duplicate data in the batch to prevent "duplicate key" error within the same INSERT statement
+        const seen = new Set<string>()
+        const uniqueData: (typeof products.$inferInsert)[] = []
+
+        for (const item of data) {
+            // Normalize data: Trim and UpperCase to match database consistency rules
+            const matNum = (item.materialNumber || "").trim().toUpperCase()
+            const sloc = (item.sloc || "").trim().toUpperCase()
+            const key = `${matNum}|${sloc}`
+
+            if (!seen.has(key)) {
+                seen.add(key)
+                uniqueData.push({
+                    ...item,
+                    materialNumber: matNum,
+                    sloc: sloc,
+                    // Also normalize other fields just in case
+                    category: (item.category || "TYRE").toUpperCase(),
+                    plant: item.plant?.trim().toUpperCase(),
+                })
+            }
+        }
+
+        if (uniqueData.length !== data.length) {
+            console.log(`[importProducts] Removed ${data.length - uniqueData.length} duplicates from the batch`)
+        }
+
+        console.log(`[importProducts] Starting import of ${uniqueData.length} unique products`)
+
+        // Insert in chunks
+        const chunkSize = 50
+        for (let i = 0; i < uniqueData.length; i += chunkSize) {
+            const chunk = uniqueData.slice(i, i + chunkSize)
+            console.log(`[importProducts] Inserting chunk ${Math.floor(i / chunkSize) + 1}, size: ${chunk.length}`)
+            await db.insert(products)
+                .values(chunk)
+                .onConflictDoUpdate({
+                    target: [products.materialNumber, products.sloc],
+                    set: {
+                        category: sql`excluded.category`,
+                        oldMaterialNo: sql`excluded.old_material_no`,
+                        materialDescription: sql`excluded.material_description`,
+                        brand: sql`excluded.brand`,
+                        costSap: sql`excluded.cost_sap`,
+                        plant: sql`excluded.plant`,
+                        slocDescription: sql`excluded.sloc_description`,
+                        typeWarehouse: sql`excluded.type_warehouse`,
+                        imageUrl: sql`excluded.image_url`,
+                        updatedAt: new Date()
+                    }
+                })
+        }
+
+        console.log(`[importProducts] Import complete!`)
         revalidatePath("/dashboard/products")
         return { success: true }
     } catch (_error) {
         console.error("Import error:", _error)
-        return { success: false, error: "Failed to import products" }
+        const msg = (_error as { message?: string })?.message || "Unknown error"
+        return { success: false, error: `Failed to import products: ${msg}` }
     }
 }
+
 
 export async function getProductByMaterialNumber(materialNumber: string) {
     return await db.query.products.findFirst({
@@ -219,7 +259,7 @@ const formatCost = (value: number) => {
     return value.toFixed(6).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
 }
 
-export async function syncProductCostSapFromStockSapNewPC() {
+export async function syncProductCostSapFromStockSapNew() {
     try {
         const result = await db.execute(sql`
             SELECT DISTINCT ON (material_no, stor_loc)
@@ -227,9 +267,9 @@ export async function syncProductCostSapFromStockSapNewPC() {
                 material_no,
                 stor_loc,
                 total_stock,
-                value_stock
+                value_stock,
+                base_unit_of_measure
             FROM public.zmc9_stock_sap
-            WHERE upper(coalesce(base_unit_of_measure, '')) = 'PC'
             ORDER BY material_no, stor_loc, extracted_at DESC NULLS LAST, stock_id DESC
         `)
 
@@ -299,7 +339,7 @@ export async function syncProductCostSapFromStockSapNewPC() {
             success: true as const,
             updatedCount,
             skippedCount,
-            message: `Synced ${updatedCount} product costs from Stock SAP New (UoM PC)`
+            message: `Synced ${updatedCount} product costs from Stock SAP New`
         }
     } catch (error) {
         console.error("Sync Product Cost SAP from Stock SAP New failed:", error)

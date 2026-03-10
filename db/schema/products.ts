@@ -16,4 +16,6 @@ export const products = pgTable("products", {
     isConsignment: boolean("is_consignment").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+    unqMaterialSloc: unique("unq_material_sloc").on(table.materialNumber, table.sloc),
+}));

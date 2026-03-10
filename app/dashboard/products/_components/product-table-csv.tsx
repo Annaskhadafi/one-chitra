@@ -148,17 +148,23 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
 
         setIsUploading(true)
         try {
+            console.log('[Import] Starting import of', preview.length, 'products')
+            console.log('[Import] Sample data:', preview.slice(0, 2))
             const result = await importProducts(preview)
+            console.log('[Import] Result:', result)
             if (result.success) {
                 toast.success(`Successfully imported ${preview.length} products`)
                 setIsOpen(false)
                 reset()
                 onSuccess?.()
             } else {
-                toast.error(result.error)
+                console.error('[Import] Error from server:', result.error)
+                toast.error(result.error || 'Gagal mengimpor produk')
             }
-        } catch (_error) {
-            toast.error("Failed to import products")
+        } catch (err) {
+            console.error('[Import] Exception caught:', err)
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Gagal mengimpor produk: ${msg}`)
         } finally {
             setIsUploading(false)
         }
