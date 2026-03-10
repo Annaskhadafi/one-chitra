@@ -93,7 +93,8 @@ export const deliverySchema = z.object({
     shippingCost: z.number().min(0).default(0),
     // Internal Cost Breakdown
     tripDestination: z.string().optional().nullable(),
-    costGasoline: z.number().min(0).default(0),
+    costGasolineDexlite: z.number().min(0).default(0),
+    costGasolineBio: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),
@@ -157,7 +158,8 @@ export const fleetTripSchema = z.object({
     notes: z.string().optional().nullable(),
     // Costs
     tripDestination: z.string().optional().nullable(),
-    costGasoline: z.number().min(0).default(0),
+    costGasolineDexlite: z.number().min(0).default(0),
+    costGasolineBio: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),

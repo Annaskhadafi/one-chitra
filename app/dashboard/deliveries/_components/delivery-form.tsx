@@ -121,7 +121,8 @@ interface DeliveryFormProps {
         notes: string | null
         // Internal Cost Breakdown
         tripDestination?: string | null
-        costGasoline: number | string | null
+        costGasolineDexlite: number | string | null
+        costGasolineBio: number | string | null
         costToll: number | string | null
         costParking: number | string | null
         costMeals: number | string | null
@@ -224,7 +225,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Internal Cost Breakdown State
     const [tripDestination, setTripDestination] = useState(initialData?.tripDestination || "")
-    const [costGasoline, setCostGasoline] = useState(initialData?.costGasoline ? String(initialData.costGasoline) : "0")
+    const [costGasolineDexlite, setCostGasolineDexlite] = useState(initialData?.costGasolineDexlite ? String(initialData.costGasolineDexlite) : "0")
+    const [costGasolineBio, setCostGasolineBio] = useState(initialData?.costGasolineBio ? String(initialData.costGasolineBio) : "0")
     const [costToll, setCostToll] = useState(initialData?.costToll ? String(initialData.costToll) : "0")
     const [costParking, setCostParking] = useState(initialData?.costParking ? String(initialData.costParking) : "0")
     const [costMeals, setCostMeals] = useState(initialData?.costMeals ? String(initialData.costMeals) : "0")
@@ -244,7 +246,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Calculate Total Internal Cost
     const totalInternalCost = useMemo(() => {
-        const gasoline = Number(costGasoline) || 0
+        const dexlite = Number(costGasolineDexlite) || 0
+        const bio = Number(costGasolineBio) || 0
         const toll = Number(costToll) || 0
         const parking = Number(costParking) || 0
         const meals = Number(costMeals) || 0
@@ -255,8 +258,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         const portal = Number(costPortal) || 0
         const washing = Number(costWashing) || 0
         const escort = Number(costEscort) || 0
-        return gasoline + toll + parking + meals + maintenance + others + rapidTest + ferry + portal + washing + escort
-    }, [costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort])
+        return dexlite + bio + toll + parking + meals + maintenance + others + rapidTest + ferry + portal + washing + escort
+    }, [costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort])
 
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
@@ -498,7 +501,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             shippingCost: isExternal ? Number(shippingCost) : totalInternalCost,
             // Internal Cost Breakdown
             tripDestination: !isExternal ? (tripDestination || undefined) : undefined,
-            costGasoline: !isExternal ? Number(costGasoline) : 0,
+            costGasolineDexlite: !isExternal ? Number(costGasolineDexlite) : 0,
+            costGasolineBio: !isExternal ? Number(costGasolineBio) : 0,
             costToll: !isExternal ? Number(costToll) : 0,
             costParking: !isExternal ? Number(costParking) : 0,
             costMeals: !isExternal ? Number(costMeals) : 0,
@@ -547,7 +551,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -1523,12 +1527,22 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                         </Label>
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-xs">Gasoline</Label>
+                                                <Label className="text-xs">Gasoline (Dexlite)</Label>
                                                 <Input
                                                     type="number"
                                                     min={0}
-                                                    value={costGasoline}
-                                                    onChange={e => setCostGasoline(e.target.value)}
+                                                    value={costGasolineDexlite}
+                                                    onChange={e => setCostGasolineDexlite(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Gasoline (Bio Solar)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costGasolineBio}
+                                                    onChange={e => setCostGasolineBio(e.target.value)}
                                                     className="h-8 font-mono text-right"
                                                 />
                                             </div>

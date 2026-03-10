@@ -46,7 +46,8 @@ interface LogisticsCost {
     vendorName: string | null
     isExternal: boolean | null
     shippingCost: string | null
-    costGasoline: string | null
+    costGasolineDexlite: string | null
+    costGasolineBio: string | null
     costToll: string | null
     costParking: string | null
     costMeals: string | null
@@ -142,9 +143,14 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 cell: ({ row }) => formatCurrency(Number(row.original.shippingCost || 0)),
             },
             {
-                accessorKey: "costGasoline",
-                header: "Gas",
-                cell: ({ row }) => formatCurrency(Number(row.original.costGasoline || 0)),
+                accessorKey: "costGasolineDexlite",
+                header: "BBM (Dexlite)",
+                cell: ({ row }) => formatCurrency(Number(row.original.costGasolineDexlite || 0)),
+            },
+            {
+                accessorKey: "costGasolineBio",
+                header: "BBM (Bio Solar)",
+                cell: ({ row }) => formatCurrency(Number(row.original.costGasolineBio || 0)),
             },
             {
                 accessorKey: "costToll",
@@ -201,7 +207,8 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 header: "Total Internal",
                 cell: ({ row }) => {
                     const total =
-                        Number(row.original.costGasoline || 0) +
+                        Number(row.original.costGasolineDexlite || 0) +
+                        Number(row.original.costGasolineBio || 0) +
                         Number(row.original.costToll || 0) +
                         Number(row.original.costParking || 0) +
                         Number(row.original.costMeals || 0) +
@@ -246,7 +253,8 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
     const totalShipping = useMemo(() => data.reduce((acc, curr) => acc + Number(curr.shippingCost || 0), 0), [data])
     const totalInternal = useMemo(() => data.reduce((acc, curr) => {
         return acc +
-            Number(curr.costGasoline || 0) +
+            Number(curr.costGasolineDexlite || 0) +
+            Number(curr.costGasolineBio || 0) +
             Number(curr.costToll || 0) +
             Number(curr.costParking || 0) +
             Number(curr.costMeals || 0) +
@@ -260,11 +268,12 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
     }, 0), [data])
 
     const exportToCSV = () => {
-        const headers = ["Delivery #", "Invoice #", "Date", "Driver/Vendor", "Ext Cost", "Gas", "Toll", "Parking", "Meals", "Maint", "Others", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Total Internal"]
+        const headers = ["Delivery #", "Invoice #", "Date", "Driver/Vendor", "Ext Cost", "BBM (Dexlite)", "BBM (Bio Solar)", "Toll", "Parking", "Meals", "Maint", "Others", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Total Internal"]
         const csvRows = data.map(row => {
             const date = row.deliveryDate || row.scheduledDate
             const total =
-                Number(row.costGasoline || 0) +
+                Number(row.costGasolineDexlite || 0) +
+                Number(row.costGasolineBio || 0) +
                 Number(row.costToll || 0) +
                 Number(row.costParking || 0) +
                 Number(row.costMeals || 0) +
@@ -282,7 +291,8 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                 date ? format(new Date(date), "yyyy-MM-dd") : "",
                 row.isExternal ? row.vendorName : row.driverName || "",
                 row.shippingCost || 0,
-                row.costGasoline || 0,
+                row.costGasolineDexlite || 0,
+                row.costGasolineBio || 0,
                 row.costToll || 0,
                 row.costParking || 0,
                 row.costMeals || 0,

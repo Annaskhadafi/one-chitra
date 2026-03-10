@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
@@ -324,7 +324,8 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
                     // Internal Cost Breakdown
                     tripDestination: data.tripDestination || null,
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    costGasolineDexlite: data.costGasolineDexlite ? String(data.costGasolineDexlite) : "0",
+                    costGasolineBio: data.costGasolineBio ? String(data.costGasolineBio) : "0",
                     costToll: data.costToll ? String(data.costToll) : "0",
                     costParking: data.costParking ? String(data.costParking) : "0",
                     costMeals: data.costMeals ? String(data.costMeals) : "0",
@@ -563,7 +564,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
                     // Internal Cost Breakdown
                     tripDestination: data.tripDestination || null,
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    costGasolineDexlite: data.costGasolineDexlite ? String(data.costGasolineDexlite) : "0",
+                    costGasolineBio: data.costGasolineBio ? String(data.costGasolineBio) : "0",
                     costToll: data.costToll ? String(data.costToll) : "0",
                     costParking: data.costParking ? String(data.costParking) : "0",
                     costMeals: data.costMeals ? String(data.costMeals) : "0",
@@ -1125,7 +1127,8 @@ export async function getLogisticsCosts() {
             vendorName: deliveries.vendorName,
             isExternal: deliveries.isExternal,
             shippingCost: deliveries.shippingCost,
-            costGasoline: deliveries.costGasoline,
+            costGasolineDexlite: deliveries.costGasolineDexlite,
+            costGasolineBio: deliveries.costGasolineBio,
             costToll: deliveries.costToll,
             costParking: deliveries.costParking,
             costMeals: deliveries.costMeals,
@@ -1159,7 +1162,8 @@ export async function clearLogisticsCosts() {
         await db.update(deliveries)
             .set({
                 shippingCost: "0",
-                costGasoline: "0",
+                costGasolineDexlite: "0",
+                costGasolineBio: "0",
                 costToll: "0",
                 costParking: "0",
                 costMeals: "0",

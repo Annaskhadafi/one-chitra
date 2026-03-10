@@ -90,7 +90,8 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
             date: new Date(),
             status: "scheduled",
             notes: "",
-            costGasoline: 0,
+            costGasolineDexlite: 0,
+            costGasolineBio: 0,
             costToll: 0,
             costParking: 0,
             costMeals: 0,
@@ -362,10 +363,28 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField
                                         control={form.control}
-                                        name="costGasoline"
+                                        name="costGasolineDexlite"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Gasoline</FormLabel>
+                                                <FormLabel>Gasoline (Dexlite)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costGasolineBio"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Gasoline (Bio Solar)</FormLabel>
                                                 <FormControl>
                                                     <Input
                                                         type="number"

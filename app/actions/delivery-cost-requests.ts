@@ -9,7 +9,8 @@ export type DeliveryCostItem = {
     noPol: string;
     driverName: string;
     tripDestination: string;
-    fuelCost: number;
+    fuelCostDexlite: number;
+    fuelCostBio: number;
     mealAllowance: number;
     medicalTest: number;
     tollRoad: number;
@@ -44,7 +45,8 @@ export type UnsettledDeliveryCost = {
     noPol: string | null;
     driverName: string | null;
     tripDestination: string | null;
-    costGasoline: string | null;
+    costGasolineDexlite: string | null;
+    costGasolineBio: string | null;
     costToll: string | null;
     costMeals: string | null;
     costRapidTest: string | null;
@@ -62,7 +64,8 @@ export type SavedDeliveryCostItem = {
     noPol: string | null;
     driverName: string | null;
     tripDestination: string | null;
-    fuelCost: string | null;
+    fuelCostDexlite: string | null;
+    fuelCostBio: string | null;
     mealAllowance: string | null;
     medicalTest: string | null;
     tollRoad: string | null;
@@ -101,7 +104,8 @@ export async function getSavedDeliveryCostRequests(filters?: { from?: Date; to?:
                 noPol: item.noPol,
                 driverName: item.driverName,
                 tripDestination: item.tripDestination,
-                fuelCost: item.fuelCost,
+                fuelCostDexlite: item.fuelCostDexlite,
+                fuelCostBio: item.fuelCostBio,
                 mealAllowance: item.mealAllowance,
                 medicalTest: item.medicalTest,
                 tollRoad: item.tollRoad,
@@ -157,7 +161,8 @@ export async function saveDeliveryCostRequest(data: {
                     noPol: item.noPol,
                     driverName: item.driverName,
                     tripDestination: item.tripDestination,
-                    fuelCost: String(item.fuelCost),
+                    fuelCostDexlite: String(item.fuelCostDexlite),
+                    fuelCostBio: String(item.fuelCostBio),
                     mealAllowance: String(item.mealAllowance),
                     medicalTest: String(item.medicalTest),
                     tollRoad: String(item.tollRoad),
@@ -221,7 +226,8 @@ export async function updateDeliveryCostRequest(id: number, data: {
                     noPol: item.noPol,
                     driverName: item.driverName,
                     tripDestination: item.tripDestination,
-                    fuelCost: String(item.fuelCost),
+                    fuelCostDexlite: String(item.fuelCostDexlite),
+                    fuelCostBio: String(item.fuelCostBio),
                     mealAllowance: String(item.mealAllowance),
                     medicalTest: String(item.medicalTest),
                     tollRoad: String(item.tollRoad),
@@ -346,7 +352,8 @@ export async function getUnsettledDeliveryCosts(): Promise<UnsettledDeliveryCost
             noPol: deliveries.vehicleNumber,
             driverName: deliveries.driverName,
             tripDestination: deliveries.tripDestination,
-            costGasoline: deliveries.costGasoline,
+            costGasolineDexlite: deliveries.costGasolineDexlite,
+            costGasolineBio: deliveries.costGasolineBio,
             costToll: deliveries.costToll,
             costMeals: deliveries.costMeals,
             costRapidTest: deliveries.costRapidTest,

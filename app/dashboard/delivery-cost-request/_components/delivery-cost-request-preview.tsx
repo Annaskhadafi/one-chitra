@@ -78,7 +78,7 @@ export function DeliveryCostRequestPreview({ open, onOpenChange, data }: Props) 
         .pdf-wrapper .col-nopol { width: 8%; }
         .pdf-wrapper .col-driver { width: 10%; }
         .pdf-wrapper .col-dest { width: 15%; }
-        .pdf-wrapper .col-amount { width: 7.1%; } /* 9 columns of 7.1% = 63.9%. Total = 99.9% */
+        .pdf-wrapper .col-amount { width: 6.3%; }
         
         @media print {
             .no-print { display: none !important; }
@@ -192,7 +192,8 @@ export function DeliveryCostRequestPreview({ open, onOpenChange, data }: Props) 
                                             <th rowSpan={1} className="col-nopol">NO POL</th>
                                             <th rowSpan={1} className="col-driver">NAMA DRIVER</th>
                                             <th rowSpan={1} className="col-dest">TRIP DESTINATION</th>
-                                            <th className="col-amount text-center">BIAYA SOLAR</th>
+                                            <th className="col-amount text-center">BIAYA DEXLITE</th>
+                                            <th className="col-amount text-center">BIAYA BIO SOLAR</th>
                                             <th className="col-amount text-center">BIAYA MAKAN</th>
                                             <th className="col-amount text-center">Rapit Tes/Tes kes</th>
                                             <th className="col-amount text-center">Jalan Tol</th>
@@ -212,7 +213,12 @@ export function DeliveryCostRequestPreview({ open, onOpenChange, data }: Props) 
                                                 <td>{item.tripDestination}</td>
                                                 <td className="text-right">
                                                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                                        <span>Rp</span> <span>{formatCurrency(item.fuelCost)}</span>
+                                                        <span>Rp</span> <span>{formatCurrency(item.fuelCostDexlite)}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="text-right">
+                                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                        <span>Rp</span> <span>{formatCurrency(item.fuelCostBio)}</span>
                                                     </div>
                                                 </td>
                                                 <td className="text-right">
@@ -261,7 +267,7 @@ export function DeliveryCostRequestPreview({ open, onOpenChange, data }: Props) 
                                         {Array.from({ length: Math.max(0, 5 - data.items.length) }).map((_, i) => (
                                             <tr key={`empty-${i}`} style={{ height: "25px" }}>
                                                 <td className="text-center">{data.items.length + i + 1}</td>
-                                                <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                                                <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
                                                 <td className="text-right">
                                                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                                                         <span>Rp</span> <span>-</span>
@@ -271,7 +277,7 @@ export function DeliveryCostRequestPreview({ open, onOpenChange, data }: Props) 
                                         ))}
                                         {/* Footer Table Totals */}
                                         <tr>
-                                            <td colSpan={12} className="font-bold text-center bg-gray" style={{ fontSize: "7pt" }}>
+                                            <td colSpan={13} className="font-bold text-center bg-gray" style={{ fontSize: "7pt" }}>
                                                 TOTAL REUQEST BIAYA OPERASIONAL TRUCK
                                             </td>
                                             <td className="text-right font-bold bg-gray" style={{ fontSize: "6pt" }}>

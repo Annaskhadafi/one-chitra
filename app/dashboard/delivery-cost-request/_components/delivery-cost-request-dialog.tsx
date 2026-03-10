@@ -39,7 +39,8 @@ const emptyItem: DeliveryCostItem = {
     noPol: "",
     driverName: "",
     tripDestination: "",
-    fuelCost: 0,
+    fuelCostDexlite: 0,
+    fuelCostBio: 0,
     mealAllowance: 0,
     medicalTest: 0,
     tollRoad: 0,
@@ -88,7 +89,8 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                 noPol: i.noPol ?? "",
                 driverName: i.driverName ?? "",
                 tripDestination: i.tripDestination ?? "",
-                fuelCost: Number(i.fuelCost ?? 0),
+                fuelCostDexlite: Number(i.fuelCostDexlite ?? 0),
+                fuelCostBio: Number(i.fuelCostBio ?? 0),
                 mealAllowance: Number(i.mealAllowance ?? 0),
                 medicalTest: Number(i.medicalTest ?? 0),
                 tollRoad: Number(i.tollRoad ?? 0),
@@ -126,7 +128,8 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                 noPol: d.noPol ?? "",
                 driverName: d.driverName ?? "",
                 tripDestination: d.shippingAddress ?? d.tripDestination ?? (d.deliveryNumber ? `DO: ${d.deliveryNumber}` : ""),
-                fuelCost: Number(d.costGasoline ?? 0),
+                fuelCostDexlite: Number(d.costGasolineDexlite ?? 0),
+                fuelCostBio: Number(d.costGasolineBio ?? 0),
                 mealAllowance: Number(d.costMeals ?? 0),
                 medicalTest: Number(d.costRapidTest ?? 0),
                 tollRoad: Number(d.costToll ?? 0),
@@ -137,7 +140,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                 totalCost: 0
             };
             item.totalCost =
-                item.fuelCost + item.mealAllowance + item.medicalTest + item.tollRoad +
+                item.fuelCostDexlite + item.fuelCostBio + item.mealAllowance + item.medicalTest + item.tollRoad +
                 item.ferryCost + item.portalCost + item.washGreaseCost + item.escortCost;
             return item;
         });
@@ -161,10 +164,11 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
 
         // Auto calculate total cost for the row
         if (typeof value === "number" || [
-            "fuelCost", "mealAllowance", "medicalTest", "tollRoad", "ferryCost", "portalCost", "washGreaseCost", "escortCost"
+            "fuelCostDexlite", "fuelCostBio", "mealAllowance", "medicalTest", "tollRoad", "ferryCost", "portalCost", "washGreaseCost", "escortCost"
         ].includes(field)) {
             item.totalCost =
-                Number(item.fuelCost) +
+                Number(item.fuelCostDexlite) +
+                Number(item.fuelCostBio) +
                 Number(item.mealAllowance) +
                 Number(item.medicalTest) +
                 Number(item.tollRoad) +
@@ -317,7 +321,7 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                                                 </div>
                                                                 <div className="text-[10px] text-muted-foreground flex justify-between w-full">
                                                                     <span>{delivery.driverName || "Driver -"}</span>
-                                                                    <span>Rp {Number(delivery.costGasoline || 0).toLocaleString()} (Solar)</span>
+                                                                    <span>Rp {(Number(delivery.costGasolineDexlite || 0) + Number(delivery.costGasolineBio || 0)).toLocaleString()} (BBM)</span>
                                                                 </div>
                                                             </CommandItem>
                                                         ))}
@@ -339,7 +343,8 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                             <TableHead className="min-w-[150px]">NO POL</TableHead>
                                             <TableHead className="min-w-[150px]">NAMA DRIVER</TableHead>
                                             <TableHead className="min-w-[150px]">DESTINATION / TRIP</TableHead>
-                                            <TableHead className="w-[120px]">BIAYA SOLAR</TableHead>
+                                            <TableHead className="w-[120px]">BIAYA DEXLITE</TableHead>
+                                            <TableHead className="w-[120px]">BIAYA BIO SOLAR</TableHead>
                                             <TableHead className="w-[120px]">BIAYA MAKAN</TableHead>
                                             <TableHead className="w-[120px]">RAPIT/TES KES</TableHead>
                                             <TableHead className="w-[120px]">TOL</TableHead>
@@ -382,8 +387,16 @@ export function DeliveryCostRequestDialog({ open, onOpenChange, editingRequest, 
                                                 <TableCell>
                                                     <Input
                                                         type="number"
-                                                        value={item.fuelCost}
-                                                        onChange={e => updateItem(index, "fuelCost", parseFloat(e.target.value) || 0)}
+                                                        value={item.fuelCostDexlite}
+                                                        onChange={e => updateItem(index, "fuelCostDexlite", parseFloat(e.target.value) || 0)}
+                                                        className="h-8 text-xs text-right"
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input
+                                                        type="number"
+                                                        value={item.fuelCostBio}
+                                                        onChange={e => updateItem(index, "fuelCostBio", parseFloat(e.target.value) || 0)}
                                                         className="h-8 text-xs text-right"
                                                     />
                                                 </TableCell>

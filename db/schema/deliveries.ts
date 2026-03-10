@@ -30,7 +30,8 @@ export const deliveries = pgTable("deliveries", {
     shippingCost: decimal("shipping_cost", { precision: 15, scale: 2 }).default("0"),
     // Internal Cost Breakdown
     tripDestination: varchar("trip_destination", { length: 255 }),
-    costGasoline: decimal("cost_gasoline", { precision: 15, scale: 2 }).default("0"),
+    costGasolineDexlite: decimal("cost_gasoline_dexlite", { precision: 15, scale: 2 }).default("0"),
+    costGasolineBio: decimal("cost_gasoline_bio", { precision: 15, scale: 2 }).default("0"),
     costToll: decimal("cost_toll", { precision: 15, scale: 2 }).default("0"),
     costParking: decimal("cost_parking", { precision: 15, scale: 2 }).default("0"),
     costMeals: decimal("cost_meals", { precision: 15, scale: 2 }).default("0"),

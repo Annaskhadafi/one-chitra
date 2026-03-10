@@ -56,7 +56,8 @@ const toDateOnly = (value: string | Date) => {
 }
 
 const sumCostFields = (payload: {
-    costGasoline?: string | number | null
+    costGasolineDexlite?: string | number | null
+    costGasolineBio?: string | number | null
     costToll?: string | number | null
     costParking?: string | number | null
     costMeals?: string | number | null
@@ -68,7 +69,8 @@ const sumCostFields = (payload: {
     costWashing?: string | number | null
     costEscort?: string | number | null
 }) => {
-    return parseDecimal(payload.costGasoline)
+    return parseDecimal(payload.costGasolineDexlite)
+        + parseDecimal(payload.costGasolineBio)
         + parseDecimal(payload.costToll)
         + parseDecimal(payload.costParking)
         + parseDecimal(payload.costMeals)
@@ -97,7 +99,8 @@ async function resolveSettlementContext(input: z.infer<typeof costSettlementSche
             where: eq(fleetTrips.id, input.fleetTripId),
             columns: {
                 id: true,
-                costGasoline: true,
+                costGasolineDexlite: true,
+                costGasolineBio: true,
                 costToll: true,
                 costParking: true,
                 costMeals: true,
@@ -141,7 +144,8 @@ async function resolveSettlementContext(input: z.infer<typeof costSettlementSche
             where: eq(deliveries.id, input.deliveryId),
             columns: {
                 shippingCost: true,
-                costGasoline: true,
+                costGasolineDexlite: true,
+                costGasolineBio: true,
                 costToll: true,
                 costParking: true,
                 costMeals: true,
