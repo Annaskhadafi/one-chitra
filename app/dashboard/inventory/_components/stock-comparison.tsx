@@ -25,6 +25,12 @@ import {
 import {
     ChartContainer,
 } from "@/components/ui/chart"
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion"
 import { useQuery } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -477,162 +483,174 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
     // ─── Render ─────────────────────────────────────────────────────
     return (
         <div className="space-y-6">
-            {/* ── Scorecards ─────────────────────────────────────── */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Compared</CardTitle>
-                        <Box className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.total}</div>
-                        <p className="text-xs text-muted-foreground">Unique material + sloc combinations</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Matched</CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{stats.matched}</div>
-                        <p className="text-xs text-muted-foreground">Items with zero gap</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Items with Gap</CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-orange-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-orange-600">{stats.withGap}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {stats.over} over · {stats.under} under
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Abs. Gap</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalAbsGap.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground">Sum of absolute differences</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* ── Charts ─────────────────────────────────────────── */}
-            <div className="grid gap-6 lg:grid-cols-3">
-                {/* Bar Chart */}
-                <Card className="lg:col-span-2">
-                    <CardHeader className="pb-2">
+            {/* ── Scorecards & Charts in Accordion ───────────────── */}
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="analytics" className="border rounded-xl bg-card shadow-sm px-6">
+                    <AccordionTrigger className="hover:no-underline py-4">
                         <div className="flex items-center gap-2">
-                            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                            <CardTitle className="text-sm font-medium">Top 15 Gap Analysis</CardTitle>
+                            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                            <span className="font-semibold text-base">Ringkasan & Grafik Perbandingan</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500 mr-1" /> Over Stock (Local &gt; SAP)
-                            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 ml-3 mr-1" /> Under Stock (SAP &gt; Local)
-                        </p>
-                    </CardHeader>
-                    <CardContent>
-                        {barChartData.length === 0 ? (
-                            <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
-                                All stocks are matched — no gaps detected!
-                            </div>
-                        ) : (
-                            <ChartContainer config={chartConfig} className="h-[350px] w-full">
-                                <BarChart
-                                    data={barChartData}
-                                    layout="vertical"
-                                    margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                    <XAxis type="number" fontSize={11} />
-                                    <YAxis
-                                        dataKey="name"
-                                        type="category"
-                                        width={100}
-                                        fontSize={10}
-                                        tickLine={false}
-                                    />
-                                    <Tooltip
-                                        content={({ active, payload }) => {
-                                            if (!active || !payload?.length) return null
-                                            const d = payload[0].payload
-                                            return (
-                                                <div className="rounded-lg border bg-background p-3 shadow-md text-xs space-y-1">
-                                                    <p className="font-semibold">{d.fullName}</p>
-                                                    <p className="text-muted-foreground truncate max-w-[200px]">{d.description}</p>
-                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1 border-t">
-                                                        <span className="text-muted-foreground">Stock Lokal:</span>
-                                                        <span className="font-mono text-right">{d.localStock.toLocaleString()}</span>
-                                                        <span className="text-muted-foreground">Stock SAP:</span>
-                                                        <span className="font-mono text-right">{d.sapStock.toLocaleString()}</span>
-                                                        <span className="text-muted-foreground font-medium">Gap:</span>
-                                                        <span className={`font-mono text-right font-bold ${d.gap > 0 ? "text-blue-600" : "text-red-600"}`}>
-                                                            {d.gap > 0 ? "+" : ""}{d.gap.toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            )
-                                        }}
-                                    />
-                                    <Bar dataKey="gap" radius={[0, 4, 4, 0]} />
-                                </BarChart>
-                            </ChartContainer>
-                        )}
-                    </CardContent>
-                </Card>
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-6 space-y-6">
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Compared</CardTitle>
+                                    <Box className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.total}</div>
+                                    <p className="text-xs text-muted-foreground">Unique material + sloc combinations</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Matched</CardTitle>
+                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-green-600">{stats.matched}</div>
+                                    <p className="text-xs text-muted-foreground">Items with zero gap</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Items with Gap</CardTitle>
+                                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-orange-600">{stats.withGap}</div>
+                                    <p className="text-xs text-muted-foreground">
+                                        {stats.over} over · {stats.under} under
+                                    </p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Abs. Gap</CardTitle>
+                                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.totalAbsGap.toLocaleString()}</div>
+                                    <p className="text-xs text-muted-foreground">Sum of absolute differences</p>
+                                </CardContent>
+                            </Card>
+                        </div>
 
-                {/* Pie Chart */}
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium">Gap Distribution</CardTitle>
-                        <p className="text-xs text-muted-foreground">Match vs Over vs Under</p>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[300px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={pieChartData}
-                                        cx="50%"
-                                        cy="45%"
-                                        innerRadius={60}
-                                        outerRadius={90}
-                                        paddingAngle={3}
-                                        dataKey="value"
-                                        label={({ name, percent }) =>
-                                            `${name} ${(percent * 100).toFixed(0)}%`
-                                        }
-                                        labelLine={false}
-                                        fontSize={11}
-                                    >
-                                        {pieChartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(value: number, name: string) => [
-                                            `${value.toLocaleString()} items`,
-                                            name,
-                                        ]}
-                                    />
-                                    <Legend
-                                        verticalAlign="bottom"
-                                        iconType="circle"
-                                        iconSize={8}
-                                        wrapperStyle={{ fontSize: "11px" }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
+                        {/* ── Charts ─────────────────────────────────────────── */}
+                        <div className="grid gap-6 lg:grid-cols-3">
+                            {/* Bar Chart */}
+                            <Card className="lg:col-span-2">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                                        <CardTitle className="text-sm font-medium">Top 15 Gap Analysis</CardTitle>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500 mr-1" /> Over Stock (Local &gt; SAP)
+                                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 ml-3 mr-1" /> Under Stock (SAP &gt; Local)
+                                    </p>
+                                </CardHeader>
+                                <CardContent>
+                                    {barChartData.length === 0 ? (
+                                        <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
+                                            All stocks are matched — no gaps detected!
+                                        </div>
+                                    ) : (
+                                        <ChartContainer config={chartConfig} className="h-[350px] w-full">
+                                            <BarChart
+                                                data={barChartData}
+                                                layout="vertical"
+                                                margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                                <XAxis type="number" fontSize={11} />
+                                                <YAxis
+                                                    dataKey="name"
+                                                    type="category"
+                                                    width={100}
+                                                    fontSize={10}
+                                                    tickLine={false}
+                                                />
+                                                <Tooltip
+                                                    content={({ active, payload }) => {
+                                                        if (!active || !payload?.length) return null
+                                                        const d = payload[0].payload
+                                                        return (
+                                                            <div className="rounded-lg border bg-background p-3 shadow-md text-xs space-y-1">
+                                                                <p className="font-semibold">{d.fullName}</p>
+                                                                <p className="text-muted-foreground truncate max-w-[200px]">{d.description}</p>
+                                                                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1 border-t">
+                                                                    <span className="text-muted-foreground">Stock Lokal:</span>
+                                                                    <span className="font-mono text-right">{d.localStock.toLocaleString()}</span>
+                                                                    <span className="text-muted-foreground">Stock SAP:</span>
+                                                                    <span className="font-mono text-right">{d.sapStock.toLocaleString()}</span>
+                                                                    <span className="text-muted-foreground font-medium">Gap:</span>
+                                                                    <span className={`font-mono text-right font-bold ${d.gap > 0 ? "text-blue-600" : "text-red-600"}`}>
+                                                                        {d.gap > 0 ? "+" : ""}{d.gap.toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    }}
+                                                />
+                                                <Bar dataKey="gap" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ChartContainer>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* Pie Chart */}
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm font-medium">Gap Distribution</CardTitle>
+                                    <p className="text-xs text-muted-foreground">Match vs Over vs Under</p>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="h-[300px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={pieChartData}
+                                                    cx="50%"
+                                                    cy="45%"
+                                                    innerRadius={60}
+                                                    outerRadius={90}
+                                                    paddingAngle={3}
+                                                    dataKey="value"
+                                                    label={({ name, percent }) =>
+                                                        `${name} ${(percent * 100).toFixed(0)}%`
+                                                    }
+                                                    labelLine={false}
+                                                    fontSize={11}
+                                                >
+                                                    {pieChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    formatter={(value: number, name: string) => [
+                                                        `${value.toLocaleString()} items`,
+                                                        name,
+                                                    ]}
+                                                />
+                                                <Legend
+                                                    verticalAlign="bottom"
+                                                    iconType="circle"
+                                                    iconSize={8}
+                                                    wrapperStyle={{ fontSize: "11px" }}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
 
             {/* ── Filters ────────────────────────────────────────── */}
             <div className="flex flex-col gap-4">
