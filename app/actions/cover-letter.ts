@@ -127,7 +127,6 @@ export async function getCoverLetterBillingData(
             isNotNull(historyOrders.poNo),
             ne(historyOrders.poNo, ""),
             isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
             minDateFilter,
             custId ? eq(historyOrders.customer, custId) : undefined
         )
