@@ -154,6 +154,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [invoiceFilter, setInvoiceFilter] = useState("all")
+    const [warehouseFilter, setWarehouseFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
     const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined })
     const [datePreset, setDatePreset] = useState<string>("all")
@@ -172,6 +173,23 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
     const [isSyncingInvoice, setIsSyncingInvoice] = useState(false)
+
+    const uniqueWarehouses = useMemo(() => {
+        if (!data) return []
+        const warehouses = data
+            .map(d => d.warehouse)
+            .filter((w): w is Warehouse => w !== null)
+        
+        const unique = []
+        const map = new Map()
+        for (const item of warehouses) {
+            if (!map.has(item.id)) {
+                map.set(item.id, true)
+                unique.push(item)
+            }
+        }
+        return unique.sort((a, b) => a.name.localeCompare(b.name))
+    }, [data])
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -394,6 +412,18 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             cell: ({ row }) => row.original.invoiceDate ? new Date(row.original.invoiceDate).toLocaleDateString("id-ID") : "-",
         },
         {
+            id: "warehouseName",
+            accessorFn: (row) => row.warehouse?.name,
+            header: "Warehouse",
+            cell: ({ row }) => (
+                <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-xs truncate max-w-[120px]" title={row.original.warehouse?.name || "-"}>
+                        {row.original.warehouse?.name || "-"}
+                    </span>
+                </div>
+            ),
+        },
+        {
             id: "customerName",
             accessorFn: (row) => row.salesOrder?.customer?.name,
             header: "Customer",
@@ -514,6 +544,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
                 (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== "")) ||
                 (invoiceFilter === "partial-invoiced" && d.deliveryType === 'partial' && !!(d.invoiceNumber && d.invoiceNumber.trim() !== ""))
+            const matchesWarehouse = warehouseFilter === "all" || d.warehouse?.id?.toString() === warehouseFilter
 
             // Date range filtering
             let matchesDateRange = true
@@ -540,9 +571,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 }
             }
 
-            return matchesSearch && matchesStatus && matchesInvoice && matchesDateRange
+            return matchesSearch && matchesStatus && matchesInvoice && matchesWarehouse && matchesDateRange
         })
-    }, [data, globalFilter, statusFilter, invoiceFilter, dateRange])
+    }, [data, globalFilter, statusFilter, invoiceFilter, warehouseFilter, dateRange])
 
     const table = useReactTable({
         data: filteredData,
@@ -574,7 +605,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Delivery No", "DO SAP", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Customer", "Remark"]
+        const headers = ["Delivery No", "DO SAP", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Warehouse", "Customer", "Remark"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const d = row.original
             return [
@@ -588,6 +619,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
+                d.warehouse?.name || "",
                 d.salesOrder?.customer?.name || "",
                 d.remark || ""
             ]
@@ -716,6 +748,17 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                             <SelectItem value="uninvoice">Belum Invoice</SelectItem>
                             <SelectItem value="invoiced">Invoice</SelectItem>
                             <SelectItem value="partial-invoiced">Partial Invoice</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                        <SelectTrigger className="w-[170px]">
+                            <SelectValue placeholder="Semua Warehouse" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua Warehouse</SelectItem>
+                            {uniqueWarehouses.map(w => (
+                                <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     <Select value={datePreset} onValueChange={handleDatePresetChange}>
