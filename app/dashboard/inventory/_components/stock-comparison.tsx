@@ -164,17 +164,32 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         },
         {
             accessorKey: "description",
-            header: "Description",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Description
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <span className="text-xs truncate max-w-[200px]" title={row.original.description}>{row.original.description || "—"}</span>,
         },
         {
             accessorKey: "sloc",
-            header: "SLoc",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    SLoc
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <Badge variant="outline" className="text-xs">{row.original.sloc}</Badge>,
         },
         {
             accessorKey: "slocDesc",
-            header: "SLoc Desc",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    SLoc Desc
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <span className="text-xs text-muted-foreground italic truncate max-w-[120px]" title={row.original.slocDesc}>{row.original.slocDesc || "—"}</span>,
         },
         {
@@ -223,7 +238,14 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
         },
         {
             accessorKey: "status",
-            header: "Status",
+            header: ({ column }) => (
+                <div className="text-center">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="h-8">
+                        Status
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
             cell: ({ row }) => {
                 const status = row.original.status
                 return (

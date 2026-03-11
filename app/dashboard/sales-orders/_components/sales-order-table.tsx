@@ -269,13 +269,23 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
         {
             accessorKey: "customerPo",
-            header: "No PO Customer",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    No PO Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.getValue("customerPo") || "-",
         },
         {
             id: "customerName",
             accessorFn: (row) => row.customer?.name,
-            header: "Customer",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <span className="font-medium">{row.original.customer?.name || "-"}</span>,
         },
         {
@@ -298,7 +308,12 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
         {
             accessorKey: "poReceive",
-            header: "PO Receive",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    PO Receive
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.poReceive ? new Date(row.original.poReceive).toLocaleDateString("id-ID", {
                 day: "2-digit",
                 month: "2-digit",
@@ -307,12 +322,22 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
         {
             accessorKey: "categoryPo",
-            header: "Cat. PO",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Cat. PO
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <Badge variant="outline">{row.original.categoryPo || "Normal"}</Badge>,
         },
         {
             accessorKey: "categoryProduct",
-            header: "Category",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Category
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800">
                     {row.original.categoryProduct || "-"}
@@ -321,12 +346,26 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
         {
             id: "itemsCount",
-            header: "Items",
+            accessorFn: (row) => row.items?.length || 0,
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Items
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <Badge variant="outline">{row.original.items.length} items</Badge>,
         },
         {
             id: "grandTotal",
-            header: "Grand Total",
+            accessorFn: (row) => calculateGrandTotal(row),
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8">
+                        Grand Total
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
             cell: ({ row }) => (
                 <span className="font-medium">
                     {formatCurrency(calculateGrandTotal(row.original))}
@@ -335,7 +374,12 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
         {
             accessorKey: "status",
-            header: "Status",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Status
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => {
                 const order = row.original
                 if (!mounted) return <Badge variant={statusVariants[order.status] || "secondary"}>{order.status}</Badge>
@@ -371,14 +415,17 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         {
             id: "createdBy",
             accessorFn: (row) => row.createdByUser?.name,
-            header: "Created By",
-            cell: ({ row }) => row.original.createdByUser ? (
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Created By
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
                 <div className="flex items-center gap-1.5">
                     <User className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm">{row.original.createdByUser.name}</span>
+                    <span className="text-sm">{row.original.createdByUser?.name || "-"}</span>
                 </div>
-            ) : (
-                <span className="text-sm text-muted-foreground">-</span>
             ),
         },
         {

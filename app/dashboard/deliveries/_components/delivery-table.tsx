@@ -351,18 +351,33 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             accessorKey: "doSap",
-            header: "DO SAP",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    DO SAP
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <span className="font-mono text-sm">{row.original.doSap || "-"}</span>,
         },
         {
             id: "customerPo",
-            header: "No. PO Customer",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    No. PO Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             accessorFn: (row) => row.salesOrder?.customerPo,
             cell: ({ row }) => <span className="font-mono text-sm">{row.original.salesOrder?.customerPo || "-"}</span>,
         },
         {
             id: "customer",
-            header: "Customer",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Customer
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             accessorFn: (row) => row.salesOrder?.customer?.name,
             cell: ({ row }) => row.original.salesOrder?.customer?.name || "-",
         },
@@ -382,7 +397,12 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             accessorKey: "deliveryDate",
-            header: "Delivery Date",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Delivery Date
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => {
                 const date = row.original.deliveryDate
                 const id = row.original.id
@@ -433,7 +453,12 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             accessorKey: "status",
-            header: "Status",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Status
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id

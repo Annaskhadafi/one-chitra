@@ -146,12 +146,22 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "product.category",
-            header: "Category",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Category
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.product?.category || "-",
         },
         {
             accessorKey: "product.brand",
-            header: "Brand",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Brand
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.product?.brand || "-",
         },
         {
@@ -170,12 +180,22 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "product.oldMaterialNo",
-            header: "Old Mat. No",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Old Mat. No
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.product?.oldMaterialNo || "-",
         },
         {
             accessorKey: "product.materialDescription",
-            header: "Description",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Description
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <div className="max-w-[200px] truncate" title={row.original.product?.materialDescription || ""}>
                     {row.original.product?.materialDescription}
@@ -184,12 +204,22 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "warehouse.sloc",
-            header: "SLoc",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    SLoc
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.warehouse?.sloc,
         },
         {
             accessorKey: "warehouse.description",
-            header: "Sloc Desc",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Sloc Desc
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <div className="max-w-[150px] truncate" title={row.original.warehouse?.description || ""}>
                     {row.original.warehouse?.description}
@@ -247,7 +277,12 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "warehouse.type",
-            header: "Type Warehouse",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Type Warehouse
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
                     {row.original.warehouse?.type || "N/A"}

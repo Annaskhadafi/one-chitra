@@ -237,7 +237,12 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
             },
             {
                 accessorKey: "plantCode",
-                header: "Plant",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Plant
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => (
                     <div className="flex flex-col">
                         <span>{row.original.plantCode}</span>
@@ -247,35 +252,70 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
             },
             {
                 accessorKey: "materialNo",
-                header: "Material",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Material
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
             },
             {
                 accessorKey: "oldMaterialNo",
-                header: "Old Material",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Old Material
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => <span className="text-muted-foreground">{row.original.oldMaterialNo}</span>,
             },
             {
                 accessorKey: "materialDesc",
-                header: "Description",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Description
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => <span className="text-xs truncate max-w-[220px]" title={row.original.materialDesc}>{row.original.materialDesc}</span>,
             },
             {
                 accessorKey: "storLoc",
-                header: "Storage Loc",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Storage Loc
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => <Badge variant="outline">{formatSloc(row.original.storLoc)}</Badge>,
             },
             {
                 accessorKey: "storLocDesc",
-                header: "Storage Loc Desc",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Storage Loc Desc
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => <span className="text-muted-foreground text-xs italic truncate max-w-[140px]" title={row.original.storLocDesc}>{row.original.storLocDesc}</span>,
             },
             {
                 id: "warehouseType",
-                header: "Type",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Type
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => {
                     const warehouseType = getDerivedWarehouseType(row.original)
                     return <span className="text-xs font-medium">{warehouseType || "-"}</span>
                 },
+                sortingFn: (rowA, rowB) => {
+                    const a = getDerivedWarehouseType(rowA.original)
+                    const b = getDerivedWarehouseType(rowB.original)
+                    return a.localeCompare(b)
+                }
             },
             {
                 accessorKey: "totalStock",
@@ -291,7 +331,12 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
             },
             {
                 accessorKey: "baseUnitOfMeasure",
-                header: "UoM",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        UoM
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => <span className="text-xs">{row.original.baseUnitOfMeasure}</span>,
             },
             {
@@ -308,7 +353,12 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
             },
             {
                 accessorKey: "updatedAt",
-                header: "Updated At",
+                header: ({ column }) => (
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                        Updated At
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                ),
                 cell: ({ row }) => (
                     <span className="text-xs text-muted-foreground">
                         {row.original.updatedAt
