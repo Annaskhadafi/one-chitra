@@ -4,9 +4,9 @@ import { Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
-function calculateGrandTotal(salesOrder: any) {
+function calculateGrandTotal(salesOrder: DeliveryWithRelations['salesOrder']) {
     if (!salesOrder || !salesOrder.items) return 0
-    const subtotal = salesOrder.items.reduce((sum: number, item: any) => {
+    const subtotal = salesOrder.items.reduce((sum, item) => {
         const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
         return sum + lineTotal
     }, 0)

@@ -2,7 +2,6 @@ import { Suspense } from "react"
 import { getBillingRecords } from "@/app/actions/billing"
 import { BillingClient } from "./billing-client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { BillingRecordDisplay } from "@/lib/types"
 import { Loader2 } from "lucide-react"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 

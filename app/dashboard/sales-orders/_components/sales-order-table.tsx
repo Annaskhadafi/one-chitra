@@ -452,7 +452,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 )
             },
         },
-    ], [canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
+    ], [mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
 
     const table = useReactTable({
         data,

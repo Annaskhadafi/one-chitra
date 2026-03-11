@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Plus, Truck } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
-import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export default async function DeliveriesPage() {
