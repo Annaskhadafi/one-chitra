@@ -39,7 +39,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, Upload, ExternalLink, AlertTriangle, XCircle } from "lucide-react"
+import { Search, Package, Plus, Check, Save, FileDown, Trash2, HelpCircle, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse } from "@/lib/types"
@@ -734,13 +734,6 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setProductOpen(true)}
-                            >
-                                <Plus className="h-4 w-4" />
-                            </Button>
                             <QuickAddProductDialog
                                 warehouses={warehouses}
                                 onProductCreated={(product) => {

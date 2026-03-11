@@ -26,6 +26,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
     AlertDialog,
@@ -37,7 +42,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3 } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, FilterX } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -384,7 +389,9 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 const order = row.original
                 if (!mounted) return <Badge variant={statusVariants[order.status] || "secondary"}>{order.status}</Badge>
 
-                return canEdit ? (
+                const isEditableStatus = order.status === "draft" || order.status === "confirmed"
+
+                return (canEdit && isEditableStatus) ? (
                     <Select
                         defaultValue={order.status}
                         onValueChange={(value) => handleUpdateStatus(order.id, value)}
@@ -462,7 +469,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 <FileText className="h-4 w-4" />
                             </Button>
                         )}
-                        {canEdit && (
+                        {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
                             <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
                                     <Pencil className="h-3.5 w-3.5" />
@@ -759,33 +766,99 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             </Accordion>
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search invoice, customer, PO, user..."
-                        className="pl-8"
-                        value={globalFilter ?? ""}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                    />
+            <div className="flex flex-col gap-4">
+                {/* Mobile Filter Dropdown */}
+                <div className="flex sm:hidden items-center justify-between w-full">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between">
+                                <span className="flex items-center gap-2">
+                                    <FilterX className="h-4 w-4" />
+                                    Advanced Filters
+                                </span>
+                                <ChevronDown className="h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-[calc(100vw-2rem)] p-4 space-y-4">
+                            <div className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Search</label>
+                                    <div className="relative w-full">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search invoice, customer, PO, user..."
+                                            className="pl-8 w-full"
+                                            value={globalFilter ?? ""}
+                                            onChange={(e) => setGlobalFilter(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Status</label>
+                                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="All Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Status</SelectItem>
+                                            <SelectItem value="draft">Draft</SelectItem>
+                                            <SelectItem value="confirmed">Confirmed</SelectItem>
+                                            <SelectItem value="completed">Completed</SelectItem>
+                                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full mt-2"
+                                    onClick={() => {
+                                        setStatusFilter("all")
+                                        setGlobalFilter("")
+                                    }}
+                                >
+                                    <FilterX className="mr-2 h-4 w-4" />
+                                    Reset Filter
+                                </Button>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                    <div className="ml-2">
+                        <Button variant="outline" onClick={handleExport} size="icon">
+                            <Download className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={handleExport}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export CSV
-                    </Button>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[160px]">
-                            <SelectValue placeholder="All Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="confirmed">Confirmed</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                    </Select>
+
+                {/* Desktop Filters */}
+                <div className="hidden sm:flex flex-row gap-4 justify-between items-center">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search invoice, customer, PO, user..."
+                            className="pl-8"
+                            value={globalFilter ?? ""}
+                            onChange={(e) => setGlobalFilter(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={handleExport}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export CSV
+                        </Button>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="All Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="draft">Draft</SelectItem>
+                                <SelectItem value="confirmed">Confirmed</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
             </div>
 

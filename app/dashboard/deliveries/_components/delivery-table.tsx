@@ -58,10 +58,10 @@ import Link from "next/link"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend, BarChart as RechartsBarChart } from "recharts"
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
-import { LayoutDashboard, BarChart3 } from "lucide-react"
+import { BarChart3 } from "lucide-react"
 
 import {
     useReactTable,
@@ -1083,11 +1083,99 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                         />
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={handleExport}>
+                        <Button variant="outline" onClick={handleExport} className="shrink-0">
                             <Download className="mr-2 h-4 w-4" />
-                            Export
+                            <span className="hidden sm:inline">Export</span>
                         </Button>
-                        <div className="flex flex-wrap items-center gap-2">
+                        
+                        {/* Mobile Filter Dropdown */}
+                        {mounted && (
+                            <div className="sm:hidden">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon">
+                                            <Search className="h-4 w-4" /> {/* Or use Filter icon */}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="end" className="w-[280px] p-4 space-y-4">
+                                        <div className="font-medium text-sm border-b pb-2 mb-2">Filters</div>
+                                        <div className="flex flex-col gap-3">
+                                            <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Year" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Years</SelectItem>
+                                                    {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+
+                                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Month" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Months</SelectItem>
+                                                    {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                                                        <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+
+                                            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Product Type" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Types</SelectItem>
+                                                    {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+
+                                            <Select
+                                                value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
+                                                onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Status</SelectItem>
+                                                    {Object.entries(statusLabels).map(([value, label]) => (
+                                                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                                    table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
+                                                }}
+                                                className={cn(
+                                                    "flex items-center justify-between px-3 py-2 rounded-md border text-xs font-medium transition-all w-full",
+                                                    (table.getColumn("status")?.getFilterValue() as string) === "partial"
+                                                        ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+                                                        : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span>⚠</span>
+                                                    <span>Partial</span>
+                                                </div>
+                                                <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                                                    {data.filter(d => d.status === "partial").length}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        )}
+
+                        {/* Desktop Filter Row */}
+                        <div className="hidden sm:flex flex-wrap items-center gap-2">
                             {mounted && (
                                 <>
                                     <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -1168,10 +1256,10 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     </div>
                 </div>
 
-                <div className="rounded-md border bg-card relative">
+                <div className="rounded-md bg-card relative">
                     <div
                         ref={parentRef}
-                        className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                        className="h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
                     >
                         <Table>
                             <TableHeader>

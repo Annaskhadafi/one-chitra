@@ -24,6 +24,11 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import {
     Accordion,
     AccordionContent,
     AccordionItem,
@@ -38,8 +43,6 @@ import {
     useReactTable,
     getCoreRowModel,
     getSortedRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
     ColumnDef,
     flexRender,
     SortingState,
@@ -399,7 +402,6 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
-    const filteredRows = table.getFilteredRowModel().rows
 
     const stats = useMemo(() => {
         return {
@@ -481,8 +483,9 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     return (
         <div className="space-y-6">
             <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setPageIndex(0); }} className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <TabsList>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* Filter Tabs - Akan selalu pakai baris baru penuh di mobile */}
+                    <TabsList className="w-full md:w-auto flex justify-start overflow-x-auto">
                         <TabsTrigger value="all">All Stocks</TabsTrigger>
                         <TabsTrigger value="repair-2002">Repair Warehouse (2002)</TabsTrigger>
                         {warehouseTypeOptions
@@ -493,7 +496,9 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                                 </TabsTrigger>
                             ))}
                     </TabsList>
-                    <div className="ml-auto flex items-center gap-4">
+
+                    {/* Desktop Version */}
+                    <div className="hidden md:flex ml-auto items-center gap-4">
                         {updateStatus && (
                             <div className="flex flex-col items-end text-right">
                                 <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
@@ -511,6 +516,38 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                             <RefreshCcw className="mr-2 h-4 w-4" />
                             Refresh DB Data
                         </Button>
+                    </div>
+
+                    {/* Mobile Version via Popover */}
+                    <div className="md:hidden flex justify-end w-full">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="w-full justify-between items-center text-left h-auto py-2">
+                                    <div className="flex flex-col items-start gap-1">
+                                        <span className="text-[10px] text-muted-foreground  uppercase font-semibold">Refresh & Update Status</span>
+                                        {updateStatus && <span className="text-xs font-medium">{updateStatus.dateStr}</span>}
+                                    </div>
+                                    <ChevronDown className="h-4 w-4" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-screen max-w-sm p-4 space-y-4">
+                                {updateStatus && (
+                                    <div className="flex flex-col space-y-2 border-b pb-4">
+                                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                                            Last Data Update
+                                        </span>
+                                        <span className="text-sm font-semibold">{updateStatus.dateStr}</span>
+                                        <Badge variant={updateStatus.isUpdated ? "secondary" : "destructive"} className={`w-fit ${updateStatus.isUpdated ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : ''}`}>
+                                            {updateStatus.message}
+                                        </Badge>
+                                    </div>
+                                )}
+                                <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full">
+                                    <RefreshCcw className="mr-2 h-4 w-4" />
+                                    Refresh DB Data
+                                </Button>
+                            </PopoverContent>
+                        </Popover>
                     </div>
                 </div>
 
@@ -563,7 +600,66 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                 </Accordion>
 
                 <div className="flex flex-col gap-4">
-                    <div className="flex flex-wrap items-end gap-4">
+                    {/* Mobile Filter Dropdown */}
+                    <div className="flex sm:hidden items-center justify-between w-full">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full justify-between">
+                                    <span className="flex items-center gap-2">
+                                        <FilterX className="h-4 w-4" />
+                                        Advanced Filters
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-[calc(100vw-2rem)] p-4 space-y-4">
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-muted-foreground">Plant Filter</label>
+                                        <Select value={filterPlant} onValueChange={(v) => { setFilterPlant(v); setPageIndex(0); }}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select Plant" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Plants</SelectItem>
+                                                {plantOptions.filter(p => p !== "all").map(plant => (
+                                                    <SelectItem key={plant} value={plant}>{plant}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-muted-foreground">Sloc Description</label>
+                                        <Input
+                                            placeholder="Filter Sloc Desc..."
+                                            value={filterStorLocDesc}
+                                            onChange={(e) => setFilterStorLocDesc(e.target.value)}
+                                            className="w-full"
+                                        />
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full mt-2"
+                                        onClick={() => {
+                                            setFilterPlant("all")
+                                            setFilterStorLocDesc("")
+                                            setSearchTerm("")
+                                            setActiveTab("all")
+                                            setCommittedSearch("")
+                                            setPageIndex(0)
+                                        }}
+                                    >
+                                        <FilterX className="mr-2 h-4 w-4" />
+                                        Reset Filter
+                                    </Button>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+
+                    {/* Desktop Filters */}
+                    <div className="hidden sm:flex flex-wrap items-end gap-4">
                         <div className="w-full sm:w-[220px]">
                             <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Plant Filter</label>
                             <Select value={filterPlant} onValueChange={(v) => { setFilterPlant(v); setPageIndex(0); }}>

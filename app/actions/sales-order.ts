@@ -69,8 +69,8 @@ export async function getSalesOrder(id: number) {
 }
 
 export async function generateInvoiceNumber() {
-    const now = new Date()
-    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+    const date = new Date()
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`
     const prefix = `SO-${dateStr}`
 
     // Count today's orders efficiently using like query
@@ -111,7 +111,6 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             
             if (existing) {
                 // Regenerate if exists
-                const now = new Date()
                 const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
                 invoiceNumber = `${invoiceNumber}-${randomSuffix}`
             }
@@ -315,7 +314,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             // Insert new items
-            if (data.items.length > 0) {
+            if (itemsToInsert.length > 0) {
                 await tx.insert(salesOrderItems)
                     .values(itemsToInsert.map(item => ({
                         salesOrderId: id,

@@ -1,4 +1,4 @@
-import { getDashboardRevenueForecast, getAllSalesRevenueData } from "@/app/actions/dashboard-revenue"
+import { getDashboardRevenueForecast, getAllSalesRevenueData, getDashboardInventory } from "@/app/actions/dashboard-revenue"
 import { RevenueClient } from "./_components/revenue-client"
 import { SalesRevenueTable } from "./_components/sales-revenue-table"
 import { format } from "date-fns"
@@ -13,6 +13,7 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
 
     const response = await getDashboardRevenueForecast({ period })
     const salesRevenueResponse = await getAllSalesRevenueData({ period })
+    const inventoryResponse = await getDashboardInventory()
 
     const defaultData = {
         period,
@@ -46,7 +47,7 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
     return (
         <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">
             <div className="flex-1 min-h-0 space-y-4">
-                <RevenueClient initialData={data} selectedPeriod={period} />
+                <RevenueClient initialData={data} selectedPeriod={period} inventoryData={inventoryResponse.success && inventoryResponse.data ? inventoryResponse.data : null} />
                 <SalesRevenueTable 
                     data={salesRevenueData} 
                     total={salesRevenueTotal} 

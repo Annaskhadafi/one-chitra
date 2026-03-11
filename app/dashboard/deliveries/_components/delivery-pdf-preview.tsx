@@ -187,7 +187,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 225mm; }
                             
                             .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-                            .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
+                            .pdf-wrapper .ship-to { width: 55%; margin-top: 20mm; }
                             .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
                             .pdf-wrapper .customer-name { font-weight: bold; font-size: 12pt; text-transform: uppercase; margin-bottom: 4px; }
                             .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; font-size: 10pt; line-height: 1.4; }

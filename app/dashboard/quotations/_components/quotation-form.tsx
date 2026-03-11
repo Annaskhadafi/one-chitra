@@ -761,12 +761,12 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 <CardContent className="p-6">
                     <div className="space-y-4">
                         <Label className="font-semibold">Product</Label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 w-full">
                             <Popover open={productOpen} onOpenChange={setProductOpen}>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start font-normal text-muted-foreground">
-                                        <Search className="mr-2 h-4 w-4" />
-                                        Search Product Name / Item Code / Scan bar code
+                                    <Button variant="outline" className="flex-1 justify-start font-normal text-muted-foreground overflow-hidden">
+                                        <Search className="mr-2 h-4 w-4 shrink-0" />
+                                        <span className="truncate">Search Product Name / Item Code / Scan bar code</span>
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[500px] p-0" align="start">
@@ -781,16 +781,16 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         value={`${product.materialNumber} ${product.materialDescription}`}
                                                         onSelect={() => addProduct(product)}
                                                     >
-                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground mt-1" />
-                                                        <div className="flex-1">
-                                                            <div className="flex justify-between items-start">
-                                                                <p className="font-bold text-blue-700">{product.materialNumber}</p>
-                                                                <p className="text-[10px] font-mono bg-blue-50 px-1 rounded border">Cost: {formatCurrency(Number(product.costSap || 0) * exchangeRate)}</p>
+                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                                        <div className="flex-1 overflow-hidden">
+                                                            <div className="flex justify-between items-start gap-2">
+                                                                <p className="font-bold text-blue-700 truncate">{product.materialNumber}</p>
+                                                                <p className="text-[10px] font-mono bg-blue-50 px-1 rounded border shrink-0">Cost: {formatCurrency(Number(product.costSap || 0) * exchangeRate)}</p>
                                                             </div>
                                                             <p className="text-xs text-muted-foreground line-clamp-1">{product.materialDescription}</p>
                                                             <div className="flex gap-2 mt-1">
-                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">WH: {product.slocDescription || product.sloc || "-"}</span>
-                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">Stock: {product.totalStock ?? 0}</span>
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500 whitespace-nowrap">WH: {product.slocDescription || product.sloc || "-"}</span>
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500 whitespace-nowrap">Stock: {product.totalStock ?? 0}</span>
                                                             </div>
                                                         </div>
                                                     </CommandItem>
@@ -805,6 +805,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                     <Button
                                         variant="outline"
                                         size="icon"
+                                        className="shrink-0"
                                     >
                                         <Plus className="h-4 w-4" />
                                     </Button>
@@ -813,8 +814,106 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             />
                         </div>
 
-                        {/* Items Table */}
-                        <div className="rounded-md border overflow-hidden">
+                        {/* Mobile Items View */}
+                        <div className="md:hidden space-y-4">
+                            {items.length === 0 ? (
+                                <div className="flex flex-col items-center gap-2 text-muted-foreground p-8 border rounded-lg border-dashed">
+                                    <Package className="h-10 w-10 opacity-30" />
+                                    <p>No data</p>
+                                </div>
+                            ) : (
+                                items.map((item, index) => {
+                                    const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
+                                    return (
+                                        <Card key={index} className="overflow-hidden border-blue-100 shadow-sm relative group">
+                                            <div className="bg-blue-600 px-4 py-2 flex justify-between items-center text-white">
+                                                <span className="font-bold text-sm">Item #{index + 1}</span>
+                                                <div className="flex items-center space-x-2">
+                                                    {item.materialNumber && (
+                                                        <ProductHistoryPopover
+                                                            materialNo={item.materialNumber}
+                                                            costSap={item.costSap || 0}
+                                                        />
+                                                    )}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-white hover:text-white hover:bg-red-500/50"
+                                                        onClick={() => removeItem(index)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <CardContent className="p-4 space-y-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs text-muted-foreground">Description</Label>
+                                                    <Textarea
+                                                        placeholder="Description"
+                                                        value={item.description}
+                                                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                                                        className="min-h-[60px] font-bold text-sm"
+                                                    />
+                                                    <Textarea
+                                                        placeholder="Long description"
+                                                        value={item.longDescription}
+                                                        onChange={(e) => updateItem(index, "longDescription", e.target.value)}
+                                                        className="min-h-[80px] text-xs"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                type="number"
+                                                                min={1}
+                                                                value={item.quantity}
+                                                                onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                                className="h-9"
+                                                            />
+                                                            <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Price</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            placeholder="Rate"
+                                                            value={item.unitPrice}
+                                                            onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
+                                                            className="h-9"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4 items-center border-t pt-3 mt-1">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Tax</Label>
+                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                            <SelectTrigger className="h-9">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="0">No Tax</SelectItem>
+                                                                <SelectItem value="11">11.00%</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-1 text-right">
+                                                        <Label className="text-xs text-muted-foreground block">Amount</Label>
+                                                        <span className="font-bold text-blue-700 text-sm block">{formatCurrency(lineSubtotal)}</span>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })
+                            )}
+                        </div>
+
+                        {/* Desktop Items Table */}
+                        <div className="hidden md:block rounded-md border overflow-hidden">
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader>
@@ -928,48 +1027,51 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </div>
 
                             {/* Totals Summary */}
-                            <div className="mt-4 flex flex-col items-end gap-1 border-t pt-4 pe-4 pb-4">
-                                <div className="flex items-center justify-end w-[400px] gap-4">
+                            <div className="mt-6 flex flex-col items-end gap-2 border-t pt-4 md:pe-4 pb-4 w-full">
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-sm font-medium text-muted-foreground">Sub Total :</span>
-                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(subTotal)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(subTotal)}</span>
                                 </div>
-                                <div className="flex items-center justify-end w-[400px] gap-4 mt-2">
-                                    <span className="text-sm font-medium text-muted-foreground">Discount :</span>
-                                    <div className="flex items-center gap-1">
-                                        <Input
-                                            type="number"
-                                            value={discount}
-                                            onChange={(e) => setDiscount(Number(e.target.value))}
-                                            className="w-20 h-8 text-right font-mono text-xs"
-                                        />
-                                        <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
-                                            <SelectTrigger className="w-14 h-8 text-xs">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="percent">%</SelectItem>
-                                                <SelectItem value="fixed">Rp</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-2">
+                                    <span className="text-sm font-medium text-muted-foreground hidden md:inline">Discount :</span>
+                                    <div className="flex items-center justify-between md:justify-end w-full md:w-auto flex-1 gap-2">
+                                        <span className="text-sm font-medium text-muted-foreground md:hidden w-16">Disc :</span>
+                                        <div className="flex items-center gap-1 flex-1 md:flex-none justify-end md:justify-start">
+                                            <Input
+                                                type="number"
+                                                value={discount}
+                                                onChange={(e) => setDiscount(Number(e.target.value))}
+                                                className="w-20 md:w-20 h-8 text-right font-mono text-xs"
+                                            />
+                                            <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
+                                                <SelectTrigger className="w-16 h-8 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="percent">%</SelectItem>
+                                                    <SelectItem value="fixed">Rp</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                     </div>
-                                    <span className="text-sm font-bold w-32 text-right text-destructive">
+                                    <span className="text-sm font-bold md:w-32 text-right text-destructive shrink-0 overflow-hidden text-ellipsis">
                                         -{formatCurrency(discountType === "percent" ? (subTotal * discount) / 100 : discount)}
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-end w-[400px] gap-4 mt-1">
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-1">
                                     <span className="text-sm font-medium text-muted-foreground">Delivery :</span>
                                     <Input
                                         type="number"
                                         value={shipping}
                                         onChange={(e) => setShipping(Number(e.target.value))}
-                                        className="w-20 h-8 text-right font-mono text-xs"
+                                        className="w-24 md:w-20 h-8 text-right font-mono text-xs"
                                     />
-                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(shipping)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right w-24 shrink-0 overflow-hidden text-ellipsis">{formatCurrency(shipping)}</span>
                                 </div>
-                                <Separator className="my-2 w-[400px]" />
-                                <div className="flex items-center justify-end w-[400px] gap-4">
+                                <Separator className="my-2 w-full md:w-[400px]" />
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-base font-black text-blue-700">TOTAL :</span>
-                                    <span className="text-lg font-black w-32 text-right text-blue-700">{formatCurrency(grandTotal)}</span>
+                                    <span className="text-lg font-black md:w-32 text-right text-blue-700 break-all min-w-[120px]">{formatCurrency(grandTotal)}</span>
                                 </div>
                             </div>
                         </div>

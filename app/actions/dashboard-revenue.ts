@@ -1,9 +1,9 @@
 "use server"
 
 import { db } from "@/db"
-import { salesRevenueSap } from "@/db/schema/sap"
+import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
-import { eq, sql, and, isNotNull, ne, or, isNull, notIlike, ilike } from "drizzle-orm"
+import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
 export interface DashboardRevenueFilters {
@@ -285,5 +285,39 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
     } catch (error) {
         console.error("Failed to fetch dashboard revenue forecast:", error);
         return { success: false, error: "Failed to fetch dashboard data" };
+    }
+}
+
+export async function getDashboardInventory() {
+    try {
+        await getAuthenticatedSession("revenue-forecast", "view")
+        const inventoryData = await db.select({
+            plantCode: zmc9StockSap.plantCode,
+            valueStock: sql<number>`SUM(COALESCE(${zmc9StockSap.valueStock}, 0))`
+        }).from(zmc9StockSap)
+        .groupBy(zmc9StockSap.plantCode);
+
+        let jasum = 0;
+        let kalEi = 0;
+        let singapore = 0;
+
+        inventoryData.forEach(item => {
+            const val = Number(item.valueStock) || 0;
+            switch(item.plantCode) {
+                case "2000": jasum += val; break;
+                case "2001":
+                case "2002": kalEi += val; break;
+                case "2200": singapore += val; break;
+                default: break;
+            }
+        });
+
+        return {
+            success: true,
+            data: { jasum, kalEi, singapore, total: jasum + kalEi + singapore }
+        };
+    } catch (error) {
+        console.error("Failed to fetch dashboard inventory:", error);
+        return { success: false, error: "Failed to fetch dashboard inventory" };
     }
 }

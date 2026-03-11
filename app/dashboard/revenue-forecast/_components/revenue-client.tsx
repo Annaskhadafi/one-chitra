@@ -31,16 +31,15 @@ interface RevenueClientProps {
         ytdChart: Array<{ name: string; revenue: number }>
     }
     selectedPeriod: string
+    inventoryData?: { jasum: number; kalEi: number; singapore: number; total: number } | null
 }
 
-const fmt = (v: number, compact = false) => {
+const fmt = (v: number, _compact = false) => {
     return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 }
 
 const pct = (r: number, f: number) => f > 0 ? Math.min((r / f) * 100, 999) : 0
-const pctStr = (r: number, f: number) => pct(r, f).toFixed(1) + "%"
 const pctColor = (p: number) => p >= 100 ? "text-green-600" : p >= 80 ? "text-blue-600" : p >= 50 ? "text-amber-500" : "text-red-500"
-const strokeColor = (p: number) => p >= 100 ? "stroke-green-500" : p >= 80 ? "stroke-blue-500" : p >= 50 ? "stroke-amber-400" : "stroke-red-400"
 
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#14b8a6']
 
@@ -215,7 +214,65 @@ function ConsolidateGauge({ data }: { data: TargetData }) {
     )
 }
 
-export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProps) {
+function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; singapore: number; total: number } }) {
+    if (!data) return null;
+    
+    const chartData = [
+        { name: 'Jasum', value: data.jasum, fill: '#f59e0b' },      // Orange
+        { name: 'KAL EI', value: data.kalEi, fill: '#3b82f6' },     // Blue
+        { name: 'Singapore', value: data.singapore, fill: '#10b981' } // Green
+    ].filter(d => d.value > 0);
+
+    return (
+        <div className="bg-card border rounded-xl p-4 flex flex-col shadow-sm">
+            <div className="flex justify-between items-start mb-2">
+                <h3 className="text-sm font-bold uppercase tracking-tight">Total Inventory (USD)</h3>
+                <div className="text-right">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Valuasi</div>
+                    <div className="text-sm font-black text-primary">${fmt(data.total)}</div>
+                </div>
+            </div>
+            
+            <div className="flex-1 flex flex-col items-center justify-center min-h-[250px] relative">
+                <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                        <Pie
+                            data={chartData}
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={2}
+                            dataKey="value"
+                            nameKey="name"
+                            label={false}
+                        >
+                            {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                        </Pie>
+                        <Tooltip 
+                            formatter={(value: number) => `$ ${fmt(value)}`}
+                            contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+                
+                <div className="w-full flex flex-col gap-2 mt-2">
+                    {chartData.map((item, i) => (
+                        <div key={i} className="flex justify-between items-center text-xs px-2 py-1.5 rounded-md bg-muted/40">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                                <span className="font-semibold tracking-tight">{item.name}</span>
+                            </div>
+                            <span className="font-black">${fmt(item.value)}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
     const router = useRouter()
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
 
@@ -316,7 +373,7 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
             </div>
 
             {/* ─── ROW 3: Pie Chart + Inventory placeholder ─────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* MTD Sunburst Sell Out Material */}
                 <div className="bg-card border rounded-xl p-4">
                     <div className="flex justify-between items-start mb-3">
@@ -347,8 +404,11 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                     </div>
                 </div>
 
+                {/* Total Inventory (USD) */}
+                {inventoryData && <InventoryPieChart data={inventoryData} />}
+
                 {/* Prime Product vs Forecast mini panel + mini gauge */}
-                <div className="bg-card border rounded-xl p-5 flex flex-col gap-4 shadow-sm">
+                <div className="bg-card border rounded-xl p-5 flex flex-col gap-4 shadow-sm h-full">
                     <h3 className="text-sm font-black uppercase tracking-tight">Prime Product & Overall Summary</h3>
                     <div className="space-y-4">
                         <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" />
