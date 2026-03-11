@@ -116,7 +116,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+            <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col h-full bg-slate-50 dark:bg-slate-950">
                 <SheetHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
                     <div className="flex items-center justify-between gap-4 pr-8">
                         <div className="flex flex-col gap-1">
@@ -154,7 +154,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                     </div>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex-1 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50">
                     <div className="max-w-[21cm] mx-auto my-8 space-y-8 p-8 bg-white dark:bg-slate-950 shadow-xl border min-h-[29.7cm] rounded-sm">
                         {/* Key Details Grid */}
                         <div className="grid grid-cols-2 gap-6">
@@ -336,7 +336,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                             </div>
                         )}
                     </div>
-                </ScrollArea>
+                </div>
 
                 <div className="p-4 border-t bg-background mt-auto flex sm:hidden">
                     <Link href={`/dashboard/deliveries/${delivery.id}`} className="w-full" onClick={() => onOpenChange(false)}>
