@@ -1,6 +1,7 @@
 import { getDashboardRevenueForecast, getAllSalesRevenueData } from "@/app/actions/dashboard-revenue"
 import { RevenueClient } from "./_components/revenue-client"
 import { SalesRevenueTable } from "./_components/sales-revenue-table"
+import { format } from "date-fns"
 
 export const metadata = {
     title: "Revenue vs Forecast Dashboard - One Chitra",
@@ -8,7 +9,7 @@ export const metadata = {
 
 export default async function RevenueForecastPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
     const params = await searchParams;
-    const period = params.period || "02.2026"
+    const period = params.period || format(new Date(), 'MM.yyyy')
 
     const response = await getDashboardRevenueForecast({ period })
     const salesRevenueResponse = await getAllSalesRevenueData({ period })

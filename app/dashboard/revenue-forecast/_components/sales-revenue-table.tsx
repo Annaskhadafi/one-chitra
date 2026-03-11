@@ -141,18 +141,18 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
     return (
         <div className="bg-card border rounded-xl overflow-hidden">
             {/* Header with collapse button */}
-            <div className="px-4 py-3 border-b bg-muted/30 flex justify-between items-center">
+            <div className="px-4 py-3 border-b bg-blue-600 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="flex items-center gap-2 hover:text-primary transition-colors"
+                        className="flex items-center gap-2 hover:text-white/80 transition-colors text-white"
                     >
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">
                             Data Validasi Sales Revenue SAP
                         </h3>
                     </button>
-                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded">
+                    <span className="text-[10px] text-blue-800 bg-white/20 px-2 py-1 rounded font-bold">
                         {count} records
                     </span>
                 </div>
@@ -177,7 +177,7 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
             {isExpanded && (
                 <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-accent">
                     <table className="w-full text-xs">
-                        <thead className="bg-primary/5 sticky top-0 z-10">
+                        <thead className="bg-blue-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
                             <tr>
                                 <th className="px-3 py-2 text-left font-semibold text-primary border-r">No</th>
                                 <th className="px-3 py-2 text-left font-semibold text-primary border-r whitespace-nowrap">Billing Date</th>

@@ -134,14 +134,17 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         ));
         const revenuePA = Number(paData[0]?.total || 0);
 
-        // ─── D. Consolidate = Prime + PA + Service ─────────────────────────────
-        const revenueConsolidate = revenuePrimeProduct + revenuePA + revenueService;
+        // ─── D. Consolidate = Total Revenue based on simple dateFilter ─────────
+        const consolidateData = await db.select({
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(dateFilter);
+        const revenueConsolidate = Number(consolidateData[0]?.total || 0);
 
-        // ─── E. Forecast Consolidate = sum of sub-forecasts ────────────────────
+        // ─── E. Forecast Consolidate = Inputted value ──────────────────────────
         const forecastPrime = targetMap.get("Prime Product") || 0;
         const forecastService = targetMap.get("Service") || 0;
         const forecastPA = targetMap.get("PA") || 0;
-        const forecastConsolidate = forecastPrime + forecastService + forecastPA;
+        const forecastConsolidate = targetMap.get("Consolidate") || 0;
 
         // ─── F. Revenue By Customer (CK vs SIS) ────────────────────────────────
         const customerRevenueData = await db.select({
@@ -168,10 +171,10 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         };
         const ocNames = ["OCKY HEGAR PRATAMA", "ZULFIKAR", "MUHAMMAD IKBAL LAISA", "NUR SABRINA FAZLIHUL UMAR", "BAMBANG IRAWAN", "TOMMY INDRA ALDINY RAMBE"];
         const mcNames = ["MICHAEL ADRIAN", "FEBRIAL HARIRI"];
-        const agNames = ["AGUNG ARI PRASERTIO"];
+        const agNames = ["AGUNG ARI PRASETIO"];
         const wsNames = ["RIKI DARMAWAN", "GREGORIUS DWIJOSAPUTRA RAHARJO", "KETUT SADHUNATA WISNUKEPAKISAN"];
         const brNames = ["BURI ANTONI", "HARRIZ ICHWAN"];
-        const fqNames = ["MUHAMMAD FURQON"];
+        const fqNames = ["MUHAMMAD FURQAN"];
 
         salesData.forEach(s => {
             const name = (s.salesman || "").toUpperCase().trim();
@@ -235,6 +238,15 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`)
             .orderBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM.YYYY')`);
 
+        const forecastYtdData = await db.select().from(forecasts).where(
+            and(
+                ilike(forecasts.period, `%${year}`),
+                eq(forecasts.targetName, 'Consolidate')
+            )
+        );
+        const forecastMap = new Map<string, number>();
+        forecastYtdData.forEach(f => forecastMap.set(f.period || "", f.amount));
+
         // ─── Build Result ───────────────────────────────────────────────────────
         return {
             success: true,
@@ -266,7 +278,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
                 })),
                 revTypes: revTypeTable,
                 matGroups: matGrp1Data.map(m => ({ desc: m.desc || "Unknown", revenue: Number(m.total) })),
-                ytdChart: ytdData.map(y => ({ name: y.month, revenue: Number(y.rev) }))
+                ytdChart: ytdData.map(y => ({ name: y.month, revenue: Number(y.rev), forecast: forecastMap.get(y.month || "") || 0 }))
             }
         };
 

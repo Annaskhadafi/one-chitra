@@ -154,20 +154,26 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                                             <div key={itemName} className="space-y-2">
                                                 <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Forecast {itemName}</Label>
                                                 <div className="relative group">
-                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold group-focus-within:text-primary transition-colors">Rp</span>
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold group-focus-within:text-primary transition-colors">$</span>
                                                     <Input
                                                         type="text"
-                                                        className="pl-9 h-10 bg-background border-muted-foreground/20 focus-visible:ring-blue-500 font-bold text-primary transition-all overflow-hidden"
-                                                        value={formData[itemName] ? new Intl.NumberFormat('id-ID').format(formData[itemName]) : ""}
+                                                        className="pl-7 h-10 bg-background border-muted-foreground/20 focus-visible:ring-blue-500 font-bold text-primary transition-all overflow-hidden"
+                                                        value={formData[itemName] !== undefined && formData[itemName] !== 0 ? formData[itemName] : ""}
                                                         onChange={(e) => {
-                                                            const digits = e.target.value.replace(/\D/g, "");
-                                                            const parsed = digits ? parseInt(digits, 10) : 0;
+                                                            let val = e.target.value.replace(/,/g, '.');
+                                                            // allow numbers and single dot
+                                                            val = val.replace(/[^0-9.]/g, '');
+                                                            if (val.split('.').length > 2) {
+                                                                val = val.replace(/\.+$/, "");
+                                                            }
+                                                            const parsed = val === "" ? 0 : parseFloat(val) || 0;
+                                                            
                                                             setFormData(prev => ({
                                                                 ...prev,
-                                                                [itemName]: parsed
+                                                                [itemName]: isNaN(parsed) ? 0 : parsed
                                                             }));
                                                         }}
-                                                        placeholder="0"
+                                                        placeholder="0.00"
                                                     />
                                                 </div>
                                             </div>

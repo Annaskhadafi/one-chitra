@@ -34,8 +34,6 @@ interface RevenueClientProps {
 }
 
 const fmt = (v: number, compact = false) => {
-    if (compact && v >= 1_000_000) return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(v / 1_000_000) + "M"
-    if (compact && v >= 1_000) return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(v / 1_000) + "K"
     return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 }
 
@@ -225,7 +223,7 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
     const ytdFormatted = ytdChart.map(y => {
         const [mm] = y.name.split(".")
         const monthIdx = parseInt(mm, 10) - 1
-        return { name: MONTHS_SHORT[monthIdx] ?? y.name, revenue: y.revenue }
+        return { name: MONTHS_SHORT[monthIdx] ?? y.name, revenue: y.revenue, forecast: 'forecast' in y ? y.forecast : 0 }
     })
 
     return (
@@ -328,26 +326,24 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                             <div className="text-sm font-black text-primary">{fmt(targets.primeProduct.revenue)}</div>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <div className="flex-1 h-[220px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie data={materials.slice(0, 7)} innerRadius={55} outerRadius={90} dataKey="revenue" nameKey="desc" paddingAngle={2} labelLine={false}>
-                                        {materials.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                    </Pie>
-                                    <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11 }} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        {/* Legend */}
-                        <div className="w-40 space-y-1.5 pt-2">
-                            {materials.slice(0, 7).map((m, i) => (
-                                <div key={i} className="flex items-center gap-1.5">
-                                    <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: PIE_COLORS[i] }} />
-                                    <span className="text-[10px] leading-tight text-muted-foreground truncate">{m.desc}</span>
-                                </div>
-                            ))}
-                        </div>
+                    <div className="flex justify-center items-center h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie 
+                                    data={materials.slice(0, 7)} 
+                                    innerRadius={70} 
+                                    outerRadius={110} 
+                                    dataKey="revenue" 
+                                    nameKey="desc" 
+                                    paddingAngle={2} 
+                                    label={({ name }) => (name || "").substring(0, 20)}
+                                    labelLine={true}
+                                >
+                                    {materials.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11 }} />
+                            </PieChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
@@ -417,13 +413,13 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
 
                 {/* Rank Material Sell Out */}
                 <div className="bg-card border rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-muted/30 flex justify-between items-center">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Rank. Material Sell Out</h3>
-                        <span className="text-[10px] text-muted-foreground">1 - {materials.length} / {materials.length}</span>
+                    <div className="px-4 py-3 bg-blue-600 flex justify-between items-center">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">Rank. Material Sell Out</h3>
+                        <span className="text-[10px] text-white/80">1 - {materials.length} / {materials.length}</span>
                     </div>
                     <div className="overflow-auto max-h-[450px] scrollbar-thin scrollbar-thumb-accent">
                         <table className="w-full text-xs">
-                            <thead className="bg-primary/5 sticky top-0">
+                            <thead className="bg-blue-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
                                 <tr>
                                     <th className="px-3 py-2 text-left font-semibold text-primary w-6">No.</th>
                                     <th className="px-3 py-2 text-left font-semibold text-primary">Material Description</th>
@@ -456,16 +452,19 @@ export function RevenueClient({ initialData, selectedPeriod }: RevenueClientProp
                 </div>
                 <div className="p-4 h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={ytdFormatted.length > 0 ? ytdFormatted : [{ name: '-', revenue: 0 }]} margin={{ top: 24, right: 20, left: 40, bottom: 5 }}>
+                        <BarChart data={ytdFormatted.length > 0 ? ytdFormatted : [{ name: '-', revenue: 0, forecast: 0 }]} margin={{ top: 24, right: 20, left: 40, bottom: 5 }}>
                             <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                             <YAxis hide />
                             <Tooltip
-                                formatter={(v: number) => [fmt(v), 'Revenue']}
+                                formatter={(v: number, name: string) => [fmt(v), name.charAt(0).toUpperCase() + name.slice(1)]}
                                 contentStyle={{ fontSize: 11, borderRadius: 8 }}
                                 cursor={{ fill: 'rgba(99,102,241,0.06)' }}
                             />
+                            <Bar dataKey="forecast" fill="#fcd34d" radius={[6, 6, 0, 0]}
+                                label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
+                            />
                             <Bar dataKey="revenue" fill="#a5b4fc" radius={[6, 6, 0, 0]}
-                                label={{ position: 'top', formatter: (v: number) => fmt(v, true), fontSize: 10, fill: '#64748b' }}
+                                label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
                             />
                         </BarChart>
                     </ResponsiveContainer>
