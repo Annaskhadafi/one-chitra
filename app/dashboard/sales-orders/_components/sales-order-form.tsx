@@ -724,7 +724,10 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                                     >
                                                         <Package className="mr-2 h-4 w-4 text-muted-foreground" />
                                                         <div>
-                                                            <p className="font-medium">{product.materialNumber}</p>
+                                                            <p className="font-medium">
+                                                                {product.materialNumber} 
+                                                                {product.materialNumberCk && <span className="text-orange-600 ml-2">| CK: {product.materialNumberCk}</span>}
+                                                            </p>
                                                             <p className="text-xs text-muted-foreground">{product.materialDescription}</p>
                                                         </div>
                                                     </CommandItem>

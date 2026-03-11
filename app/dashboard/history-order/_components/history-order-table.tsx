@@ -146,6 +146,10 @@ export function HistoryOrderTable() {
             ),
         },
         {
+            accessorKey: "billing_no",
+            header: "Billing No",
+        },
+        {
             accessorKey: "customer_name",
             header: "Customer",
             cell: ({ row }) => <div className="font-medium max-w-[200px] truncate" title={row.original.customer_name}>{row.original.customer_name}</div>,

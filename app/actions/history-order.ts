@@ -13,6 +13,7 @@ export interface HistoryOrderItem {
     revenue: number;
     revenue_formatted: string;
     billing_date: string;
+    billing_no: string;
     plant: string;
     po_number: string;
     po_date: string;
@@ -230,6 +231,7 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
                 revenue: revenue,
                 revenue_formatted: revenueFormatted,
                 billing_date: item.billingDate || '',
+                billing_no: item.billingNo || '',
                 plant: item.plant || '',
                 po_number: item.poNo || '',
                 po_date: item.poDate || '',

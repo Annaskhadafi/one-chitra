@@ -109,8 +109,8 @@ export async function getCoverLetterBillingData(
         usedPoNos = used.map(u => u.poNo).filter(Boolean) as string[];
     }
 
-    // Filter: billing_date >= 15 Januari 2026
-    const minDateFilter = sql`${historyOrders.billingDate} >= '2026-01-15'`;
+    // Filter: billing_date >= 1 November 2025
+    const minDateFilter = sql`${historyOrders.billingDate} >= '2025-11-01'`;
 
     const groupedHistorySubquery = db.select({
         poNo: historyOrders.poNo,

@@ -17,6 +17,7 @@ import { type Product } from "@/lib/types"
 import { ProductDialog } from "./product-dialog"
 import { ProductDetail } from "./product-detail"
 import { ProductCSVUpload } from "./product-table-csv"
+import { ProductCkCSVUpload } from "./product-ck-csv"
 import { Search, Trash2, Pencil, Package, Layers, Tag, ChevronUp, ChevronDown, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -299,6 +300,20 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
             cell: ({ row }) => <span className="font-medium text-blue-600">{row.original.materialNumber}</span>,
         },
         {
+            accessorKey: "materialNumberCk",
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                    className="-ml-4 h-8"
+                >
+                    Material Number CK
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="font-medium text-orange-600 dark:text-orange-400">{row.original.materialNumberCk || "-"}</span>,
+        },
+        {
             accessorKey: "oldMaterialNo",
             header: "Old Material No.",
             cell: ({ row }) => <span className="text-muted-foreground">{row.original.oldMaterialNo || "-"}</span>,
@@ -400,6 +415,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
             const item = row.original
             const matchesSearch = !!(
                 item.materialNumber.toLowerCase().includes(term) ||
+                (item.materialNumberCk && item.materialNumberCk.toLowerCase().includes(term)) ||
                 (item.materialDescription && item.materialDescription.toLowerCase().includes(term)) ||
                 item.category.toLowerCase().includes(term) ||
                 (item.oldMaterialNo && item.oldMaterialNo.toLowerCase().includes(term)) ||
@@ -549,6 +565,7 @@ export function ProductTable({ data: initialData }: ProductTableProps) {
                     </Button>
                     {canCreate && (
                         <>
+                            <ProductCkCSVUpload onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                             <ProductCSVUpload />
                             <ProductDialog onSuccess={() => queryClient.invalidateQueries({ queryKey: ["products"] })} />
                         </>

@@ -4,6 +4,7 @@ export const products = pgTable("products", {
     id: serial("id").primaryKey(),
     category: varchar("category", { length: 100 }).notNull(), // ACC, FLAP, IMT PART, Material Consumable, SPM, TUBE, TYRE, WHEEL & RIM
     materialNumber: varchar("material_number", { length: 100 }).notNull(),
+    materialNumberCk: varchar("material_number_ck", { length: 100 }),
     oldMaterialNo: text("old_material_no"),
     materialDescription: text("material_description"),
     brand: varchar("brand", { length: 100 }),

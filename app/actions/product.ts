@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { products, stockLevels } from "@/db/schema"
-import { eq, sql, inArray } from "drizzle-orm"
+import { eq, sql, inArray, ilike } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
@@ -21,6 +21,7 @@ export async function getProducts() {
         id: products.id,
         category: products.category,
         materialNumber: products.materialNumber,
+        materialNumberCk: products.materialNumberCk,
         oldMaterialNo: products.oldMaterialNo,
         materialDescription: products.materialDescription,
         brand: products.brand,
@@ -180,6 +181,53 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
         console.error("Import error:", _error)
         const msg = (_error as { message?: string })?.message || "Unknown error"
         return { success: false, error: `Failed to import products: ${msg}` }
+    }
+}
+
+export async function importMaterialCk(data: { materialNumber: string, materialNumberCk: string }[]) {
+    try {
+        if (data.length === 0) return { success: true }
+
+        console.log(`[importMaterialCk] Received ${data.length} mappings`)
+
+        const uniqueData = new Map<string, string>()
+        for (const item of data) {
+            const matNum = (item.materialNumber || "").trim().toUpperCase()
+            const ckNum = (item.materialNumberCk || "").trim().toUpperCase()
+            if (matNum && ckNum) {
+                uniqueData.set(matNum, ckNum)
+            }
+        }
+
+        console.log(`[importMaterialCk] Processing ${uniqueData.size} unique mappings`)
+
+        let updatedCount = 0
+        const entries = Array.from(uniqueData.entries())
+        const chunkSize = 50
+
+        for (let i = 0; i < entries.length; i += chunkSize) {
+            const chunk = entries.slice(i, i + chunkSize)
+            // For each item in the chunk, update the product
+            // Drizzle doesn't have a bulk update with multiple different values easily without raw SQL CASE statements,
+            // so we can loop or use a transaction. Given the context, executing individually in a Promise.all or sequentially is fine for typical sizes.
+            await Promise.all(chunk.map(async ([matNum, ckNum]) => {
+                const res = await db.update(products)
+                    .set({ materialNumberCk: ckNum, updatedAt: new Date() })
+                    .where(ilike(products.materialNumber, matNum))
+                
+                // Note: db.update.where might update multiple rows if materialNumber is not unique (e.g. diff sloc). 
+                // That's acceptable here since Material Number CK is tied to Material Number theoretically.
+            }))
+            updatedCount += chunk.length
+        }
+
+        console.log(`[importMaterialCk] Import complete. Processed chunks for ${updatedCount} products.`)
+        revalidatePath("/dashboard/products")
+        return { success: true, count: updatedCount }
+    } catch (_error) {
+        console.error("Import CK error:", _error)
+        const msg = (_error as { message?: string })?.message || "Unknown error"
+        return { success: false, error: `Failed to import Material CK: ${msg}` }
     }
 }
 

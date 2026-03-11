@@ -168,6 +168,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const [selectedYear, setSelectedYear] = useState<string>("all")
     const [selectedMonth, setSelectedMonth] = useState<string>("all")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
+    const [selectedWarehouse, setSelectedWarehouse] = useState<string>("all")
 
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -266,9 +267,10 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             const yearMatch = selectedYear === "all" || date.getFullYear().toString() === selectedYear
             const monthMatch = selectedMonth === "all" || (date.getMonth() + 1).toString() === selectedMonth
             const categoryMatch = selectedCategory === "all" || d.items.some(item => item.product?.category === selectedCategory)
-            return yearMatch && monthMatch && categoryMatch
+            const warehouseMatch = selectedWarehouse === "all" || d.warehouseId?.toString() === selectedWarehouse
+            return yearMatch && monthMatch && categoryMatch && warehouseMatch
         })
-    }, [data, selectedYear, selectedMonth, selectedCategory])
+    }, [data, selectedYear, selectedMonth, selectedCategory, selectedWarehouse])
 
     // Status Distribution Data (moved from page.tsx)
     const statusCounts = useMemo(() => {
@@ -829,6 +831,16 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         return Array.from(c).sort()
     }, [data])
 
+    const warehouses = useMemo(() => {
+        const w = new Map<string, string>()
+        data.forEach(d => {
+            if (d.warehouse && d.warehouseId) {
+                w.set(d.warehouseId.toString(), d.warehouse.description || d.warehouse.sloc || `Warehouse ${d.warehouseId}`)
+            }
+        })
+        return Array.from(w.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    }, [data])
+
     const selectedCount = Object.keys(rowSelection).length
 
     if (isLoading && !data.length) {
@@ -1132,6 +1144,16 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                                 </SelectContent>
                                             </Select>
 
+                                            <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Warehouse" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Warehouses</SelectItem>
+                                                    {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+
                                             <Select
                                                 value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
                                                 onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
@@ -1207,6 +1229,16 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                         <SelectContent>
                                             <SelectItem value="all">All Types</SelectItem>
                                             {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                                        <SelectTrigger className="w-[160px]">
+                                            <SelectValue placeholder="Warehouse" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Warehouses</SelectItem>
+                                            {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
 
