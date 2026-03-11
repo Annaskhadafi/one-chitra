@@ -139,13 +139,14 @@ function getDateRangePreset(preset: string): { from: Date; to: Date } | null {
 }
 
 export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRelations[] }) {
-    const queryClient = useQueryClient()
     const { data = initialData } = useQuery({
         queryKey: ["deliveries"],
-        queryFn: getDeliveries,
-        initialData,
+        queryFn: () => getDeliveries(),
+        initialData: initialData,
         staleTime: 60 * 1000,
     })
+
+    const queryClient = useQueryClient()
 
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
@@ -178,7 +179,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         if (!data) return []
         const warehouses = data
             .map(d => d.warehouse)
-            .filter((w): w is Warehouse => w !== null)
+            .filter((w): w is Warehouse => w !== null && w !== undefined)
         
         const unique = []
         const map = new Map()
@@ -415,13 +416,16 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             id: "warehouseName",
             accessorFn: (row) => row.warehouse?.name,
             header: "Warehouse",
-            cell: ({ row }) => (
-                <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-xs truncate max-w-[120px]" title={row.original.warehouse?.name || "-"}>
-                        {row.original.warehouse?.name || "-"}
-                    </span>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const whName = row.original.warehouse?.name || "-"
+                return (
+                    <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-xs truncate max-w-[120px]" title={whName}>
+                            {whName}
+                        </span>
+                    </div>
+                )
+            },
         },
         {
             id: "customerName",
@@ -544,7 +548,9 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
                 (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== "")) ||
                 (invoiceFilter === "partial-invoiced" && d.deliveryType === 'partial' && !!(d.invoiceNumber && d.invoiceNumber.trim() !== ""))
-            const matchesWarehouse = warehouseFilter === "all" || d.warehouse?.id?.toString() === warehouseFilter
+            
+            const wh = d.warehouse
+            const matchesWarehouse = warehouseFilter === "all" || wh?.id?.toString() === warehouseFilter
 
             // Date range filtering
             let matchesDateRange = true

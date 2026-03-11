@@ -41,6 +41,10 @@ export const salesOrdersRelations = relations(salesOrders, ({ one, many }) => ({
         fields: [salesOrders.customerId],
         references: [customers.id],
     }),
+    warehouse: one(warehouses, {
+        fields: [salesOrders.warehouseId],
+        references: [warehouses.id],
+    }),
     createdByUser: one(user, {
         fields: [salesOrders.createdBy],
         references: [user.id],

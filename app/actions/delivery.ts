@@ -53,6 +53,7 @@ export async function getDeliveries() {
             salesOrder: {
                 with: {
                     customer: true,
+                    warehouse: true,
                     items: true,
                 },
             },
@@ -72,7 +73,10 @@ export async function getDeliveryItemsFlat() {
     const allDeliveries = await db.query.deliveries.findMany({
         with: {
             salesOrder: {
-                with: { customer: true },
+                with: { 
+                    customer: true,
+                    warehouse: true 
+                },
             },
             warehouse: true,
             items: {
@@ -282,11 +286,33 @@ export async function generateDeliveryNumber() {
     const now = new Date()
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
 
-    const allDeliveries = await db.select({ deliveryNumber: deliveries.deliveryNumber }).from(deliveries)
-    const todayDeliveries = allDeliveries.filter(d => d.deliveryNumber?.startsWith(`DLV-${dateStr}`))
-    const nextNum = todayDeliveries.length + 1
+    // Use SQL to count instead of fetching everything
+    const [result] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(deliveries)
+        .where(sql`${deliveries.deliveryNumber} LIKE ${`DLV-${dateStr}-%`}`)
 
-    return `DLV-${dateStr}-${String(nextNum).padStart(4, "0")}`
+    const nextNum = (Number(result?.count) || 0) + 1
+    
+    // Safety check: if the number exists, increment until we find a free one
+    let finalNum = nextNum
+    let exists = true
+    let finalDeliveryNumber = ""
+
+    while (exists) {
+        finalDeliveryNumber = `DLV-${dateStr}-${String(finalNum).padStart(4, "0")}`
+        const check = await db.query.deliveries.findFirst({
+            where: eq(deliveries.deliveryNumber, finalDeliveryNumber),
+            columns: { id: true }
+        })
+        if (!check) {
+            exists = false
+        } else {
+            finalNum++
+        }
+    }
+
+    return finalDeliveryNumber
 }
 
 export async function createDelivery(data: z.infer<typeof deliverySchema>) {
