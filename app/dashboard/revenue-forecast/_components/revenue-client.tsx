@@ -1,7 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useRef } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Download } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts"
 
 interface TargetData { revenue: number; forecast: number }
@@ -34,7 +37,7 @@ interface RevenueClientProps {
     inventoryData?: { jasum: number; kalEi: number; singapore: number; total: number } | null
 }
 
-const fmt = (v: number, _compact = false) => {
+const fmt = (v: number) => {
     return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 }
 
@@ -56,8 +59,8 @@ function MiniGauge({ label, data, colorClass = "bg-indigo-500", textClass = "tex
                 <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(p, 100)}%` }} />
             </div>
             <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
-                <span>R: {fmt(data.revenue, true)}</span>
-                <span>F: {fmt(data.forecast, true)}</span>
+                <span>R: {fmt(data.revenue)}</span>
+                <span>F: {fmt(data.forecast)}</span>
             </div>
         </div>
     )
@@ -98,11 +101,11 @@ function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
             <div className="flex justify-between items-end gap-2 mt-auto z-10">
                 <div className="flex flex-col">
                     <span className="text-[9px] font-bold text-muted-foreground uppercase">Forecast</span>
-                    <span className="text-xs font-extrabold truncate">{fmt(data.forecast, true)}</span>
+                    <span className="text-xs font-extrabold truncate">{fmt(data.forecast)}</span>
                 </div>
                 <div className="flex flex-col text-right">
                     <span className="text-[9px] font-bold text-primary/70 uppercase">Revenue</span>
-                    <span className="text-sm font-black text-primary truncate leading-none">{fmt(data.revenue, true)}</span>
+                    <span className="text-sm font-black text-primary truncate leading-none">{fmt(data.revenue)}</span>
                 </div>
             </div>
         </div>
@@ -123,7 +126,7 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
             <div className="flex justify-between items-start mb-2 mt-1 z-10 w-full relative">
                 <div className="flex flex-col">
                     <div className="text-xs font-black text-muted-foreground uppercase tracking-wider">{label}</div>
-                    <div className="text-2xl font-black mt-1 tracking-tight">{fmt(data.forecast, true)}</div>
+                    <div className="text-2xl font-black mt-1 tracking-tight">{fmt(data.forecast)}</div>
                     <div className="text-[10px] uppercase text-muted-foreground font-bold mt-0.5">Forecast</div>
                 </div>
             </div>
@@ -141,7 +144,7 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
             </div>
 
             <div className="flex flex-col items-end z-10">
-                <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue, true)}</div>
+                <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
                 <div className="text-[10px] uppercase text-primary/70 font-bold mt-0.5">Revenue</div>
             </div>
         </div>
@@ -165,11 +168,11 @@ function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "te
             <div className="flex justify-between items-end mt-4 pl-2">
                 <div className="flex flex-col">
                     <span className="text-[10px] text-muted-foreground font-bold uppercase">Forecast</span>
-                    <span className="text-lg font-black tracking-tight">{fmt(data.forecast, true)}</span>
+                    <span className="text-lg font-black tracking-tight">{fmt(data.forecast)}</span>
                 </div>
                 <div className="flex flex-col text-right">
                     <span className="text-[10px] text-primary/70 font-bold uppercase">Revenue</span>
-                    <span className="text-lg font-black text-primary tracking-tight truncate max-w-[120px]">{fmt(data.revenue, true)}</span>
+                    <span className="text-lg font-black text-primary tracking-tight truncate max-w-[120px]">{fmt(data.revenue)}</span>
                 </div>
             </div>
 
@@ -185,7 +188,6 @@ function ConsolidateGauge({ data }: { data: TargetData }) {
     const p = pct(data.revenue, data.forecast)
     return (
         <div className="bg-card border-2 border-primary/10 rounded-xl p-6 flex flex-col items-center justify-center h-full shadow-md relative overflow-hidden">
-            {/* Background effects */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none" />
 
@@ -221,51 +223,52 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
         { name: 'Jasum', value: data.jasum, fill: '#f59e0b' },      // Orange
         { name: 'KAL EI', value: data.kalEi, fill: '#3b82f6' },     // Blue
         { name: 'Singapore', value: data.singapore, fill: '#10b981' } // Green
-    ].filter(d => d.value > 0);
+    ];
 
     return (
-        <div className="bg-card border rounded-xl p-4 flex flex-col shadow-sm">
-            <div className="flex justify-between items-start mb-2">
-                <h3 className="text-sm font-bold uppercase tracking-tight">Total Inventory (USD)</h3>
+        <div className="bg-card border rounded-xl overflow-hidden shadow-sm flex flex-col">
+            <div className="px-4 py-3 bg-blue-600 flex justify-between items-start">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-white">Total Inventory (USD)</h3>
                 <div className="text-right">
-                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Valuasi</div>
-                    <div className="text-sm font-black text-primary">${fmt(data.total)}</div>
+                    <div className="text-[10px] text-white/70 font-bold uppercase">Total Valuasi</div>
+                    <div className="text-sm font-black text-white">${fmt(data.total)}</div>
                 </div>
             </div>
-            
-            <div className="flex-1 flex flex-col items-center justify-center min-h-[250px] relative">
-                <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                        <Pie
-                            data={chartData}
-                            innerRadius={50}
-                            outerRadius={80}
-                            paddingAngle={2}
-                            dataKey="value"
-                            nameKey="name"
-                            label={false}
-                        >
-                            {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                        </Pie>
-                        <Tooltip 
-                            formatter={(value: number) => `$ ${fmt(value)}`}
-                            contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
-                        />
-                    </PieChart>
-                </ResponsiveContainer>
-                
-                <div className="w-full flex flex-col gap-2 mt-2">
-                    {chartData.map((item, i) => (
-                        <div key={i} className="flex justify-between items-center text-xs px-2 py-1.5 rounded-md bg-muted/40">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
-                                <span className="font-semibold tracking-tight">{item.name}</span>
+            <div className="p-4 flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col items-center justify-center min-h-[250px] relative">
+                    <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                            <Pie
+                                data={chartData}
+                                innerRadius={50}
+                                outerRadius={80}
+                                paddingAngle={2}
+                                dataKey="value"
+                                nameKey="name"
+                                label={false}
+                            >
+                                {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                            </Pie>
+                            <Tooltip 
+                                formatter={(value: number) => `$ ${fmt(value)}`}
+                                contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
+                            />
+                        </PieChart>
+                    </ResponsiveContainer>
+                    
+                    <div className="w-full flex flex-col gap-2 mt-2">
+                        {chartData.map((item, i) => (
+                            <div key={i} className="flex justify-between items-center text-xs px-2 py-1.5 rounded-md bg-muted/40">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                                    <span className="font-semibold tracking-tight">{item.name}</span>
+                                </div>
+                                <span className="font-black">${fmt(item.value)}</span>
                             </div>
-                            <span className="font-black">${fmt(item.value)}</span>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>
@@ -274,7 +277,34 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
 
 export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
     const router = useRouter()
+    const dashboardRef = useRef<HTMLDivElement>(null)
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
+
+    const handleExportJPG = async () => {
+        if (!dashboardRef.current) return
+
+        try {
+            const { toJpeg } = await import("html-to-image")
+            const dataUrl = await toJpeg(dashboardRef.current, {
+                backgroundColor: "#ffffff",
+                quality: 0.95,
+                pixelRatio: 2,
+                filter: (node) => {
+                    const exclusionClasses = ['export-button-hide']
+                    return !exclusionClasses.some(className => 
+                        (node instanceof HTMLElement) && node.classList.contains(className)
+                    )
+                }
+            })
+
+            const link = document.createElement("a")
+            link.download = `revenue-forecast-${selectedPeriod}.jpg`
+            link.href = dataUrl
+            link.click()
+        } catch (error) {
+            console.error("Export failed:", error)
+        }
+    }
 
     const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
     const ytdFormatted = ytdChart.map(y => {
@@ -284,14 +314,19 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
     })
 
     return (
-        <div className="space-y-4 pb-8">
+        <div ref={dashboardRef} className="space-y-4 pb-8 p-4 bg-background">
             {/* ─── HEADER ──────────────────────────────────────────────────────── */}
             <div className="bg-card border rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">📊</div>
                         <div>
-                            <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Dashboard Monitoring</div>
+                            <div className="flex items-center gap-2">
+                                <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Dashboard Monitoring</div>
+                                <div className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full border border-primary/20">
+                                    Period: {selectedPeriod}
+                                </div>
+                            </div>
                             <h1 className="text-lg font-black text-primary leading-tight">Revenue <span className="text-foreground">vs</span> Forecast</h1>
                         </div>
                     </div>
@@ -304,33 +339,43 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                         ))}
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-bold">Period:</span>
-                    <Select defaultValue={selectedPeriod} onValueChange={v => router.push(`/dashboard/revenue-forecast?period=${v}`)}>
-                        <SelectTrigger className="w-[160px] h-8 text-xs border-primary/30 font-bold">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="2025">Yearly 2025</SelectItem>
-                            <SelectItem value="2026">Yearly 2026</SelectItem>
-                            <SelectItem value="01.2025">Jan 2025</SelectItem>
-                            <SelectItem value="02.2025">Feb 2025</SelectItem>
-                            <SelectItem value="01.2026">Jan 2026</SelectItem>
-                            <SelectItem value="02.2026">Feb 2026</SelectItem>
-                            <SelectItem value="03.2026">Mar 2026</SelectItem>
-                        </SelectContent>
-                    </Select>
+                <div className="flex items-center gap-3 shrink-0">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 text-xs font-bold gap-2 border-blue-200 hover:bg-blue-50 text-blue-700 export-button-hide"
+                        onClick={handleExportJPG}
+                    >
+                        <Download className="w-3.5 h-3.5" />
+                        Export JPG
+                    </Button>
+                    <div className="flex items-center gap-2 export-button-hide">
+                        <span className="text-xs font-bold">Period:</span>
+                        <Select defaultValue={selectedPeriod} onValueChange={v => router.push(`/dashboard/revenue-forecast?period=${v}`)}>
+                            <SelectTrigger className="w-[160px] h-8 text-xs border-primary/30 font-bold">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="2025">Yearly 2025</SelectItem>
+                                <SelectItem value="2026">Yearly 2026</SelectItem>
+                                <SelectItem value="01.2025">Jan 2025</SelectItem>
+                                <SelectItem value="02.2025">Feb 2025</SelectItem>
+                                <SelectItem value="01.2026">Jan 2026</SelectItem>
+                                <SelectItem value="02.2026">Feb 2026</SelectItem>
+                                <SelectItem value="03.2026">Mar 2026</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
             </div>
 
+            <div className="space-y-4 p-1">
+
             {/* ─── ROW 1: Consolidate + Salesman + Customer ─────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-                {/* Consolidate Gauge */}
                 <div className="lg:col-span-3">
                     <ConsolidateGauge data={targets.consolidate} />
                 </div>
-
-                {/* Salesman Grid 2x3 */}
                 <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <SalesmanCard label="MA OC" data={targets.ma_oc} />
                     <SalesmanCard label="MA WS" data={targets.ma_ws} />
@@ -339,8 +384,6 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     <SalesmanCard label="MA FQ" data={targets.ma_fq} />
                     <SalesmanCard label="MA MC" data={targets.ma_mc} />
                 </div>
-
-                {/* CK & SIS */}
                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
                     <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" />
                     <CustomerGauge label="MA SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" />
@@ -372,61 +415,63 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                 />
             </div>
 
-            {/* ─── ROW 3: Pie Chart + Inventory placeholder ─────────────────────── */}
+            {/* ─── ROW 3: Pie Chart + Inventory ─────────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* MTD Sunburst Sell Out Material */}
-                <div className="bg-card border rounded-xl p-4">
-                    <div className="flex justify-between items-start mb-3">
-                        <h3 className="text-sm font-bold">MTD Sunburst Sell Out Material</h3>
+                <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-blue-600 flex justify-between items-start">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">MTD Sunburst Sell Out Material</h3>
                         <div className="text-right">
-                            <div className="text-[10px] text-muted-foreground">Prime Product</div>
-                            <div className="text-sm font-black text-primary">{fmt(targets.primeProduct.revenue)}</div>
+                            <div className="text-[10px] text-white/70 font-semibold uppercase">Prime Product</div>
+                            <div className="text-sm font-black text-white">{fmt(targets.primeProduct.revenue)}</div>
                         </div>
                     </div>
-                    <div className="flex justify-center items-center h-[350px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie 
-                                    data={materials.slice(0, 7)} 
-                                    innerRadius={70} 
-                                    outerRadius={110} 
-                                    dataKey="revenue" 
-                                    nameKey="desc" 
-                                    paddingAngle={2} 
-                                    label={({ name }) => (name || "").substring(0, 20)}
-                                    labelLine={true}
-                                >
-                                    {materials.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                </Pie>
-                                <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11 }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                    <div className="p-4">
+                        <div className="flex justify-center items-center h-[350px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie 
+                                        data={materials.slice(0, 7)} 
+                                        innerRadius={70} 
+                                        outerRadius={110} 
+                                        dataKey="revenue" 
+                                        nameKey="desc" 
+                                        paddingAngle={2} 
+                                        label={({ name }) => (name || "").substring(0, 20)}
+                                        labelLine={true}
+                                    >
+                                        {materials.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                    </Pie>
+                                    <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11 }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
 
-                {/* Total Inventory (USD) */}
                 {inventoryData && <InventoryPieChart data={inventoryData} />}
 
-                {/* Prime Product vs Forecast mini panel + mini gauge */}
-                <div className="bg-card border rounded-xl p-5 flex flex-col gap-4 shadow-sm h-full">
-                    <h3 className="text-sm font-black uppercase tracking-tight">Prime Product & Overall Summary</h3>
-                    <div className="space-y-4">
-                        <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" />
-                        <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" />
-                        <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
-                        <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />
-                        <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" />
-                        <MiniGauge label="MA SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
+                <div className="bg-card border rounded-xl overflow-hidden flex flex-col shadow-sm h-full">
+                    <div className="px-4 py-3 bg-blue-600">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">Prime Product & Overall Summary</h3>
+                    </div>
+                    <div className="p-5 flex flex-col gap-4">
+                        <div className="space-y-4">
+                            <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" />
+                            <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" />
+                            <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
+                            <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />
+                            <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" />
+                            <MiniGauge label="MA SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* ─── ROW 4: Product Accessories + Rank Material ───────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Product Accessories Table */}
                 <div className="bg-card border rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-muted/30">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Product Accessories</h3>
+                    <div className="px-4 py-3 bg-blue-600">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">Product Accessories</h3>
                     </div>
                     <table className="w-full text-xs">
                         <thead className="bg-muted/20">
@@ -447,9 +492,8 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                         </tbody>
                     </table>
 
-                    {/* Transaction Type */}
-                    <div className="px-4 py-3 border-t border-b bg-muted/30 mt-2">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Transaction Type</h3>
+                    <div className="px-4 py-3 bg-blue-600 mt-2">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">Transaction Type</h3>
                     </div>
                     <table className="w-full text-xs">
                         <thead className="bg-muted/20">
@@ -471,7 +515,6 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     </table>
                 </div>
 
-                {/* Rank Material Sell Out */}
                 <div className="bg-card border rounded-xl overflow-hidden">
                     <div className="px-4 py-3 bg-blue-600 flex justify-between items-center">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-white">Rank. Material Sell Out</h3>
@@ -506,9 +549,8 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
 
             {/* ─── ROW 5: Revenue YTD Bar Chart ─────────────────────────────────── */}
             <div className="bg-card border rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-b flex items-center gap-2">
-                    <div className="w-3 h-6 rounded bg-cyan-400" />
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">Revenue YTD</h3>
+                <div className="px-4 py-3 bg-blue-600">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-white">Revenue YTD</h3>
                 </div>
                 <div className="p-4 h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -529,6 +571,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
             </div>
         </div>
     )
