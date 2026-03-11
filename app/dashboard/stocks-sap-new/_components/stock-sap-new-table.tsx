@@ -23,6 +23,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useQuery } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -458,41 +464,53 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                     </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                    <ScoreCard
-                        title="Total Stock Items"
-                        value={stats.totalItems}
-                        icon={Box}
-                        description={
-                            activeTab === "all"
-                                ? "All unique stock units"
-                                : activeTab === "repair-2002"
-                                    ? "Stock units in Plant 2002 (Repair)"
-                                    : `Stock units in warehouse type ${activeTab}`
-                        }
-                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
-                        iconColor="text-blue-600"
-                        textColor="text-blue-900"
-                    />
-                    <ScoreCard
-                        title="Low Stock Items"
-                        value={stats.outOfStock}
-                        icon={AlertTriangle}
-                        description="Items below minimum level"
-                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
-                        iconColor="text-amber-600"
-                        textColor="text-amber-900"
-                    />
-                    <ScoreCard
-                        title="Total Valuation"
-                        value={`IDR ${stats.totalValuationIdr.toLocaleString()}`}
-                        icon={TrendingUp}
-                        description={`Total inventory value (USD × ${parsedRate.toLocaleString()})`}
-                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
-                        iconColor="text-emerald-600"
-                        textColor="text-emerald-900"
-                    />
-                </div>
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value="analytics" className="border rounded-xl bg-card shadow-sm px-6">
+                        <AccordionTrigger className="hover:no-underline py-4">
+                            <div className="flex items-center gap-2">
+                                <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                                <span className="font-semibold text-base">Ringkasan & Analitik Stock</span>
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2 pb-6">
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <ScoreCard
+                                    title="Total Stock Items"
+                                    value={stats.totalItems}
+                                    icon={Box}
+                                    description={
+                                        activeTab === "all"
+                                            ? "All unique stock units"
+                                            : activeTab === "repair-2002"
+                                                ? "Stock units in Plant 2002 (Repair)"
+                                                : `Stock units in warehouse type ${activeTab}`
+                                    }
+                                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
+                                    iconColor="text-blue-600"
+                                    textColor="text-blue-900"
+                                />
+                                <ScoreCard
+                                    title="Low Stock Items"
+                                    value={stats.outOfStock}
+                                    icon={AlertTriangle}
+                                    description="Items below minimum level"
+                                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
+                                    iconColor="text-amber-600"
+                                    textColor="text-amber-900"
+                                />
+                                <ScoreCard
+                                    title="Total Valuation"
+                                    value={`IDR ${stats.totalValuationIdr.toLocaleString()}`}
+                                    icon={TrendingUp}
+                                    description={`Total inventory value (USD × ${parsedRate.toLocaleString()})`}
+                                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
+                                    iconColor="text-emerald-600"
+                                    textColor="text-emerald-900"
+                                />
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
 
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-end gap-4">
