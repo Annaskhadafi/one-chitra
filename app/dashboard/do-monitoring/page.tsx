@@ -2,6 +2,7 @@ import { getDeliveries } from "@/app/actions/delivery"
 import { DoMonitoringTable, type DeliveryWithRelations } from "./_components/do-monitoring-table"
 import { Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
+import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 function calculateGrandTotal(salesOrder: any) {
     if (!salesOrder || !salesOrder.items) return 0
@@ -37,6 +38,7 @@ export default async function DoMonitoringPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+            <AutoCloseSidebar />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex flex-col gap-1">
                     <h1 className="text-2xl font-bold tracking-tight">DO Monitoring</h1>

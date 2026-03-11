@@ -37,7 +37,8 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3 } from "lucide-react"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { SalesOrderWithRelations } from "@/lib/types"
@@ -576,39 +577,54 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
     return (
         <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-                <ScoreCard
-                    title="Total Orders"
-                    value={totalOrders}
-                    icon={ShoppingCart}
-                    description="All sales orders"
-                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
-                    iconColor="text-blue-600 dark:text-blue-400"
-                    textColor="text-blue-900 dark:text-blue-100"
-                />
-                <ScoreCard
-                    title="Completed"
-                    value={completedOrders}
-                    icon={CheckCircle}
-                    description="Successfully fulfilled"
-                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
-                    iconColor="text-emerald-600 dark:text-emerald-400"
-                    textColor="text-emerald-900 dark:text-emerald-100"
-                />
-                <ScoreCard
-                    title="Pending"
-                    value={pendingOrders}
-                    icon={Clock}
-                    description="Draft or confirmed orders"
-                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
-                    iconColor="text-amber-600 dark:text-amber-400"
-                    textColor="text-amber-900 dark:text-amber-100"
-                />
-            </div>
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="analytics" className="border-none">
+                    <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                <BarChart3 className="h-5 w-5" />
+                            </div>
+                            <div className="text-left">
+                                <h3 className="text-base font-bold text-foreground/90">Ringkasan & Dashboard Analitik</h3>
+                                <p className="text-xs text-muted-foreground font-normal">Klik untuk melihat statistik penjualan, tren bulanan, dan performa pesanan.</p>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="bg-card border border-t-0 rounded-b-xl shadow-sm p-6 overflow-visible">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <ScoreCard
+                                    title="Total Orders"
+                                    value={totalOrders}
+                                    icon={ShoppingCart}
+                                    description="All sales orders"
+                                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 dark:from-blue-500/20 dark:via-blue-400/10 dark:to-indigo-500/20 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20"
+                                    iconColor="text-blue-600 dark:text-blue-400"
+                                    textColor="text-blue-900 dark:text-blue-100"
+                                />
+                                <ScoreCard
+                                    title="Completed"
+                                    value={completedOrders}
+                                    icon={CheckCircle}
+                                    description="Successfully fulfilled"
+                                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 dark:from-emerald-500/20 dark:via-emerald-400/10 dark:to-teal-500/20 dark:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20"
+                                    iconColor="text-emerald-600 dark:text-emerald-400"
+                                    textColor="text-emerald-900 dark:text-emerald-100"
+                                />
+                                <ScoreCard
+                                    title="Pending"
+                                    value={pendingOrders}
+                                    icon={Clock}
+                                    description="Draft or confirmed orders"
+                                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 dark:from-amber-500/20 dark:via-amber-400/10 dark:to-orange-500/20 dark:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20"
+                                    iconColor="text-amber-600 dark:text-amber-400"
+                                    textColor="text-amber-900 dark:text-amber-100"
+                                />
+                            </div>
 
-            {/* Charts Row */}
-            {data.length > 0 && (
-                <div className="grid gap-4 md:grid-cols-3">
+                            {/* Charts Row */}
+                            {data.length > 0 && (
+                                <div className="grid gap-4 md:grid-cols-3">
                     {/* Status Chart */}
                     <Card>
                         <CardHeader className="pb-2">
@@ -689,7 +705,11 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                         </CardContent>
                     </Card>
                 </div>
-            )}
+                            )}
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
 
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">

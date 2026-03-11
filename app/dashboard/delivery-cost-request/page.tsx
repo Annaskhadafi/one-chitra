@@ -4,6 +4,7 @@ import { getSavedDeliveryCostRequests, getFleetData, getDeliveryCostRequestStats
 import { DeliveryCostRequestClient } from "./_components/delivery-cost-request-client";
 import { DeliveryCostScorecard } from "./_components/delivery-cost-scorecard";
 import { DeliveryCostFilters } from "./_components/delivery-cost-filters";
+import { AutoCloseSidebar } from "@/components/auto-close-sidebar";
 
 export default async function DeliveryCostRequestPage({
     searchParams,
@@ -27,6 +28,7 @@ export default async function DeliveryCostRequestPage({
 
     return (
         <div className="h-full flex-1 flex-col space-y-6 p-8 md:flex">
+            <AutoCloseSidebar />
             <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                     <Calculator className="h-5 w-5" />

@@ -4,6 +4,7 @@ import { BillingClient } from "./billing-client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { BillingRecordDisplay } from "@/lib/types"
 import { Loader2 } from "lucide-react"
+import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export default async function BillingPage() {
     const result = await getBillingRecords()
@@ -12,6 +13,7 @@ export default async function BillingPage() {
 
     return (
         <div className="h-full flex-1 flex-col space-y-8 p-8 md:flex">
+            <AutoCloseSidebar />
             <div className="flex items-center justify-between space-y-2">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Billing Management</h2>

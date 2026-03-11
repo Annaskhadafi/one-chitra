@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Plus, ShoppingCart } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
+import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export default async function SalesOrdersPage() {
     const orders = await getSalesOrders()
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+            <AutoCloseSidebar />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex-1">
                     <PageHeader

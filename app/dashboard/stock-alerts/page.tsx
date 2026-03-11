@@ -1,6 +1,8 @@
 import { getReorderAlerts } from "@/app/actions/stock-alerts"
 import { ReorderAlertTable } from "./_components/reorder-alert-table"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { BarChart3 } from "lucide-react"
 
 export default async function StockAlertsPage() {
     const alerts = await getReorderAlerts()
@@ -46,8 +48,23 @@ export default async function StockAlertsPage() {
                 </p>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Summary Cards & Charts */}
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="analytics" className="border-none">
+                    <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                <BarChart3 className="h-5 w-5" />
+                            </div>
+                            <div className="text-left">
+                                <h3 className="text-base font-bold text-foreground/90">Ringkasan & Dashboard Analitik</h3>
+                                <p className="text-xs text-muted-foreground font-normal">Klik untuk melihat status alert kritis dan produk prioritas restock.</p>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="bg-card border border-t-0 rounded-b-xl shadow-sm p-6 overflow-visible">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="rounded-xl border bg-card p-5 flex flex-col gap-1">
                     <p className="text-sm text-muted-foreground">Total Alert</p>
                     <p className="text-3xl font-bold">{alerts.length}</p>
@@ -87,6 +104,10 @@ export default async function StockAlertsPage() {
                     </div>
                 </div>
             )}
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
 
             <div className="flex-1">
                 <ReorderAlertTable data={alerts} />

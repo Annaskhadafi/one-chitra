@@ -6,6 +6,7 @@ import { Plus, Truck } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
+import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export default async function DeliveriesPage() {
     const [deliveriesData, itemsData] = await Promise.all([
@@ -17,6 +18,7 @@ export default async function DeliveriesPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+            <AutoCloseSidebar />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex-1">
                     <PageHeader
