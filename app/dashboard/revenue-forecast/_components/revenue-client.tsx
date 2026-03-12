@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
@@ -47,27 +47,45 @@ const pctColor = (p: number) => p >= 100 ? "text-green-600" : p >= 80 ? "text-bl
 const PIE_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#14b8a6']
 
 // Mini horizontal gauge bar
-function MiniGauge({ label, data, colorClass = "bg-indigo-500", textClass = "text-indigo-600" }: { label: string; data: TargetData; colorClass?: string; textClass?: string }) {
+function MiniGauge({
+    label,
+    data,
+    colorClass = "bg-indigo-500",
+    textClass = "text-indigo-600",
+    showProgress = true,
+    showPercentage = true,
+    emphasizeRevenue = false,
+}: {
+    label: string
+    data: TargetData
+    colorClass?: string
+    textClass?: string
+    showProgress?: boolean
+    showPercentage?: boolean
+    emphasizeRevenue?: boolean
+}) {
     const p = pct(data.revenue, data.forecast)
     return (
         <div className="space-y-1.5">
             <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-foreground truncate max-w-[140px]" title={label}>{label}</span>
-                <span className={`font-black ${textClass}`}>{p.toFixed(1)}%</span>
+                {showPercentage ? <span className={`font-black ${textClass}`}>{p.toFixed(1)}%</span> : null}
             </div>
-            <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(p, 100)}%` }} />
-            </div>
-            <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
-                <span>R: {fmt(data.revenue)}</span>
-                <span>F: {fmt(data.forecast)}</span>
+            {showProgress ? (
+                <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(p, 100)}%` }} />
+                </div>
+            ) : null}
+            <div className="flex justify-between items-end text-[10px] text-muted-foreground font-medium">
+                <span className={emphasizeRevenue ? "text-[10px]" : ""}>F: {fmt(data.forecast)}</span>
+                <span className={emphasizeRevenue ? "text-xl font-black text-primary leading-none" : ""}>R: {fmt(data.revenue)}</span>
             </div>
         </div>
     )
 }
 
 // Compact percentage badge card
-function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
+function SalesmanCard({ label, data, isExporting = false }: { label: string; data: TargetData; isExporting?: boolean }) {
     const p = pct(data.revenue, data.forecast)
     const getTheme = (val: number) => {
         if (val >= 100) return { bg: 'text-emerald-500', stroke: '#10b981', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30' }
@@ -89,8 +107,24 @@ function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
             <div className="relative w-full h-[54px] flex justify-center items-center mb-2 z-10">
                 <div className="relative w-[100px] h-[54px]">
                     <svg viewBox="0 0 84 46" className="w-full h-full drop-shadow-sm">
-                        <path d="M 6,40 A 36,36 0 0,1 78,40" fill="none" className="stroke-muted/30" strokeWidth="10" strokeLinecap="round" />
-                        <path d="M 6,40 A 36,36 0 0,1 78,40" fill="none" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={theme.stroke} className="transition-all duration-1000" />
+                        <path
+                            d="M 6,40 A 36,36 0 0,1 78,40"
+                            fill="none"
+                            className={isExporting ? "" : "stroke-muted/30"}
+                            stroke={isExporting ? "#9ca3af" : undefined}
+                            strokeWidth="10"
+                            strokeLinecap="round"
+                        />
+                        <path
+                            d="M 6,40 A 36,36 0 0,1 78,40"
+                            fill="none"
+                            strokeWidth="10"
+                            strokeLinecap="round"
+                            strokeDasharray={circ}
+                            strokeDashoffset={dashOffset}
+                            stroke={theme.stroke}
+                            className="transition-all duration-1000"
+                        />
                     </svg>
                     <div className={`absolute bottom-0 left-0 w-full text-center text-lg font-black ${theme.bg}`}>
                         {p.toFixed(0)}%
@@ -113,7 +147,7 @@ function SalesmanCard({ label, data }: { label: string; data: TargetData }) {
 }
 
 // Customer details (CK/SIS)
-function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "text-gray-700 dark:text-gray-300", strokeColor = "#6b7280" }: { label: string; data: TargetData; colorClass?: string; textClass?: string; strokeColor?: string }) {
+function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "text-gray-700 dark:text-gray-300", strokeColor = "#6b7280", isExporting = false }: { label: string; data: TargetData; colorClass?: string; textClass?: string; strokeColor?: string; isExporting?: boolean }) {
     const p = pct(data.revenue, data.forecast)
     const radius = 56; const circ = Math.PI * radius
     const dashOffset = circ - (Math.min(p, 100) / 100) * circ
@@ -134,8 +168,24 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
             <div className="relative w-full h-[80px] flex justify-center items-center my-3 z-10">
                 <div className="relative w-[150px] h-[80px]">
                     <svg viewBox="0 0 128 72" className="w-full h-full drop-shadow-md">
-                        <path d="M 8,64 A 56,56 0 0,1 120,64" fill="none" className="stroke-muted/30" strokeWidth="12" strokeLinecap="round" />
-                        <path d="M 8,64 A 56,56 0 0,1 120,64" fill="none" strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOffset} stroke={strokeColor} className="transition-all duration-1000" />
+                        <path
+                            d="M 8,64 A 56,56 0 0,1 120,64"
+                            fill="none"
+                            className={isExporting ? "" : "stroke-muted/30"}
+                            stroke={isExporting ? "#9ca3af" : undefined}
+                            strokeWidth="12"
+                            strokeLinecap="round"
+                        />
+                        <path
+                            d="M 8,64 A 56,56 0 0,1 120,64"
+                            fill="none"
+                            strokeWidth="12"
+                            strokeLinecap="round"
+                            strokeDasharray={circ}
+                            strokeDashoffset={dashOffset}
+                            stroke={strokeColor}
+                            className="transition-all duration-1000"
+                        />
                     </svg>
                     <div className={`absolute bottom-0 left-0 w-full text-center text-3xl font-black ${textClass}`}>
                         {p.toFixed(1)}%
@@ -282,12 +332,16 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
 export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
     const router = useRouter()
     const dashboardRef = useRef<HTMLDivElement>(null)
+    const [isExportingJpg, setIsExportingJpg] = useState(false)
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
 
     const handleExportJPG = async () => {
         if (!dashboardRef.current) return
 
         try {
+            setIsExportingJpg(true)
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
             const { toJpeg } = await import("html-to-image")
             const dataUrl = await toJpeg(dashboardRef.current, {
                 backgroundColor: "#ffffff",
@@ -307,6 +361,8 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
             link.click()
         } catch (error) {
             console.error("Export failed:", error)
+        } finally {
+            setIsExportingJpg(false)
         }
     }
 
@@ -381,16 +437,16 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     <ConsolidateGauge data={targets.consolidate} />
                 </div>
                 <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <SalesmanCard label="MA OC" data={targets.ma_oc} />
-                    <SalesmanCard label="MA WS" data={targets.ma_ws} />
-                    <SalesmanCard label="MA AG" data={targets.ma_ag} />
-                    <SalesmanCard label="MA BR" data={targets.ma_br} />
-                    <SalesmanCard label="MA FQ" data={targets.ma_fq} />
-                    <SalesmanCard label="MA MC" data={targets.ma_mc} />
+                    <SalesmanCard label="MA OC" data={targets.ma_oc} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA WS" data={targets.ma_ws} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA AG" data={targets.ma_ag} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA BR" data={targets.ma_br} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA MC" data={targets.ma_mc} isExporting={isExportingJpg} />
                 </div>
                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
-                    <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" />
-                    <CustomerGauge label="MA SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" />
+                    <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" isExporting={isExportingJpg} />
+                    <CustomerGauge label="MA SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" isExporting={isExportingJpg} />
                 </div>
             </div>
 
@@ -469,7 +525,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     </div>
                     <div className="p-5 flex flex-col gap-4">
                         <div className="space-y-4">
-                            <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" />
+                            <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" showProgress={false} showPercentage={false} emphasizeRevenue={true} />
                             <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" />
                             <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
                             <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />

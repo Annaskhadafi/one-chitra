@@ -432,14 +432,16 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         <div className="space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <div className="flex items-center justify-between">
-                    <TabsList>
-                        <TabsTrigger value="all">All Stocks</TabsTrigger>
-                        {warehouseTypes.filter(t => t !== "all").map(type => (
-                            <TabsTrigger key={type || "unknown"} value={type || "unknown"}>
-                                {type}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
+                    <div className="max-w-[calc(100vw-7rem)] overflow-x-auto sm:max-w-none">
+                        <TabsList className="w-max min-w-max flex-nowrap">
+                            <TabsTrigger value="all">All Stocks</TabsTrigger>
+                            {warehouseTypes.filter(t => t !== "all").map(type => (
+                                <TabsTrigger key={type || "unknown"} value={type || "unknown"}>
+                                    {type}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </div>
                     <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh

@@ -727,8 +727,8 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Product Search + Add */}
-            <div className="flex items-center justify-between mb-2 px-2">
-                <div className="flex items-center gap-4 bg-muted/30 p-2 rounded-lg border border-blue-100">
+            <div className="mb-2 flex flex-col gap-2 px-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex w-full flex-wrap items-center gap-4 rounded-lg border border-blue-100 bg-muted/30 p-2 sm:w-auto">
                     <div className="flex items-center gap-2">
                         <Label htmlFor="margin-input" className="text-xs font-bold text-blue-700 whitespace-nowrap">Margin (%)</Label>
                         <Input
@@ -751,7 +751,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 <Button
                     onClick={addEmptyRow}
                     variant="outline"
-                    className="h-8 border-blue-600 text-blue-600 hover:bg-blue-50 border-dashed border-2 font-bold"
+                    className="h-8 w-full border-2 border-dashed border-blue-600 font-bold text-blue-600 hover:bg-blue-50 sm:w-auto"
                 >
                     <Plus className="h-4 w-4 mr-1" /> TAMBAH BARIS
                 </Button>

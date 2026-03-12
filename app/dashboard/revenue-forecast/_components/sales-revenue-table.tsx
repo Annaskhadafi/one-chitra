@@ -1,8 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import * as XLSX from "xlsx"
 
 interface SalesRevenueData {
@@ -70,10 +79,94 @@ const fmt = (v: number | null) => {
 
 export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTableProps) {
     const [isExpanded, setIsExpanded] = useState(false)
+    const [selectedCustomerNames, setSelectedCustomerNames] = useState<string[]>([])
+    const [selectedSalesmen, setSelectedSalesmen] = useState<string[]>([])
+    const [searchQuery, setSearchQuery] = useState("")
+
+    const customerNameOptions = useMemo(() => {
+        const uniqueNames = Array.from(
+            new Set(
+                data
+                    .map((row) => row.customerName?.trim())
+                    .filter((name): name is string => Boolean(name)),
+            ),
+        )
+        return uniqueNames.sort((a, b) => a.localeCompare(b))
+    }, [data])
+
+    const salesmanOptions = useMemo(() => {
+        const uniqueSalesmen = Array.from(
+            new Set(
+                data
+                    .map((row) => row.salesman?.trim())
+                    .filter((name): name is string => Boolean(name)),
+            ),
+        )
+        return uniqueSalesmen.sort((a, b) => a.localeCompare(b))
+    }, [data])
+
+    const filteredData = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase()
+
+        return data.filter((row) => {
+            const customerName = (row.customerName ?? "").trim()
+            const salesmanName = (row.salesman ?? "").trim()
+
+            const matchesCustomer =
+                selectedCustomerNames.length === 0 || selectedCustomerNames.includes(customerName)
+            const matchesSalesman =
+                selectedSalesmen.length === 0 || selectedSalesmen.includes(salesmanName)
+
+            if (!matchesCustomer || !matchesSalesman) {
+                return false
+            }
+
+            if (!query) {
+                return true
+            }
+
+            const searchableText = [
+                row.customer,
+                row.customerName,
+                row.salesman,
+                row.billingNo,
+                row.materialNo,
+                row.materialDescription,
+                row.poNo,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            return searchableText.includes(query)
+        })
+    }, [data, searchQuery, selectedCustomerNames, selectedSalesmen])
+
+    const filteredTotal = useMemo(() => {
+        return filteredData.reduce((sum, row) => sum + (row.revenueInLocCurr ?? 0), 0)
+    }, [filteredData])
+
+    const toggleCustomerName = (name: string, checked: boolean) => {
+        setSelectedCustomerNames((prev) => {
+            if (checked) {
+                return prev.includes(name) ? prev : [...prev, name]
+            }
+            return prev.filter((item) => item !== name)
+        })
+    }
+
+    const toggleSalesman = (name: string, checked: boolean) => {
+        setSelectedSalesmen((prev) => {
+            if (checked) {
+                return prev.includes(name) ? prev : [...prev, name]
+            }
+            return prev.filter((item) => item !== name)
+        })
+    }
 
     const handleExportExcel = () => {
         // Prepare data for Excel
-        const excelData = data.map((row) => ({
+        const excelData = filteredData.map((row) => ({
             "Sales Rev ID": row.salesRevId,
             "Sorg": row.sorg || "",
             "Bill Type": row.billTy || "",
@@ -153,7 +246,7 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
                         </h3>
                     </button>
                     <span className="text-[10px] text-blue-800 bg-white/20 px-2 py-1 rounded font-bold">
-                        {count} records
+                        {filteredData.length}{filteredData.length !== count ? ` / ${count}` : ""} records
                     </span>
                 </div>
                 <Button
@@ -170,12 +263,81 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
             {/* Summary bar */}
             <div className="px-4 py-2 bg-primary/5 border-b flex justify-between items-center">
                 <span className="text-xs font-semibold text-muted-foreground">Total Revenue in Loc Curr:</span>
-                <span className="text-sm font-black text-primary">{fmt(total)}</span>
+                <span className="text-sm font-black text-primary">{fmt(filteredTotal)}</span>
             </div>
 
             {/* Collapsible table */}
             {isExpanded && (
-                <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-accent">
+                <>
+                    <div className="border-b bg-muted/20 px-4 py-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <Input
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search customer, salesman, billing, material, PO..."
+                                className="h-9"
+                            />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="h-9 justify-between font-normal">
+                                        <span className="truncate">
+                                            {selectedCustomerNames.length > 0
+                                                ? `Customer Name (${selectedCustomerNames.length})`
+                                                : "Filter: Customer Name"}
+                                        </span>
+                                        <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-[320px] max-h-[320px]" align="start">
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedCustomerNames([]) }}>
+                                        Clear Customer Name Filter
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    {customerNameOptions.map((name) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={name}
+                                            checked={selectedCustomerNames.includes(name)}
+                                            onCheckedChange={(checked) => toggleCustomerName(name, Boolean(checked))}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="h-9 justify-between font-normal">
+                                        <span className="truncate">
+                                            {selectedSalesmen.length > 0
+                                                ? `Salesman (${selectedSalesmen.length})`
+                                                : "Filter: Salesman"}
+                                        </span>
+                                        <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-[320px] max-h-[320px]" align="start">
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedSalesmen([]) }}>
+                                        Clear Salesman Filter
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    {salesmanOptions.map((name) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={name}
+                                            checked={selectedSalesmen.includes(name)}
+                                            onCheckedChange={(checked) => toggleSalesman(name, Boolean(checked))}
+                                            onSelect={(e) => e.preventDefault()}
+                                        >
+                                            {name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    </div>
+
+                    <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-accent">
                     <table className="w-full text-xs">
                         <thead className="bg-blue-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
                             <tr>
@@ -195,14 +357,14 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
                             </tr>
                         </thead>
                         <tbody>
-                            {data.length === 0 ? (
+                            {filteredData.length === 0 ? (
                                 <tr>
                                     <td colSpan={13} className="px-4 py-6 text-center text-muted-foreground">
                                         No data available
                                     </td>
                                 </tr>
                             ) : (
-                                data.map((row, i) => (
+                                filteredData.map((row, i) => (
                                     <tr key={row.salesRevId} className="border-t hover:bg-muted/30">
                                         <td className="px-3 py-2 text-muted-foreground border-r">{i + 1}</td>
                                         <td className="px-3 py-2 border-r whitespace-nowrap">{row.billingDate || "-"}</td>
@@ -231,6 +393,7 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
                         </tbody>
                     </table>
                 </div>
+                </>
             )}
         </div>
     )

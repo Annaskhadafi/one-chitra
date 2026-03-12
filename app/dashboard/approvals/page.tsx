@@ -29,6 +29,11 @@ export default async function ApprovalInboxPage() {
     const pendingTasks = inbox.pendingTasks
     const mySubmissions = inbox.mySubmissions
 
+    async function handleApprovalDecision(formData: FormData): Promise<void> {
+        "use server"
+        await submitApprovalDecision(formData)
+    }
+
     return (
         <div className="space-y-6 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -125,9 +130,7 @@ export default async function ApprovalInboxPage() {
                                                 <div className="flex flex-col items-end gap-2">
                                                     <span className="text-[10px] text-muted-foreground">{noteHint}</span>
                                                     <form
-                                                        action={async (formData: FormData): Promise<void> => {
-                                                            await submitApprovalDecision(formData)
-                                                        }}
+                                                        action={handleApprovalDecision}
                                                         className="flex items-center justify-end gap-2"
                                                     >
                                                         <input type="hidden" name="assignmentId" value={task.assignmentId} />
