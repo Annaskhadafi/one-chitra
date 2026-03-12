@@ -71,7 +71,7 @@ export const deliveryItemSchema = z.object({
     salesOrderItemId: z.number().optional(),
     productId: z.number().min(1, "Product is required"),
     orderedQuantity: z.number().min(0).default(0),
-    deliveredQuantity: z.number().min(1, "Delivered quantity must be at least 1"),
+    deliveredQuantity: z.number().min(0, "Delivered quantity must be at least 0"),
     serialNumbers: z.array(z.string()).optional(),
 })
 

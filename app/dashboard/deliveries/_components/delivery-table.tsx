@@ -500,17 +500,32 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             accessorKey: "deliveryType",
-            header: "Type",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold">
+                    Type
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => <Badge variant="outline" className="capitalize">{row.original.deliveryType}</Badge>,
         },
         {
             accessorKey: "driverName",
-            header: "Driver",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold">
+                    Driver
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => row.original.driverName || "-",
         },
         {
             accessorKey: "vehicleNumber",
-            header: "Vehicle",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold">
+                    Vehicle
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             cell: ({ row }) => (
                 <div className="text-sm">
                     <span>{row.original.vehicleNumber || "-"}</span>
@@ -522,13 +537,23 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             id: "warehouse",
-            header: "Warehouse",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold">
+                    Warehouse
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             accessorFn: (row) => row.warehouse?.description || row.warehouse?.sloc,
             cell: ({ row }) => row.original.warehouse?.description || row.original.warehouse?.sloc || "-",
         },
         {
             id: "createdBy",
-            header: "Created By",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8 text-xs font-semibold">
+                    Created By
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
             accessorFn: (row) => row.createdByUser?.name,
             cell: ({ row }) => row.original.createdByUser ? (
                 <div className="flex items-center gap-1.5">
@@ -539,12 +564,32 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
         {
             id: "items",
-            header: () => <div className="text-right">Items</div>,
+            accessorFn: (row) => row.items.length,
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8 text-xs font-semibold">
+                        Items
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
             cell: ({ row }) => <div className="text-right">{row.original.items.length}</div>,
         },
         {
             id: "fulfillment",
-            header: () => <div className="text-right">Fulfillment</div>,
+            accessorFn: (row) => {
+                const totalOrdered = row.items.reduce((sum, i) => sum + i.orderedQuantity, 0)
+                const totalDelivered = row.items.reduce((sum, i) => sum + i.deliveredQuantity, 0)
+                return totalOrdered === 0 ? 0 : (totalDelivered / totalOrdered)
+            },
+            header: ({ column }) => (
+                <div className="text-right">
+                    <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-mr-4 h-8 text-xs font-semibold">
+                        Fulfillment
+                        {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    </Button>
+                </div>
+            ),
             cell: ({ row }) => {
                 const items = row.original.items
                 const totalOrdered = items.reduce((sum, i) => sum + i.orderedQuantity, 0)

@@ -360,7 +360,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         setItems(prev => prev.map((item, i) => {
             if (i !== index) return item
 
-            const newQty = Math.min(Math.max(1, qty), item.remainingQuantity)
+            const newQty = Math.min(Math.max(0, qty), item.remainingQuantity)
 
             // Adjust serial numbers array size if it's a TYRE
             let newSerialNumbers = item.serialNumbers
