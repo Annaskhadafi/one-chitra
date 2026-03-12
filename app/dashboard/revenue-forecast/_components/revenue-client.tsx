@@ -151,9 +151,9 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
     )
 }
 
-// Big category card (Service / PA / PA+Service)
-function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "text-blue-700 dark:text-blue-400", lightBg = "bg-blue-50/50 dark:bg-blue-950/20" }: {
-    label: string; data: TargetData; colorClass?: string; textClass?: string; lightBg?: string
+// Big category card (Service / PA / PA+Service / Prime Product)
+function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "text-blue-700 dark:text-blue-400", lightBg = "bg-blue-50/50 dark:bg-blue-950/20", hideStats = false, largeRevenue = false }: {
+    label: string; data: TargetData; colorClass?: string; textClass?: string; lightBg?: string; hideStats?: boolean; largeRevenue?: boolean
 }) {
     const p = pct(data.revenue, data.forecast)
     return (
@@ -162,23 +162,27 @@ function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "te
 
             <div className="flex justify-between items-start">
                 <div className="text-[11px] font-black uppercase text-muted-foreground tracking-wider line-clamp-2 max-w-[65%] pl-2">{label}</div>
-                <div className={`text-3xl font-black ${textClass} drop-shadow-sm`}>{p.toFixed(1)}%</div>
+                {!hideStats && <div className={`text-3xl font-black ${textClass} drop-shadow-sm`}>{p.toFixed(1)}%</div>}
             </div>
 
             <div className="flex justify-between items-end mt-4 pl-2">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase">Forecast</span>
-                    <span className="text-lg font-black tracking-tight">{fmt(data.forecast)}</span>
-                </div>
-                <div className="flex flex-col text-right">
+                {!hideStats && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] text-muted-foreground font-bold uppercase">Forecast</span>
+                        <span className="text-lg font-black tracking-tight">{fmt(data.forecast)}</span>
+                    </div>
+                )}
+                <div className={`flex flex-col ${hideStats ? 'w-full' : 'text-right'}`}>
                     <span className="text-[10px] text-primary/70 font-bold uppercase">Revenue</span>
-                    <span className="text-lg font-black text-primary tracking-tight truncate max-w-[120px]">{fmt(data.revenue)}</span>
+                    <span className={`${largeRevenue ? 'text-2xl font-black' : 'text-lg font-black'} text-primary tracking-tight truncate`}>{fmt(data.revenue)}</span>
                 </div>
             </div>
 
-            <div className="h-1.5 bg-black/5 dark:bg-white/10 rounded-full w-[calc(100%-8px)] ml-2 overflow-hidden mt-3">
-                <div className={`h-full rounded-full ${colorClass} transition-all`} style={{ width: `${Math.min(p, 100)}%` }} />
-            </div>
+            {!hideStats && (
+                <div className="h-1.5 bg-black/5 dark:bg-white/10 rounded-full w-[calc(100%-8px)] ml-2 overflow-hidden mt-3">
+                    <div className={`h-full rounded-full ${colorClass} transition-all`} style={{ width: `${Math.min(p, 100)}%` }} />
+                </div>
+            )}
         </div>
     )
 }
@@ -398,6 +402,8 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     colorClass="bg-indigo-500"
                     textClass="text-indigo-700 dark:text-indigo-400"
                     lightBg="bg-indigo-50/50 dark:bg-indigo-950/20"
+                    hideStats={true}
+                    largeRevenue={true}
                 />
                 <CategoryCard
                     label="Forecast Service"

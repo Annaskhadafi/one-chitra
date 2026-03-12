@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
-import { desc, notIlike, isNull, isNotNull, or, and, eq, ne, gte, SQL } from "drizzle-orm"
+import { salesRevenueSap } from "@/db/schema/sap"
+import { desc, notIlike, isNull, isNotNull, or, and, eq, ne, gte, SQL, sql } from "drizzle-orm"
 import { getSetting } from "./settings"
 
 export interface HistoryOrderItem {
@@ -37,35 +37,30 @@ export interface HistoryOrderFilters {
 export async function getHistoryOrderFilters() {
     try {
         const baseWhere = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
+            isNotNull(salesRevenueSap.billingDate),
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                and(
+                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+                    notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
+                )
             )
         );
 
         const [customers, plants, matGrps] = await Promise.all([
-            db.selectDistinct({ name: historyOrders.customerName }).from(historyOrders).where(baseWhere).orderBy(historyOrders.customerName),
-            db.selectDistinct({ name: historyOrders.plant }).from(historyOrders).where(baseWhere).orderBy(historyOrders.plant),
-            db.selectDistinct({ name: historyOrders.matGrpDesc }).from(historyOrders).where(baseWhere).orderBy(historyOrders.matGrpDesc),
+            db.selectDistinct({ name: salesRevenueSap.customerName }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.customerName),
+            db.selectDistinct({ name: salesRevenueSap.plant }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.plant),
+            db.selectDistinct({ name: salesRevenueSap.matGrpDesc }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.matGrpDesc),
         ]);
 
-        // Get years and months from billingDate (text format M/D/YYYY)
-        // This is a bit expensive but only run once on page load
-        const dates = await db.selectDistinct({ date: historyOrders.billingDate }).from(historyOrders).where(baseWhere);
-        const years = new Set<string>();
-        const months = new Set<string>();
+        // Get years and months from billingDate (Date type)
+        const yearsQuery = await db.selectDistinct({
+            year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`
+        }).from(salesRevenueSap).where(baseWhere);
 
-        dates.forEach(d => {
-            if (d.date) {
-                const parts = d.date.split('/');
-                if (parts.length === 3) {
-                    years.add(parts[2]);
-                    months.add(parts[0].padStart(2, '0'));
-                }
-            }
-        });
+        const monthsQuery = await db.selectDistinct({
+            month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM')`
+        }).from(salesRevenueSap).where(baseWhere);
 
         return {
             success: true,
@@ -73,8 +68,8 @@ export async function getHistoryOrderFilters() {
                 customers: customers.map(c => c.name).filter(Boolean),
                 plants: plants.map(p => p.name).filter(Boolean),
                 matGrps: matGrps.map(m => m.name).filter(Boolean),
-                years: Array.from(years).sort().reverse(),
-                months: Array.from(months).sort(),
+                years: yearsQuery.map(y => y.year).sort().reverse(),
+                months: monthsQuery.map(m => m.month).sort(),
             }
         };
     } catch (error) {
@@ -83,7 +78,6 @@ export async function getHistoryOrderFilters() {
     }
 }
 
-import { sql } from "drizzle-orm"
 
 export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
     try {
@@ -106,11 +100,13 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
         const filterArray: SQL[] = [];
 
         const baseFilter = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
+            isNotNull(salesRevenueSap.billingDate),
             or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
+                isNull(salesRevenueSap.customerName),
+                and(
+                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+                    notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
+                )
             )
         );
 
@@ -120,11 +116,11 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
 
         if (search) {
             const searchFilter = or(
-                sql`${historyOrders.customerName} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.materialNo} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.materialDescription} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.poNo} ILIKE ${`%${search}%`}`,
-                sql`${historyOrders.salesman} ILIKE ${`%${search}%`}`
+                sql`${salesRevenueSap.customerName} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.materialNo} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.materialDescription} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.poNo} ILIKE ${`%${search}%`}`,
+                sql`${salesRevenueSap.salesman} ILIKE ${`%${search}%`}`
             );
 
             if (searchFilter) {
@@ -132,19 +128,19 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
             }
         }
 
-        if (customers.length > 0) filterArray.push(sql`${historyOrders.customerName} IN ${customers}`);
-        if (plants.length > 0) filterArray.push(sql`${historyOrders.plant} IN ${plants}`);
-        if (matGrps.length > 0) filterArray.push(sql`${historyOrders.matGrpDesc} IN ${matGrps}`);
+        if (customers.length > 0) filterArray.push(sql`${salesRevenueSap.customerName} IN ${customers}`);
+        if (plants.length > 0) filterArray.push(sql`${salesRevenueSap.plant} IN ${plants}`);
+        if (matGrps.length > 0) filterArray.push(sql`${salesRevenueSap.matGrpDesc} IN ${matGrps}`);
 
-        // Date filters for MM/DD/YYYY text format
         if (years.length > 0) {
-            const yearFilter = or(...years.map(y => sql`${historyOrders.billingDate} LIKE ${`%/%/${y}`} `));
+            const yearFilter = or(...years.map(y => sql`to_char(${salesRevenueSap.billingDate}, 'YYYY') = ${y}`));
             if (yearFilter) {
                 filterArray.push(yearFilter);
             }
         }
+
         if (months.length > 0) {
-            const monthFilter = or(...months.map(m => sql`${historyOrders.billingDate} LIKE ${`${parseInt(m)}/%/%`} `));
+            const monthFilter = or(...months.map(m => sql`to_char(${salesRevenueSap.billingDate}, 'MM') = ${m.padStart(2, '0')}`));
             if (monthFilter) {
                 filterArray.push(monthFilter);
             }
@@ -153,66 +149,64 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
         const finalWhere = and(...filterArray);
 
         // 1. Fetch Paginated Data
-        const dataQuery = db.select().from(historyOrders).where(finalWhere);
+        const dataQuery = db.select().from(salesRevenueSap).where(finalWhere);
 
-        // Handle logical sorting for text dates
+        // Handle logical sorting
         if (sortField === 'billing_date') {
             dataQuery.orderBy(
                 sortOrder === 'desc'
-                    ? sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') DESC`
-                    : sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') ASC`
+                    ? desc(salesRevenueSap.billingDate)
+                    : salesRevenueSap.billingDate
             );
         } else {
-            // Add other sort fields if needed, default to billing date
-            dataQuery.orderBy(sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') DESC`);
+            dataQuery.orderBy(desc(salesRevenueSap.billingDate));
         }
 
         const data = await dataQuery.limit(pageSize).offset(offset);
 
         // 2. Fetch Aggregations (Scorecards)
         const aggregation = await db.select({
-            totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
-            totalQty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`,
-            uniqueCust: sql<number>`COUNT(DISTINCT ${historyOrders.customerName})`,
-            uniqueOrders: sql<number>`COUNT(DISTINCT ${historyOrders.poNo})`,
+            totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
+            totalQty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            uniqueCust: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})`,
+            uniqueOrders: sql<number>`COUNT(DISTINCT ${salesRevenueSap.poNo})`,
             totalCount: sql<number>`COUNT(*)`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere);
 
         const stats = aggregation[0] || { totalRevenue: 0, totalQty: 0, uniqueCust: 0, uniqueOrders: 0, totalCount: 0 };
 
         // 3. Fetch Chart Data (Top 10 Customers)
         const topCustomers = await db.select({
-            name: historyOrders.customerName,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: salesRevenueSap.customerName,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.customerName)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0)) DESC`)
+            .groupBy(salesRevenueSap.customerName)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) DESC`)
             .limit(10);
 
         // 4. Fetch Chart Data (Revenue by Plant)
         const plantStats = await db.select({
-            name: historyOrders.plant,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: salesRevenueSap.plant,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.plant)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0)) DESC`);
+            .groupBy(salesRevenueSap.plant)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) DESC`);
 
         // 5. Fetch Chart Data (Monthly Trend)
-        // Grouping by YYYY-MM from MM/DD/YYYY text
         const monthlyTrend = await db.select({
-            name: sql<string>`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            name: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`)
-            .orderBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY-MM')`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`)
+            .orderBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`);
 
         const formattedData: HistoryOrderItem[] = data.map((item) => {
             const revenue = item.revenueInDocCurr || 0;
@@ -278,56 +272,84 @@ export async function importHistoryOrderBatch(batchData: Record<string, unknown>
             return isNaN(parsed) ? null : parsed;
         };
 
-        const mappedBatch = batchData.map(item => ({
-            sorg: (item['Sorg.'] as string) || null,
-            billTy: (item['BillTy'] as string) || null,
-            revType: (item['Rev. Type'] as string) || null,
-            customer: (item['Customer'] as string) || null,
-            customerName: (item['Customer Name'] as string) || null,
-            salesman: (item['Salesman'] as string) || null,
-            item: (item['Item'] as string) || null,
-            sloc: (item['Sloc'] as string) || null,
-            plant: (item['Plant'] as string) || null,
-            materialNo: (item['Material No'] as string) || null,
-            materialDescription: (item['Material Description'] as string) || null,
-            sizeDimen: (item['Size/Dimen'] as string) || null,
-            materialGroup: (item['Material Group'] as string) || null,
-            matGrpDesc: (item['Mat Grp Desc.'] as string) || null,
-            matGrp1: (item['Mat Grp1'] as string) || null,
-            matGrp1Desc: (item['Mat Grp1 Desc.'] as string) || null,
-            matGrp2: (item['Mat Grp2'] as string) || null,
-            matGrp2Desc: (item['Mat Grp2 Desc.'] as string) || null,
-            matGrp3: (item['Mat Grp3'] as string) || null,
-            matGrp3Desc: (item['Mat Grp3 Desc.'] as string) || null,
-            matGrp4: (item['Mat Grp4'] as string) || null,
-            matGrp4Desc: (item['Mat Grp4 Desc.'] as string) || null,
-            matGrp5: (item['Mat Grp5'] as string) || null,
-            matGrp5Desc: (item['Mat Grp5 Desc.'] as string) || null,
-            qty: parseNumber(item['Qty'] as string),
-            uom: (item['UOM'] as string) || null,
-            curr: (item['Curr'] as string) || null,
-            basePrice: parseNumber(item['Base Price'] as string),
-            intdeptPrice: parseNumber(item['Intdept Price'] as string),
-            adjustmentPrice: parseNumber(item['Adjustment Price'] as string),
-            revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.'] as string),
-            revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.'] as string),
-            billingNo: (item['Billing No'] as string) || null,
-            billingDate: (item['Billing Date'] as string) || (item['BillingDate'] as string) || null,
-            inco1: (item['INCO1'] as string) || null,
-            inco2: (item['INCO2'] as string) || null,
-            c: (item['C'] as string) || null,
-            cancelled: (item['Cancelled'] as string) || null,
-            deliveryNo: (item['Delivery No'] as string) || null,
-            salesOrder: (item['Sales Order'] as string) || null,
-            workOrder: (item['Work Order'] as string) || null,
-            poNo: (item['PO No.'] as string) || null,
-            poDate: (item['PO Date'] as string) || null,
-            poType: (item['PO Type'] as string) || null,
-            costOfSales: parseNumber(item['Cost Of Sales'] as string),
-            profitMargin: parseNumber(item['Profit Margin'] as string)
-        }));
+        const parseDate = (val: string | undefined | null) => {
+            if (!val) return null;
+            const dateStr = String(val).trim();
+            // Try parsing MM/DD/YYYY
+            if (dateStr.includes('/')) {
+                const parts = dateStr.split('/');
+                if (parts.length === 3) {
+                    // Check if parts[2] is year (length 4)
+                    if (parts[2].length === 4) {
+                        const m = parseInt(parts[0]) - 1;
+                        const d = parseInt(parts[1]);
+                        const y = parseInt(parts[2]);
+                        const date = new Date(y, m, d);
+                        return isNaN(date.getTime()) ? null : date;
+                    }
+                }
+            }
+            // Fallback to standard JS parsing (ISO etc)
+            const parsed = new Date(dateStr);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        };
 
-        await db.insert(historyOrders).values(mappedBatch);
+        const mappedBatch = batchData.map(item => {
+            const billingDateVal = (item['Billing Date'] as string) || (item['BillingDate'] as string) || null;
+            const poDateVal = (item['PO Date'] as string) || null;
+
+            return {
+                sorg: (item['Sorg.'] as string) || null,
+                billTy: (item['BillTy'] as string) || null,
+                revType: (item['Rev. Type'] as string) || null,
+                customer: (item['Customer'] as string) || null,
+                customerName: (item['Customer Name'] as string) || null,
+                salesman: (item['Salesman'] as string) || null,
+                item: parseInt(String(item['Item'])) || 0,
+                sloc: (item['Sloc'] as string) || null,
+                plant: (item['Plant'] as string) || null,
+                materialNo: (item['Material No'] as string) || null,
+                materialDescription: (item['Material Description'] as string) || null,
+                sizeDimen: (item['Size/Dimen'] as string) || null,
+                materialGroup: (item['Material Group'] as string) || null,
+                matGrpDesc: (item['Mat Grp Desc.'] as string) || null,
+                matGrp1: (item['Mat Grp1'] as string) || null,
+                matGrp1Desc: (item['Mat Grp1 Desc.'] as string) || null,
+                matGrp2: (item['Mat Grp2'] as string) || null,
+                matGrp2Desc: (item['Mat Grp2 Desc.'] as string) || null,
+                matGrp3: (item['Mat Grp3'] as string) || null,
+                matGrp3Desc: (item['Mat Grp3 Desc.'] as string) || null,
+                matGrp4: (item['Mat Grp4'] as string) || null,
+                matGrp4Desc: (item['Mat Grp4 Desc.'] as string) || null,
+                matGrp5: (item['Mat Grp5'] as string) || null,
+                matGrp5Desc: (item['Mat Grp5 Desc.'] as string) || null,
+                qty: Math.round(parseNumber(item['Qty'] as string) || 0),
+                uom: (item['UOM'] as string) || null,
+                curr: (item['Curr'] as string) || null,
+                basePrice: parseNumber(item['Base Price'] as string),
+                intdeptPrice: parseNumber(item['Intdept Price'] as string),
+                adjustmentPrice: parseNumber(item['Adjustment Price'] as string),
+                revenueInDocCurr: parseNumber(item['Revenue in Doc Curr.'] as string),
+                revenueInLocCurr: parseNumber(item['Revenue in Loc Curr.'] as string),
+                billingNo: (item['Billing No'] as string) || null,
+                billingDate: parseDate(billingDateVal),
+                inco1: (item['INCO1'] as string) || null,
+                inco2: (item['INCO2'] as string) || null,
+                c: (item['C'] as string) || null,
+                cancelled: (item['Cancelled'] as string) || null,
+                deliveryNo: (item['Delivery No'] as string) || null,
+                salesOrder: (item['Sales Order'] as string) || null,
+                workOrder: (item['Work Order'] as string) || null,
+                poNo: (item['PO No.'] as string) || null,
+                poDate: parseDate(poDateVal),
+                poType: (item['PO Type'] as string) || null,
+                costOfSales: parseNumber(item['Cost Of Sales'] as string),
+                profitMargin: parseNumber(item['Profit Margin'] as string)
+            };
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await db.insert(salesRevenueSap).values(mappedBatch as any);
         return { success: true, count: mappedBatch.length };
     } catch (error) {
         console.error("Failed to import history orders batch:", error);
@@ -346,8 +368,8 @@ export async function getProductHistoryForQuotation(materialNo: string, costSap:
 
         // Fetch all history for this material
         const data = await db.select()
-            .from(historyOrders)
-            .where(eq(historyOrders.materialNo, materialNo));
+            .from(salesRevenueSap)
+            .where(eq(salesRevenueSap.materialNo, materialNo));
 
         // Filter and sort in JS because of string dates and complex multi-column sorting
         const processedData = data
