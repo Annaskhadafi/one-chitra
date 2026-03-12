@@ -83,10 +83,11 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             ),
-            // Exclude ITC008, 1000289A, and Chitra Paratama
+            // Exclude ITC008, 1000289A, and Chitra Paratama groups
             notIlike(salesRevenueSap.customer, '%ITC008%'),
             notIlike(salesRevenueSap.customer, '%1000289A%'),
-            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%')
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+            notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
         );
 
         // Note: Customer exclusions (ITC008, 1000289A, Chitra Paratama) are now in baseFilter
@@ -192,10 +193,15 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
         }).from(salesRevenueSap).where(baseFilter).groupBy(salesRevenueSap.revType);
 
-        const revTypeTable = revTypeData.map(r => ({
-            type: r.type || "Unknown",
-            total: Number(r.total)
-        })).sort((a, b) => b.total - a.total);
+        const revTypeTable = revTypeData
+            .filter(r => {
+                const type = (r.type || "").toUpperCase();
+                return type === 'REPAIR' || type === 'SERVICE' || type === 'RETREAD';
+            })
+            .map(r => ({
+                type: r.type || "Unknown",
+                total: Number(r.total)
+            })).sort((a, b) => b.total - a.total);
 
         // ─── I. Product Accessories Detail ─────────────────────────────────────
         const matGrp1Data = await db.select({
@@ -211,7 +217,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`,
             qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
         }).from(salesRevenueSap)
-            .where(baseFilter)
+            .where(and(baseFilter, ilike(salesRevenueSap.revType, 'Trading')))
             .groupBy(salesRevenueSap.materialDescription)
             .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`)
             .limit(20);
@@ -224,10 +230,11 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
             ),
-            // Exclude ITC008, 1000289A, and Chitra Paratama
+            // Exclude ITC008, 1000289A, and Chitra Paratama groups
             notIlike(salesRevenueSap.customer, '%ITC008%'),
             notIlike(salesRevenueSap.customer, '%1000289A%'),
-            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%')
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+            notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
         );
 
         const ytdData = await db.select({

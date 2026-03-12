@@ -220,9 +220,9 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
     if (!data) return null;
     
     const chartData = [
-        { name: 'Jasum', value: data.jasum, fill: '#f59e0b' },      // Orange
-        { name: 'KAL EI', value: data.kalEi, fill: '#3b82f6' },     // Blue
-        { name: 'Singapore', value: data.singapore, fill: '#10b981' } // Green
+        { name: 'Jakarta - Sumatera', value: data.jasum, fill: '#f59e0b' },      // Orange
+        { name: 'KALIMANTAN', value: data.kalEi, fill: '#3b82f6' },              // Blue
+        { name: 'Singapore', value: data.singapore, fill: '#10b981' }            // Green
     ];
 
     return (
@@ -391,7 +391,14 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
             </div>
 
             {/* ─── ROW 2: Service / PA / PA+Service ────────────────────────────── */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <CategoryCard
+                    label="Prime Product"
+                    data={targets.primeProduct}
+                    colorClass="bg-indigo-500"
+                    textClass="text-indigo-700 dark:text-indigo-400"
+                    lightBg="bg-indigo-50/50 dark:bg-indigo-950/20"
+                />
                 <CategoryCard
                     label="Forecast Service"
                     data={targets.service}
@@ -419,9 +426,9 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
                     <div className="px-4 py-3 bg-blue-600 flex justify-between items-start">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">MTD Sunburst Sell Out Material</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-white">MTD TOP TEN SELL OUT</h3>
                         <div className="text-right">
-                            <div className="text-[10px] text-white/70 font-semibold uppercase">Prime Product</div>
+                            <div className="text-[10px] text-white/70 font-semibold uppercase">Trading Revenue</div>
                             <div className="text-sm font-black text-white">{fmt(targets.primeProduct.revenue)}</div>
                         </div>
                     </div>
@@ -430,7 +437,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie 
-                                        data={materials.slice(0, 7)} 
+                                        data={materials.slice(0, 10)} 
                                         innerRadius={70} 
                                         outerRadius={110} 
                                         dataKey="revenue" 
@@ -439,7 +446,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                                         label={({ name }) => (name || "").substring(0, 20)}
                                         labelLine={true}
                                     >
-                                        {materials.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                        {materials.slice(0, 10).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                                     </Pie>
                                     <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11 }} />
                                 </PieChart>
