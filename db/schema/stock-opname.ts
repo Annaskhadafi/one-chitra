@@ -50,7 +50,7 @@ export const stockOpnameItems = pgTable("stock_opname_items", {
 
 export const stockOpnameSignatures = pgTable("stock_opname_signatures", {
     id: serial("id").primaryKey(),
-    sessionId: integer("session_id").references(() => stockOpnameSessions.id, { onDelete: "cascade" }).notNull(),
+    sessionId: integer("session_id")/*.references(() => stockOpnameSessions.id, { onDelete: "cascade" })*/.notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     position: varchar("position", { length: 200 }).notNull(),
     order: integer("order").notNull(),

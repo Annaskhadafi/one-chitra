@@ -123,6 +123,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/stock-transfers",
                         resource: "stock-transfers",
                     },
+                    {
+                        title: "E-VHS",
+                        url: "/dashboard/evhs",
+                        resource: "evhs",
+                    },
                 ],
             },
             {

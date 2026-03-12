@@ -105,6 +105,23 @@ export {
 export { marketingCampaigns, campaignRecipients, marketingCampaignsRelations, campaignRecipientsRelations } from "./marketing-campaigns";
 export { zmc9StockSap, me2lPurchDocsSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
 export { aiInventoryPredictions, restockNotifications, aiSettings } from "./ai-predictions";
+export {
+    evhsReceipts,
+    evhsReceiptItems,
+    evhsVouchers,
+    evhsVoucherItems,
+    evhsGiRecords,
+    evhsGiItems,
+    evhsMrko,
+    evhsMasterPrices,
+    evhsReceiptsRelations,
+    evhsReceiptItemsRelations,
+    evhsVouchersRelations,
+    evhsVoucherItemsRelations,
+    evhsGiRecordsRelations,
+    evhsGiItemsRelations,
+    evhsMasterPricesRelations,
+} from "./evhs";
 
 // Core Auth Table Relations
 import { user } from "./auth";

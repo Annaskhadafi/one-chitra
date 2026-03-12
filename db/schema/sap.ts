@@ -2,7 +2,7 @@ import { pgTable, serial, integer, text, timestamp, decimal, doublePrecision, da
 
 // SAP Stock Table
 export const zmc9StockSap = pgTable("zmc9_stock_sap", {
-    stockId: serial("stock_id").primaryKey(),
+    stockId: integer("stock_id").primaryKey(),
     plantCode: text("plant_code"),
     plantName: text("plant_name"),
     materialNo: text("material_no"),
@@ -15,6 +15,7 @@ export const zmc9StockSap = pgTable("zmc9_stock_sap", {
     valueStock: decimal("value_stock", { precision: 20, scale: 3 }),
     currency: text("currency"),
     extractedAt: timestamp("extracted_at"),
+    updatedAt: timestamp("updated_at"), // Keep old column to prevent data loss
 });
 
 // SAP Purchasing Documents
@@ -56,7 +57,7 @@ export const me2lPurchDocsSap = pgTable("me2l_purch_docs_sap", {
 
 // SAP Sales Revenue
 export const salesRevenueSap = pgTable("sales_revenue_sap", {
-    salesRevId: serial("sales_rev_id").primaryKey(),
+    salesRevId: integer("sales_rev_id").primaryKey(),
     sorg: text("sorg"),
     billTy: text("bill_ty"),
     revType: text("rev_type"),
