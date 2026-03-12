@@ -546,7 +546,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                 <div className="relative overflow-hidden rounded-b-xl border-t">
                                     <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
                                         <Table>
-                                            <TableHeader className="sticky top-0 z-20 bg-muted/80 backdrop-blur-md">
+                                            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                                                 {table.getHeaderGroups().map((headerGroup) => (
                                                     <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
                                                         {headerGroup.headers.map((header) => (
@@ -630,7 +630,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                 <div className="relative overflow-hidden rounded-b-xl border-t">
                                     <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
                                         <Table>
-                                            <TableHeader className="sticky top-0 z-20 bg-muted/80 backdrop-blur-md">
+                                            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                                                 {table.getHeaderGroups().map((headerGroup) => (
                                                     <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
                                                         {headerGroup.headers.map((header) => (

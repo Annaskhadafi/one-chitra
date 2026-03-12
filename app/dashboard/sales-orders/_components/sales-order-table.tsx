@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
@@ -17,8 +17,15 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import {
     Select,
     SelectContent,
@@ -42,11 +49,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, FilterX } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, FilterX, RefreshCcw } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { SalesOrderWithRelations } from "@/lib/types"
+import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -57,16 +65,21 @@ import {
     getCoreRowModel,
     getSortedRowModel,
     getFilteredRowModel,
+    getPaginationRowModel,
     ColumnDef,
     flexRender,
     SortingState,
+    PaginationState,
+    VisibilityState,
 } from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
 
 
 interface SalesOrderTableProps {
     data: SalesOrderWithRelations[]
 }
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500, 1000]
+const DEFAULT_PAGE_SIZE = 25
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     draft: "secondary",
@@ -100,11 +113,14 @@ function calculateGrandTotal(order: SalesOrderWithRelations) {
 
 export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
+    const { data: session } = useSession()
+    const currentUserId = session?.user?.id || "anonymous"
+    const columnVisibilityStorageKey = `sales-orders:column-visibility:${currentUserId}`
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
 
-    const { data = initialData } = useQuery({
+    const { data = initialData, refetch } = useQuery({
         queryKey: ["sales-orders"],
         queryFn: getSalesOrders,
         initialData,
@@ -120,14 +136,48 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const canView = hasResourcePermission('sales-orders', 'view')
 
     const [globalFilter, setGlobalFilter] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [sorting, setSorting] = useState<SortingState>([{ id: "salesDate", desc: true }])
+    const [statusFilter, setStatusFilter] = useState<string[]>([])
+    const [customerFilter, setCustomerFilter] = useState<string[]>([])
+    const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+    const [yearFilter, setYearFilter] = useState<string[]>([])
+    const [monthFilter, setMonthFilter] = useState<string[]>([])
+    const [sorting, setSorting] = useState<SortingState>([])
     const [rowSelection, setRowSelection] = useState({})
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+    const [pagination, setPagination] = useState<PaginationState>({
+        pageIndex: 0,
+        pageSize: DEFAULT_PAGE_SIZE,
+    })
 
     const [viewOrder, setViewOrder] = useState<SalesOrderWithRelations | null>(null)
     const [isViewOpen, setIsViewOpen] = useState(false)
     const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderWithRelations | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
+
+    useEffect(() => {
+        if (!mounted) return
+        const saved = localStorage.getItem(columnVisibilityStorageKey)
+        if (saved) {
+            try {
+                setColumnVisibility(JSON.parse(saved) as VisibilityState)
+            } catch {
+                localStorage.removeItem(columnVisibilityStorageKey)
+            }
+        }
+    }, [mounted, columnVisibilityStorageKey])
+
+    useEffect(() => {
+        if (!mounted) return
+        localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(columnVisibility))
+    }, [mounted, columnVisibilityStorageKey, columnVisibility])
+
+    const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
+    const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
+    const uniqueYears = useMemo(() => Array.from(new Set(data.map(o => new Date(o.salesDate).getFullYear().toString()))).sort().reverse(), [data])
+    const uniqueMonths = useMemo(() => {
+        const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+        return Array.from(new Set(data.map(o => monthLabels[new Date(o.salesDate).getMonth()])))
+    }, [data])
 
     // Stats calculation based on full data
     const totalOrders = data.length
@@ -326,6 +376,17 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             }) : "-",
         },
         {
+            id: "salesPerson",
+            accessorFn: (row) => row.salesPerson?.name,
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    PIC Sales
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => <span className="text-sm">{row.original.salesPerson?.name || "-"}</span>,
+        },
+        {
             accessorKey: "categoryPo",
             header: ({ column }) => (
                 <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
@@ -515,45 +576,43 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             sorting,
             globalFilter,
             rowSelection,
+            columnVisibility,
+            pagination,
         },
         onSortingChange: setSorting,
         onGlobalFilterChange: setGlobalFilter,
         onRowSelectionChange: setRowSelection,
+        onColumnVisibilityChange: setColumnVisibility,
+        onPaginationChange: setPagination,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
         globalFilterFn: (row, columnId, filterValue) => {
             const term = filterValue.toLowerCase()
             const order = row.original
+            const orderYear = new Date(order.salesDate).getFullYear().toString()
+            const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+            const orderMonth = monthLabels[new Date(order.salesDate).getMonth()]
+
             const matchesSearch =
                 order.invoiceNumber?.toLowerCase().includes(term) ||
                 order.customerPo?.toLowerCase().includes(term) ||
                 order.customer?.name.toLowerCase().includes(term) ||
+                order.salesPerson?.name?.toLowerCase().includes(term) ||
                 order.createdByUser?.name?.toLowerCase().includes(term) ||
                 order.status.toLowerCase().includes(term)
 
-            const matchesStatus = statusFilter === "all" || order.status === statusFilter
-            return matchesSearch && matchesStatus
+            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
+            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
+            const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
+            const matchesYear = yearFilter.length === 0 || yearFilter.includes(orderYear)
+            const matchesMonth = monthFilter.length === 0 || monthFilter.includes(orderMonth)
+            return matchesSearch && matchesStatus && matchesCustomer && matchesCategory && matchesYear && matchesMonth
         },
     })
 
-    // Virtualization
-    const parentRef = useRef<HTMLDivElement>(null)
-    const { rows } = table.getRowModel()
-
-    const rowVirtualizer = useVirtualizer({
-        count: rows.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 53,
-        overscan: 20,
-    })
-
-    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
-        ? [
-            rowVirtualizer.getVirtualItems()[0].start,
-            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
-        ]
-        : [0, 0]
+    const rows = table.getRowModel().rows
 
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
@@ -589,13 +648,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     }
 
     const handleExport = () => {
-        const headers = ["Invoice Number", "Customer PO", "Customer", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
+        const headers = ["Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const order = row.original
             return [
                 order.invoiceNumber || "",
                 order.customerPo || "",
                 order.customer?.name || "",
+                order.salesPerson?.name || "",
                 new Date(order.salesDate).toLocaleDateString("id-ID"),
                 order.categoryPo || "Normal",
                 order.categoryProduct || "",
@@ -624,10 +684,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
 
 
-    // Effect to trigger search when status filter changes
+    // Effect to trigger search when faceted filter changes
     useEffect(() => {
         table.setGlobalFilter(globalFilter)
-    }, [statusFilter, globalFilter, table])
+    }, [statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, globalFilter, table])
+
+    useEffect(() => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+    }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter])
 
     return (
         <div className="space-y-6">
@@ -765,74 +829,150 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 </AccordionItem>
             </Accordion>
 
+            <div className="flex justify-end mb-2">
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Rows</span>
+                    <Select
+                        value={String(pagination.pageSize)}
+                        onValueChange={(value) => table.setPageSize(Number(value))}
+                    >
+                        <SelectTrigger className="w-[90px] h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                    >
+                        Next
+                    </Button>
+                </div>
+            </div>
+
             {/* Filters */}
             <div className="flex flex-col gap-4">
-                {/* Mobile Filter Dropdown */}
-                <div className="flex sm:hidden items-center justify-between w-full">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between">
-                                <span className="flex items-center gap-2">
-                                    <FilterX className="h-4 w-4" />
-                                    Advanced Filters
-                                </span>
-                                <ChevronDown className="h-4 w-4 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="start" className="w-[calc(100vw-2rem)] p-4 space-y-4">
-                            <div className="space-y-4">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">Search</label>
-                                    <div className="relative w-full">
-                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            placeholder="Search invoice, customer, PO, user..."
-                                            className="pl-8 w-full"
-                                            value={globalFilter ?? ""}
-                                            onChange={(e) => setGlobalFilter(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">Status</label>
-                                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="All Status" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Status</SelectItem>
-                                            <SelectItem value="draft">Draft</SelectItem>
-                                            <SelectItem value="confirmed">Confirmed</SelectItem>
-                                            <SelectItem value="completed">Completed</SelectItem>
-                                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full mt-2"
-                                    onClick={() => {
-                                        setStatusFilter("all")
-                                        setGlobalFilter("")
-                                    }}
-                                >
-                                    <FilterX className="mr-2 h-4 w-4" />
-                                    Reset Filter
-                                </Button>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
-                    <div className="ml-2">
+                {/* Mobile Filters */}
+                <div className="sm:hidden space-y-3">
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search invoice, customer, PO, user..."
+                                className="pl-8"
+                                value={globalFilter ?? ""}
+                                onChange={(e) => setGlobalFilter(e.target.value)}
+                            />
+                        </div>
+                        <Button variant="outline" onClick={refetch} size="icon">
+                            <RefreshCcw className="h-4 w-4" />
+                        </Button>
                         <Button variant="outline" onClick={handleExport} size="icon">
                             <Download className="h-4 w-4" />
                         </Button>
                     </div>
+
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        <DataTableFacetedFilter
+                            title="Status"
+                            options={["draft", "confirmed", "completed", "cancelled"]}
+                            selectedValues={statusFilter}
+                            onFilterChange={setStatusFilter}
+                        />
+                        {uniqueCustomers.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Customer"
+                                options={uniqueCustomers}
+                                selectedValues={customerFilter}
+                                onFilterChange={setCustomerFilter}
+                            />
+                        )}
+                        {uniqueCategories.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Category"
+                                options={uniqueCategories}
+                                selectedValues={categoryFilter}
+                                onFilterChange={setCategoryFilter}
+                            />
+                        )}
+                        {uniqueYears.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Year"
+                                options={uniqueYears}
+                                selectedValues={yearFilter}
+                                onFilterChange={setYearFilter}
+                            />
+                        )}
+                        {uniqueMonths.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Month"
+                                options={uniqueMonths}
+                                selectedValues={monthFilter}
+                                onFilterChange={setMonthFilter}
+                            />
+                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-[36px] whitespace-nowrap">
+                                    View <ChevronDown className="ml-2 h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
+                                {table
+                                    .getAllColumns()
+                                    .filter((column) => column.getCanHide())
+                                    .map((column) => {
+                                        const label = {
+                                            invoiceNumber: "Invoice Number",
+                                            customerPo: "No PO Customer",
+                                            customerName: "Customer",
+                                            salesDate: "Date PO",
+                                            poReceive: "PO Receive",
+                                            salesPerson: "PIC Sales",
+                                            categoryPo: "Cat. PO",
+                                            categoryProduct: "Category",
+                                            itemsCount: "Items",
+                                            grandTotal: "Grand Total",
+                                            status: "Status",
+                                            createdBy: "Created By",
+                                        }[column.id] || column.id
+
+                                        return (
+                                            <DropdownMenuCheckboxItem
+                                                key={column.id}
+                                                checked={column.getIsVisible()}
+                                                onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                                            >
+                                                {label}
+                                            </DropdownMenuCheckboxItem>
+                                        )
+                                    })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
 
                 {/* Desktop Filters */}
-                <div className="hidden sm:flex flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full sm:w-72">
+                <div className="hidden sm:flex flex-row gap-3 justify-between items-center">
+                    <div className="relative w-full sm:w-72 shrink-0">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search invoice, customer, PO, user..."
@@ -841,38 +981,105 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                             onChange={(e) => setGlobalFilter(e.target.value)}
                         />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <DataTableFacetedFilter
+                            title="Status"
+                            options={["draft", "confirmed", "completed", "cancelled"]}
+                            selectedValues={statusFilter}
+                            onFilterChange={setStatusFilter}
+                        />
+                        {uniqueCustomers.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Customer"
+                                options={uniqueCustomers}
+                                selectedValues={customerFilter}
+                                onFilterChange={setCustomerFilter}
+                            />
+                        )}
+                        {uniqueCategories.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Category"
+                                options={uniqueCategories}
+                                selectedValues={categoryFilter}
+                                onFilterChange={setCategoryFilter}
+                            />
+                        )}
+                        {uniqueYears.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Year"
+                                options={uniqueYears}
+                                selectedValues={yearFilter}
+                                onFilterChange={setYearFilter}
+                            />
+                        )}
+                        {uniqueMonths.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Month"
+                                options={uniqueMonths}
+                                selectedValues={monthFilter}
+                                onFilterChange={setMonthFilter}
+                            />
+                        )}
+                        <Button variant="outline" size="icon" onClick={() => refetch()}>
+                            <RefreshCcw className="h-4 w-4" />
+                        </Button>
                         <Button variant="outline" onClick={handleExport}>
                             <Download className="mr-2 h-4 w-4" />
                             Export CSV
                         </Button>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[160px]">
-                                <SelectValue placeholder="All Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="draft">Draft</SelectItem>
-                                <SelectItem value="confirmed">Confirmed</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline">
+                                    View <ChevronDown className="ml-2 h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
+                                {table
+                                    .getAllColumns()
+                                    .filter((column) => column.getCanHide())
+                                    .map((column) => {
+                                        const label = {
+                                            invoiceNumber: "Invoice Number",
+                                            customerPo: "No PO Customer",
+                                            customerName: "Customer",
+                                            salesDate: "Date PO",
+                                            poReceive: "PO Receive",
+                                            salesPerson: "PIC Sales",
+                                            categoryPo: "Cat. PO",
+                                            categoryProduct: "Category",
+                                            itemsCount: "Items",
+                                            grandTotal: "Grand Total",
+                                            status: "Status",
+                                            createdBy: "Created By",
+                                        }[column.id] || column.id
+
+                                        return (
+                                            <DropdownMenuCheckboxItem
+                                                key={column.id}
+                                                checked={column.getIsVisible()}
+                                                onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                                            >
+                                                {label}
+                                            </DropdownMenuCheckboxItem>
+                                        )
+                                    })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
             </div>
 
-            <div className="rounded-md border overflow-hidden">
+            <div className="rounded-md border">
                 <div
-                    ref={parentRef}
-                    className="overflow-auto h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
+                    className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-background shadow-sm">
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
+                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -885,36 +1092,67 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                             ))}
                         </TableHeader>
                         <TableBody>
-                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                <>
-                                    <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={table.getVisibleFlatColumns().length} className="p-0" />
+                            {rows.length > 0 ? (
+                                rows.map((row) => (
+                                    <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                                        {row.getVisibleCells().map((cell) => (
+                                            <TableCell key={cell.id}>
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </TableCell>
+                                        ))}
                                     </TableRow>
-                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
-                                        return (
-                                            <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                                                {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id}>
-                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} className="p-0" />
-                                    </TableRow>
-                                </>
+                                ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                                    <TableCell colSpan={table.getVisibleFlatColumns().length} className="h-24 text-center">
                                         No sales orders found.
                                     </TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
                     </Table>
+                </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+                <div className="text-muted-foreground">
+                    Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} records
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Rows</span>
+                    <Select
+                        value={String(pagination.pageSize)}
+                        onValueChange={(value) => table.setPageSize(Number(value))}
+                    >
+                        <SelectTrigger className="w-[90px] h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    <span className="text-muted-foreground whitespace-nowrap">
+                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                    >
+                        Next
+                    </Button>
                 </div>
             </div>
 

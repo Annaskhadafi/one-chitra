@@ -42,7 +42,7 @@ import { toast } from "sonner"
 import { Search, Package, Plus, Check, Save, FileDown, Trash2, HelpCircle, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import type { Customer, Product, Warehouse } from "@/lib/types"
+import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import { QuickAddProductDialog } from "./quick-add-product-dialog"
 
 interface OrderItem {
@@ -59,11 +59,13 @@ interface SalesOrderFormProps {
     customers: Customer[]
     products: Product[]
     warehouses: Warehouse[]
+    users: Pick<User, "id" | "name" | "email">[]
     initialData?: {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
         customerId: number
+        salesPersonId?: string | null
         warehouseId?: number | null
         salesDate: Date
         poReceive?: Date | null
@@ -95,7 +97,7 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
-export function SalesOrderForm({ customers, products, warehouses, initialData }: SalesOrderFormProps) {
+export function SalesOrderForm({ customers, products, warehouses, users, initialData }: SalesOrderFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
 
@@ -103,6 +105,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
     const [customerPo, setCustomerPo] = useState(initialData?.customerPo || "")
     const [customerId, setCustomerId] = useState<number | undefined>(initialData?.customerId || undefined)
+    const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || "")
     const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
     const [salesDate, setSalesDate] = useState(
         initialData
@@ -329,6 +332,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 invoiceNumber: invoiceNumber || undefined,
                 customerPo: customerPo || undefined,
                 customerId: customerId as number,
+                salesPersonId: salesPersonId || undefined,
                 warehouseId,
                 salesDate,
                 poReceive: poReceive || undefined,
@@ -492,6 +496,23 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                        </div>
+
+                        {/* Warehouse */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">PIC Sales</Label>
+                            <Select value={salesPersonId || undefined} onValueChange={setSalesPersonId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select PIC Sales..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {users.map((u) => (
+                                        <SelectItem key={u.id} value={u.id}>
+                                            {u.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {/* Warehouse */}

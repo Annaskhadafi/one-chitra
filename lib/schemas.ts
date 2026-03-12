@@ -53,6 +53,7 @@ export const salesOrderSchema = z.object({
     invoiceNumber: z.string().optional(),
     customerPo: z.string().optional(),
     customerId: z.number().min(1, "Customer is required"),
+    salesPersonId: z.string().optional().nullable(),
     warehouseId: z.number().optional(),
     salesDate: z.string().or(z.date()),
     poReceive: z.string().or(z.date()).optional().nullable(),

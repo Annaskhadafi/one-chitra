@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import {
@@ -15,6 +15,20 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScoreCard } from "@/components/score-card"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
+import { Search, CheckCircle, PackageSearch, PackageOpen, Download, ChevronUp, ChevronDown } from "lucide-react"
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getFilteredRowModel,
+    getPaginationRowModel,
+    ColumnDef,
+    flexRender,
+    SortingState,
+    PaginationState,
+} from "@tanstack/react-table"
+import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 import {
     Select,
     SelectContent,
@@ -22,24 +36,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Search, CheckCircle, PackageSearch, PackageOpen, Download, ChevronUp, ChevronDown } from "lucide-react"
-import {
-    useReactTable,
-    getCoreRowModel,
-    getSortedRowModel,
-    getFilteredRowModel,
-    ColumnDef,
-    flexRender,
-    SortingState,
-} from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
-import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 
 type DeliveryItemFlat = Awaited<ReturnType<typeof getDeliveryItemsFlat>>[number]
 
 interface DeliveryItemsTableProps {
     data: DeliveryItemFlat[]
 }
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500, 1000]
+const DEFAULT_PAGE_SIZE = 25
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     scheduled: "secondary",
@@ -51,9 +56,16 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
 export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
     const mounted = useMounted()
     const [globalFilter, setGlobalFilter] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [categoryFilter, setCategoryFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState<string[]>([])
+    const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+    const [customerFilter, setCustomerFilter] = useState<string[]>([])
+    const [yearFilter, setYearFilter] = useState<string[]>([])
+    const [monthFilter, setMonthFilter] = useState<string[]>([])
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryNumber", desc: true }])
+    const [pagination, setPagination] = useState<PaginationState>({
+        pageIndex: 0,
+        pageSize: DEFAULT_PAGE_SIZE,
+    })
 
     // Stats calculation based on full data
     const totalItems = data.length
@@ -65,6 +77,60 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
         const unique = new Set(data.map(i => i.productCategory).filter(Boolean))
         return Array.from(unique).sort()
     }, [data])
+
+    const years = useMemo(() => {
+        return Array.from(
+            new Set(
+                data
+                    .map(i => {
+                        const date = i.scheduledDate ? new Date(i.scheduledDate) : null
+                        return date ? date.getFullYear().toString() : null
+                    })
+                    .filter((year): year is string => Boolean(year))
+            )
+        ).sort().reverse()
+    }, [data])
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const uniqueMonths = useMemo(() => {
+        return Array.from(
+            new Set(
+                data
+                    .map(i => {
+                        const date = (i.deliveryDate || i.scheduledDate) ? new Date(i.deliveryDate || i.scheduledDate) : null
+                        return date ? months[date.getMonth()] : null
+                    })
+                    .filter((month): month is string => Boolean(month))
+            )
+        )
+    }, [data])
+
+    const customers = useMemo(() => {
+        return Array.from(
+            new Set(data.map(i => i.customerName).filter((name): name is string => Boolean(name)))
+        ).sort((a, b) => a.localeCompare(b))
+    }, [data])
+
+    const statuses = useMemo(() => {
+        return Array.from(new Set(data.map(i => i.status).filter(Boolean))).sort()
+    }, [data])
+
+    const filteredData = useMemo(() => {
+        return data.filter(item => {
+            const dateValue = item.deliveryDate || item.scheduledDate
+            const date = dateValue ? new Date(dateValue) : null
+            const itemYear = date ? date.getFullYear().toString() : ""
+            const itemMonth = date ? months[date.getMonth()] : ""
+
+            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(item.status)
+            const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(item.productCategory)
+            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(item.customerName || "")
+            const matchesYear = yearFilter.length === 0 || yearFilter.includes(itemYear)
+            const matchesMonth = monthFilter.length === 0 || monthFilter.includes(itemMonth)
+
+            return matchesStatus && matchesCategory && matchesCustomer && matchesYear && matchesMonth
+        })
+    }, [data, statusFilter, categoryFilter, customerFilter, yearFilter, monthFilter])
 
     const columns = useMemo<ColumnDef<DeliveryItemFlat>[]>(() => [
         {
@@ -175,17 +241,20 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
     ], [mounted])
 
     const table = useReactTable({
-        data,
+        data: filteredData,
         columns,
         state: {
             sorting,
             globalFilter,
+            pagination,
         },
         onSortingChange: setSorting,
         onGlobalFilterChange: setGlobalFilter,
+        onPaginationChange: setPagination,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
         globalFilterFn: (row, columnId, filterValue) => {
             const term = filterValue.toLowerCase()
             const item = row.original
@@ -197,31 +266,15 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                 item.invoiceNumber?.toLowerCase().includes(term) ||
                 item.customerPo?.toLowerCase().includes(term) ||
                 item.customerName?.toLowerCase().includes(term)
-
-            const matchesStatus = statusFilter === "all" || item.status === statusFilter
-            const matchesCategory = categoryFilter === "all" || item.productCategory === categoryFilter
-
-            return matchesSearch && matchesStatus && matchesCategory
+            return matchesSearch
         },
     })
 
-    // Virtualization setup
-    const parentRef = useRef<HTMLDivElement>(null)
-    const { rows } = table.getRowModel()
+    const rows = table.getRowModel().rows
 
-    const rowVirtualizer = useVirtualizer({
-        count: rows.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 65, // slightly taller for double-line rows
-        overscan: 20,
-    })
-
-    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
-        ? [
-            rowVirtualizer.getVirtualItems()[0].start,
-            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
-        ]
-        : [0, 0]
+    useEffect(() => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+    }, [globalFilter, statusFilter, categoryFilter, customerFilter, yearFilter, monthFilter])
 
     const handleExport = () => {
         const headers = ["Product Name", "Product No", "Old Material No", "Category", "Customer", "PO Customer", "Delivery No (DO)", "SO Internal", "Delivery Date", "Status", "Qty Delivered", "Qty Ordered", "Driver/Vendor", "Vehicle", "Warehouse"]
@@ -258,11 +311,6 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
         document.body.removeChild(link)
     }
 
-    // Effect to trigger filtration when dropdowns change
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [statusFilter, categoryFilter, globalFilter, table])
-
     return (
         <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
@@ -295,55 +343,140 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                 />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-card p-3 rounded-md border shadow-sm">
-                <div className="relative w-full sm:w-80">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search product, DO, SO, customer..."
-                        className="pl-8 bg-background"
-                        value={globalFilter ?? ""}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                    />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" onClick={handleExport} className="bg-background">
-                        <Download className="mr-2 h-4 w-4" />
-                        Export CSV
-                    </Button>
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-[140px] bg-background">
-                            <SelectValue placeholder="All Categories" />
+            <div className="flex justify-end mb-2">
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Rows</span>
+                    <Select
+                        value={String(pagination.pageSize)}
+                        onValueChange={(value) => table.setPageSize(Number(value))}
+                    >
+                        <SelectTrigger className="w-[90px] h-8">
+                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Categories</SelectItem>
-                            {categories.map(cat => (
-                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[140px] bg-background">
-                            <SelectValue placeholder="All Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="scheduled">Scheduled</SelectItem>
-                            <SelectItem value="partial">Partial</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                    >
+                        Next
+                    </Button>
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card overflow-hidden shadow-sm">
-                <div ref={parentRef} className="overflow-auto h-[600px] relative scrollbar-thin scrollbar-thumb-accent">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search product, DO, SO, customer..."
+                            value={globalFilter ?? ""}
+                            onChange={(e) => setGlobalFilter(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={handleExport} className="shrink-0">
+                            <Download className="mr-2 h-4 w-4" />
+                            <span className="hidden sm:inline">Export</span>
+                        </Button>
+
+                        <div className="hidden sm:flex flex-wrap items-center gap-2">
+                            <DataTableFacetedFilter
+                                title="Year"
+                                options={years}
+                                selectedValues={yearFilter}
+                                onFilterChange={setYearFilter}
+                            />
+                            <DataTableFacetedFilter
+                                title="Month"
+                                options={uniqueMonths}
+                                selectedValues={monthFilter}
+                                onFilterChange={setMonthFilter}
+                            />
+                            <DataTableFacetedFilter
+                                title="Category"
+                                options={categories}
+                                selectedValues={categoryFilter}
+                                onFilterChange={setCategoryFilter}
+                            />
+                            <DataTableFacetedFilter
+                                title="Customer"
+                                options={customers}
+                                selectedValues={customerFilter}
+                                onFilterChange={setCustomerFilter}
+                            />
+                            <DataTableFacetedFilter
+                                title="Status"
+                                options={statuses}
+                                selectedValues={statusFilter}
+                                onFilterChange={setStatusFilter}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="sm:hidden flex items-center gap-2 overflow-x-auto pb-1">
+                    <DataTableFacetedFilter
+                        title="Year"
+                        options={years}
+                        selectedValues={yearFilter}
+                        onFilterChange={setYearFilter}
+                    />
+                    <DataTableFacetedFilter
+                        title="Month"
+                        options={uniqueMonths}
+                        selectedValues={monthFilter}
+                        onFilterChange={setMonthFilter}
+                    />
+                    <DataTableFacetedFilter
+                        title="Category"
+                        options={categories}
+                        selectedValues={categoryFilter}
+                        onFilterChange={setCategoryFilter}
+                    />
+                    <DataTableFacetedFilter
+                        title="Customer"
+                        options={customers}
+                        selectedValues={customerFilter}
+                        onFilterChange={setCustomerFilter}
+                    />
+                    <DataTableFacetedFilter
+                        title="Status"
+                        options={statuses}
+                        selectedValues={statusFilter}
+                        onFilterChange={setStatusFilter}
+                    />
+                </div>
+            </div>
+
+            <div className="rounded-md border bg-card shadow-sm">
+                <div
+                    className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-accent"
+                >
                     <Table>
-                        <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 shadow-sm">
+                        <TableHeader className="bg-background shadow-sm">
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="font-semibold text-slate-700 dark:text-slate-300">
+                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))] font-semibold text-slate-700 dark:text-slate-300">
                                             {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                         </TableHead>
                                     ))}
@@ -351,30 +484,19 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                             ))}
                         </TableHeader>
                         <TableBody>
-                            {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                <>
-                                    <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={table.getVisibleFlatColumns().length} className="p-0" />
+                            {rows.length > 0 ? (
+                                rows.map((row) => (
+                                    <TableRow key={row.id} className="hover:bg-muted/50 transition-colors group">
+                                        {row.getVisibleCells().map((cell) => (
+                                            <TableCell key={cell.id} className="py-3">
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </TableCell>
+                                        ))}
                                     </TableRow>
-                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                        const row = rows[virtualRow.index]
-                                        return (
-                                            <TableRow key={row.id} className="hover:bg-muted/50 transition-colors group">
-                                                {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id} className="py-3">
-                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        )
-                                    })}
-                                    <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={columns.length} className="p-0" />
-                                    </TableRow>
-                                </>
+                                ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={columns.length} className="h-40 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+                                    <TableCell colSpan={table.getVisibleFlatColumns().length} className="h-40 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
                                         <PackageSearch className="h-8 w-8 text-muted-foreground/50" />
                                         No delivery items found based on your filters.
                                     </TableCell>
@@ -382,6 +504,47 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                             )}
                         </TableBody>
                     </Table>
+                </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+                <div className="text-muted-foreground">
+                    Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} records
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Rows</span>
+                    <Select
+                        value={String(pagination.pageSize)}
+                        onValueChange={(value) => table.setPageSize(Number(value))}
+                    >
+                        <SelectTrigger className="w-[90px] h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-muted-foreground whitespace-nowrap">
+                        Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                    >
+                        Next
+                    </Button>
                 </div>
             </div>
         </div>

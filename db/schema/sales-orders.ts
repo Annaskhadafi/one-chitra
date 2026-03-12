@@ -10,6 +10,7 @@ export const salesOrders = pgTable("sales_orders", {
     invoiceNumber: varchar("invoice_number", { length: 50 }).unique(),
     customerPo: varchar("customer_po", { length: 100 }),
     customerId: integer("customer_id").references(() => customers.id).notNull(),
+    salesPersonId: text("sales_person_id").references(() => user.id),
     warehouseId: integer("warehouse_id").references(() => warehouses.id),
     salesDate: timestamp("sales_date").defaultNow().notNull(),
     poReceive: timestamp("po_receive"),
@@ -40,6 +41,10 @@ export const salesOrdersRelations = relations(salesOrders, ({ one, many }) => ({
     customer: one(customers, {
         fields: [salesOrders.customerId],
         references: [customers.id],
+    }),
+    salesPerson: one(user, {
+        fields: [salesOrders.salesPersonId],
+        references: [user.id],
     }),
     warehouse: one(warehouses, {
         fields: [salesOrders.warehouseId],

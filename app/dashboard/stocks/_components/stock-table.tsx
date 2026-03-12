@@ -5,7 +5,7 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock, getStocks } from "@/app/actions/stock"
 import { StockDialog } from "./stock-dialog"
 import { StockCSVUpload } from "./stock-csv-upload"
-import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp, RefreshCcw, ChevronUp, ChevronDown, Loader2, FilterX } from "lucide-react"
+import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp, RefreshCcw, ChevronUp, ChevronDown, Check, ListFilter, X, Loader2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -44,18 +44,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { updateSetting } from "@/app/actions/settings"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -151,22 +140,12 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "product.category",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Category
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Category",
             cell: ({ row }) => row.original.product?.category || "-",
         },
         {
             accessorKey: "product.brand",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Brand
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Brand",
             cell: ({ row }) => row.original.product?.brand || "-",
         },
         {
@@ -185,22 +164,12 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "product.oldMaterialNo",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Old Mat. No
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Old Mat. No",
             cell: ({ row }) => row.original.product?.oldMaterialNo || "-",
         },
         {
             accessorKey: "product.materialDescription",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Description
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Description",
             cell: ({ row }) => (
                 <div className="max-w-[200px] truncate" title={row.original.product?.materialDescription || ""}>
                     {row.original.product?.materialDescription}
@@ -209,22 +178,12 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "warehouse.sloc",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    SLoc
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "SLoc",
             cell: ({ row }) => row.original.warehouse?.sloc,
         },
         {
             accessorKey: "warehouse.description",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Sloc Desc
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Sloc Desc",
             cell: ({ row }) => (
                 <div className="max-w-[150px] truncate" title={row.original.warehouse?.description || ""}>
                     {row.original.warehouse?.description}
@@ -282,12 +241,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         },
         {
             accessorKey: "warehouse.type",
-            header: ({ column }) => (
-                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
-                    Type Warehouse
-                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
-                </Button>
-            ),
+            header: "Type Warehouse",
             cell: ({ row }) => (
                 <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
                     {row.original.warehouse?.type || "N/A"}
@@ -477,9 +431,8 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
     return (
         <div className="space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    {/* Filter Tabs - Full width on mobile */}
-                    <TabsList className="w-full md:w-auto flex justify-start overflow-x-auto">
+                <div className="flex items-center justify-between">
+                    <TabsList>
                         <TabsTrigger value="all">All Stocks</TabsTrigger>
                         {warehouseTypes.filter(t => t !== "all").map(type => (
                             <TabsTrigger key={type || "unknown"} value={type || "unknown"}>
@@ -487,130 +440,44 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                             </TabsTrigger>
                         ))}
                     </TabsList>
-
-                    {/* Refresh Button - Full width on mobile, auto on desktop */}
-                    <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full md:w-auto md:ml-auto">
+                    <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-auto">
                         <RefreshCcw className="mr-2 h-4 w-4" />
-                        Refresh Data
+                        Refresh
                     </Button>
                 </div>
 
-                <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="analytics" className="border rounded-xl bg-card shadow-sm px-6">
-                        <AccordionTrigger className="hover:no-underline py-4">
-                            <div className="flex items-center gap-2">
-                                <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                                <span className="font-semibold text-base">Ringkasan & Analitik Stock</span>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-2 pb-6">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <ScoreCard
-                                    title="Total Stock Items"
-                                    value={stats.totalItems}
-                                    icon={Box}
-                                    description={activeTab === 'all' ? "All unique stock units" : `Stock units in ${activeTab}`}
-                                    gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
-                                    iconColor="text-blue-600"
-                                    textColor="text-blue-900"
-                                />
-                                <ScoreCard
-                                    title="Low Stock Items"
-                                    value={stats.lowStock}
-                                    icon={AlertTriangle}
-                                    description="Items below minimum level"
-                                    gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
-                                    iconColor="text-amber-600"
-                                    textColor="text-amber-900"
-                                />
-                                <ScoreCard
-                                    title="Total Valuation"
-                                    value={`IDR ${stats.totalValuation.toLocaleString("id-ID")}`}
-                                    icon={TrendingUp}
-                                    description="Total inventory value"
-                                    gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
-                                    iconColor="text-emerald-600"
-                                    textColor="text-emerald-900"
-                                />
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
+                <div className="grid gap-4 md:grid-cols-3">
+                    <ScoreCard
+                        title="Total Stock Items"
+                        value={stats.totalItems}
+                        icon={Box}
+                        description={activeTab === 'all' ? "All unique stock units" : `Stock units in ${activeTab}`}
+                        gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50 hover:shadow-lg"
+                        iconColor="text-blue-600"
+                        textColor="text-blue-900"
+                    />
+                    <ScoreCard
+                        title="Low Stock Items"
+                        value={stats.lowStock}
+                        icon={AlertTriangle}
+                        description="Items below minimum level"
+                        gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50 hover:shadow-lg"
+                        iconColor="text-amber-600"
+                        textColor="text-amber-900"
+                    />
+                    <ScoreCard
+                        title="Total Valuation"
+                        value={`IDR ${stats.totalValuation.toLocaleString("id-ID")}`}
+                        icon={TrendingUp}
+                        description="Total inventory value"
+                        gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50 hover:shadow-lg"
+                        iconColor="text-emerald-600"
+                        textColor="text-emerald-900"
+                    />
+                </div>
 
                 <div className="flex flex-col gap-4">
-                    {/* Mobile Filter Dropdown */}
-                    <div className="flex sm:hidden items-center justify-between w-full">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full justify-between">
-                                    <span className="flex items-center gap-2">
-                                        <FilterX className="h-4 w-4" />
-                                        Filters
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-[calc(100vw-2rem)] p-4 space-y-4">
-                                <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-muted-foreground">Manual Rate Exchange</label>
-                                        <Input
-                                            type="number"
-                                            placeholder="Rate..."
-                                            value={manualRate}
-                                            onChange={(e) => setManualRate(e.target.value)}
-                                            onBlur={(e) => {
-                                                if (e.target.value) {
-                                                    updateSetting("manual_usd_rate", e.target.value)
-                                                }
-                                            }}
-                                            className="w-full h-9"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-muted-foreground">Sloc Description</label>
-                                        <Input
-                                            placeholder="Filter Sloc Desc..."
-                                            value={filterSlocDesc}
-                                            onChange={(e) => setFilterSlocDesc(e.target.value)}
-                                            className="w-full h-9"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-muted-foreground">Product Type</label>
-                                        <Select value={filterCategory} onValueChange={setFilterCategory}>
-                                            <SelectTrigger className="w-full h-9">
-                                                <SelectValue placeholder="Select Type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">All Types</SelectItem>
-                                                {productCategories.filter(c => c !== 'all').map(category => (
-                                                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="w-full mt-2"
-                                        onClick={() => {
-                                            setFilterCategory("all")
-                                            setFilterSlocDesc("")
-                                            setGlobalFilter("")
-                                            setActiveTab("all")
-                                        }}
-                                    >
-                                        <FilterX className="mr-2 h-4 w-4" />
-                                        Reset Filter
-                                    </Button>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-
-                    {/* Desktop Filters */}
-                    <div className="hidden sm:flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                         <div className="w-full sm:w-[200px]">
                             <label className="text-xs font-medium mb-1.5 block text-muted-foreground">Manual Rate Exchange</label>
                             <Input
@@ -651,17 +518,17 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                         </div>
                     </div>
 
-                    <div className="flex justify-between flex-wrap sm:flex-nowrap items-center gap-4">
-                        <div className="relative w-full sm:flex-1 sm:max-w-sm shrink-0">
+                    <div className="flex justify-between items-center gap-4">
+                        <div className="relative flex-1 max-w-sm">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder="Search by material or sloc..."
-                                className="pl-8 w-full"
+                                className="pl-8"
                                 value={globalFilter}
                                 onChange={(e) => setGlobalFilter(e.target.value)}
                             />
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2">
                             <StockCSVUpload onSuccess={() => refetch()} />
                             <StockDialog products={products} warehouses={warehouses} onSuccess={() => refetch()} />
                         </div>

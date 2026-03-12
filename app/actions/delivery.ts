@@ -79,6 +79,7 @@ export async function getDeliveryItemsFlat() {
                 },
             },
             warehouse: true,
+            createdByUser: true,
             items: {
                 with: { product: true },
             },
@@ -116,6 +117,7 @@ export async function getDeliveryItemsFlat() {
             customerId: delivery.salesOrder?.customer?.id,
             warehouseId: delivery.warehouseId,
             warehouseName: delivery.warehouse?.description || delivery.warehouse?.sloc,
+            createdByName: delivery.createdByUser?.name || null,
         }))
     )
 }

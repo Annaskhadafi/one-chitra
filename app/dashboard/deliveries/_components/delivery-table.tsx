@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef, useCallback } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { deleteDelivery, bulkDeleteDeliveries, bulkUpdateDeliveryStatus, getDeliveries, updateDeliveryDate } from "@/app/actions/delivery"
@@ -13,6 +13,7 @@ import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import { DeliveryItemsTable } from "./delivery-items-table"
 import {
     DropdownMenu,
+    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
@@ -33,6 +34,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
+import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import {
     Select,
     SelectContent,
@@ -55,6 +57,7 @@ import {
 import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useSession } from "@/lib/auth-client"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
@@ -68,12 +71,14 @@ import {
     getCoreRowModel,
     getSortedRowModel,
     getFilteredRowModel,
+    getPaginationRowModel,
     flexRender,
     ColumnDef,
     SortingState,
     ColumnFiltersState,
+    PaginationState,
+    VisibilityState,
 } from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
 
@@ -118,6 +123,9 @@ interface DeliveryTableProps {
     itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
 }
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500, 1000]
+const DEFAULT_PAGE_SIZE = 25
+
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
     scheduled: "secondary",
     ready: "warning",
@@ -146,14 +154,22 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTableProps) {
+    const { data: session } = useSession()
+    const currentUserId = session?.user?.id || "anonymous"
+    const columnVisibilityStorageKey = `deliveries:column-visibility:${currentUserId}`
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
     const canDelete = hasResourcePermission('deliveries', 'delete')
 
     const [sorting, setSorting] = useState<SortingState>([])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
     const [rowSelection, setRowSelection] = useState({})
     const [globalFilter, setGlobalFilter] = useState("")
+    const [pagination, setPagination] = useState<PaginationState>({
+        pageIndex: 0,
+        pageSize: DEFAULT_PAGE_SIZE,
+    })
     const [viewMode, setViewMode] = useState<"list" | "by-po" | "items">("list")
 
     const [deleting, setDeleting] = useState<number | null>(null)
@@ -169,6 +185,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const [selectedMonth, setSelectedMonth] = useState<string>("all")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
     const [selectedWarehouse, setSelectedWarehouse] = useState<string>("all")
+    const [selectedCreatedBy, setSelectedCreatedBy] = useState<string>("all")
 
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -184,6 +201,23 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
+
+    React.useEffect(() => {
+        if (!mounted) return
+        const saved = localStorage.getItem(columnVisibilityStorageKey)
+        if (saved) {
+            try {
+                setColumnVisibility(JSON.parse(saved) as VisibilityState)
+            } catch {
+                localStorage.removeItem(columnVisibilityStorageKey)
+            }
+        }
+    }, [mounted, columnVisibilityStorageKey])
+
+    React.useEffect(() => {
+        if (!mounted) return
+        localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(columnVisibility))
+    }, [mounted, columnVisibilityStorageKey, columnVisibility])
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -268,9 +302,10 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             const monthMatch = selectedMonth === "all" || (date.getMonth() + 1).toString() === selectedMonth
             const categoryMatch = selectedCategory === "all" || d.items.some(item => item.product?.category === selectedCategory)
             const warehouseMatch = selectedWarehouse === "all" || d.warehouseId?.toString() === selectedWarehouse
-            return yearMatch && monthMatch && categoryMatch && warehouseMatch
+            const createdByMatch = selectedCreatedBy === "all" || (d.createdByUser?.name || "") === selectedCreatedBy
+            return yearMatch && monthMatch && categoryMatch && warehouseMatch && createdByMatch
         })
-    }, [data, selectedYear, selectedMonth, selectedCategory, selectedWarehouse])
+    }, [data, selectedYear, selectedMonth, selectedCategory, selectedWarehouse, selectedCreatedBy])
 
     // Status Distribution Data (moved from page.tsx)
     const statusCounts = useMemo(() => {
@@ -713,14 +748,19 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             columnFilters,
             rowSelection,
             globalFilter,
+            columnVisibility,
+            pagination,
         },
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         onRowSelectionChange: setRowSelection,
         onGlobalFilterChange: setGlobalFilter,
+        onColumnVisibilityChange: setColumnVisibility,
+        onPaginationChange: setPagination,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
         globalFilterFn: (row, columnId, filterValue) => {
             const search = filterValue.toLowerCase()
             const d = row.original
@@ -737,22 +777,11 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
     })
 
-    const { rows } = table.getRowModel()
-    const parentRef = useRef<HTMLDivElement>(null)
+    const rows = table.getRowModel().rows
 
-    const rowVirtualizer = useVirtualizer({
-        count: rows.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 53,
-        overscan: 20,
-    })
-
-    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
-        ? [
-            rowVirtualizer.getVirtualItems()[0].start,
-            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
-        ]
-        : [0, 0]
+    React.useEffect(() => {
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+    }, [globalFilter, selectedYear, selectedMonth, selectedCategory, selectedWarehouse, selectedCreatedBy, viewMode])
 
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
@@ -884,6 +913,16 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             }
         })
         return Array.from(w.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    }, [data])
+
+    const createdByUsers = useMemo(() => {
+        return Array.from(
+            new Set(
+                data
+                    .map(d => d.createdByUser?.name)
+                    .filter((name): name is string => Boolean(name))
+            )
+        ).sort((a, b) => a.localeCompare(b))
     }, [data])
 
     const selectedCount = Object.keys(rowSelection).length
@@ -1123,11 +1162,51 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     canEdit={canEdit}
                     statusVariants={statusVariants}
                     statusLabels={statusLabels}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    defaultPageSize={DEFAULT_PAGE_SIZE}
                 />
             )}
 
             {/* Regular List View */}
             {viewMode === "list" && (<>
+
+                <div className="flex justify-end mb-2">
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Rows</span>
+                        <Select
+                            value={String(pagination.pageSize)}
+                            onValueChange={(value) => table.setPageSize(Number(value))}
+                        >
+                            <SelectTrigger className="w-[90px] h-8">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PAGE_SIZE_OPTIONS.map((size) => (
+                                    <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground whitespace-nowrap">
+                            Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                        >
+                            Prev
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                        >
+                            Next
+                        </Button>
+                    </div>
+                </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1 max-w-sm">
@@ -1145,164 +1224,72 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                             <span className="hidden sm:inline">Export</span>
                         </Button>
                         
-                        {/* Mobile Filter Dropdown */}
                         {mounted && (
-                            <div className="sm:hidden">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" size="icon">
-                                            <Search className="h-4 w-4" /> {/* Or use Filter icon */}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent align="end" className="w-[280px] p-4 space-y-4">
-                                        <div className="font-medium text-sm border-b pb-2 mb-2">Filters</div>
-                                        <div className="flex flex-col gap-3">
-                                            <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Year" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Years</SelectItem>
-                                                    {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Month" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Months</SelectItem>
-                                                    {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
-                                                        <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Product Type" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Types</SelectItem>
-                                                    {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Warehouse" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Warehouses</SelectItem>
-                                                    {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Select
-                                                value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
-                                                onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
-                                            >
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Status" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Status</SelectItem>
-                                                    {Object.entries(statusLabels).map(([value, label]) => (
-                                                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
-                                                    table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
-                                                }}
-                                                className={cn(
-                                                    "flex items-center justify-between px-3 py-2 rounded-md border text-xs font-medium transition-all w-full",
-                                                    (table.getColumn("status")?.getFilterValue() as string) === "partial"
-                                                        ? "bg-orange-500 text-white border-orange-500 shadow-sm"
-                                                        : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
-                                                )}
-                                            >
-                                                <div className="flex items-center gap-1.5">
-                                                    <span>⚠</span>
-                                                    <span>Partial</span>
-                                                </div>
-                                                <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                                                    {data.filter(d => d.status === "partial").length}
-                                                </span>
-                                            </button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                            <Button variant="outline" size="icon" onClick={() => refetch()} className="sm:hidden">
+                                <RefreshCcw className="h-4 w-4" />
+                            </Button>
                         )}
 
                         {/* Desktop Filter Row */}
                         <div className="hidden sm:flex flex-wrap items-center gap-2">
                             {mounted && (
                                 <>
-                                    <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                        <SelectTrigger className="w-[100px]">
-                                            <SelectValue placeholder="Year" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Years</SelectItem>
-                                            {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <DataTableFacetedFilter
+                                        title="Year"
+                                        options={years}
+                                        selectedValues={selectedYear === "all" ? [] : [selectedYear]}
+                                        onFilterChange={(values) => setSelectedYear(values[0] || "all")}
+                                    />
 
-                                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                        <SelectTrigger className="w-[120px]">
-                                            <SelectValue placeholder="Month" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Months</SelectItem>
-                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
-                                                <SelectItem key={m} value={(i + 1).toString()}>{m}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <DataTableFacetedFilter
+                                        title="Month"
+                                        options={["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]}
+                                        selectedValues={selectedMonth === "all" ? [] : [(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(selectedMonth) - 1] || "")]}
+                                        onFilterChange={(values) => {
+                                            const idx = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(values[0] || "")
+                                            setSelectedMonth(idx >= 0 ? String(idx + 1) : "all")
+                                        }}
+                                    />
 
-                                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                        <SelectTrigger className="w-[160px]">
-                                            <SelectValue placeholder="Product Type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Types</SelectItem>
-                                            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <DataTableFacetedFilter
+                                        title="Category"
+                                        options={categories}
+                                        selectedValues={selectedCategory === "all" ? [] : [selectedCategory]}
+                                        onFilterChange={(values) => setSelectedCategory(values[0] || "all")}
+                                    />
 
-                                    <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                                        <SelectTrigger className="w-[160px]">
-                                            <SelectValue placeholder="Warehouse" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Warehouses</SelectItem>
-                                            {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <DataTableFacetedFilter
+                                        title="Warehouse"
+                                        options={warehouses.map(w => w.name)}
+                                        selectedValues={selectedWarehouse === "all" ? [] : [warehouses.find(w => w.id === selectedWarehouse)?.name || ""]}
+                                        onFilterChange={(values) => {
+                                            const selectedName = values[0]
+                                            const selected = warehouses.find(w => w.name === selectedName)
+                                            setSelectedWarehouse(selected?.id || "all")
+                                        }}
+                                    />
 
-                                    <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
+                                    <DataTableFacetedFilter
+                                        title="Created By"
+                                        options={createdByUsers}
+                                        selectedValues={selectedCreatedBy === "all" ? [] : [selectedCreatedBy]}
+                                        onFilterChange={(values) => setSelectedCreatedBy(values[0] || "all")}
+                                    />
 
-                                    <Select
-                                        value={(table.getColumn("status")?.getFilterValue() as string) ?? "all"}
-                                        onValueChange={(value) => table.getColumn("status")?.setFilterValue(value)}
-                                    >
-                                        <SelectTrigger className="w-[140px]">
-                                            <SelectValue placeholder="Status" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Status</SelectItem>
-                                            {Object.entries(statusLabels).map(([value, label]) => (
-                                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <DataTableFacetedFilter
+                                        title="Status"
+                                        options={Object.values(statusLabels)}
+                                        selectedValues={(() => {
+                                            const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                            if (current === "all") return []
+                                            return [statusLabels[current] || current]
+                                        })()}
+                                        onFilterChange={(values) => {
+                                            const selectedLabel = values[0]
+                                            const selected = Object.entries(statusLabels).find(([, label]) => label === selectedLabel)
+                                            table.getColumn("status")?.setFilterValue(selected?.[0] || "all")
+                                        }}
+                                    />
 
                                     {/* Quick partial filter chip */}
                                     <button
@@ -1324,6 +1311,48 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                             {data.filter(d => d.status === "partial").length}
                                         </span>
                                     </button>
+
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline">
+                                                View <ChevronDown className="ml-2 h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-56">
+                                            <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
+                                            {table
+                                                .getAllColumns()
+                                                .filter((column) => column.getCanHide())
+                                                .map((column) => {
+                                                    const label = {
+                                                        deliveryNumber: "Delivery No",
+                                                        doSap: "DO SAP",
+                                                        customerPo: "No. PO Customer",
+                                                        customer: "Customer",
+                                                        scheduledDate: "Scheduled",
+                                                        deliveryDate: "Delivery Date",
+                                                        status: "Status",
+                                                        deliveryType: "Type",
+                                                        driverName: "Driver",
+                                                        vehicleNumber: "Vehicle",
+                                                        warehouse: "Warehouse",
+                                                        createdBy: "Created By",
+                                                        items: "Items",
+                                                        fulfillment: "Fulfillment",
+                                                    }[column.id] || column.id
+
+                                                    return (
+                                                        <DropdownMenuCheckboxItem
+                                                            key={column.id}
+                                                            checked={column.getIsVisible()}
+                                                            onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                                                        >
+                                                            {label}
+                                                        </DropdownMenuCheckboxItem>
+                                                    )
+                                                })}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </>
                             )}
                             <Button variant="outline" size="icon" onClick={() => refetch()}>
@@ -1333,17 +1362,132 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     </div>
                 </div>
 
-                <div className="rounded-md bg-card relative">
+                {mounted && (
+                    <div className="sm:hidden flex items-center gap-2 overflow-x-auto pb-1">
+                        <DataTableFacetedFilter
+                            title="Year"
+                            options={years}
+                            selectedValues={selectedYear === "all" ? [] : [selectedYear]}
+                            onFilterChange={(values) => setSelectedYear(values[0] || "all")}
+                        />
+                        <DataTableFacetedFilter
+                            title="Month"
+                            options={["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]}
+                            selectedValues={selectedMonth === "all" ? [] : [(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(selectedMonth) - 1] || "")]}
+                            onFilterChange={(values) => {
+                                const idx = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(values[0] || "")
+                                setSelectedMonth(idx >= 0 ? String(idx + 1) : "all")
+                            }}
+                        />
+                        <DataTableFacetedFilter
+                            title="Category"
+                            options={categories}
+                            selectedValues={selectedCategory === "all" ? [] : [selectedCategory]}
+                            onFilterChange={(values) => setSelectedCategory(values[0] || "all")}
+                        />
+                        <DataTableFacetedFilter
+                            title="Warehouse"
+                            options={warehouses.map(w => w.name)}
+                            selectedValues={selectedWarehouse === "all" ? [] : [warehouses.find(w => w.id === selectedWarehouse)?.name || ""]}
+                            onFilterChange={(values) => {
+                                const selectedName = values[0]
+                                const selected = warehouses.find(w => w.name === selectedName)
+                                setSelectedWarehouse(selected?.id || "all")
+                            }}
+                        />
+                        <DataTableFacetedFilter
+                            title="Created By"
+                            options={createdByUsers}
+                            selectedValues={selectedCreatedBy === "all" ? [] : [selectedCreatedBy]}
+                            onFilterChange={(values) => setSelectedCreatedBy(values[0] || "all")}
+                        />
+                        <DataTableFacetedFilter
+                            title="Status"
+                            options={Object.values(statusLabels)}
+                            selectedValues={(() => {
+                                const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                if (current === "all") return []
+                                return [statusLabels[current] || current]
+                            })()}
+                            onFilterChange={(values) => {
+                                const selectedLabel = values[0]
+                                const selected = Object.entries(statusLabels).find(([, label]) => label === selectedLabel)
+                                table.getColumn("status")?.setFilterValue(selected?.[0] || "all")
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const current = (table.getColumn("status")?.getFilterValue() as string) ?? "all"
+                                table.getColumn("status")?.setFilterValue(current === "partial" ? "all" : "partial")
+                            }}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all whitespace-nowrap",
+                                (table.getColumn("status")?.getFilterValue() as string) === "partial"
+                                    ? "bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-200"
+                                    : "bg-background text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                            )}
+                        >
+                            <span>⚠</span>
+                            <span>Partial</span>
+                            <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                                {data.filter(d => d.status === "partial").length}
+                            </span>
+                        </button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-[36px] whitespace-nowrap">
+                                    View <ChevronDown className="ml-2 h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <div className="px-2 py-1.5 text-sm font-medium">Toggle columns</div>
+                                {table
+                                    .getAllColumns()
+                                    .filter((column) => column.getCanHide())
+                                    .map((column) => {
+                                        const label = {
+                                            deliveryNumber: "Delivery No",
+                                            doSap: "DO SAP",
+                                            customerPo: "No. PO Customer",
+                                            customer: "Customer",
+                                            scheduledDate: "Scheduled",
+                                            deliveryDate: "Delivery Date",
+                                            status: "Status",
+                                            deliveryType: "Type",
+                                            driverName: "Driver",
+                                            vehicleNumber: "Vehicle",
+                                            warehouse: "Warehouse",
+                                            createdBy: "Created By",
+                                            items: "Items",
+                                            fulfillment: "Fulfillment",
+                                        }[column.id] || column.id
+
+                                        return (
+                                            <DropdownMenuCheckboxItem
+                                                key={column.id}
+                                                checked={column.getIsVisible()}
+                                                onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                                            >
+                                                {label}
+                                            </DropdownMenuCheckboxItem>
+                                        )
+                                    })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )}
+
+                <div className="rounded-md border">
                     <div
-                        ref={parentRef}
-                        className="h-[600px] relative scrollbar-thin scrollbar-thumb-accent"
+                        className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-accent"
                     >
                         <Table>
-                            <TableHeader>
+                            <TableHeader className="bg-background shadow-sm">
                                 {table.getHeaderGroups().map((headerGroup) => (
-                                    <TableRow key={headerGroup.id} className="bg-muted/50">
+                                    <TableRow key={headerGroup.id}>
                                         {headerGroup.headers.map((header) => (
-                                            <TableHead key={header.id}>
+                                            <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                             </TableHead>
                                         ))}
@@ -1351,38 +1495,29 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                 ))}
                             </TableHeader>
                             <TableBody>
-                                {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                    <>
-                                        <TableRow style={{ height: `${before}px` }} className="border-none">
-                                            <TableCell colSpan={columns.length} />
-                                        </TableRow>
-                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                            const row = rows[virtualRow.index]
-                                            const isPartialRow = row.original.status === "partial"
-                                            return (
-                                                <TableRow
-                                                    key={row.id}
-                                                    data-state={row.getIsSelected() && "selected"}
-                                                    className={cn(
-                                                        "group transition-colors hover:bg-muted/50",
-                                                        isPartialRow && "border-l-4 border-l-orange-400 bg-orange-50/30 dark:bg-orange-950/10"
-                                                    )}
-                                                >
-                                                    {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id}>
-                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                        </TableCell>
-                                                    ))}
-                                                </TableRow>
-                                            )
-                                        })}
-                                        <TableRow style={{ height: `${after}px` }} className="border-none">
-                                            <TableCell colSpan={columns.length} />
-                                        </TableRow>
-                                    </>
+                                {rows.length > 0 ? (
+                                    rows.map((row) => {
+                                        const isPartialRow = row.original.status === "partial"
+                                        return (
+                                            <TableRow
+                                                key={row.id}
+                                                data-state={row.getIsSelected() && "selected"}
+                                                className={cn(
+                                                    "group transition-colors hover:bg-muted/50",
+                                                    isPartialRow && "border-l-4 border-l-orange-400 bg-orange-50/30 dark:bg-orange-950/10"
+                                                )}
+                                            >
+                                                {row.getVisibleCells().map((cell) => (
+                                                    <TableCell key={cell.id}>
+                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                    </TableCell>
+                                                ))}
+                                            </TableRow>
+                                        )
+                                    })
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                                        <TableCell colSpan={table.getVisibleFlatColumns().length} className="h-32 text-center text-muted-foreground">
                                             No records found.
                                         </TableCell>
                                     </TableRow>
@@ -1393,7 +1528,42 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 </div>
 
                 <div className="flex items-center justify-between text-sm text-muted-foreground py-2">
-                    <div>Showing {table.getFilteredRowModel().rows.length} of {data.length} records</div>
+                    <div>Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} records</div>
+                    <div className="flex items-center gap-2">
+                        <span>Rows</span>
+                        <Select
+                            value={String(pagination.pageSize)}
+                            onValueChange={(value) => table.setPageSize(Number(value))}
+                        >
+                            <SelectTrigger className="w-[90px] h-8">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PAGE_SIZE_OPTIONS.map((size) => (
+                                    <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <span className="whitespace-nowrap">
+                            Page {table.getState().pagination.pageIndex + 1} / {Math.max(1, table.getPageCount())}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                        >
+                            Prev
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                        >
+                            Next
+                        </Button>
+                    </div>
                 </div>
 
                 {selectedCount > 0 && (canEdit || canDelete) && (
@@ -1456,9 +1626,14 @@ interface DeliveryGroupedByPOProps {
     canEdit: boolean
     statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning">
     statusLabels: Record<string, string>
+    pageSizeOptions: number[]
+    defaultPageSize: number
 }
 
-function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, canEdit, statusVariants, statusLabels }: DeliveryGroupedByPOProps) {
+function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, canEdit, statusVariants, statusLabels, pageSizeOptions, defaultPageSize }: DeliveryGroupedByPOProps) {
+    const [pageIndex, setPageIndex] = useState(0)
+    const [pageSize, setPageSize] = useState(defaultPageSize)
+
     const grouped = useMemo(() => {
         const q = globalFilter.toLowerCase()
         const filtered = q
@@ -1476,15 +1651,23 @@ function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, c
             map.get(key)!.push(d)
         }
 
-        // Sort each group by scheduledDate asc
+        // Sort each group by newest created first
         map.forEach((deliveries, key) => {
             map.set(key, [...deliveries].sort((a, b) =>
-                new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             ))
         })
 
         return Array.from(map.entries())
     }, [data, globalFilter])
+
+    React.useEffect(() => {
+        setPageIndex(0)
+    }, [globalFilter, pageSize, data])
+
+    const totalPages = Math.max(1, Math.ceil(grouped.length / pageSize))
+    const currentPageIndex = Math.min(pageIndex, totalPages - 1)
+    const paginatedGrouped = grouped.slice(currentPageIndex * pageSize, currentPageIndex * pageSize + pageSize)
 
     return (
         <div className="space-y-4">
@@ -1499,9 +1682,27 @@ function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, c
                 />
             </div>
 
-            <p className="text-sm text-muted-foreground">{grouped.length} PO ditemukan dari {data.length} delivery</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm text-muted-foreground">{grouped.length} PO ditemukan dari {data.length} delivery</p>
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Rows</span>
+                    <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                        <SelectTrigger className="w-[90px] h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {pageSizeOptions.map((size) => (
+                                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-muted-foreground whitespace-nowrap">Page {currentPageIndex + 1} / {totalPages}</span>
+                    <Button variant="outline" size="sm" onClick={() => setPageIndex((p) => Math.max(0, p - 1))} disabled={currentPageIndex === 0}>Prev</Button>
+                    <Button variant="outline" size="sm" onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))} disabled={currentPageIndex >= totalPages - 1}>Next</Button>
+                </div>
+            </div>
 
-            {grouped.map(([poKey, deliveries]) => {
+            {paginatedGrouped.map(([poKey, deliveries]) => {
                 const customer = deliveries[0]?.salesOrder?.customer?.name || "-"
                 const totalOrdered = deliveries.reduce((acc, d) => acc + d.items.reduce((s, i) => s + i.orderedQuantity, 0), 0)
                 const totalDelivered = deliveries.reduce((acc, d) => acc + d.items.reduce((s, i) => s + i.deliveredQuantity, 0), 0)

@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers } from "@/db/schema"
+import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers, user } from "@/db/schema"
 import { eq, desc, inArray, sql, and, isNotNull, like } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -9,15 +9,51 @@ import { salesOrderSchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 
+let hasSalesPersonColumnCache: boolean | null = null
+
+async function hasSalesPersonColumn() {
+    if (hasSalesPersonColumnCache !== null) {
+        return hasSalesPersonColumnCache
+    }
+
+    try {
+        const result = await db.execute(sql`
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'sales_orders'
+              AND column_name = 'sales_person_id'
+            LIMIT 1
+        `)
+
+        hasSalesPersonColumnCache = result.rows.length > 0
+        return hasSalesPersonColumnCache
+    } catch {
+        hasSalesPersonColumnCache = false
+        return false
+    }
+}
+
 export async function getSalesOrders() {
+    const hasPicColumn = await hasSalesPersonColumn()
+
     // Fetch orders with customer and createdByUser first
-    const orders = await db.query.salesOrders.findMany({
-        with: {
-            customer: true,
-            createdByUser: true,
-        },
-        orderBy: [desc(salesOrders.createdAt)],
-    })
+    const orders = hasPicColumn
+        ? await db.query.salesOrders.findMany({
+            with: {
+                customer: true,
+                createdByUser: true,
+                salesPerson: true,
+            },
+            orderBy: [desc(salesOrders.createdAt)],
+        })
+        : await db.query.salesOrders.findMany({
+            with: {
+                customer: true,
+                createdByUser: true,
+            },
+            orderBy: [desc(salesOrders.createdAt)],
+        })
 
     // Fetch items with products separately to avoid nested lateral join issues
     const ordersWithItems = await Promise.all(
@@ -28,7 +64,9 @@ export async function getSalesOrders() {
                     product: true,
                 },
             })
-            return { ...order, items }
+            return hasPicColumn
+                ? { ...order, items }
+                : { ...order, salesPerson: null, items }
         })
     )
 
@@ -47,13 +85,23 @@ export async function getSalesOrderCategories() {
 
 
 export async function getSalesOrder(id: number) {
+    const hasPicColumn = await hasSalesPersonColumn()
+
     // Fetch order with customer first
-    const order = await db.query.salesOrders.findFirst({
-        where: eq(salesOrders.id, id),
-        with: {
-            customer: true,
-        },
-    })
+    const order = hasPicColumn
+        ? await db.query.salesOrders.findFirst({
+            where: eq(salesOrders.id, id),
+            with: {
+                customer: true,
+                salesPerson: true,
+            },
+        })
+        : await db.query.salesOrders.findFirst({
+            where: eq(salesOrders.id, id),
+            with: {
+                customer: true,
+            },
+        })
 
     if (!order) return undefined
 
@@ -65,7 +113,9 @@ export async function getSalesOrder(id: number) {
         },
     })
 
-    return { ...order, items }
+    return hasPicColumn
+        ? { ...order, items }
+        : { ...order, salesPerson: null, items }
 }
 
 export async function generateInvoiceNumber() {
@@ -96,6 +146,7 @@ export async function generateInvoiceNumber() {
 
 export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     try {
+        const hasPicColumn = await hasSalesPersonColumn()
         const session = await getAuthenticatedSession('sales-orders', 'create')
         const userId = session.user.id
         
@@ -124,6 +175,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
                     customerPo: data.customerPo || null,
                     createdBy: userId,
                     customerId: data.customerId,
+                    ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
@@ -224,6 +276,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
 
 export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrderSchema>) {
     try {
+        const hasPicColumn = await hasSalesPersonColumn()
         await checkPermission('sales-orders', 'edit')
         return await db.transaction(async (tx) => {
             // Get original order to see if items changed
@@ -271,6 +324,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
                     invoiceNumber: data.invoiceNumber || undefined,
                     customerPo: data.customerPo || null,
                     customerId: data.customerId,
+                    ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
@@ -402,6 +456,14 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
 
         return { success: false, error: `Gagal mengupdate Sales Order: ${message}` }
     }
+}
+
+export async function getSalesOrderPicUsers() {
+    await getAuthenticatedSession()
+    return await db
+        .select({ id: user.id, name: user.name, email: user.email })
+        .from(user)
+        .orderBy(user.name)
 }
 
 export async function deleteSalesOrder(id: number) {

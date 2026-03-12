@@ -383,7 +383,7 @@ export function LogisticsCostTable({ data }: LogisticsCostTableProps) {
                     className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
                 >
                     <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
+                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
                                     {headerGroup.headers.map((header) => (

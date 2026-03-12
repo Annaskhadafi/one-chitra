@@ -229,6 +229,11 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                         </div>
                                     </div>
 
+                                    <div>
+                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">PIC Sales</div>
+                                        <div className="font-medium text-sm">{order.salesPerson?.name || "-"}</div>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Category PO</div>

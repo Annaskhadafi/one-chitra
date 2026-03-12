@@ -31,6 +31,7 @@ export type NewSalesOrderItem = InferInsertModel<typeof salesOrderItems>
 export type SalesOrderWithRelations = SalesOrder & {
     customer: Customer
     createdByUser: { id: string; name: string; email: string } | null
+    salesPerson: { id: string; name: string; email: string } | null
     items: (SalesOrderItem & {
         product: Product | null
     })[]
