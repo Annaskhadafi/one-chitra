@@ -27,6 +27,8 @@ interface DashboardShortcutsCommandProps {
   navigationSections: RuntimeNavSection[]
 }
 
+export const DASHBOARD_SHORTCUTS_OPEN_EVENT = "dashboard-shortcuts:open"
+
 export function DashboardShortcutsCommand({
   navigationSections,
 }: DashboardShortcutsCommandProps) {
@@ -41,8 +43,16 @@ export function DashboardShortcutsCommand({
       }
     }
 
+    const handleOpenEvent = () => {
+      setOpen(true)
+    }
+
     window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
+    window.addEventListener(DASHBOARD_SHORTCUTS_OPEN_EVENT, handleOpenEvent)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener(DASHBOARD_SHORTCUTS_OPEN_EVENT, handleOpenEvent)
+    }
   }, [])
 
   const shortcutsBySection = React.useMemo(() => {
