@@ -7,6 +7,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { DashboardShortcutsCommand } from "@/components/dashboard-shortcuts-command"
 import { SiteHeader } from "@/components/site-header"
 
 import "@/app/dashboard/theme.css"
@@ -254,6 +255,7 @@ export default async function DashboardLayout({
             avatar: user.image || "",
           } : undefined
         } />
+        <DashboardShortcutsCommand navigationSections={navigationSectionsWithStockSapNew} />
         <SidebarInset suppressHydrationWarning>
           <SiteHeader />
           <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
