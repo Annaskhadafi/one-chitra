@@ -8,6 +8,30 @@ import { getAuthenticatedSession } from "@/lib/rbac"
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
+    range?: "this-week" | "this-month" | "this-quarter";
+}
+
+function getRangeBounds(range: "this-week" | "this-month" | "this-quarter") {
+    const now = new Date();
+    const endDate = new Date(now);
+
+    if (range === "this-week") {
+        const startDate = new Date(now);
+        startDate.setDate(now.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+        return { startDate, endDate };
+    }
+
+    if (range === "this-quarter") {
+        const startMonth = Math.floor(now.getMonth() / 3) * 3;
+        const startDate = new Date(now.getFullYear(), startMonth, 1);
+        startDate.setHours(0, 0, 0, 0);
+        return { startDate, endDate };
+    }
+
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    startDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
 }
 
 // Mat grp desc for Prime Product (Tires)
@@ -62,8 +86,14 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
     try {
         await getAuthenticatedSession("revenue-forecast", "view")
         const periodStr = filters.period || "02.2026";
+        const range = filters.range || "this-month";
         const isYearlyView = !periodStr.includes('.');
         const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
+        const { startDate, endDate } = getRangeBounds(range);
+        const rangeDateFilter = and(
+            sql`${salesRevenueSap.billingDate} >= ${startDate.toISOString().slice(0, 10)}`,
+            sql`${salesRevenueSap.billingDate} <= ${endDate.toISOString().slice(0, 10)}`,
+        );
 
         // 1. Fetch Forecast for the requested period
         const forecastData = await db.select().from(forecasts).where(eq(forecasts.period, periodStr));
@@ -79,6 +109,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const baseFilter = and(
             isNotNull(salesRevenueSap.billingDate),
             dateFilter,
+            rangeDateFilter,
             or(
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
@@ -89,11 +120,6 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
             notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
             notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
         );
-
-        // Note: Customer exclusions (ITC008, 1000289A, Chitra Paratama) are now in baseFilter
-        // These variables kept for backward compatibility but no longer needed
-        const customerExcludePA = undefined;
-        const customerExcludeMA = undefined;
 
         // ─── A. Revenue Prime Product ───────────────────────────────────────────
         // Filter: rev_type = 'Trading', mat_grp_desc IN (Tire list)
@@ -226,6 +252,7 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const baseFilterYTD = and(
             isNotNull(salesRevenueSap.billingDate),
             sql`to_char(${salesRevenueSap.billingDate}, 'YYYY') = ${year}`,
+            rangeDateFilter,
             or(
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
@@ -253,6 +280,16 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         );
         const forecastMap = new Map<string, number>();
         forecastYtdData.forEach(f => forecastMap.set(f.period || "", f.amount));
+
+        // ─── L. Top 5 Customer by Revenue in Local Currency ───────────────────
+        const topCustomersLocCurr = await db.select({
+            customerName: salesRevenueSap.customerName,
+            revenueInLocCurr: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap)
+            .where(baseFilter)
+            .groupBy(salesRevenueSap.customerName)
+            .orderBy(sql`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0)) DESC`)
+            .limit(5);
 
         // ─── Build Result ───────────────────────────────────────────────────────
         return {
@@ -282,6 +319,10 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
                     desc: m.materialDesc || "Unknown",
                     revenue: Number(m.totalRevenue),
                     qty: Number(m.qty)
+                })),
+                topCustomersLocCurr: topCustomersLocCurr.map(c => ({
+                    customerName: c.customerName || "Unknown",
+                    revenueInLocCurr: Number(c.revenueInLocCurr || 0)
                 })),
                 revTypes: revTypeTable,
                 matGroups: matGrp1Data.map(m => ({ desc: m.desc || "Unknown", revenue: Number(m.total) })),
