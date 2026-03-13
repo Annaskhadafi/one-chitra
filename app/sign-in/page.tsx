@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { signIn } from "@/lib/auth-client";
+import { signIn, useSession } from "@/lib/auth-client";
 import { Loader2, Eye, EyeOff } from "lucide-react";
+
+function getSafeCallbackUrl(search: string): string {
+    const callbackUrl = new URLSearchParams(search).get("callbackUrl");
+
+    if (!callbackUrl || !callbackUrl.startsWith("/") || callbackUrl.startsWith("//")) {
+        return "/dashboard";
+    }
+
+    return callbackUrl;
+}
 
 export default function SignInPage() {
     const [email, setEmail] = useState("");
@@ -15,7 +25,19 @@ export default function SignInPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
+    const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
     const router = useRouter();
+    const { data: session, isPending: isSessionPending } = useSession();
+
+    useEffect(() => {
+        setCallbackUrl(getSafeCallbackUrl(window.location.search));
+    }, []);
+
+    useEffect(() => {
+        if (callbackUrl && !isSessionPending && session?.user) {
+            router.replace(callbackUrl);
+        }
+    }, [callbackUrl, isSessionPending, router, session]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,10 +53,7 @@ export default function SignInPage() {
             if (result.error) {
                 setError(result.error.message || "Sign in failed");
             } else {
-                // Redirect to callbackUrl if present, else dashboard
-                const params = new URLSearchParams(window.location.search);
-                const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
-                router.push(callbackUrl);
+                router.push(callbackUrl ?? getSafeCallbackUrl(window.location.search));
             }
         } catch (_err) {
             setError("An unexpected error occurred");
@@ -42,6 +61,14 @@ export default function SignInPage() {
             setIsLoading(false);
         }
     };
+
+    if (isSessionPending || session?.user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
+                <Loader2 className="h-8 w-8 animate-spin text-[#5233FF]" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50/50 p-4 font-sans text-gray-900" suppressHydrationWarning>
