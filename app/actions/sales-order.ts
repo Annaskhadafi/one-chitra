@@ -11,6 +11,7 @@ import { deleteFile } from "./upload"
 
 let hasSalesPersonColumnCache: boolean | null = null
 type SalesPersonRecord = typeof user.$inferSelect
+const DUPLICATE_CUSTOMER_PO_ERROR = "No PO Customer ini sudah pernah diinput. Gunakan nomor PO Customer yang berbeda."
 
 function normalizeSalesPerson(order: unknown): SalesPersonRecord | null {
     if (typeof order === "object" && order !== null && "salesPerson" in order) {
@@ -18,6 +19,47 @@ function normalizeSalesPerson(order: unknown): SalesPersonRecord | null {
     }
 
     return null
+}
+
+function normalizeCustomerPo(customerPo?: string | null) {
+    return customerPo?.trim() ?? ""
+}
+
+async function findExistingSalesOrderByCustomerPo(customerPo?: string | null, excludeId?: number) {
+    const normalizedCustomerPo = normalizeCustomerPo(customerPo)
+
+    if (!normalizedCustomerPo) {
+        return null
+    }
+
+    const duplicateCondition = excludeId === undefined
+        ? sql`${salesOrders.customerPo} is not null and lower(trim(${salesOrders.customerPo})) = ${normalizedCustomerPo.toLowerCase()}`
+        : sql`${salesOrders.customerPo} is not null and lower(trim(${salesOrders.customerPo})) = ${normalizedCustomerPo.toLowerCase()} and ${salesOrders.id} <> ${excludeId}`
+
+    const [existingOrder] = await db
+        .select({
+            id: salesOrders.id,
+            invoiceNumber: salesOrders.invoiceNumber,
+        })
+        .from(salesOrders)
+        .where(duplicateCondition)
+        .limit(1)
+
+    return existingOrder ?? null
+}
+
+function duplicateCustomerPoResult(existingOrder?: { invoiceNumber: string | null } | null) {
+    const message = existingOrder?.invoiceNumber
+        ? `No PO Customer ini sudah pernah diinput pada Sales Order ${existingOrder.invoiceNumber}. Gunakan nomor PO Customer yang berbeda.`
+        : DUPLICATE_CUSTOMER_PO_ERROR
+
+    return {
+        success: false as const,
+        error: message,
+        fieldErrors: {
+            customerPo: message,
+        },
+    }
 }
 
 async function hasSalesPersonColumn() {
@@ -162,6 +204,12 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
         const hasPicColumn = await hasSalesPersonColumn()
         const session = await getAuthenticatedSession('sales-orders', 'create')
         const userId = session.user.id
+        const normalizedCustomerPo = normalizeCustomerPo(data.customerPo)
+
+        const existingCustomerPo = await findExistingSalesOrderByCustomerPo(normalizedCustomerPo)
+        if (existingCustomerPo) {
+            return duplicateCustomerPoResult(existingCustomerPo)
+        }
         
         // Ensure invoice number is unique (retry if collision happens)
         let invoiceNumber = data.invoiceNumber
@@ -185,7 +233,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             const [newOrder] = await tx.insert(salesOrders)
                 .values({
                     invoiceNumber: invoiceNumber!,
-                    customerPo: data.customerPo || null,
+                    customerPo: normalizedCustomerPo || null,
                     createdBy: userId,
                     customerId: data.customerId,
                     ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
@@ -291,6 +339,13 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
     try {
         const hasPicColumn = await hasSalesPersonColumn()
         await checkPermission('sales-orders', 'edit')
+        const normalizedCustomerPo = normalizeCustomerPo(data.customerPo)
+
+        const existingCustomerPo = await findExistingSalesOrderByCustomerPo(normalizedCustomerPo, id)
+        if (existingCustomerPo) {
+            return duplicateCustomerPoResult(existingCustomerPo)
+        }
+
         return await db.transaction(async (tx) => {
             // Get original order to see if items changed
             const originalOrder = await tx.query.salesOrders.findFirst({
@@ -335,7 +390,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             await tx.update(salesOrders)
                 .set({
                     invoiceNumber: data.invoiceNumber || undefined,
-                    customerPo: data.customerPo || null,
+                    customerPo: normalizedCustomerPo || null,
                     customerId: data.customerId,
                     ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,

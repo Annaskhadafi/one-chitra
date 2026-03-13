@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/popover"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { Search, Package, Plus, Check, Save, FileDown, Trash2, HelpCircle, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
 import Link from "next/link"
@@ -162,6 +163,8 @@ export function SalesOrderForm({ customers, products, warehouses, users, initial
     const [productOpen, setProductOpen] = useState(false)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitAlert, setSubmitAlert] = useState<string | null>(null)
+    const [customerPoError, setCustomerPoError] = useState<string | null>(null)
     const uniqueProducts = useMemo(() => {
         const seen = new Set()
         return products.filter(p => {
@@ -284,6 +287,8 @@ export function SalesOrderForm({ customers, products, warehouses, users, initial
         console.log("🔍 SO Submit clicked")
         console.log("customerId:", customerId)
         console.log("items:", items)
+        setSubmitAlert(null)
+        setCustomerPoError(null)
 
         // Validation
         const errors: string[] = []
@@ -367,6 +372,20 @@ export function SalesOrderForm({ customers, products, warehouses, users, initial
                 router.refresh()
                 router.push("/dashboard/sales-orders")
             } else {
+                const customerPoFieldError =
+                    "fieldErrors" in result &&
+                        result.fieldErrors &&
+                        typeof result.fieldErrors === "object" &&
+                        "customerPo" in result.fieldErrors &&
+                        typeof result.fieldErrors.customerPo === "string"
+                        ? result.fieldErrors.customerPo
+                        : null
+
+                if (customerPoFieldError) {
+                    setCustomerPoError(customerPoFieldError)
+                    setSubmitAlert(customerPoFieldError)
+                }
+
                 // Check if result has error property (type guard)
                 if ('error' in result && result.error) {
                      toast.error(result.error)
@@ -435,6 +454,14 @@ export function SalesOrderForm({ customers, products, warehouses, users, initial
                         </div>
                     </CardContent>
                 </Card>
+            )}
+
+            {submitAlert && (
+                <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>No PO Customer Sudah Pernah Diinput</AlertTitle>
+                    <AlertDescription>{submitAlert}</AlertDescription>
+                </Alert>
             )}
 
             {/* Order Header Fields */}
@@ -565,8 +592,20 @@ export function SalesOrderForm({ customers, products, warehouses, users, initial
                             <Input
                                 placeholder="Enter Customer PO Number"
                                 value={customerPo}
-                                onChange={(e) => setCustomerPo(e.target.value)}
+                                onChange={(e) => {
+                                    setCustomerPo(e.target.value)
+                                    if (customerPoError) {
+                                        setCustomerPoError(null)
+                                    }
+                                    if (submitAlert) {
+                                        setSubmitAlert(null)
+                                    }
+                                }}
+                                className={cn(customerPoError && "border-red-500 focus-visible:ring-red-500")}
                             />
+                            {customerPoError && (
+                                <p className="text-sm font-medium text-red-600">{customerPoError}</p>
+                            )}
                         </div>
 
 
