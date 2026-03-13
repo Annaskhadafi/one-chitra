@@ -19,6 +19,97 @@ import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 
+const slugifyNavKey = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
+const ensureUniqueNavId = (preferredId: string | undefined, fallbackId: string, seenIds: Set<string>) => {
+  const baseId = preferredId?.trim() || fallbackId
+
+  if (!seenIds.has(baseId)) {
+    seenIds.add(baseId)
+    return baseId
+  }
+
+  let counter = 2
+  let candidate = `${baseId}-${counter}`
+  while (seenIds.has(candidate)) {
+    counter += 1
+    candidate = `${baseId}-${counter}`
+  }
+
+  seenIds.add(candidate)
+  return candidate
+}
+
+const sanitizeRuntimeNavigationSections = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section, sectionIndex) => {
+    const mergedItems = new Map<string, RuntimeNavSection["items"][number]>()
+
+    for (const item of section.items) {
+      const identity = item.id || `${slugifyNavKey(item.title)}::${item.url || "#"}`
+      const existing = mergedItems.get(identity)
+
+      if (!existing) {
+        mergedItems.set(identity, {
+          ...item,
+          items: [...(item.items ?? [])],
+        })
+        continue
+      }
+
+      const mergedSubItems = new Map<string, NonNullable<typeof existing.items>[number]>()
+      for (const subItem of [...(existing.items ?? []), ...(item.items ?? [])]) {
+        const subIdentity = subItem.id || `${slugifyNavKey(subItem.title)}::${subItem.url || "#"}`
+        if (!mergedSubItems.has(subIdentity)) {
+          mergedSubItems.set(subIdentity, { ...subItem })
+        }
+      }
+
+      mergedItems.set(identity, {
+        ...existing,
+        ...item,
+        id: existing.id || item.id,
+        title: existing.title || item.title,
+        url: existing.url === "#" && item.url !== "#" ? item.url : existing.url,
+        resource: existing.resource || item.resource,
+        iconName: existing.iconName || item.iconName,
+        items: Array.from(mergedSubItems.values()),
+      })
+    }
+
+    const seenItemIds = new Set<string>()
+
+    return {
+      ...section,
+      items: Array.from(mergedItems.values()).map((item, itemIndex) => {
+        const itemId = ensureUniqueNavId(
+          item.id,
+          `${section.id || `section-${sectionIndex}`}-item-${itemIndex}-${slugifyNavKey(item.title) || "entry"}`,
+          seenItemIds,
+        )
+
+        const seenSubItemIds = new Set<string>()
+
+        return {
+          ...item,
+          id: itemId,
+          items: (item.items ?? []).map((subItem, subIndex) => ({
+            ...subItem,
+            id: ensureUniqueNavId(
+              subItem.id,
+              `${itemId}-sub-${subIndex}-${slugifyNavKey(subItem.title) || "entry"}`,
+              seenSubItemIds,
+            ),
+          })),
+        }
+      }),
+    }
+  })
+}
+
 const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
   return sections.map((section) => ({
     ...section,
@@ -181,55 +272,57 @@ export default async function DashboardLayout({
     }))
     .filter((section) => section.items.length > 0)
 
-  const navigationSectionsWithStockSapNew: RuntimeNavSection[] = navigationSections.map((section) => ({
-    ...section,
-    items: section.items.map((item) => {
-      if (item.resource !== "inventory-control") {
-        return item
-      }
+  const navigationSectionsWithStockSapNew: RuntimeNavSection[] = sanitizeRuntimeNavigationSections(
+    navigationSections.map((section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        if (item.resource !== "inventory-control") {
+          return item
+        }
 
-      const subItems = item.items ?? []
-      const hasStockSapNew = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap-new")
-      const hasStockSapOld = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap")
+        const subItems = item.items ?? []
+        const hasStockSapNew = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap-new")
+        const hasStockSapOld = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap")
 
-      let normalizedSubItems = subItems
+        let normalizedSubItems = subItems
 
-      if (!hasStockSapNew && hasStockSapOld) {
-        normalizedSubItems = subItems.map((subItem) =>
-          subItem.url === "/dashboard/stocks-sap"
-            ? {
-              ...subItem,
-              id: subItem.id ?? "inventory-control-stock-sap-new",
-              title: subItem.title,
+        if (!hasStockSapNew && hasStockSapOld) {
+          normalizedSubItems = subItems.map((subItem) =>
+            subItem.url === "/dashboard/stocks-sap"
+              ? {
+                ...subItem,
+                id: subItem.id ?? "inventory-control-stock-sap-new",
+                title: subItem.title,
+                url: "/dashboard/stocks-sap-new",
+                resource: "stocks-sap",
+              }
+              : subItem,
+          )
+        }
+
+        if (hasStockSapNew && hasStockSapOld) {
+          normalizedSubItems = normalizedSubItems.filter((subItem) => subItem.url !== "/dashboard/stocks-sap")
+        }
+
+        if (!hasStockSapNew && !hasStockSapOld) {
+          normalizedSubItems = [
+            ...normalizedSubItems,
+            {
+              id: "inventory-control-stock-sap-new",
+              title: "Stock SAP New",
               url: "/dashboard/stocks-sap-new",
               resource: "stocks-sap",
-            }
-            : subItem,
-        )
-      }
+            },
+          ]
+        }
 
-      if (hasStockSapNew && hasStockSapOld) {
-        normalizedSubItems = normalizedSubItems.filter((subItem) => subItem.url !== "/dashboard/stocks-sap")
-      }
-
-      if (!hasStockSapNew && !hasStockSapOld) {
-        normalizedSubItems = [
-          ...normalizedSubItems,
-          {
-            id: "inventory-control-stock-sap-new",
-            title: "Stock SAP New",
-            url: "/dashboard/stocks-sap-new",
-            resource: "stocks-sap",
-          },
-        ]
-      }
-
-      return {
-        ...item,
-        items: normalizedSubItems,
-      }
-    }),
-  }))
+        return {
+          ...item,
+          items: normalizedSubItems,
+        }
+      }),
+    })),
+  )
 
   return (
     <PermissionsProvider permissions={permissions}>

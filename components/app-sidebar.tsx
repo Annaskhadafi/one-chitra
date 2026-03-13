@@ -83,7 +83,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
             <SidebarContent suppressHydrationWarning>
                 {isHydrated
                     ? sidebarConfig.map((section, index) => (
-                        <React.Fragment key={section.title || index}>
+                        <React.Fragment key={section.id || section.title || index}>
                             {index > 0 && (
                                 <>
                                     <SidebarSeparator className="mx-2" />
@@ -100,7 +100,7 @@ export function AppSidebar({ permissions: _perms = [], user, ...props }: AppSide
                         </React.Fragment>
                     ))
                     : sidebarConfig.map((section, index) => (
-                        <React.Fragment key={`skeleton-${section.title || index}`}>
+                        <React.Fragment key={`skeleton-${section.id || section.title || index}`}>
                             {index > 0 && (
                                 <>
                                     <SidebarSeparator className="mx-2" />

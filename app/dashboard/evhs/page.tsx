@@ -5,7 +5,8 @@ import {
     getEvhsReceipts, 
     getPendingEvhsTransfers, 
     getEvhsVouchers,
-    getEvhsTrackingData
+    getEvhsTrackingData,
+    getEvhsControlTowerData,
 } from "@/app/actions/evhs"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { getProducts } from "@/app/actions/product"
@@ -17,6 +18,7 @@ import { EvhsVoucherTable } from "./_components/evhs-voucher-table"
 import { EvhsGiMatching } from "./_components/evhs-gi-matching"
 import { EvhsMrkoTable } from "./_components/evhs-mrko-table"
 import { EvhsMasterPriceTable } from "./_components/evhs-master-price-table"
+import { EvhsControlTower } from "./_components/evhs-control-tower"
 
 export default async function EvhsPage() {
     // Initial data fetching
@@ -26,6 +28,7 @@ export default async function EvhsPage() {
     const warehouses = await getWarehouses()
     const products = await getProducts()
     const trackingData = await getEvhsTrackingData()
+    const controlTowerData = await getEvhsControlTowerData()
 
     return (
         <div className="flex flex-col gap-6 p-6">
@@ -36,8 +39,9 @@ export default async function EvhsPage() {
                 </p>
             </div>
 
-            <Tabs id="evhs-tabs" defaultValue="receipts" className="space-y-4">
+            <Tabs id="evhs-tabs" defaultValue="control-tower" className="space-y-4">
                 <TabsList className="bg-muted/50 p-1">
+                    <TabsTrigger value="control-tower">Control Tower</TabsTrigger>
                     <TabsTrigger value="receipts">Penerimaan</TabsTrigger>
                     <TabsTrigger value="stock">Stock VHS & WO</TabsTrigger>
                     <TabsTrigger value="vouchers">Voucher VHS</TabsTrigger>
@@ -46,7 +50,22 @@ export default async function EvhsPage() {
                     <TabsTrigger value="master-price">Master Price CK</TabsTrigger>
                 </TabsList>
 
-                {/* Tab 1: Penerimaan */}
+                {/* Tab 1: Control Tower */}
+                <TabsContent value="control-tower" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>EVHS Control Tower</CardTitle>
+                            <CardDescription>
+                                Ringkasan ledger stok, reconciliation, aging, exception center, dan audit trail EVHS.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <EvhsControlTower data={controlTowerData} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tab 2: Penerimaan */}
                 <TabsContent value="receipts" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -64,7 +83,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 2: Stock VHS & WO */}
+                {/* Tab 3: Stock VHS & WO */}
                 <TabsContent value="stock" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -81,7 +100,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 3: Voucher VHS */}
+                {/* Tab 4: Voucher VHS */}
                 <TabsContent value="vouchers" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -100,7 +119,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 4: GI Matching */}
+                {/* Tab 5: GI Matching */}
                 <TabsContent value="gi-matching" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -110,12 +129,12 @@ export default async function EvhsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <EvhsGiMatching />
+                            <EvhsGiMatching warehouses={warehouses} />
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* Tab 5: MRKO & Invoice */}
+                {/* Tab 6: MRKO & Invoice */}
                 <TabsContent value="mrko" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -130,7 +149,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 6: Master Data Price */}
+                {/* Tab 7: Master Data Price */}
                 <TabsContent value="master-price" className="space-y-4">
                     <Card>
                         <CardHeader>

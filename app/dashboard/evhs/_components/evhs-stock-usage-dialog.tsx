@@ -18,6 +18,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
 import { createEvhsVoucher } from "@/app/actions/evhs"
+import { useQuery } from "@tanstack/react-query"
+import { getEvhsMasterPrices } from "@/app/actions/evhs-master"
 
 const usageSchema = z.object({
     woNo: z.string().min(1, "Nomor WO wajib diisi"),
@@ -33,6 +35,27 @@ const usageSchema = z.object({
 
 type UsageValues = z.infer<typeof usageSchema>
 
+type EvhsMasterPriceSuggestion = {
+    warehouseId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    price: string
+}
+
+type TrackingDialogItem = {
+    warehouseId: number
+    productId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    sn: string
+    qty?: number
+    availableQty?: number
+    cpDo?: string | null
+    product: {
+        materialDescription?: string | null
+    }
+}
+
 export function EvhsStockUsageDialog({
     open,
     onOpenChange,
@@ -40,9 +63,22 @@ export function EvhsStockUsageDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    trackingItem: any | null
+    trackingItem: TrackingDialogItem | null
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const { data: masterPrices = [] } = useQuery({
+        queryKey: ["evhs-master-prices"],
+        queryFn: getEvhsMasterPrices,
+        enabled: open,
+    })
+
+    const suggestedMasterPrice = trackingItem
+        ? masterPrices.find((price: EvhsMasterPriceSuggestion) => (
+            price.warehouseId === trackingItem.warehouseId &&
+            price.materialNumberCp === trackingItem.materialNumberCp
+        ))
+        : null
+    const suggestedMaterialCk = suggestedMasterPrice?.materialNumberCk || ""
 
     const form = useForm<UsageValues>({
         resolver: zodResolver(usageSchema),
@@ -63,10 +99,12 @@ export function EvhsStockUsageDialog({
     // Update form when tracking item changes
     useEffect(() => {
         if (trackingItem) {
+            const availableQty = trackingItem.availableQty ?? trackingItem.qty ?? 1
+
             form.reset({
                 woNo: "",
-                qty: trackingItem.qty || 1,
-                materialNumberCk: trackingItem.materialNumberCk !== "-" ? trackingItem.materialNumberCk : "",
+                qty: availableQty,
+                materialNumberCk: trackingItem.materialNumberCk !== "-" ? trackingItem.materialNumberCk : suggestedMaterialCk,
                 serialNumber: trackingItem.sn !== "-" && trackingItem.sn !== "N/A" ? trackingItem.sn : "",
                 pos: "",
                 unitId: "",
@@ -75,10 +113,17 @@ export function EvhsStockUsageDialog({
                 receivedByName: "",
             })
         }
-    }, [trackingItem, form])
+    }, [trackingItem, form, suggestedMaterialCk])
 
     const onSubmit = async (values: UsageValues) => {
         if (!trackingItem) return
+
+        const availableQty = trackingItem.availableQty ?? trackingItem.qty ?? 0
+
+        if (values.qty > availableQty) {
+            toast.error(`Qty melebihi stok tersedia. Tersedia ${availableQty}.`)
+            return
+        }
         
         setIsSubmitting(true)
         try {
@@ -102,13 +147,13 @@ export function EvhsStockUsageDialog({
 
             const result = await createEvhsVoucher(voucherData)
             if (result.success) {
-                toast.success(`Voucher ${(result as any).vhsNo} berhasil dibuat`)
+                toast.success(`Voucher ${result.vhsNo} berhasil dibuat`)
                 onOpenChange(false)
                 form.reset()
             } else {
-                toast.error((result as any).error || "Gagal membuat voucher")
+                toast.error(result.error || "Gagal membuat voucher")
             }
-        } catch (error) {
+        } catch {
             toast.error("Terjadi kesalahan")
         } finally {
             setIsSubmitting(false)
@@ -129,6 +174,13 @@ export function EvhsStockUsageDialog({
                         <p className="text-sm font-bold">{trackingItem.materialNumberCp}</p>
                         <p className="text-xs text-muted-foreground">{trackingItem.product.materialDescription}</p>
                         <p className="text-xs font-mono">Diterima dari DO: <span className="font-bold">{trackingItem.cpDo || "N/A"}</span></p>
+                        <p className="text-xs font-mono">Stok tersedia: <span className="font-bold">{trackingItem.availableQty ?? trackingItem.qty ?? 0}</span></p>
+                        {suggestedMasterPrice && (
+                            <p className="text-xs font-mono">
+                                Saran Master CK: <span className="font-bold text-blue-700">{suggestedMasterPrice.materialNumberCk || "-"}</span>
+                                {" "} | Harga: <span className="font-bold text-emerald-700">{Number(suggestedMasterPrice.price).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</span>
+                            </p>
+                        )}
                         {trackingItem.sn !== "-" && trackingItem.sn !== "N/A" && (
                             <p className="text-xs font-mono mt-2">Serial Number Asal: <Badge variant="secondary">{trackingItem.sn}</Badge></p>
                         )}
@@ -147,6 +199,7 @@ export function EvhsStockUsageDialog({
                             <Input 
                                 id="qty" 
                                 type="number" 
+                                max={trackingItem.availableQty ?? trackingItem.qty ?? 1}
                                 disabled={trackingItem.sn !== "-" && trackingItem.sn !== "N/A"}
                                 {...form.register("qty", { valueAsNumber: true })} 
                             />

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Search, FileText, Download, MoreHorizontal, Edit, Trash2 } from "lucide-react"
+import { Search, FileText, MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
 import { EvhsVoucherPreview } from "./evhs-voucher-preview"
@@ -38,17 +38,29 @@ import { deleteEvhsVoucher } from "@/app/actions/evhs"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
+type VoucherRow = {
+    id: number
+    vhsNo: string
+    date: string | Date
+    woNo?: string | null
+    status: string
+    items: unknown[]
+    warehouse?: {
+        sloc?: string | null
+    } | null
+}
+
 export function EvhsVoucherTable({ 
     vouchers, 
-    products, 
-    warehouses 
+    products: _products, 
+    warehouses: _warehouses 
 }: { 
-    vouchers: any[], 
-    products: any[], 
-    warehouses: any[] 
+    vouchers: VoucherRow[], 
+    products: unknown[], 
+    warehouses: unknown[] 
 }) {
     const [searchTerm, setSearchTerm] = useState("")
-    const [selectedVoucher, setSelectedVoucher] = useState<any | null>(null)
+    const [selectedVoucher, setSelectedVoucher] = useState<VoucherRow | null>(null)
     const [previewOpen, setPreviewOpen] = useState(false)
     const [editOpen, setEditOpen] = useState(false)
     const [deleteOpen, setDeleteOpen] = useState(false)
@@ -71,9 +83,9 @@ export function EvhsVoucherTable({
                 setDeleteOpen(false)
                 router.refresh()
             } else {
-                toast.error(result.error || "Gagal menghapus voucher.")
+                toast.error("error" in result ? result.error : "Gagal menghapus voucher.")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsDeleting(false)

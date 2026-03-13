@@ -20,25 +20,65 @@ import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
 import { EvhsMultipleUsageDialog } from "./evhs-multiple-usage-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 
-export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
+type WarehouseOption = {
+    id: number
+    sloc: string
+    description?: string | null
+}
+
+type TrackingRow = {
+    id: string
+    dateIn?: Date | string | null
+    cpDo?: string | null
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    sn?: string | null
+    qty?: number
+    receivedQty?: number
+    availableQty?: number
+    usedQty?: number
+    installDate?: Date | string | null
+    pos?: string | null
+    unitId?: string | null
+    voucherNo?: string | null
+    voucherId?: number | null
+    voucherItemId?: number | null
+    woNo?: string | null
+    giNumber?: string | null
+    mrko?: string | null
+    inv?: string | null
+    warehouseId?: number | null
+    warehouse?: WarehouseOption | null
+    productId: number
+    product?: {
+        materialDescription?: string | null
+        materialNumberCk?: string | null
+    } | null
+}
+
+export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[] }) {
     const [searchQuery, setSearchQuery] = useState("")
     const [usageDialogOpen, setUsageDialogOpen] = useState(false)
     const [editUsageDialogOpen, setEditUsageDialogOpen] = useState(false)
-    const [selectedItem, setSelectedItem] = useState<any | null>(null)
+    const [selectedItem, setSelectedItem] = useState<TrackingRow | null>(null)
     const [multipleUsageDialogOpen, setMultipleUsageDialogOpen] = useState(false)
     const [selectedItemsForBatch, setSelectedItemsForBatch] = useState<string[]>([])
     const [warehouseFilter, setWarehouseFilter] = useState("all")
 
-    const uniqueWarehouses = Array.from(new Map(trackingData.map(item => [item.warehouseId, item.warehouse])).values()).filter(Boolean)
+    const uniqueWarehouses = Array.from(new Map(trackingData.map((item) => [item.warehouseId, item.warehouse])).values()).filter(Boolean) as WarehouseOption[]
 
     const warehouseFilteredData = trackingData.filter(item => 
         warehouseFilter === "all" || item.warehouseId?.toString() === warehouseFilter
     )
 
+    const getReceivedQty = (item: TrackingRow) => item.receivedQty ?? item.qty ?? 0
+    const getAvailableQty = (item: TrackingRow) => item.availableQty ?? (!item.voucherNo ? item.qty || 0 : 0)
+    const getUsedQty = (item: TrackingRow) => item.usedQty ?? (item.voucherNo ? getReceivedQty(item) : 0)
+
     const stats = {
-        total: warehouseFilteredData.reduce((acc, curr) => acc + (curr.qty || 1), 0),
-        available: warehouseFilteredData.filter(i => !i.voucherNo).reduce((acc, curr) => acc + (curr.qty || 1), 0),
-        used: warehouseFilteredData.filter(i => !!i.voucherNo).reduce((acc, curr) => acc + (curr.qty || 1), 0)
+        total: warehouseFilteredData.reduce((acc, curr) => acc + getReceivedQty(curr), 0),
+        available: warehouseFilteredData.reduce((acc, curr) => acc + getAvailableQty(curr), 0),
+        used: warehouseFilteredData.reduce((acc, curr) => acc + getUsedQty(curr), 0)
     }
 
     const filteredData = warehouseFilteredData.filter((item) => {
@@ -61,7 +101,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
             const selectableIds = filteredData
-                .filter(item => !item.voucherNo)
+                .filter(item => getAvailableQty(item) > 0)
                 .map(item => item.id.toString())
             setSelectedItemsForBatch(selectableIds)
         } else {
@@ -69,7 +109,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
         }
     }
 
-    const selectableItemsCount = filteredData.filter(item => !item.voucherNo).length
+    const selectableItemsCount = filteredData.filter(item => getAvailableQty(item) > 0).length
     const isAllSelected = selectedItemsForBatch.length > 0 && selectedItemsForBatch.length === selectableItemsCount
 
     return (
@@ -110,12 +150,6 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
                 </Card>
             </div>
 
-            <EvhsStockUsageDialog 
-                open={usageDialogOpen}
-                onOpenChange={setUsageDialogOpen}
-                trackingItem={selectedItem}
-            />
-
             <div className="flex items-center gap-2">
                 <select 
                     className="flex h-9 w-[250px] items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -123,7 +157,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
                     onChange={(e) => setWarehouseFilter(e.target.value)}
                 >
                     <option value="all">Semua Warehouse (Site VHS)</option>
-                    {uniqueWarehouses.map((w: any) => (
+                    {uniqueWarehouses.map((w) => (
                         <option value={w.id.toString()} key={w.id}>{w.sloc} - {w.description}</option>
                     ))}
                 </select>
@@ -212,7 +246,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
                                 return (
                                 <TableRow key={item.id} className={`whitespace-nowrap text-xs ${selectedItemsForBatch.includes(item.id.toString()) ? "bg-blue-50/50" : ""}`}>
                                     <TableCell className="text-center">
-                                        {!item.voucherNo && (
+                                        {getAvailableQty(item) > 0 && (
                                             <Checkbox 
                                                 checked={selectedItemsForBatch.includes(item.id.toString())}
                                                 onCheckedChange={() => handleSelectItem(item.id.toString())}
@@ -228,7 +262,9 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
                                     <TableCell className="font-semibold">{item.materialNumberCp}</TableCell>
                                     <TableCell>{item.materialNumberCk || "-"}</TableCell>
                                     <TableCell className="font-mono font-medium">{item.sn}</TableCell>
-                                    <TableCell className="text-right">{item.qty}</TableCell>
+                                    <TableCell className="text-right font-mono">
+                                        {item.receivedQty ? `${getAvailableQty(item)} / ${getReceivedQty(item)}` : item.qty}
+                                    </TableCell>
                                     <TableCell suppressHydrationWarning>{item.installDate ? format(new Date(item.installDate), "dd-MMM-yy") : "-"}</TableCell>
                                     <TableCell>{item.pos || "-"}</TableCell>
                                     <TableCell>{item.unitId || "-"}</TableCell>
@@ -244,7 +280,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
                                     </TableCell>
                                     <TableCell>{item.inv || "-"}</TableCell>
                                     <TableCell>
-                                        {!item.voucherNo ? (
+                                        {getAvailableQty(item) > 0 ? (
                                             <Button 
                                                 size="sm" 
                                                 variant="default" 
@@ -287,7 +323,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: any[] }) {
             <EvhsMultipleUsageDialog
                 open={multipleUsageDialogOpen}
                 onOpenChange={setMultipleUsageDialogOpen}
-                trackingItems={filteredData.filter(item => selectedItemsForBatch.includes(item.id.toString()))}
+                trackingItems={filteredData.filter(item => selectedItemsForBatch.includes(item.id.toString()) && getAvailableQty(item) > 0)}
                 onSuccess={() => setSelectedItemsForBatch([])}
             />
 

@@ -27,6 +27,21 @@ const editSchema = z.object({
 
 type EditValues = z.infer<typeof editSchema>
 
+type EvhsTrackingUsageItem = {
+    voucherId?: number | null
+    voucherItemId?: number | null
+    woNo?: string | null
+    materialNumberCk?: string | null
+    pos?: string | null
+    unitId?: string | null
+    materialNumberCp?: string | null
+    voucherNo?: string | null
+    sn?: string | null
+    product?: {
+        materialDescription?: string | null
+    } | null
+}
+
 export function EvhsEditUsageDialog({
     open,
     onOpenChange,
@@ -34,7 +49,7 @@ export function EvhsEditUsageDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    trackingItem: any | null
+    trackingItem: EvhsTrackingUsageItem | null
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
@@ -84,9 +99,9 @@ export function EvhsEditUsageDialog({
                 onOpenChange(false)
                 router.refresh()
             } else {
-                toast.error(result.error || "Gagal memperbarui data")
+                toast.error("error" in result ? result.error : "Gagal memperbarui data")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsSubmitting(false)

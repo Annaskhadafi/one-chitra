@@ -18,6 +18,8 @@ import { z } from "zod"
 import { toast } from "sonner"
 import { createEvhsVoucher } from "@/app/actions/evhs"
 import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
+import { getEvhsMasterPrices } from "@/app/actions/evhs-master"
 
 const batchUsageSchema = z.object({
     woNo: z.string().min(1, "Nomor WO wajib diisi"),
@@ -37,6 +39,28 @@ const batchUsageSchema = z.object({
 
 type BatchUsageValues = z.infer<typeof batchUsageSchema>
 
+type EvhsMasterPriceSuggestion = {
+    warehouseId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    price: string
+}
+
+type MultipleTrackingItem = {
+    id: string
+    warehouseId: number
+    productId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    sn: string
+    qty?: number
+    availableQty?: number
+    product?: {
+        materialNumberCk?: string | null
+        materialDescription?: string | null
+    }
+}
+
 export function EvhsMultipleUsageDialog({
     open,
     onOpenChange,
@@ -45,11 +69,23 @@ export function EvhsMultipleUsageDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    trackingItems: any[]
+    trackingItems: MultipleTrackingItem[]
     onSuccess?: () => void
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
+    const { data: masterPrices = [] } = useQuery({
+        queryKey: ["evhs-master-prices"],
+        queryFn: getEvhsMasterPrices,
+        enabled: open,
+    })
+
+    const suggestedMasterPrice = trackingItems.length > 0
+        ? masterPrices.find((price: EvhsMasterPriceSuggestion) => (
+            price.warehouseId === trackingItems[0].warehouseId &&
+            price.materialNumberCp === trackingItems[0].materialNumberCp
+        ))
+        : null
 
     const form = useForm<BatchUsageValues>({
         resolver: zodResolver(batchUsageSchema),
@@ -65,7 +101,7 @@ export function EvhsMultipleUsageDialog({
         }
     })
 
-    const { fields, replace } = useFieldArray({
+    const { fields } = useFieldArray({
         control: form.control,
         name: "items"
     })
@@ -75,7 +111,7 @@ export function EvhsMultipleUsageDialog({
             const firstItem = trackingItems[0];
             const defaultMatCk = firstItem?.materialNumberCk && firstItem.materialNumberCk !== "-" 
                 ? firstItem.materialNumberCk 
-                : (firstItem?.product?.materialNumberCk || "");
+                : (suggestedMasterPrice?.materialNumberCk || firstItem?.product?.materialNumberCk || "");
 
             form.reset({
                 woNo: "",
@@ -89,11 +125,11 @@ export function EvhsMultipleUsageDialog({
                     trackingId: item.id,
                     serialNumber: item.sn !== "-" && item.sn !== "N/A" ? item.sn : "",
                     productId: item.productId,
-                    qty: item.qty || 1
+                    qty: item.availableQty ?? item.qty ?? 1
                 }))
             })
         }
-    }, [open, trackingItems, form])
+    }, [open, trackingItems, form, suggestedMasterPrice])
 
     const onSubmit = async (values: BatchUsageValues) => {
         if (trackingItems.length === 0) return
@@ -127,7 +163,7 @@ export function EvhsMultipleUsageDialog({
             } else {
                 toast.error(result.error || "Gagal membuat voucher batch.")
             }
-        } catch (error) {
+        } catch {
             toast.error("Terjadi kesalahan sistem")
         } finally {
             setIsSubmitting(false)
@@ -179,10 +215,19 @@ export function EvhsMultipleUsageDialog({
                         </div>
                     </div>
 
+                    {suggestedMasterPrice && (
+                        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                            Saran master price untuk item pertama:
+                            {" "}
+                            CK <span className="font-bold">{suggestedMasterPrice.materialNumberCk || "-"}</span>
+                            {" "} | Harga <span className="font-bold">{Number(suggestedMasterPrice.price).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    )}
+
                     <div className="flex-1 overflow-y-auto pr-2 space-y-3 mt-4">
                         <Label className="text-xs font-semibold text-slate-700">Daftar Item Terpilih ({fields.length}):</Label>
                         <div className="grid grid-cols-2 gap-3">
-                            {fields.map((field, index) => {
+                            {fields.map((field) => {
                                 const originalItem = trackingItems.find(t => t.id === field.trackingId)
                                 return (
                                     <div key={field.id} className="bg-slate-50 border border-slate-200 rounded-md p-3 flex items-center justify-between">

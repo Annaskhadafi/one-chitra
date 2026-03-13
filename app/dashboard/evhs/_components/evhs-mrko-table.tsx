@@ -12,12 +12,52 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Edit2, Save, X, Link, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
+import { Search, Edit2, Save, X, Link, CheckCircle2, Loader2 } from "lucide-react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getEvhsMrkoData, updateMrko } from "@/app/actions/evhs"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+
+type MrkoVoucherItem = {
+    qty?: number | null
+    materialNumberCk?: string | null
+    product?: {
+        materialDescription?: string | null
+    } | null
+}
+
+type MrkoVoucher = {
+    id: number
+    vhsNo: string
+    date: string | Date
+    woNo?: string | null
+    mrkoNo?: string | null
+    sapInvoiceNo?: string | null
+    mrkoStatus?: string | null
+    items?: MrkoVoucherItem[]
+}
+
+type MrkoGiItem = {
+    materialNumber: string
+    qty: string | number
+}
+
+type MrkoGiRecord = {
+    woNo?: string | null
+    items?: MrkoGiItem[]
+}
+
+type SapRevenueRow = {
+    poNo?: string | null
+    billingNo?: string | null
+}
+
+type MrkoQueryData = {
+    vouchers?: MrkoVoucher[]
+    giRecords?: MrkoGiRecord[]
+    sapRevenue?: SapRevenueRow[]
+}
 
 export function EvhsMrkoTable() {
     const queryClient = useQueryClient()
@@ -28,7 +68,7 @@ export function EvhsMrkoTable() {
         sapInvoiceNo: ""
     })
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading } = useQuery<MrkoQueryData>({
         queryKey: ["evhs-mrko-data"],
         queryFn: getEvhsMrkoData
     })
@@ -51,21 +91,21 @@ export function EvhsMrkoTable() {
 
     // Logic for matching (reused from GI Matching)
     const matchedVouchers = vouchers.map(voucher => {
-        const voucherItem = voucher.items?.[0] || {}
+        const voucherItem = voucher.items?.[0] || null
         const materialCk = voucherItem?.materialNumberCk
         
         // Find matching GI using WO Number or Material CK
         const matchedGi = giRecords.find(gi => 
             (gi.woNo && gi.woNo === voucher.woNo) || 
-            (gi.giItems?.some((i: any) => i.materialNumber === materialCk))
+            (gi.items?.some((i) => i.materialNumber === materialCk))
         )
 
-        const giItem = matchedGi?.giItems?.[0] || {}
+        const giItem = matchedGi?.items?.find((i) => i.materialNumber === materialCk) || matchedGi?.items?.[0] || null
 
         let status: "MATCHED" | "UNMATCHED" | "PENDING" = "PENDING"
         if (matchedGi) {
-            const isMatMatched = (giItem.materialNumber === materialCk)
-            const isQtyMatched = Number(giItem.qty) === Number(voucherItem.qty)
+            const isMatMatched = giItem?.materialNumber === materialCk
+            const isQtyMatched = Number(giItem?.qty || 0) === Number(voucherItem?.qty || 0)
             status = (isMatMatched && isQtyMatched) ? "MATCHED" : "UNMATCHED"
         }
         

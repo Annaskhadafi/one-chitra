@@ -3,17 +3,47 @@
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, MapPin, Calendar, FileText } from "lucide-react"
+import { Printer, FileText } from "lucide-react"
 import { format } from "date-fns"
+
+type VoucherPreviewItem = {
+    id: number
+    qty: number | string
+    serialNumber?: string | null
+    materialNumberCk?: string | null
+    pos?: string | null
+    unitId?: string | null
+    product?: {
+        materialNumber?: string | null
+        materialDescription?: string | null
+    } | null
+}
+
+type VoucherPreviewData = {
+    vhsNo: string
+    woNo?: string | null
+    date: Date | string
+    status?: string | null
+    remark?: string | null
+    receivedByName?: string | null
+    approvedByName?: string | null
+    warehouse?: {
+        sloc?: string | null
+        description?: string | null
+    } | null
+    issuedByUser?: {
+        name?: string | null
+    } | null
+    items: VoucherPreviewItem[]
+}
 
 interface EvhsVoucherPreviewProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    voucher: any | null
+    voucher: VoucherPreviewData | null
 }
 
 export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherPreviewProps) {
@@ -299,7 +329,7 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                     </tr>
                 </thead>
                 <tbody>
-                    {voucher.items.map((item: any, idx: number) => (
+                    {voucher.items.map((item: VoucherPreviewItem, idx: number) => (
                         <tr key={item.id}>
                             <td className="text-center">{idx + 1}</td>
                             <td>
@@ -345,7 +375,7 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                 <div>
                     <p className="font-bold">Issued By,</p>
                     <div className="signature-line"></div>
-                    <p className="mt-1 text-[8pt] font-bold">{voucher.confirmedByUser?.name || "Warehouse Admin"}</p>
+                    <p className="mt-1 text-[8pt] font-bold">{voucher.issuedByUser?.name || "Warehouse Admin"}</p>
                     <p className="text-[7pt] text-gray-500">PT Chitra Paritama</p>
                 </div>
             </div>

@@ -18,17 +18,36 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus, FileText } from "lucide-react"
+import { Search, Plus } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { getStocks } from "@/app/actions/stock"
 import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 
-export function EvhsStockTable({ warehouses }: { warehouses: any[] }) {
+type WarehouseOption = {
+    id: number
+    sloc: string
+    description?: string | null
+    type?: string | null
+}
+
+type StockRow = {
+    id: number | string
+    warehouseId: number
+    totalStock: number
+    productId: number
+    product: {
+        materialNumber: string
+        materialDescription?: string | null
+        materialNumberCk?: string | null
+    }
+}
+
+export function EvhsStockTable({ warehouses }: { warehouses: WarehouseOption[] }) {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(
         warehouses.find(w => w.type === "VHS")?.id.toString() || ""
     )
     const [searchTerm, setSearchTerm] = useState("")
-    const [selectedStock, setSelectedStock] = useState<any | null>(null)
+    const [selectedStock, setSelectedStock] = useState<StockRow | null>(null)
     const [usageDialogOpen, setUsageDialogOpen] = useState(false)
 
     // Filter VHS warehouses
@@ -41,13 +60,13 @@ export function EvhsStockTable({ warehouses }: { warehouses: any[] }) {
         queryKey: ["stocks", selectedWarehouseId],
         queryFn: async () => {
             const allStocks = await getStocks()
-            return allStocks.filter(s => s.warehouseId === parseInt(selectedWarehouseId))
+            return allStocks.filter((s: StockRow) => s.warehouseId === parseInt(selectedWarehouseId))
         },
         enabled: !!selectedWarehouseId
     })
 
     const filteredStocks = useMemo(() => {
-        return stocks.filter(s => 
+        return stocks.filter((s: StockRow) => 
             s.product?.materialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             s.product?.materialDescription?.toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -58,7 +77,7 @@ export function EvhsStockTable({ warehouses }: { warehouses: any[] }) {
             <EvhsStockUsageDialog 
                 open={usageDialogOpen}
                 onOpenChange={setUsageDialogOpen}
-                stock={selectedStock}
+                trackingItem={selectedStock}
             />
 
             <div className="flex flex-col md:flex-row gap-4 justify-between">

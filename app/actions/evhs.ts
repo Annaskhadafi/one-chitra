@@ -8,13 +8,8 @@ import {
     evhsVoucherItems,
     evhsGiRecords,
     evhsGiItems,
-    evhsMrko,
     stockTransfers, 
-    stockTransferItems, 
-    stockLevels,
-    products,
-    user,
-    salesRevenueSap
+    warehouses,
 } from "@/db/schema"
 import { eq, desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -22,7 +17,7 @@ import { z } from "zod"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
 // Schema for Receipt Confirmation
-const confirmReceiptSchema = z.object({
+const _confirmReceiptSchema = z.object({
     transferId: z.number(),
     receivedDate: z.date(),
     doChitraNo: z.string().optional(),
@@ -33,6 +28,103 @@ const confirmReceiptSchema = z.object({
         serialNumbers: z.array(z.string()).optional(),
     })),
 })
+
+function normalizeSerialNumber(serialNumber?: string | null) {
+    return serialNumber?.trim() || ""
+}
+
+type EvhsMatchedGiItem = {
+    materialNumber: string
+    qty?: number | string | null
+}
+
+type EvhsMatchedGiRecord = {
+    id: number
+    warehouseId: number | null
+    documentNo: string | null
+    woNo: string | null
+    createdAt: Date | string
+    items: EvhsMatchedGiItem[]
+}
+
+type EvhsMatchedVoucherItem = {
+    id: number
+    productId: number
+    qty: number | string | null
+    serialNumber: string | null
+    materialNumberCk: string | null
+    pos: string | null
+    unitId: string | null
+}
+
+type EvhsMatchedVoucher = {
+    id: number
+    warehouseId: number | null
+    woNo: string | null
+    vhsNo: string
+    date: Date | null
+    createdAt: Date
+    updatedAt: Date
+    settledDate: Date | null
+    mrkoStatus: string | null
+    sapInvoiceNo: string | null
+    mrkoNo: string | null
+    warehouse?: { id: number; sloc: string; description?: string | null } | null
+    issuedByUser?: { name: string | null } | null
+    items: Array<EvhsMatchedVoucherItem & {
+        product?: {
+            materialNumber: string
+            materialDescription?: string | null
+        } | null
+    }>
+}
+
+type EvhsTrackingRow = {
+    id: string
+    dateIn: Date | null
+    cpDo: string | null
+    materialNumberCp: string
+    materialNumberCk: string
+    sn: string
+    qty: number
+    receivedQty: number
+    availableQty: number
+    usedQty: number
+    installDate: Date | null
+    pos: string
+    unitId: string
+    voucherNo: string
+    voucherId: number | null
+    voucherItemId: number | null
+    woNo: string
+    giNumber: string
+    mrko: string
+    inv: string
+    date: Date | null
+    productId: number
+    product: {
+        materialNumber: string
+        materialDescription?: string | null
+        materialNumberCk?: string | null
+    }
+    warehouseId: number | null | undefined
+    warehouse: { id: number; sloc: string; description?: string | null } | null | undefined
+}
+
+function parseSerialNumbers(serialNumbers: string[] | string | null | undefined) {
+    if (Array.isArray(serialNumbers)) {
+        return serialNumbers.map(normalizeSerialNumber).filter(Boolean)
+    }
+
+    if (typeof serialNumbers === "string") {
+        return serialNumbers
+            .split(/[\n,]+/)
+            .map(normalizeSerialNumber)
+            .filter(Boolean)
+    }
+
+    return []
+}
 
 /**
  * Get all E-VHS Receipts
@@ -68,12 +160,17 @@ export async function getEvhsReceipts() {
  */
 export async function getPendingEvhsTransfers() {
     try {
-        // Find transfers where to_warehouse has customer_id and not yet in evhs_receipts
+        // Only show transfers into customer-linked warehouses that have not been confirmed yet.
         return await db.query.stockTransfers.findMany({
             where: (transfers, { exists, isNotNull, and, eq, not }) => and(
-                // Only transfers to VHS sites (warehouses with customerId)
-                // This logic might need refinement based on how VHS warehouses are identified
-                // but usually they are the ones with type 'VHS' or linked to a customer
+                exists(
+                    db.select()
+                        .from(warehouses)
+                        .where(and(
+                            eq(warehouses.id, transfers.toWarehouseId),
+                            isNotNull(warehouses.customerId)
+                        ))
+                ),
                 not(
                     exists(
                         db.select()
@@ -107,7 +204,7 @@ export async function getPendingEvhsTransfers() {
 /**
  * Confirm receipt of E-VHS stock
  */
-export async function confirmEvhsReceipt(data: z.infer<typeof confirmReceiptSchema>) {
+export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSchema>) {
     try {
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
@@ -146,7 +243,7 @@ export async function confirmEvhsReceipt(data: z.infer<typeof confirmReceiptSche
 /**
  * Fitur 2 & 4: Create Voucher VHS
  */
-const voucherSchema = z.object({
+const _voucherSchema = z.object({
     woNo: z.string().optional(),
     date: z.date(),
     warehouseId: z.number(),
@@ -164,7 +261,7 @@ const voucherSchema = z.object({
     })),
 })
 
-export async function createEvhsVoucher(data: z.infer<typeof voucherSchema>) {
+export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
     try {
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
@@ -176,6 +273,94 @@ export async function createEvhsVoucher(data: z.infer<typeof voucherSchema>) {
         const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
         return await db.transaction(async (tx) => {
+            const warehouseReceipts = await tx.query.evhsReceipts.findMany({
+                with: {
+                    transfer: true,
+                    items: true,
+                },
+            })
+
+            const existingVouchers = await tx.query.evhsVouchers.findMany({
+                where: eq(evhsVouchers.warehouseId, data.warehouseId),
+                with: {
+                    items: true,
+                },
+            })
+
+            const requestedQtyByProduct = new Map<number, number>()
+            const requestedSerials = new Set<string>()
+
+            for (const item of data.items) {
+                const relevantReceiptItems = warehouseReceipts
+                    .filter(receipt => receipt.transfer?.toWarehouseId === data.warehouseId)
+                    .flatMap(receipt => receipt.items)
+                    .filter(receiptItem => receiptItem.productId === item.productId)
+
+                const receivedQty = relevantReceiptItems.reduce((total, receiptItem) => total + receiptItem.confirmedQty, 0)
+                const usedQty = existingVouchers
+                    .flatMap(voucher => voucher.items)
+                    .filter(voucherItem => voucherItem.productId === item.productId)
+                    .reduce((total, voucherItem) => total + voucherItem.qty, 0)
+
+                const availableQty = Math.max(receivedQty - usedQty, 0)
+                const normalizedSerial = normalizeSerialNumber(item.serialNumber)
+                const nextRequestedQty = (requestedQtyByProduct.get(item.productId) || 0) + item.qty
+
+                if (normalizedSerial) {
+                    const serialKey = `${item.productId}:${normalizedSerial}`
+
+                    if (requestedSerials.has(serialKey)) {
+                        return {
+                            success: false,
+                            error: `Serial number ${normalizedSerial} terduplikasi dalam voucher yang sama.`,
+                        }
+                    }
+
+                    const serialExistsInWarehouse = relevantReceiptItems.some(receiptItem =>
+                        parseSerialNumbers(receiptItem.serialNumbers).includes(normalizedSerial)
+                    )
+
+                    if (!serialExistsInWarehouse) {
+                        return {
+                            success: false,
+                            error: `Serial number ${normalizedSerial} tidak ditemukan pada stok EVHS warehouse ini.`,
+                        }
+                    }
+
+                    const serialAlreadyUsed = existingVouchers.some(voucher =>
+                        voucher.items.some(voucherItem =>
+                            voucherItem.productId === item.productId &&
+                            normalizeSerialNumber(voucherItem.serialNumber) === normalizedSerial
+                        )
+                    )
+
+                    if (serialAlreadyUsed) {
+                        return {
+                            success: false,
+                            error: `Serial number ${normalizedSerial} sudah pernah dipakai pada voucher sebelumnya.`,
+                        }
+                    }
+
+                    if (item.qty !== 1) {
+                        return {
+                            success: false,
+                            error: `Qty untuk item berserial harus 1. Serial ${normalizedSerial} menerima qty ${item.qty}.`,
+                        }
+                    }
+
+                    requestedSerials.add(serialKey)
+                }
+
+                if (nextRequestedQty > availableQty) {
+                    return {
+                        success: false,
+                        error: `Stok tidak cukup untuk product ${item.productId}. Tersedia ${availableQty}, diminta total ${nextRequestedQty}.`,
+                    }
+                }
+
+                requestedQtyByProduct.set(item.productId, nextRequestedQty)
+            }
+
             const [voucher] = await tx.insert(evhsVouchers).values({
                 vhsNo,
                 woNo: data.woNo,
@@ -189,17 +374,36 @@ export async function createEvhsVoucher(data: z.infer<typeof voucherSchema>) {
                 mrkoStatus: "OPEN",
             }).returning()
 
+            const insertedQtyByProduct = new Map<number, number>()
+
             for (const item of data.items) {
+                const receivedQty = warehouseReceipts
+                    .filter(receipt => receipt.transfer?.toWarehouseId === data.warehouseId)
+                    .flatMap(receipt => receipt.items)
+                    .filter(receiptItem => receiptItem.productId === item.productId)
+                    .reduce((total, receiptItem) => total + receiptItem.confirmedQty, 0)
+
+                const usedQtyBeforeInsert = existingVouchers
+                    .flatMap(voucher => voucher.items)
+                    .filter(voucherItem => voucherItem.productId === item.productId)
+                    .reduce((total, voucherItem) => total + voucherItem.qty, 0)
+
+                const availableQtyBeforeInsert = Math.max(receivedQty - usedQtyBeforeInsert, 0)
+                const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
+                const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
+
                 await tx.insert(evhsVoucherItems).values({
                     voucherId: voucher.id,
                     productId: item.productId,
                     materialNumberCk: item.materialNumberCk,
                     qty: item.qty,
-                    serialNumber: item.serialNumber,
-                    stockBalance: item.stockBalance,
+                    serialNumber: normalizeSerialNumber(item.serialNumber) || null,
+                    stockBalance: item.stockBalance ?? remainingAfterInsert,
                     pos: item.pos,
                     unitId: item.unitId,
                 })
+
+                insertedQtyByProduct.set(item.productId, alreadyInsertedQty + item.qty)
             }
 
             return { success: true, vhsNo }
@@ -212,7 +416,7 @@ export async function createEvhsVoucher(data: z.infer<typeof voucherSchema>) {
     }
 }
 
-const editUsageSchema = z.object({
+const _editUsageSchema = z.object({
     voucherId: z.number(),
     voucherItemId: z.number(),
     woNo: z.string().optional(),
@@ -221,14 +425,14 @@ const editUsageSchema = z.object({
     unitId: z.string().optional(),
 })
 
-export async function updateEvhsUsage(data: z.infer<typeof editUsageSchema>) {
+export async function updateEvhsUsage(data: z.infer<typeof _editUsageSchema>) {
     try {
         await getAuthenticatedSession('evhs', 'edit')
         
         return await db.transaction(async (tx) => {
             if (data.woNo !== undefined) {
                 await tx.update(evhsVouchers)
-                    .set({ woNo: data.woNo })
+                    .set({ woNo: data.woNo, updatedAt: new Date() })
                     .where(eq(evhsVouchers.id, data.voucherId))
             }
             
@@ -250,7 +454,7 @@ export async function updateEvhsUsage(data: z.infer<typeof editUsageSchema>) {
     }
 }
 
-const editVoucherSchema = z.object({
+const _editVoucherSchema = z.object({
     id: z.number(),
     woNo: z.string().optional(),
     date: z.date(),
@@ -259,7 +463,7 @@ const editVoucherSchema = z.object({
     receivedByName: z.string().optional(),
 })
 
-export async function updateEvhsVoucher(data: z.infer<typeof editVoucherSchema>) {
+export async function updateEvhsVoucher(data: z.infer<typeof _editVoucherSchema>) {
     try {
         await getAuthenticatedSession('evhs', 'edit')
         
@@ -270,6 +474,7 @@ export async function updateEvhsVoucher(data: z.infer<typeof editVoucherSchema>)
                 remark: data.remark,
                 approvedByName: data.approvedByName,
                 receivedByName: data.receivedByName,
+                updatedAt: new Date(),
             })
             .where(eq(evhsVouchers.id, data.id))
             
@@ -351,6 +556,8 @@ export async function createGiRecord(data: {
     items: { materialNumber: string; qty: number; price?: number }[];
 }) {
     try {
+        await getAuthenticatedSession('evhs', 'create')
+
         return await db.transaction(async (tx) => {
             const [record] = await tx.insert(evhsGiRecords).values({
                 warehouseId: data.warehouseId,
@@ -373,7 +580,85 @@ export async function createGiRecord(data: {
             return { success: true, recordId: record.id }
         })
     } catch (error) {
-        return { success: false, error: "Failed to create GI record" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to create GI record" }
+    } finally {
+        revalidatePath("/dashboard/evhs")
+    }
+}
+
+const giImportRecordSchema = z.object({
+    warehouseId: z.number(),
+    periodDate: z.string().min(1),
+    documentNo: z.string().optional(),
+    woNo: z.string().optional(),
+    items: z.array(z.object({
+        materialNumber: z.string().min(1),
+        qty: z.number().positive(),
+        price: z.number().optional(),
+    })).min(1),
+})
+
+export async function importEvhsGiRecords(records: z.infer<typeof giImportRecordSchema>[]) {
+    try {
+        await getAuthenticatedSession('evhs', 'create')
+        const parsedRecords = z.array(giImportRecordSchema).parse(records)
+
+        return await db.transaction(async (tx) => {
+            const errors: { record: number; reference: string; error: string }[] = []
+            let imported = 0
+
+            for (const [index, record] of parsedRecords.entries()) {
+                try {
+                    const [giRecord] = await tx.insert(evhsGiRecords).values({
+                        warehouseId: record.warehouseId,
+                        periodDate: record.periodDate,
+                        documentNo: record.documentNo,
+                        woNo: record.woNo,
+                        source: "upload",
+                    }).returning()
+
+                    await tx.insert(evhsGiItems).values(
+                        record.items.map(item => ({
+                            giRecordId: giRecord.id,
+                            materialNumber: item.materialNumber,
+                            qty: item.qty.toString(),
+                            price: item.price?.toString(),
+                            status: "pending",
+                        }))
+                    )
+
+                    imported += 1
+                } catch (error) {
+                    errors.push({
+                        record: index + 1,
+                        reference: record.documentNo || record.woNo || `Record ${index + 1}`,
+                        error: error instanceof Error ? error.message : "Failed to import GI record",
+                    })
+                }
+            }
+
+            return {
+                success: errors.length === 0,
+                imported,
+                failed: errors.length,
+                errors,
+            }
+        })
+    } catch (error) {
+        return {
+            success: false,
+            imported: 0,
+            failed: records.length,
+            errors: [
+                {
+                    record: 0,
+                    reference: "validation",
+                    error: error instanceof Error ? error.message : "Failed to import GI records",
+                },
+            ],
+        }
+    } finally {
+        revalidatePath("/dashboard/evhs")
     }
 }
 
@@ -470,22 +755,27 @@ export async function getEvhsTrackingData() {
             with: { items: true }
         })
         
-        const trackingRows: any[] = []
+        const trackingRows: EvhsTrackingRow[] = []
         
         for (const receipt of receipts) {
             for (const item of receipt.items) {
                 const sns = Array.isArray(item.serialNumbers) 
-                    ? item.serialNumbers.filter(Boolean) 
-                    : (typeof item.serialNumbers === "string" 
-                        ? item.serialNumbers.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean) 
-                        : [])
+                    ? item.serialNumbers.filter(Boolean)
+                    : parseSerialNumbers(item.serialNumbers)
                 
                 if (sns.length > 0) {
                     for (const sn of sns) {
                         let matchedVoucherItem = null
                         let matchedVoucher = null
                         for (const v of vouchers) {
-                            const vi = v.items.find((i: any) => i.productId === item.productId && i.serialNumber === sn)
+                            if (v.warehouseId !== receipt.transfer?.toWarehouseId) {
+                                continue
+                            }
+
+                            const vi = v.items.find((i: EvhsMatchedVoucherItem) =>
+                                i.productId === item.productId &&
+                                normalizeSerialNumber(i.serialNumber) === normalizeSerialNumber(sn)
+                            )
                             if (vi) {
                                 matchedVoucherItem = vi
                                 matchedVoucher = v
@@ -506,6 +796,9 @@ export async function getEvhsTrackingData() {
                             materialNumberCk: matchedVoucherItem?.materialNumberCk || item.product.materialNumberCk || "-",
                             sn: sn,
                             qty: 1,
+                            receivedQty: 1,
+                            availableQty: matchedVoucher ? 0 : 1,
+                            usedQty: matchedVoucher ? 1 : 0,
                             installDate: matchedVoucher?.date || null,
                             pos: matchedVoucherItem?.pos || "",
                             unitId: matchedVoucherItem?.unitId || "",
@@ -526,12 +819,23 @@ export async function getEvhsTrackingData() {
                 } else {
                     const itemUsages = []
                     for (const v of vouchers) {
+                        if (v.warehouseId !== receipt.transfer?.toWarehouseId) {
+                            continue
+                        }
+
                         for (const vi of v.items) {
                             if (vi.productId === item.productId && !vi.serialNumber) {
                                 itemUsages.push({ voucher: v, voucherItem: vi })
                             }
                         }
                     }
+
+                    const usedQty = itemUsages.reduce(
+                        (total, usage) => total + Number(usage.voucherItem.qty || 0),
+                        0
+                    )
+                    const availableQty = Math.max(item.confirmedQty - usedQty, 0)
+                    const latestUsage = itemUsages[itemUsages.length - 1]
                     
                     trackingRows.push({
                         id: `${item.id}-bulk`,
@@ -542,8 +846,11 @@ export async function getEvhsTrackingData() {
                             ? itemUsages[itemUsages.length-1].voucherItem.materialNumberCk 
                             : (item.product.materialNumberCk || "-"),
                         sn: "-",
-                        qty: item.confirmedQty,
-                        installDate: itemUsages.length > 0 ? itemUsages[itemUsages.length-1].voucher.date : null,
+                        qty: availableQty,
+                        receivedQty: item.confirmedQty,
+                        availableQty,
+                        usedQty,
+                        installDate: latestUsage ? latestUsage.voucher.date : null,
                         pos: "",
                         unitId: "",
                         voucherNo: itemUsages.length > 0 ? (itemUsages.length > 1 ? "Multiple Usages" : itemUsages[0].voucher.vhsNo) : "",
@@ -567,5 +874,539 @@ export async function getEvhsTrackingData() {
     } catch (error) {
         console.error("Error fetching tracking data:", error)
         return []
+    }
+}
+
+function getEvhsMatchedGiRecord(
+    voucher: Pick<EvhsMatchedVoucher, "warehouseId" | "woNo">,
+    voucherItem: Pick<EvhsMatchedVoucherItem, "materialNumberCk">,
+    giRecords: EvhsMatchedGiRecord[]
+) {
+    const materialCk = voucherItem?.materialNumberCk
+
+    return giRecords.find((gi) => {
+        const warehouseMatches = !gi.warehouseId || gi.warehouseId === voucher.warehouseId
+        const woMatches = Boolean(voucher.woNo) && gi.woNo === voucher.woNo
+        const materialMatches = Boolean(materialCk) && gi.items?.some((item: EvhsMatchedGiItem) => item.materialNumber === materialCk)
+
+        return warehouseMatches && (woMatches || materialMatches)
+    }) || null
+}
+
+function getDaysSince(dateValue: Date | string | null | undefined) {
+    if (!dateValue) return 0
+
+    const date = new Date(dateValue)
+    if (Number.isNaN(date.getTime())) return 0
+
+    return Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+function getAgingBucket(days: number) {
+    if (days <= 3) return "0-3 hari"
+    if (days <= 7) return "4-7 hari"
+    return ">7 hari"
+}
+
+function formatEvhsWarehouseLabel(warehouse?: { sloc: string; description?: string | null } | null) {
+    if (!warehouse) return "-"
+    return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
+}
+
+export async function getEvhsControlTowerData() {
+    try {
+        const [receipts, vouchers, giRecords] = await Promise.all([
+            db.query.evhsReceipts.findMany({
+                with: {
+                    transfer: {
+                        with: {
+                            toWarehouse: true,
+                        },
+                    },
+                    confirmedByUser: true,
+                    items: {
+                        with: {
+                            product: true,
+                        },
+                    },
+                },
+                orderBy: [desc(evhsReceipts.receivedDate)],
+            }),
+            db.query.evhsVouchers.findMany({
+                with: {
+                    items: {
+                        with: {
+                            product: true,
+                        },
+                    },
+                    warehouse: true,
+                    issuedByUser: true,
+                },
+                orderBy: [desc(evhsVouchers.createdAt)],
+            }),
+            db.query.evhsGiRecords.findMany({
+                with: {
+                    items: true,
+                    warehouse: true,
+                },
+                orderBy: [desc(evhsGiRecords.createdAt)],
+            }),
+        ])
+
+        const duplicateSerialMap = new Map<string, {
+            serialNumber: string
+            site: string
+            references: string[]
+        }>()
+
+        const ledgerRows: Array<{
+            id: string
+            site: string
+            receiptDate: Date | string | null
+            reference: string
+            materialNumberCp: string
+            materialDescription: string | null
+            receivedQty: number
+            reservedQty: number
+            usedQty: number
+            reversedQty: number
+            remainingQty: number
+            ageDays: number
+            confirmedBy: string
+        }> = []
+
+        for (const receipt of receipts) {
+            const siteLabel = formatEvhsWarehouseLabel(receipt.transfer?.toWarehouse)
+            const reference = receipt.doChitraNo || receipt.transfer?.referenceNumber || `Receipt ${receipt.id}`
+
+            for (const item of receipt.items) {
+                const serials = parseSerialNumbers(item.serialNumbers)
+
+                if (serials.length > 0) {
+                    let reservedQty = 0
+                    let usedQty = 0
+
+                    for (const serialNumber of serials) {
+                        const normalizedSerial = normalizeSerialNumber(serialNumber)
+                        const duplicateKey = `${receipt.transfer?.toWarehouseId || "na"}:${item.productId}:${normalizedSerial}`
+                        const duplicateEntry = duplicateSerialMap.get(duplicateKey)
+
+                        if (duplicateEntry) {
+                            duplicateEntry.references.push(reference)
+                        } else {
+                            duplicateSerialMap.set(duplicateKey, {
+                                serialNumber: normalizedSerial,
+                                site: siteLabel,
+                                references: [reference],
+                            })
+                        }
+
+                        let matchedUsage: { voucher: EvhsMatchedVoucher; voucherItem: EvhsMatchedVoucherItem } | null = null
+
+                        for (const voucher of vouchers) {
+                            if (voucher.warehouseId !== receipt.transfer?.toWarehouseId) {
+                                continue
+                            }
+
+                            const voucherItem = voucher.items.find((candidate: EvhsMatchedVoucherItem) => (
+                                candidate.productId === item.productId &&
+                                normalizeSerialNumber(candidate.serialNumber) === normalizedSerial
+                            ))
+
+                            if (voucherItem) {
+                                matchedUsage = { voucher, voucherItem }
+                                break
+                            }
+                        }
+
+                        if (matchedUsage) {
+                            const matchedGi = getEvhsMatchedGiRecord(matchedUsage.voucher, matchedUsage.voucherItem, giRecords)
+                            if (matchedGi) {
+                                usedQty += 1
+                            } else {
+                                reservedQty += 1
+                            }
+                        }
+                    }
+
+                    ledgerRows.push({
+                        id: `${receipt.id}-${item.id}-serial`,
+                        site: siteLabel,
+                        receiptDate: receipt.receivedDate,
+                        reference,
+                        materialNumberCp: item.product.materialNumber,
+                        materialDescription: item.product.materialDescription,
+                        receivedQty: item.confirmedQty,
+                        reservedQty,
+                        usedQty,
+                        reversedQty: 0,
+                        remainingQty: item.confirmedQty - reservedQty - usedQty,
+                        ageDays: getDaysSince(receipt.receivedDate),
+                        confirmedBy: receipt.confirmedByUser?.name || "System",
+                    })
+                    continue
+                }
+
+                let reservedQty = 0
+                let usedQty = 0
+
+                for (const voucher of vouchers) {
+                    if (voucher.warehouseId !== receipt.transfer?.toWarehouseId) {
+                        continue
+                    }
+
+                    for (const voucherItem of voucher.items) {
+                        if (voucherItem.productId !== item.productId || voucherItem.serialNumber) {
+                            continue
+                        }
+
+                        const matchedGi = getEvhsMatchedGiRecord(voucher, voucherItem, giRecords)
+                        if (matchedGi) {
+                            usedQty += Number(voucherItem.qty || 0)
+                        } else {
+                            reservedQty += Number(voucherItem.qty || 0)
+                        }
+                    }
+                }
+
+                ledgerRows.push({
+                    id: `${receipt.id}-${item.id}-bulk`,
+                    site: siteLabel,
+                    receiptDate: receipt.receivedDate,
+                    reference,
+                    materialNumberCp: item.product.materialNumber,
+                    materialDescription: item.product.materialDescription,
+                    receivedQty: item.confirmedQty,
+                    reservedQty,
+                    usedQty,
+                    reversedQty: 0,
+                    remainingQty: item.confirmedQty - reservedQty - usedQty,
+                    ageDays: getDaysSince(receipt.receivedDate),
+                    confirmedBy: receipt.confirmedByUser?.name || "System",
+                })
+            }
+        }
+
+        const warehouseSummaryMap = new Map<number, {
+            warehouseId: number
+            site: string
+            receivedQty: number
+            reservedQty: number
+            usedQty: number
+            reversedQty: number
+            remainingQty: number
+            giQty: number
+            invoicedQty: number
+            openMrkoQty: number
+        }>()
+
+        const warehouseById = new Map<number, { sloc: string; description?: string | null }>()
+        for (const receipt of receipts) {
+            if (receipt.transfer?.toWarehouse?.id) {
+                warehouseById.set(receipt.transfer.toWarehouse.id, receipt.transfer.toWarehouse)
+            }
+        }
+        for (const voucher of vouchers) {
+            if (voucher.warehouse?.id) {
+                warehouseById.set(voucher.warehouse.id, voucher.warehouse)
+            }
+        }
+        for (const giRecord of giRecords) {
+            if (giRecord.warehouse?.id) {
+                warehouseById.set(giRecord.warehouse.id, giRecord.warehouse)
+            }
+        }
+
+        for (const [warehouseId, warehouse] of warehouseById.entries()) {
+            warehouseSummaryMap.set(warehouseId, {
+                warehouseId,
+                site: formatEvhsWarehouseLabel(warehouse),
+                receivedQty: 0,
+                reservedQty: 0,
+                usedQty: 0,
+                reversedQty: 0,
+                remainingQty: 0,
+                giQty: 0,
+                invoicedQty: 0,
+                openMrkoQty: 0,
+            })
+        }
+
+        for (const ledgerRow of ledgerRows) {
+            const warehouseEntry = Array.from(warehouseSummaryMap.values()).find((entry) => entry.site === ledgerRow.site)
+            if (!warehouseEntry) continue
+
+            warehouseEntry.receivedQty += ledgerRow.receivedQty
+            warehouseEntry.reservedQty += ledgerRow.reservedQty
+            warehouseEntry.usedQty += ledgerRow.usedQty
+            warehouseEntry.reversedQty += ledgerRow.reversedQty
+            warehouseEntry.remainingQty += ledgerRow.remainingQty
+        }
+
+        for (const giRecord of giRecords) {
+            if (!giRecord.warehouseId || !warehouseSummaryMap.has(giRecord.warehouseId)) continue
+
+            const warehouseEntry = warehouseSummaryMap.get(giRecord.warehouseId)
+            if (!warehouseEntry) continue
+
+            warehouseEntry.giQty += giRecord.items.reduce((total: number, item: EvhsMatchedGiItem) => total + Number(item.qty || 0), 0)
+        }
+
+        for (const voucher of vouchers) {
+            if (!voucher.warehouseId || !warehouseSummaryMap.has(voucher.warehouseId)) continue
+
+            const warehouseEntry = warehouseSummaryMap.get(voucher.warehouseId)
+            if (!warehouseEntry) continue
+
+            const voucherQty = voucher.items.reduce((total: number, item: EvhsMatchedVoucherItem) => total + Number(item.qty || 0), 0)
+
+            if (voucher.sapInvoiceNo) {
+                warehouseEntry.invoicedQty += voucherQty
+            }
+
+            if (voucher.mrkoStatus !== "SETTLED") {
+                warehouseEntry.openMrkoQty += voucherQty
+            }
+        }
+
+        const matchedGiRecordIds = new Set<number>()
+        const exceptionCenter: Array<{
+            id: string
+            category: string
+            severity: "high" | "medium"
+            site: string
+            reference: string
+            detail: string
+            ageDays: number
+        }> = []
+
+        for (const [duplicateKey, duplicate] of duplicateSerialMap.entries()) {
+            if (duplicate.references.length <= 1) continue
+
+            exceptionCenter.push({
+                id: `duplicate-sn-${duplicateKey}`,
+                category: "Duplicate SN",
+                severity: "high",
+                site: duplicate.site,
+                reference: duplicate.references[0],
+                detail: `Serial ${duplicate.serialNumber} muncul pada ${duplicate.references.length} receipt: ${duplicate.references.join(", ")}`,
+                ageDays: 0,
+            })
+        }
+
+        for (const ledgerRow of ledgerRows) {
+            if (ledgerRow.remainingQty < 0) {
+                exceptionCenter.push({
+                    id: `over-issued-${ledgerRow.id}`,
+                    category: "Qty Over-Issued",
+                    severity: "high",
+                    site: ledgerRow.site,
+                    reference: ledgerRow.reference,
+                    detail: `Saldo negatif ${Math.abs(ledgerRow.remainingQty)} pada ${ledgerRow.materialNumberCp}.`,
+                    ageDays: ledgerRow.ageDays,
+                })
+            }
+
+            if (ledgerRow.remainingQty > 0 && ledgerRow.ageDays > 30) {
+                exceptionCenter.push({
+                    id: `idle-stock-${ledgerRow.id}`,
+                    category: "Stock Aging",
+                    severity: "medium",
+                    site: ledgerRow.site,
+                    reference: ledgerRow.reference,
+                    detail: `Stok ${ledgerRow.materialNumberCp} masih tersisa ${ledgerRow.remainingQty} setelah ${ledgerRow.ageDays} hari.`,
+                    ageDays: ledgerRow.ageDays,
+                })
+            }
+        }
+
+        let voucherPendingGiQty = 0
+        let giPendingMrkoQty = 0
+        let mrkoPendingInvoiceQty = 0
+        const agingBuckets = {
+            pendingGi: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+            giPendingMrko: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+            mrkoPendingInvoice: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+        }
+
+        for (const voucher of vouchers) {
+            const voucherAge = getDaysSince(voucher.createdAt)
+
+            for (const voucherItem of voucher.items) {
+                if (!voucherItem.materialNumberCk) {
+                    exceptionCenter.push({
+                        id: `missing-ck-${voucher.id}-${voucherItem.id}`,
+                        category: "Material CK Missing",
+                        severity: "medium",
+                        site: formatEvhsWarehouseLabel(voucher.warehouse),
+                        reference: voucher.vhsNo,
+                        detail: `Material CP ${voucherItem.product?.materialNumber || voucherItem.productId} belum punya material CK.`,
+                        ageDays: voucherAge,
+                    })
+                }
+
+                const matchedGi = getEvhsMatchedGiRecord(voucher, voucherItem, giRecords)
+                if (matchedGi?.id) {
+                    matchedGiRecordIds.add(matchedGi.id)
+                }
+
+                if (!matchedGi) {
+                    voucherPendingGiQty += Number(voucherItem.qty || 0)
+                    agingBuckets.pendingGi[getAgingBucket(voucherAge)] += Number(voucherItem.qty || 0)
+                    exceptionCenter.push({
+                        id: `gi-unmatched-${voucher.id}-${voucherItem.id}`,
+                        category: "GI Unmatched",
+                        severity: "high",
+                        site: formatEvhsWarehouseLabel(voucher.warehouse),
+                        reference: voucher.vhsNo,
+                        detail: `Item ${voucherItem.product?.materialNumber || voucherItem.productId} belum menemukan GI pasangan.`,
+                        ageDays: voucherAge,
+                    })
+                }
+
+                if (matchedGi && voucher.mrkoStatus !== "SETTLED") {
+                    giPendingMrkoQty += Number(voucherItem.qty || 0)
+                    agingBuckets.giPendingMrko[getAgingBucket(voucherAge)] += Number(voucherItem.qty || 0)
+                }
+
+                if (voucher.mrkoStatus === "SETTLED" && !voucher.sapInvoiceNo) {
+                    const settledAge = getDaysSince(voucher.settledDate || voucher.updatedAt || voucher.createdAt)
+                    mrkoPendingInvoiceQty += Number(voucherItem.qty || 0)
+                    agingBuckets.mrkoPendingInvoice[getAgingBucket(settledAge)] += Number(voucherItem.qty || 0)
+                }
+            }
+
+            if (voucher.mrkoStatus !== "SETTLED" && voucherAge > 7) {
+                exceptionCenter.push({
+                    id: `mrko-overdue-${voucher.id}`,
+                    category: "MRKO Overdue",
+                    severity: "medium",
+                    site: formatEvhsWarehouseLabel(voucher.warehouse),
+                    reference: voucher.vhsNo,
+                    detail: `Voucher masih OPEN selama ${voucherAge} hari dan belum settle MRKO.`,
+                    ageDays: voucherAge,
+                })
+            }
+        }
+
+        for (const giRecord of giRecords) {
+            if (matchedGiRecordIds.has(giRecord.id)) continue
+
+            exceptionCenter.push({
+                id: `orphan-gi-${giRecord.id}`,
+                category: "GI Unmatched",
+                severity: "medium",
+                site: formatEvhsWarehouseLabel(giRecord.warehouse),
+                reference: giRecord.documentNo || giRecord.woNo || `GI ${giRecord.id}`,
+                detail: "Dokumen GI belum punya voucher pasangan.",
+                ageDays: getDaysSince(giRecord.createdAt),
+            })
+        }
+
+        const summary = ledgerRows.reduce((acc, row) => {
+            acc.receivedQty += row.receivedQty
+            acc.reservedQty += row.reservedQty
+            acc.usedQty += row.usedQty
+            acc.reversedQty += row.reversedQty
+            acc.remainingQty += row.remainingQty
+            return acc
+        }, {
+            receivedQty: 0,
+            reservedQty: 0,
+            usedQty: 0,
+            reversedQty: 0,
+            remainingQty: 0,
+        })
+
+        const auditTrail = [
+            ...receipts.map((receipt) => ({
+                id: `receipt-${receipt.id}`,
+                timestamp: receipt.receivedDate,
+                type: "Receipt Confirmed",
+                actor: receipt.confirmedByUser?.name || "System",
+                reference: receipt.doChitraNo || receipt.transfer?.referenceNumber || `Receipt ${receipt.id}`,
+                detail: `${receipt.items.length} item diterima di ${formatEvhsWarehouseLabel(receipt.transfer?.toWarehouse)}`,
+            })),
+            ...vouchers.map((voucher) => ({
+                id: `voucher-issued-${voucher.id}`,
+                timestamp: voucher.createdAt,
+                type: "Voucher Issued",
+                actor: voucher.issuedByUser?.name || "System",
+                reference: voucher.vhsNo,
+                detail: `WO ${voucher.woNo || "-"} / ${voucher.items.length} item`,
+            })),
+            ...vouchers
+                .filter((voucher) => new Date(voucher.updatedAt).getTime() > new Date(voucher.createdAt).getTime() + 1000)
+                .map((voucher) => ({
+                    id: `voucher-updated-${voucher.id}`,
+                    timestamp: voucher.updatedAt,
+                    type: "Voucher Updated",
+                    actor: voucher.issuedByUser?.name || "System",
+                    reference: voucher.vhsNo,
+                    detail: "WO, material CK, POS, unit, atau remark terakhir diperbarui.",
+                })),
+            ...vouchers
+                .filter((voucher) => voucher.mrkoStatus === "SETTLED" && voucher.settledDate)
+                .map((voucher) => ({
+                    id: `mrko-settled-${voucher.id}`,
+                    timestamp: voucher.settledDate!,
+                    type: "MRKO Settled",
+                    actor: voucher.issuedByUser?.name || "System",
+                    reference: voucher.mrkoNo || voucher.vhsNo,
+                    detail: `Invoice ${voucher.sapInvoiceNo || "-"} / voucher ${voucher.vhsNo}`,
+                })),
+        ]
+            .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+            .slice(0, 12)
+
+        return {
+            summary,
+            ledgerRows,
+            reconciliationByWarehouse: Array.from(warehouseSummaryMap.values()).sort((left, right) => left.site.localeCompare(right.site)),
+            aging: {
+                idleStockQty: ledgerRows
+                    .filter((row) => row.remainingQty > 0 && row.ageDays > 30)
+                    .reduce((total, row) => total + row.remainingQty, 0),
+                voucherPendingGiQty,
+                giPendingMrkoQty,
+                mrkoPendingInvoiceQty,
+                buckets: agingBuckets,
+            },
+            exceptionCenter: exceptionCenter
+                .sort((left, right) => {
+                    if (left.severity !== right.severity) {
+                        return left.severity === "high" ? -1 : 1
+                    }
+                    return right.ageDays - left.ageDays
+                })
+                .slice(0, 25),
+            auditTrail,
+        }
+    } catch (error) {
+        console.error("Error fetching EVHS control tower data:", error)
+        return {
+            summary: {
+                receivedQty: 0,
+                reservedQty: 0,
+                usedQty: 0,
+                reversedQty: 0,
+                remainingQty: 0,
+            },
+            ledgerRows: [],
+            reconciliationByWarehouse: [],
+            aging: {
+                idleStockQty: 0,
+                voucherPendingGiQty: 0,
+                giPendingMrkoQty: 0,
+                mrkoPendingInvoiceQty: 0,
+                buckets: {
+                    pendingGi: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                    giPendingMrko: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                    mrkoPendingInvoice: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                },
+            },
+            exceptionCenter: [],
+            auditTrail: [],
+        }
     }
 }
