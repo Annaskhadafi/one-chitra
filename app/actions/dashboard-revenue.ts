@@ -161,10 +161,22 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         ));
         const revenuePA = Number(paData[0]?.total || 0);
 
-        // ─── D. Consolidate = Total Revenue based on simple dateFilter ─────────
+        // ─── D. Consolidate = Total Revenue (same exclusions, no range filter) ──
+        const consolidateFilter = and(
+            isNotNull(salesRevenueSap.billingDate),
+            dateFilter,
+            or(
+                isNull(salesRevenueSap.customerName),
+                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
+            ),
+            notIlike(salesRevenueSap.customer, '%ITC008%'),
+            notIlike(salesRevenueSap.customer, '%1000289A%'),
+            notIlike(salesRevenueSap.customerName, '%Chitra Paratama%'),
+            notIlike(salesRevenueSap.customerName, '%Transityre b.v%')
+        );
         const consolidateData = await db.select({
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(dateFilter);
+        }).from(salesRevenueSap).where(consolidateFilter);
         const revenueConsolidate = Number(consolidateData[0]?.total || 0);
 
         // ─── E. Forecast Consolidate = Inputted value ──────────────────────────
