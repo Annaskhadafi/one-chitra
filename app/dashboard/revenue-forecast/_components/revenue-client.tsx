@@ -446,7 +446,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                 </div>
                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
                     <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" isExporting={isExportingJpg} />
-                    <CustomerGauge label="MA SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" isExporting={isExportingJpg} />
+                    <CustomerGauge label="SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" isExporting={isExportingJpg} />
                 </div>
             </div>
 
@@ -530,7 +530,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                             <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
                             <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />
                             <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" />
-                            <MiniGauge label="MA SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
+                            <MiniGauge label="SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
                         </div>
                     </div>
                 </div>
