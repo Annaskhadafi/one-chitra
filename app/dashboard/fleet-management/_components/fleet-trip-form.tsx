@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -136,6 +136,16 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
         } else {
             form.setValue("salesOrderIds", [...current, id])
         }
+    }
+
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) {
+        return <div className="min-h-[500px]" />
     }
 
     return (
@@ -589,62 +599,66 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                 <CardTitle>Deliver Orders</CardTitle>
                             </CardHeader>
                             <CardContent className="flex-1 overflow-auto max-h-[600px]">
-                                <FormField
-                                    control={form.control}
-                                    name="salesOrderIds"
-                                    render={() => (
-                                        <FormItem>
-                                            <div className="rounded-md border">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead className="w-[50px]"></TableHead>
-                                                            <TableHead>SO Number</TableHead>
-                                                            <TableHead>Customer</TableHead>
-                                                            <TableHead className="text-right">Items</TableHead>
+                                <div className="space-y-4">
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-[50px]"></TableHead>
+                                                    <TableHead>SO Number</TableHead>
+                                                    <TableHead>Customer</TableHead>
+                                                    <TableHead className="text-right">Items</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {salesOrders.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                                                            No pending orders available.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    salesOrders.map((so) => (
+                                                        <TableRow
+                                                            key={so.id}
+                                                            className="cursor-pointer hover:bg-muted/50"
+                                                            onClick={(e) => {
+                                                                if ((e.target as HTMLElement).closest('button')) return;
+                                                                handleToggleSalesOrder(so.id);
+                                                            }}
+                                                        >
+                                                            <TableCell>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="size-4 rounded-sm border-input shadow-sm accent-primary cursor-pointer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    checked={selectedSalesOrderIds.includes(so.id)}
+                                                                    onChange={() => handleToggleSalesOrder(so.id)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="font-mono">
+                                                                {so.invoiceNumber || so.customerPo || "SO-" + so.id}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {so.customer.name}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Badge variant="outline">
+                                                                    {so.items.length} Items
+                                                                </Badge>
+                                                            </TableCell>
                                                         </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {salesOrders.length === 0 ? (
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
-                                                                    No pending orders available.
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ) : (
-                                                            salesOrders.map((so) => (
-                                                                <TableRow
-                                                                    key={so.id}
-                                                                    className="cursor-pointer hover:bg-muted/50"
-                                                                    onClick={() => handleToggleSalesOrder(so.id)}
-                                                                >
-                                                                    <TableCell>
-                                                                        <Checkbox
-                                                                            checked={selectedSalesOrderIds.includes(so.id)}
-                                                                            onCheckedChange={() => handleToggleSalesOrder(so.id)}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell className="font-mono">
-                                                                        {so.invoiceNumber || so.customerPo || "SO-" + so.id}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        {so.customer.name}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right">
-                                                                        <Badge variant="outline">
-                                                                            {so.items.length} Items
-                                                                        </Badge>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                    {form.formState.errors.salesOrderIds && (
+                                        <p className="text-[0.8rem] font-medium text-destructive">
+                                            {form.formState.errors.salesOrderIds.message}
+                                        </p>
                                     )}
-                                />
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
