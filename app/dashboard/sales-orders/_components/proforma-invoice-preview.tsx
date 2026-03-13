@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import type { SalesOrderWithRelations } from "@/lib/types";
+import type { ProformaInvoiceOrder } from "./types";
 
 interface ProformaInvoicePreviewProps {
-    order: SalesOrderWithRelations;
+    order: ProformaInvoiceOrder;
     currentDate?: Date;
 }
 
@@ -32,14 +32,15 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
     // Fixed TAX 11% based on Subtotal
     const totalTax = subTotal * 0.11;
     const grandTotal = subTotal - totalDiscount + totalTax + Number(order.shipping);
+    const customer = order.customer;
 
     // Address
     const customerAddress = [
-        order.customer.address1,
-        order.customer.address2,
-        order.customer.address3,
-        order.customer.address4,
-        order.customer.address5
+        customer?.address1,
+        customer?.address2,
+        customer?.address3,
+        customer?.address4,
+        customer?.address5
     ].filter(Boolean);
 
     return (
@@ -97,7 +98,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                     {/* Left: Customer Info (As per OCR layout) */}
                     <div style={{ width: "55%" }}>
                          <div style={{ fontWeight: "bold", fontSize: "11pt", marginBottom: "8pt" }}>
-                            {order.customer.name || "PT. BERKAT ANUGRAH PERKASA"}
+                            {customer?.name || "PT. BERKAT ANUGRAH PERKASA"}
                         </div>
                         <div style={{ marginBottom: "15pt", fontSize: "9pt", lineHeight: "1.4" }}>
                             {customerAddress.length > 0 ? (
@@ -110,9 +111,9 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "80pt 1fr", gap: "2pt", fontSize: "9pt" }}>
                             <div>Customer ID</div>
-                            <div>: {order.customer.customerCode || "-"}</div>
+                            <div>: {customer?.customerCode || "-"}</div>
                             <div>NPWP</div>
-                            <div>: {(order.customer as { npwp?: string }).npwp || "-"}</div>
+                            <div>: {(customer as { npwp?: string } | null)?.npwp || "-"}</div>
                         </div>
                     </div>
 
@@ -165,7 +166,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                                 <td style={{ padding: "5pt" }}>{String(index + 1).padStart(2, '0')}</td>
                                 <td style={{ padding: "5pt" }}>
                                     <div style={{ fontWeight: "bold" }}>{item.product?.materialNumber}</div>
-                                    <div>{item.product?.materialDescription || item.productName}</div>
+                                    <div>{item.product?.materialDescription || "-"}</div>
                                 </td>
                                 <td style={{ textAlign: "right", padding: "5pt" }}>{item.quantity}</td>
                                 <td style={{ textAlign: "center", padding: "5pt" }}>PC</td>

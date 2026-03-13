@@ -41,8 +41,8 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
 
     const data = response.success && response.data ? response.data : defaultData
     const salesRevenueData = salesRevenueResponse.success && salesRevenueResponse.data ? salesRevenueResponse.data : []
-    const salesRevenueTotal = salesRevenueResponse.success ? salesRevenueResponse.total : 0
-    const salesRevenueCount = salesRevenueResponse.success ? salesRevenueResponse.count : 0
+    const salesRevenueTotal = salesRevenueResponse.success && salesRevenueResponse.total !== undefined ? salesRevenueResponse.total : 0
+    const salesRevenueCount = salesRevenueResponse.success && salesRevenueResponse.count !== undefined ? salesRevenueResponse.count : 0
 
     return (
         <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">

@@ -17,10 +17,19 @@ export type NewRole = InferInsertModel<typeof roles>
 
 export type User = InferSelectModel<typeof user>
 
-export type Stock = InferSelectModel<typeof stockLevels> & {
-    product?: Product | null
-    warehouse?: Warehouse | null
-}
+type StockLevelBase = InferSelectModel<typeof stockLevels>
+
+export type Stock = Pick<
+    StockLevelBase,
+    "id" | "warehouseId" | "productId" | "valuationValue" | "totalStock" | "minStock"
+> &
+    Partial<Omit<
+        StockLevelBase,
+        "id" | "warehouseId" | "productId" | "valuationValue" | "totalStock" | "minStock"
+    >> & {
+        product?: Partial<Product> | null
+        warehouse?: Partial<Warehouse> | null
+    }
 export type NewStock = InferInsertModel<typeof stockLevels>
 
 export type SalesOrder = InferSelectModel<typeof salesOrders>
@@ -29,9 +38,9 @@ export type SalesOrderItem = InferSelectModel<typeof salesOrderItems>
 export type NewSalesOrderItem = InferInsertModel<typeof salesOrderItems>
 
 export type SalesOrderWithRelations = SalesOrder & {
-    customer: Customer
-    createdByUser: { id: string; name: string; email: string } | null
-    salesPerson: { id: string; name: string; email: string } | null
+    customer: Customer | null
+    createdByUser: User | null
+    salesPerson: User | null
     items: (SalesOrderItem & {
         product: Product | null
     })[]

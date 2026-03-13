@@ -65,6 +65,7 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import type { DateRange } from "react-day-picker"
 import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product, SalesOrderItem } from "@/lib/types"
 
 export interface DeliveryWithRelations extends Delivery {
@@ -72,6 +73,11 @@ export interface DeliveryWithRelations extends Delivery {
     warehouse: Warehouse | null
     createdByUser: User | null
     items: (DeliveryItem & { product: Product })[]
+}
+
+function getWarehouseLabel(warehouse: Warehouse | null | undefined) {
+    if (!warehouse) return "-"
+    return warehouse.description || warehouse.sloc || "-"
 }
 
 function calculateGrandTotal(salesOrder: SalesOrder & { items: SalesOrderItem[] } | null) {
@@ -157,7 +163,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const [invoiceFilter, setInvoiceFilter] = useState("all")
     const [warehouseFilter, setWarehouseFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
-    const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined })
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
     const [datePreset, setDatePreset] = useState<string>("all")
 
 
@@ -189,7 +195,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 unique.push(item)
             }
         }
-        return unique.sort((a, b) => a.name.localeCompare(b.name))
+        return unique.sort((a, b) => getWarehouseLabel(a).localeCompare(getWarehouseLabel(b)))
     }, [data])
 
     // Mutations
@@ -414,10 +420,10 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
         {
             id: "warehouseName",
-            accessorFn: (row) => row.warehouse?.name,
+            accessorFn: (row) => getWarehouseLabel(row.warehouse),
             header: "Warehouse",
             cell: ({ row }) => {
-                const whName = row.original.warehouse?.name || "-"
+                const whName = getWarehouseLabel(row.original.warehouse)
                 return (
                     <div className="flex items-center gap-1.5">
                         <span className="font-medium text-xs truncate max-w-[120px]" title={whName}>
@@ -535,6 +541,8 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
     const filteredData = useMemo(() => {
         const term = globalFilter.toLowerCase().trim()
         return (data || []).filter(d => {
+            const dateFrom = dateRange?.from
+            const dateTo = dateRange?.to
             const matchesSearch = !term || (
                 (d.deliveryNumber?.toLowerCase().includes(term)) ||
                 (d.doSap?.toLowerCase().includes(term)) ||
@@ -554,21 +562,21 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
             // Date range filtering
             let matchesDateRange = true
-            if (dateRange.from || dateRange.to) {
+            if (dateFrom || dateTo) {
                 const deliveryDate = d.deliveryDate ? new Date(d.deliveryDate) : null
                 if (deliveryDate) {
-                    if (dateRange.from && dateRange.to) {
-                        const from = new Date(dateRange.from)
-                        const to = new Date(dateRange.to)
+                    if (dateFrom && dateTo) {
+                        const from = new Date(dateFrom)
+                        const to = new Date(dateTo)
                         from.setHours(0, 0, 0, 0)
                         to.setHours(23, 59, 59, 999)
                         matchesDateRange = deliveryDate >= from && deliveryDate <= to
-                    } else if (dateRange.from) {
-                        const from = new Date(dateRange.from)
+                    } else if (dateFrom) {
+                        const from = new Date(dateFrom)
                         from.setHours(0, 0, 0, 0)
                         matchesDateRange = deliveryDate >= from
-                    } else if (dateRange.to) {
-                        const to = new Date(dateRange.to)
+                    } else if (dateTo) {
+                        const to = new Date(dateTo)
                         to.setHours(23, 59, 59, 999)
                         matchesDateRange = deliveryDate <= to
                     }
@@ -625,7 +633,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
-                d.warehouse?.name || "",
+                getWarehouseLabel(d.warehouse),
                 d.salesOrder?.customer?.name || "",
                 d.remark || ""
             ]
@@ -763,7 +771,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         <SelectContent>
                             <SelectItem value="all">Semua Warehouse</SelectItem>
                             {uniqueWarehouses.map(w => (
-                                <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
+                                <SelectItem key={w.id} value={w.id.toString()}>{getWarehouseLabel(w)}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -786,7 +794,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         <PopoverTrigger asChild>
                             <Button variant="outline" className="w-[280px] justify-start text-left font-normal">
                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                {dateRange.from ? (
+                                {dateRange?.from ? (
                                     dateRange.to ? (
                                         <>
                                             {dateRange.from.toLocaleDateString("id-ID")} - {dateRange.to.toLocaleDateString("id-ID")}
@@ -804,7 +812,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                                 mode="range"
                                 selected={dateRange}
                                 onSelect={(range) => {
-                                    setDateRange(range || { from: undefined, to: undefined })
+                                    setDateRange(range)
                                     setDatePreset("all")
                                 }}
                                 numberOfMonths={2}
@@ -812,7 +820,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         </PopoverContent>
                     </Popover>
 
-                    {(dateRange.from || dateRange.to) && (
+                    {(dateRange?.from || dateRange?.to) && (
                         <Button variant="ghost" size="icon" onClick={clearDateRange} title="Clear date filter">
                             <X className="h-4 w-4" />
                         </Button>

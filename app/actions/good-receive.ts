@@ -162,7 +162,7 @@ export async function processGoodReceive(
                     quantity: item.quantity,
                     type: "GR_SAP",
                     recordedBy: userId,
-                    reference: `PO: ${ponumb} Item: ${itemIndex}`
+                    referenceNumber: `PO: ${ponumb} Item: ${itemIndex}`
                 })
 
                 // 5. Update ALL matching PO+Item records as processed

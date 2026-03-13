@@ -489,8 +489,7 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
         // Ensure section id is unique (not strictly needed, but for completeness)
         const sectionId = section.id || `section-${sectionIdx}`;
         // Ensure unique item ids
-        let items = ensureUniqueIds(section.items, sectionId, "item");
-        items = items.map((item, itemIdx) => {
+        const items: RuntimeNavItem[] = ensureUniqueIds(section.items, sectionId, "item").map((item) => {
             const runtimeLink = resolveRuntimeLink({
                 id: item.id,
                 title: item.title,
@@ -500,8 +499,7 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                 openInNewTab: item.openInNewTab,
             });
             // Ensure unique subitem ids
-            let subItems = ensureUniqueIds(item.items || [], item.id, "sub");
-            subItems = subItems.map((subItem, subIdx) => {
+            const subItems: RuntimeNavSubItem[] = ensureUniqueIds(item.items || [], item.id, "sub").map((subItem) => {
                 const subRuntimeLink = resolveRuntimeLink({
                     id: subItem.id,
                     title: subItem.title,
@@ -511,10 +509,16 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                     openInNewTab: subItem.openInNewTab,
                 });
                 return {
-                    ...subItem,
                     id: subItem.id,
+                    title: subItem.title,
                     url: subRuntimeLink.url,
+                    resource: subItem.resource ?? undefined,
+                    hidden: subItem.hidden,
                     openInNewTab: subRuntimeLink.openInNewTab,
+                    isCustom: subItem.isCustom,
+                    linkType: subItem.linkType,
+                    externalOpenMode: subItem.externalOpenMode,
+                    iframeManualEnabled: subItem.iframeManualEnabled,
                 };
             });
             return {

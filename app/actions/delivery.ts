@@ -1049,6 +1049,7 @@ export async function updateDoMonitoringFields(id: number, data: {
     doStatus?: string,
     remark?: string | null,
     scanDoDocument?: string | null,
+    doSap?: string | null,
 }) {
     try {
         await checkPermission('deliveries', 'edit')
@@ -1064,6 +1065,7 @@ export async function updateDoMonitoringFields(id: number, data: {
         if (data.doStatus !== undefined) updateData.doStatus = data.doStatus
         if (data.remark !== undefined) updateData.remark = data.remark
         if (data.scanDoDocument !== undefined) updateData.scanDoDocument = data.scanDoDocument
+        if (data.doSap !== undefined) updateData.doSap = data.doSap
 
         await db.update(deliveries)
             .set(updateData)

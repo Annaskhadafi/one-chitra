@@ -16,6 +16,12 @@ type SettlementPdfPreviewProps = {
     settlement: any
 }
 
+type CustomSignatory = {
+    role: string
+    position: string
+    name: string
+}
+
 export function SettlementPdfPreview({ settlement }: SettlementPdfPreviewProps) {
     const handlePrint = () => {
         window.print()
@@ -24,7 +30,7 @@ export function SettlementPdfPreview({ settlement }: SettlementPdfPreviewProps) 
     const { items, signatories, vehicleNumber } = settlement
     const grandTotal = items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
 
-    const [customSignatories, setCustomSignatories] = useState(() => {
+    const [customSignatories, setCustomSignatories] = useState<CustomSignatory[]>(() => {
         if (signatories?.length > 0) {
             return signatories.map((s: any) => ({
                 role: s.signatoryRole || s.signatoryPosition,
@@ -41,7 +47,7 @@ export function SettlementPdfPreview({ settlement }: SettlementPdfPreviewProps) 
     })
 
     const handleNameChange = (index: number, newName: string) => {
-        setCustomSignatories(prev => {
+        setCustomSignatories((prev) => {
             const next = [...prev]
             next[index] = { ...next[index], name: newName }
             return next
@@ -186,14 +192,14 @@ export function SettlementPdfPreview({ settlement }: SettlementPdfPreviewProps) 
                             <table className="w-full text-center border-none">
                                 <thead>
                                     <tr>
-                                        {customSignatories.map((sig, idx) => (
+                                        {customSignatories.map((sig: CustomSignatory, idx: number) => (
                                             <td key={`sig-role-${idx}`} className="pb-16 font-medium">{sig.role} :</td>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        {customSignatories.map((sig, idx) => (
+                                        {customSignatories.map((sig: CustomSignatory, idx: number) => (
                                             <td key={`sig-name-${idx}`}>
                                                 <div className="font-bold underline pb-1">
                                                     <input

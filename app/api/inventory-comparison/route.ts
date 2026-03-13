@@ -58,7 +58,7 @@ export async function GET() {
             ORDER BY ABS(COALESCE(ls.local_stock, 0) - COALESCE(ss.sap_stock, 0)) DESC
         `)
 
-        const comparisonData = result.rows.map((row: {
+        const rows = result.rows as Array<{
             material_number: string
             description: string
             sloc: string
@@ -69,7 +69,9 @@ export async function GET() {
             local_stock: number
             sap_stock: number
             gap: number
-        }) => ({
+        }>
+
+        const comparisonData = rows.map((row) => ({
             materialNumber: row.material_number || "",
             description: row.description || "",
             sloc: row.sloc || "",

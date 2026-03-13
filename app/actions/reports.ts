@@ -1182,7 +1182,7 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
         vehicle_type: deliveries.vehicleType,
         total_trips: sql<number>`COUNT(*)`,
         total_cost: sql<number>`COALESCE(SUM(
-                ${deliveries.costGasoline}::numeric + ${deliveries.costToll}::numeric + ${deliveries.costParking}::numeric +
+                ${deliveries.costGasolineDexlite}::numeric + ${deliveries.costGasolineBio}::numeric + ${deliveries.costToll}::numeric + ${deliveries.costParking}::numeric +
                 ${deliveries.costMeals}::numeric + ${deliveries.costMaintenance}::numeric + ${deliveries.costOthers}::numeric
             ), 0)`
     })

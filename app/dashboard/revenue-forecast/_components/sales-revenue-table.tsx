@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import * as XLSX from "xlsx"
 
-interface SalesRevenueData {
+export interface SalesRevenueData {
     salesRevId: number
     sorg: string | null
     billTy: string | null
@@ -49,7 +49,7 @@ interface SalesRevenueData {
     revenueInDocCurr: number | null
     revenueInLocCurr: number | null
     billingNo: string | null
-    billingDate: string | null
+    billingDate: Date | string | null
     inco1: string | null
     inco2: string | null
     c: string | null
@@ -58,11 +58,11 @@ interface SalesRevenueData {
     salesOrder: string | null
     workOrder: string | null
     poNo: string | null
-    poDate: string | null
+    poDate: Date | string | null
     poType: string | null
     costOfSales: number | null
     profitMargin: number | null
-    extractedAt: string | null
+    extractedAt: Date | string | null
 }
 
 interface SalesRevenueTableProps {
@@ -75,6 +75,12 @@ interface SalesRevenueTableProps {
 const fmt = (v: number | null) => {
     if (v === null) return "-"
     return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+}
+
+const formatDateCell = (value: Date | string | null) => {
+    if (!value) return "-"
+    const date = value instanceof Date ? value : new Date(value)
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("id-ID")
 }
 
 export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTableProps) {
@@ -367,7 +373,7 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
                                 filteredData.map((row, i) => (
                                     <tr key={row.salesRevId} className="border-t hover:bg-muted/30">
                                         <td className="px-3 py-2 text-muted-foreground border-r">{i + 1}</td>
-                                        <td className="px-3 py-2 border-r whitespace-nowrap">{row.billingDate || "-"}</td>
+                                        <td className="px-3 py-2 border-r whitespace-nowrap">{formatDateCell(row.billingDate)}</td>
                                         <td className="px-3 py-2 border-r whitespace-nowrap">{row.billingNo || "-"}</td>
                                         <td className="px-3 py-2 border-r whitespace-nowrap">{row.customer || "-"}</td>
                                         <td className="px-3 py-2 border-r max-w-[200px] truncate" title={row.customerName || ""}>

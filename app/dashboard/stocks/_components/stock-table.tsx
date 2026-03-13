@@ -73,7 +73,7 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         setMounted(true)
     }, [])
 
-    const { data: stocks = initialData, isLoading, refetch } = useQuery({
+    const { data: stocks = initialData, isLoading, refetch } = useQuery<Stock[]>({
         queryKey: ["stocks"],
         queryFn: async () => {
             return await getStocks()
@@ -338,10 +338,10 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
             const item = row.original
 
             return !!(
-                item.product?.materialNumber.toLowerCase().includes(term) ||
+                item.product?.materialNumber?.toLowerCase().includes(term) ||
                 item.product?.materialDescription?.toLowerCase().includes(term) ||
                 item.product?.oldMaterialNo?.toLowerCase().includes(term) ||
-                item.warehouse?.sloc.toLowerCase().includes(term) ||
+                item.warehouse?.sloc?.toLowerCase().includes(term) ||
                 item.warehouse?.description?.toLowerCase().includes(term) ||
                 item.warehouse?.type?.toLowerCase().includes(term)
             )

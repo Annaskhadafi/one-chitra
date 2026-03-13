@@ -30,7 +30,7 @@ interface DashboardMetrics {
     }
     topRestockProducts: Array<{
         productCode: string
-        productName: string
+        productName: string | null
         recommendedStock: number
         currentStock: number | null
     }>

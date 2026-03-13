@@ -27,14 +27,15 @@ import {
 } from "@/components/ui/tooltip"
 import { format } from "date-fns"
 import { Pencil, Printer, MapPin, Mail, Calendar, FileText } from "lucide-react"
-import type { SalesOrderWithRelations } from "@/lib/types"
+import type { SalesOrderListItem } from "./types"
 import Link from "next/link"
 
+type SalesOrderDetailOrder = SalesOrderListItem
 
 interface SalesOrderDetailProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    order: SalesOrderWithRelations | null
+    order: SalesOrderDetailOrder | null
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -78,14 +79,15 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
         const totalTax = calculateTotalTax()
         return subtotal - totalDiscount + totalTax + Number(order.shipping)
     }
+    const customer = order.customer
 
     // Combine address parts
     const customerAddress = [
-        order.customer.address1,
-        order.customer.address2,
-        order.customer.address3,
-        order.customer.address4,
-        order.customer.address5
+        customer?.address1,
+        customer?.address2,
+        customer?.address3,
+        customer?.address4,
+        customer?.address5
     ].filter(Boolean).join(", ")
 
     return (
@@ -164,17 +166,17 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                 <div className="space-y-3">
                                     <div>
                                         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Customer Name</div>
-                                        <div className="font-medium text-lg leading-tight">{order.customer.name}</div>
-                                        <div className="text-xs font-mono text-muted-foreground mt-0.5">{order.customer.customerCode}</div>
+                                        <div className="font-medium text-lg leading-tight">{customer?.name || "-"}</div>
+                                        <div className="text-xs font-mono text-muted-foreground mt-0.5">{customer?.customerCode || "-"}</div>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {order.customer.email && (
+                                        {customer?.email && (
                                             <div>
                                                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Email</div>
                                                 <div className="flex items-center gap-1.5 text-sm">
                                                     <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    <span className="truncate">{order.customer.email}</span>
+                                                    <span className="truncate">{customer.email}</span>
                                                 </div>
                                             </div>
                                         )}

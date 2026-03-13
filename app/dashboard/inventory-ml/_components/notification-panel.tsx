@@ -30,7 +30,7 @@ interface Notification {
     productName: string | null
     currentStock: number
     recommendedStock: number
-    urgencyLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM'
+    urgencyLevel: string
     predictionId: number | null
     isAcknowledged: number
     acknowledgedAt: Date | null
@@ -162,7 +162,7 @@ export function NotificationPanel({ onNavigateToDetail }: NotificationPanelProps
 
     const getStockPercentage = (current: number, recommended: number) => {
         if (recommended === 0) return 0
-        return ((current / recommended) * 100).toFixed(1)
+        return Number(((current / recommended) * 100).toFixed(1))
     }
 
     if (isLoading) {
@@ -375,7 +375,7 @@ export function NotificationPanel({ onNavigateToDetail }: NotificationPanelProps
                                                                             notification.urgencyLevel === 'HIGH' && "bg-orange-500",
                                                                             notification.urgencyLevel === 'MEDIUM' && "bg-yellow-500"
                                                                         )}
-                                                                        style={{ width: `${Math.min(100, parseFloat(stockPercentage))}%` }}
+                                                                        style={{ width: `${Math.min(100, stockPercentage)}%` }}
                                                                     />
                                                                 </div>
                                                             </div>

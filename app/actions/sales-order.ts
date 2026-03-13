@@ -10,6 +10,15 @@ import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 
 let hasSalesPersonColumnCache: boolean | null = null
+type SalesPersonRecord = typeof user.$inferSelect
+
+function normalizeSalesPerson(order: unknown): SalesPersonRecord | null {
+    if (typeof order === "object" && order !== null && "salesPerson" in order) {
+        return (order as { salesPerson?: SalesPersonRecord | null }).salesPerson ?? null
+    }
+
+    return null
+}
 
 async function hasSalesPersonColumn() {
     if (hasSalesPersonColumnCache !== null) {
@@ -64,9 +73,11 @@ export async function getSalesOrders() {
                     product: true,
                 },
             })
-            return hasPicColumn
-                ? { ...order, items }
-                : { ...order, salesPerson: null, items }
+            return {
+                ...order,
+                salesPerson: normalizeSalesPerson(order),
+                items,
+            }
         })
     )
 
@@ -113,9 +124,11 @@ export async function getSalesOrder(id: number) {
         },
     })
 
-    return hasPicColumn
-        ? { ...order, items }
-        : { ...order, salesPerson: null, items }
+    return {
+        ...order,
+        salesPerson: normalizeSalesPerson(order),
+        items,
+    }
 }
 
 export async function generateInvoiceNumber() {

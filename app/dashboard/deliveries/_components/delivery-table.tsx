@@ -1579,7 +1579,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
 
             {/* Shared Dialogs - tersedia untuk semua view mode */}
             <DeliveryPreview
-                delivery={previewDelivery}
+                delivery={previewDelivery as Parameters<typeof DeliveryPreview>[0]["delivery"]}
                 open={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
             />

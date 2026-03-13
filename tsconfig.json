@@ -38,6 +38,9 @@
   "exclude": [
     "node_modules",
     "scripts/**",
-    "verify-stock-logic.ts"
+    "verify-stock-logic.ts",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

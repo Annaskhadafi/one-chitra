@@ -674,6 +674,8 @@ ${jsonSchema}`;
     }
 }
 
+export const generateAIPrediction = generateMLPrediction;
+
 export async function generateMLCustomerRecommendation(customerCode: string) {
     try {
         await getAuthenticatedSession("inventory", "edit");
@@ -1210,7 +1212,7 @@ export async function processBulkPredictions(
                 }
 
                 // Generate new prediction
-                const predictionResult = await generateAIPrediction(materialNo, predictionType);
+                const predictionResult = await generateMLPrediction(materialNo, predictionType);
 
                 if (predictionResult.success && predictionResult.data) {
                     // Update batch ID for the new prediction

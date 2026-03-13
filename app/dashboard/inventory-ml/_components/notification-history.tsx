@@ -25,7 +25,7 @@ interface NotificationHistoryItem {
     productName: string | null
     currentStock: number
     recommendedStock: number
-    urgencyLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM'
+    urgencyLevel: string
     predictionId: number | null
     isAcknowledged: number
     acknowledgedAt: Date | null

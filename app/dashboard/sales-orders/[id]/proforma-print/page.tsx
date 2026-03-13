@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { ProformaInvoicePreview } from "../../_components/proforma-invoice-preview";
-import type { SalesOrderWithRelations } from "@/lib/types";
+import type { ProformaInvoiceOrder } from "../../_components/types";
 import { Loader2 } from "lucide-react";
 
 export default function ProformaPrintPage() {
     const [data, setData] = useState<{
-        order: SalesOrderWithRelations;
+        order: ProformaInvoiceOrder;
         currentDate: string;
     } | null>(null);
 

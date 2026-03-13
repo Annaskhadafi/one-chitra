@@ -53,10 +53,10 @@ import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Do
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
-import type { SalesOrderWithRelations } from "@/lib/types"
 import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
+import type { SalesOrderListItem } from "./types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
@@ -73,9 +73,8 @@ import {
     VisibilityState,
 } from "@tanstack/react-table"
 
-
 interface SalesOrderTableProps {
-    data: SalesOrderWithRelations[]
+    data: SalesOrderListItem[]
 }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500, 1000]
@@ -103,7 +102,7 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
-function calculateGrandTotal(order: SalesOrderWithRelations) {
+function calculateGrandTotal(order: SalesOrderListItem) {
     const subtotal = order.items.reduce((sum, item) => {
         const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
         return sum + lineTotal
@@ -120,15 +119,16 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
 
-    const { data = initialData, refetch } = useQuery({
+    const { data: queryData, refetch } = useQuery<SalesOrderListItem[]>({
         queryKey: ["sales-orders"],
-        queryFn: getSalesOrders,
+        queryFn: async () => (await getSalesOrders()) as SalesOrderListItem[],
         initialData,
         initialDataUpdatedAt: 0,    // Tandai initialData sebagai stale → langsung refetch
         staleTime: 0,               // Selalu anggap data stale setelah fetched
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
+    const data = queryData ?? initialData
 
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('sales-orders', 'edit')
@@ -149,9 +149,9 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         pageSize: DEFAULT_PAGE_SIZE,
     })
 
-    const [viewOrder, setViewOrder] = useState<SalesOrderWithRelations | null>(null)
+    const [viewOrder, setViewOrder] = useState<SalesOrderListItem | null>(null)
     const [isViewOpen, setIsViewOpen] = useState(false)
-    const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderWithRelations | null>(null)
+    const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderListItem | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
 
     useEffect(() => {
@@ -173,10 +173,10 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
     const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
-    const uniqueYears = useMemo(() => Array.from(new Set(data.map(o => new Date(o.salesDate).getFullYear().toString()))).sort().reverse(), [data])
+    const uniqueYears = useMemo(() => Array.from(new Set(data.map(o => new Date(o.salesDate).getFullYear().toString()))) as string[], [data])
     const uniqueMonths = useMemo(() => {
         const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
-        return Array.from(new Set(data.map(o => monthLabels[new Date(o.salesDate).getMonth()])))
+        return Array.from(new Set(data.map(o => monthLabels[new Date(o.salesDate).getMonth()]))) as string[]
     }, [data])
 
     // Stats calculation based on full data
@@ -226,11 +226,11 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         mutationFn: ({ ids, status }: { ids: number[], status: string }) => bulkUpdateSalesOrderStatus(ids, status),
         onMutate: async ({ ids, status }) => {
             await queryClient.cancelQueries({ queryKey: ["sales-orders"] })
-            const previousOrders = queryClient.getQueryData<SalesOrderWithRelations[]>(["sales-orders"])
+            const previousOrders = queryClient.getQueryData<SalesOrderListItem[]>(["sales-orders"])
 
             if (previousOrders) {
-                queryClient.setQueryData<SalesOrderWithRelations[]>(["sales-orders"], (old) =>
-                    old?.map(order => ids.includes(order.id) ? { ...order, status: status as SalesOrderWithRelations['status'] } : order)
+                queryClient.setQueryData<SalesOrderListItem[]>(["sales-orders"], (old) =>
+                    old?.map(order => ids.includes(order.id) ? { ...order, status: status as SalesOrderListItem["status"] } : order)
                 )
             }
 
@@ -251,10 +251,10 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         mutationFn: (ids: number[]) => ids.length === 1 ? deleteSalesOrder(ids[0]) : bulkDeleteSalesOrders(ids),
         onMutate: async (ids) => {
             await queryClient.cancelQueries({ queryKey: ["sales-orders"] })
-            const previousOrders = queryClient.getQueryData<SalesOrderWithRelations[]>(["sales-orders"])
+            const previousOrders = queryClient.getQueryData<SalesOrderListItem[]>(["sales-orders"])
 
             if (previousOrders) {
-                queryClient.setQueryData<SalesOrderWithRelations[]>(["sales-orders"], (old) =>
+                queryClient.setQueryData<SalesOrderListItem[]>(["sales-orders"], (old) =>
                     old?.filter(order => !ids.includes(order.id))
                 )
             }
@@ -284,7 +284,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         })
     }, [deleteMutation])
 
-    const columns = useMemo<ColumnDef<SalesOrderWithRelations>[]>(() => [
+    const columns = useMemo<ColumnDef<SalesOrderListItem>[]>(() => [
         {
             id: "select",
             header: ({ table }) => (
@@ -881,7 +881,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 onChange={(e) => setGlobalFilter(e.target.value)}
                             />
                         </div>
-                        <Button variant="outline" onClick={refetch} size="icon">
+                        <Button variant="outline" onClick={() => { void refetch() }} size="icon">
                             <RefreshCcw className="h-4 w-4" />
                         </Button>
                         <Button variant="outline" onClick={handleExport} size="icon">
