@@ -19,6 +19,9 @@ import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const slugifyNavKey = (value: string) =>
   value
     .toLowerCase()
