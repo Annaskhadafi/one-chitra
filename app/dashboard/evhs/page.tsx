@@ -19,6 +19,7 @@ import { EvhsGiMatching } from "./_components/evhs-gi-matching"
 import { EvhsMrkoTable } from "./_components/evhs-mrko-table"
 import { EvhsMasterPriceTable } from "./_components/evhs-master-price-table"
 import { EvhsControlTower } from "./_components/evhs-control-tower"
+import { EvhsStockOverviewTable } from "./_components/evhs-stock-overview-table"
 
 export default async function EvhsPage() {
     // Initial data fetching
@@ -44,6 +45,7 @@ export default async function EvhsPage() {
                     <TabsTrigger value="control-tower">Control Tower</TabsTrigger>
                     <TabsTrigger value="receipts">Penerimaan</TabsTrigger>
                     <TabsTrigger value="stock">Stock VHS & WO</TabsTrigger>
+                    <TabsTrigger value="stock-overview">Semua Stock VHS</TabsTrigger>
                     <TabsTrigger value="vouchers">Voucher VHS</TabsTrigger>
                     <TabsTrigger value="gi-matching">GI Matching</TabsTrigger>
                     <TabsTrigger value="mrko">MRKO & Invoice</TabsTrigger>
@@ -96,6 +98,20 @@ export default async function EvhsPage() {
                             <EvhsTrackingTable 
                                 trackingData={trackingData}
                             />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="stock-overview" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Semua Stock VHS per Site</CardTitle>
+                            <CardDescription>
+                                Ringkasan stok VHS lintas site, termasuk indikator kelengkapan Serial Number (SN).
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <EvhsStockOverviewTable trackingData={trackingData} />
                         </CardContent>
                     </Card>
                 </TabsContent>
