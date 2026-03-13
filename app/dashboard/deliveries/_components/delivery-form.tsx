@@ -168,6 +168,49 @@ interface DeliveryFormProps {
     }
 }
 
+const DELIVERY_FORM_DRAFT_KEY = "delivery-form-draft-v1"
+const DELIVERY_FORM_RELOAD_REASON_KEY = "delivery-form-reload-reason-v1"
+
+interface DeliveryFormDraft {
+    generatedDeliveryNumber: string
+    doSap: string
+    salesOrderId?: number
+    scheduledDate: string
+    deliveryDate: string
+    status: string
+    deliveryType: string
+    driverName: string
+    vehicleNumber: string
+    vehicleType: string
+    warehouseId?: number
+    warehouseToId?: number
+    shippingAddress: string
+    notes: string
+    tripDestination: string
+    costGasolineDexlite: string
+    costGasolineBio: string
+    costToll: string
+    costParking: string
+    costMeals: string
+    costMaintenance: string
+    costOthers: string
+    costRapidTest: string
+    costFerry: string
+    costPortal: string
+    costWashing: string
+    costEscort: string
+    isExternal: boolean
+    vendorName: string
+    awbNumber: string
+    shippingCost: string
+    items: DeliveryFormItem[]
+}
+
+function isStaleServerActionError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.includes("UnrecognizedActionError") || message.includes("was not found on the server")
+}
+
 export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
@@ -175,19 +218,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     // Fleet Data State
     const [drivers, setDrivers] = useState<{ id: number, name: string }[]>([])
     const [vehicles, setVehicles] = useState<{ id: number, policeNumber: string, type: string }[]>([])
-    const [loadingFleet, setLoadingFleet] = useState(false)
+    const [, setLoadingFleet] = useState(false)
     const [driverSearch, setDriverSearch] = useState("")
     const [vehicleSearch, setVehicleSearch] = useState("")
 
     // Delivery Number
     const [generatedDeliveryNumber, setGeneratedDeliveryNumber] = useState(initialData?.deliveryNumber || "")
     const [doSap, setDoSap] = useState(initialData?.doSap || "")
-
-    useEffect(() => {
-        if (!isEdit) {
-            generateDeliveryNumber().then(num => setGeneratedDeliveryNumber(num))
-        }
-    }, [isEdit])
 
     // Load fleet data on mount
     useEffect(() => {
@@ -293,7 +330,168 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [whToOpen, setWhToOpen] = useState(false)
     const [addrOpen, setAddrOpen] = useState(false)
     const [savedAddresses, setSavedAddresses] = useState<{ id: number; address: string; label: string | null }[]>([])
-    const [loadingAddresses, setLoadingAddresses] = useState(false)
+    const [, setLoadingAddresses] = useState(false)
+    const [draftHydrated, setDraftHydrated] = useState(isEdit)
+
+    useEffect(() => {
+        if (isEdit || typeof window === "undefined") {
+            return
+        }
+
+        const savedDraft = window.sessionStorage.getItem(DELIVERY_FORM_DRAFT_KEY)
+        if (savedDraft) {
+            try {
+                const draft = JSON.parse(savedDraft) as DeliveryFormDraft
+                setGeneratedDeliveryNumber(draft.generatedDeliveryNumber || "")
+                setDoSap(draft.doSap || "")
+                setSalesOrderId(draft.salesOrderId)
+                setScheduledDate(draft.scheduledDate || new Date().toISOString().slice(0, 10))
+                setDeliveryDate(draft.deliveryDate || "")
+                setStatus(draft.status || "scheduled")
+                setDeliveryType(draft.deliveryType || "full")
+                setDriverName(draft.driverName || "")
+                setVehicleNumber(draft.vehicleNumber || "")
+                setVehicleType(draft.vehicleType || "")
+                setWarehouseId(draft.warehouseId)
+                setWarehouseToId(draft.warehouseToId)
+                setShippingAddress(draft.shippingAddress || "")
+                setNotes(draft.notes || "")
+                setTripDestination(draft.tripDestination || "")
+                setCostGasolineDexlite(draft.costGasolineDexlite || "0")
+                setCostGasolineBio(draft.costGasolineBio || "0")
+                setCostToll(draft.costToll || "0")
+                setCostParking(draft.costParking || "0")
+                setCostMeals(draft.costMeals || "0")
+                setCostMaintenance(draft.costMaintenance || "0")
+                setCostOthers(draft.costOthers || "0")
+                setCostRapidTest(draft.costRapidTest || "0")
+                setCostFerry(draft.costFerry || "0")
+                setCostPortal(draft.costPortal || "0")
+                setCostWashing(draft.costWashing || "0")
+                setCostEscort(draft.costEscort || "0")
+                setIsExternal(Boolean(draft.isExternal))
+                setVendorName(draft.vendorName || "")
+                setAwbNumber(draft.awbNumber || "")
+                setShippingCost(draft.shippingCost || "0")
+                setItems(Array.isArray(draft.items) ? draft.items : [])
+            } catch (error) {
+                console.error("Failed to restore delivery draft:", error)
+                window.sessionStorage.removeItem(DELIVERY_FORM_DRAFT_KEY)
+            }
+        }
+
+        const reloadReason = window.sessionStorage.getItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+        if (reloadReason === "stale-server-action") {
+            toast.info("Halaman dimuat ulang karena server baru diperbarui. Form Anda sudah dipulihkan, silakan submit lagi.")
+            window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+        }
+
+        setDraftHydrated(true)
+    }, [isEdit])
+
+    useEffect(() => {
+        if (isEdit || !draftHydrated || generatedDeliveryNumber) {
+            return
+        }
+
+        let cancelled = false
+
+        const loadDeliveryNumber = async () => {
+            try {
+                const num = await generateDeliveryNumber()
+
+                if (!cancelled) {
+                    setGeneratedDeliveryNumber(current => current || num)
+                }
+            } catch (error) {
+                console.error("Failed to generate delivery number:", error)
+            }
+        }
+
+        loadDeliveryNumber()
+
+        return () => {
+            cancelled = true
+        }
+    }, [draftHydrated, generatedDeliveryNumber, isEdit])
+
+    useEffect(() => {
+        if (isEdit || typeof window === "undefined" || !draftHydrated) {
+            return
+        }
+
+        const draft: DeliveryFormDraft = {
+            generatedDeliveryNumber,
+            doSap,
+            salesOrderId,
+            scheduledDate,
+            deliveryDate,
+            status,
+            deliveryType,
+            driverName,
+            vehicleNumber,
+            vehicleType,
+            warehouseId,
+            warehouseToId,
+            shippingAddress,
+            notes,
+            tripDestination,
+            costGasolineDexlite,
+            costGasolineBio,
+            costToll,
+            costParking,
+            costMeals,
+            costMaintenance,
+            costOthers,
+            costRapidTest,
+            costFerry,
+            costPortal,
+            costWashing,
+            costEscort,
+            isExternal,
+            vendorName,
+            awbNumber,
+            shippingCost,
+            items,
+        }
+
+        window.sessionStorage.setItem(DELIVERY_FORM_DRAFT_KEY, JSON.stringify(draft))
+    }, [
+        isEdit,
+        draftHydrated,
+        generatedDeliveryNumber,
+        doSap,
+        salesOrderId,
+        scheduledDate,
+        deliveryDate,
+        status,
+        deliveryType,
+        driverName,
+        vehicleNumber,
+        vehicleType,
+        warehouseId,
+        warehouseToId,
+        shippingAddress,
+        notes,
+        tripDestination,
+        costGasolineDexlite,
+        costGasolineBio,
+        costToll,
+        costParking,
+        costMeals,
+        costMaintenance,
+        costOthers,
+        costRapidTest,
+        costFerry,
+        costPortal,
+        costWashing,
+        costEscort,
+        isExternal,
+        vendorName,
+        awbNumber,
+        shippingCost,
+        items,
+    ])
 
     // Selected SO
     const selectedSO = useMemo(() =>
@@ -537,6 +735,10 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             console.log("📦 Delivery Result:", result)
 
             if (result.success) {
+                if (!isEdit && typeof window !== "undefined") {
+                    window.sessionStorage.removeItem(DELIVERY_FORM_DRAFT_KEY)
+                    window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+                }
                 toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
                 router.refresh()
                 router.push("/dashboard/deliveries")
@@ -547,6 +749,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             }
         } catch (error) {
             console.error("❌ Delivery Exception:", error)
+
+            if (!isEdit && typeof window !== "undefined" && isStaleServerActionError(error)) {
+                window.sessionStorage.setItem(DELIVERY_FORM_RELOAD_REASON_KEY, "stale-server-action")
+                toast.info("Server baru saja diperbarui. Halaman akan dimuat ulang dan form dipulihkan otomatis.")
+                window.location.reload()
+                return
+            }
+
             toast.error("Error: " + (error instanceof Error ? error.message : "Unknown error occurred"))
         } finally {
             setSaving(false)
