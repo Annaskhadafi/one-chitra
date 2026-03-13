@@ -264,7 +264,6 @@ export async function getDashboardRevenueForecast(filters: DashboardRevenueFilte
         const baseFilterYTD = and(
             isNotNull(salesRevenueSap.billingDate),
             sql`to_char(${salesRevenueSap.billingDate}, 'YYYY') = ${year}`,
-            rangeDateFilter,
             or(
                 isNull(salesRevenueSap.customerName),
                 notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
