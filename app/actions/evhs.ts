@@ -15,6 +15,7 @@ import { eq, desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { recordStockMovement } from "@/app/actions/stock-movement"
 
 // Schema for Receipt Confirmation
 const _confirmReceiptSchema = z.object({
@@ -69,7 +70,7 @@ type EvhsMatchedVoucher = {
     mrkoStatus: string | null
     sapInvoiceNo: string | null
     mrkoNo: string | null
-    warehouse?: { id: number; sloc: string; description?: string | null } | null
+    warehouse?: { id: number; sloc: string; description?: string | null; type?: string | null } | null
     issuedByUser?: { name: string | null } | null
     items: Array<EvhsMatchedVoucherItem & {
         product?: {
@@ -108,7 +109,7 @@ type EvhsTrackingRow = {
         materialNumberCk?: string | null
     }
     warehouseId: number | null | undefined
-    warehouse: { id: number; sloc: string; description?: string | null } | null | undefined
+    warehouse: { id: number; sloc: string; description?: string | null; type?: string | null } | null | undefined
 }
 
 function parseSerialNumbers(serialNumbers: string[] | string | null | undefined) {
@@ -124,6 +125,17 @@ function parseSerialNumbers(serialNumbers: string[] | string | null | undefined)
     }
 
     return []
+}
+
+function isCkVhsWarehouse(warehouse?: {
+    type?: string | null
+    sloc?: string | null
+    description?: string | null
+} | null) {
+    const normalizedType = warehouse?.type?.trim().toUpperCase()
+    const warehouseLabel = `${warehouse?.sloc || ""} ${warehouse?.description || ""}`.toUpperCase()
+
+    return normalizedType === "VHS" && warehouseLabel.includes("CK")
 }
 
 /**
@@ -273,6 +285,17 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
         const vhsNo = `VHS/CP/CK/${dateStr}-${randomStr}`
 
         return await db.transaction(async (tx) => {
+            const warehouse = await tx.query.warehouses.findFirst({
+                where: eq(warehouses.id, data.warehouseId),
+            })
+
+            if (!isCkVhsWarehouse(warehouse)) {
+                return {
+                    success: false,
+                    error: "Warehouse harus bertipe VHS dan mengandung nama CK untuk proses EVHS PT Cipta Kridatama.",
+                }
+            }
+
             const warehouseReceipts = await tx.query.evhsReceipts.findMany({
                 with: {
                     transfer: true,
@@ -401,6 +424,17 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     stockBalance: item.stockBalance ?? remainingAfterInsert,
                     pos: item.pos,
                     unitId: item.unitId,
+                })
+
+                await recordStockMovement(tx, {
+                    productId: item.productId,
+                    warehouseId: data.warehouseId,
+                    quantity: -Math.abs(item.qty),
+                    type: "DELIVERY",
+                    referenceNumber: vhsNo,
+                    recordedBy: userId,
+                    customerId: warehouse?.customerId ?? undefined,
+                    notes: `Pengeluaran EVHS via voucher ${vhsNo}`,
                 })
 
                 insertedQtyByProduct.set(item.productId, alreadyInsertedQty + item.qty)
