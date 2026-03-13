@@ -5,7 +5,7 @@ import { useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from "recharts"
 
 interface TargetData { revenue: number; forecast: number }
 
@@ -631,10 +631,14 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                                 contentStyle={{ fontSize: 11, borderRadius: 8 }}
                                 cursor={{ fill: 'rgba(99,102,241,0.06)' }}
                             />
-                            <Bar dataKey="forecast" fill="#fcd34d" radius={[6, 6, 0, 0]}
+                            <Legend
+                                formatter={(value: string) => value.charAt(0).toUpperCase() + value.slice(1)}
+                                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                            />
+                            <Bar dataKey="forecast" name="Forecast" fill="#fcd34d" radius={[6, 6, 0, 0]}
                                 label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
                             />
-                            <Bar dataKey="revenue" fill="#a5b4fc" radius={[6, 6, 0, 0]}
+                            <Bar dataKey="revenue" name="Revenue" fill="#a5b4fc" radius={[6, 6, 0, 0]}
                                 label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
                             />
                         </BarChart>
