@@ -50,6 +50,17 @@ const stripCodeFence = (value: string) => value
     .replace(/```/g, "")
     .trim()
 
+const isValidMLReportData = (value: unknown): value is MLReportData => {
+    if (!value || typeof value !== "object") return false
+    const candidate = value as Record<string, unknown>
+
+    return (
+        typeof candidate.summary === "string" &&
+        (candidate.status === "Safe" || candidate.status === "Warning" || candidate.status === "Critical") &&
+        Array.isArray(candidate.metrics)
+    )
+}
+
 export function extractRationaleJson(rationale: string): MLReportData | null {
     const cleaned = stripCodeFence(rationale)
 
@@ -58,7 +69,7 @@ export function extractRationaleJson(rationale: string): MLReportData | null {
         if (!candidate) continue
         try {
             const parsed = JSON.parse(candidate)
-            if (parsed && typeof parsed === "object") return parsed as MLReportData
+            if (isValidMLReportData(parsed)) return parsed
         } catch {
             // Continue to next strategy
         }
@@ -70,7 +81,7 @@ export function extractRationaleJson(rationale: string): MLReportData | null {
         const jsonLike = cleaned.slice(start, end + 1)
         try {
             const parsed = JSON.parse(jsonLike)
-            if (parsed && typeof parsed === "object") return parsed as MLReportData
+            if (isValidMLReportData(parsed)) return parsed
         } catch {
             // ignore
         }

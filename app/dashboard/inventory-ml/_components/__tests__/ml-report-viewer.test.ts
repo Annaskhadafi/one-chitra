@@ -20,4 +20,9 @@ describe("ml-report-viewer parsers", () => {
         expect(fallback.summary).toContain("Analisa stok")
         expect(fallback.recommendations?.length).toBe(2)
     })
+
+    it("returns null for JSON missing required metrics field", () => {
+        const data = extractRationaleJson('{"summary":"invalid","status":"Safe"}')
+        expect(data).toBeNull()
+    })
 })
