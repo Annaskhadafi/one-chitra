@@ -80,9 +80,9 @@ export function EvhsStockTable({ warehouses }: { warehouses: WarehouseOption[] }
                 trackingItem={selectedStock}
             />
 
-            <div className="flex flex-col md:flex-row gap-4 justify-between">
-                <div className="flex flex-1 gap-2">
-                    <div className="w-[250px]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-1 flex-col gap-2 sm:flex-row">
+                    <div className="w-full sm:w-[250px]">
                         <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Pilih Site VHS" />
@@ -108,8 +108,8 @@ export function EvhsStockTable({ warehouses }: { warehouses: WarehouseOption[] }
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card">
-                <Table>
+            <div className="rounded-md border bg-card overflow-x-auto">
+                <Table className="min-w-[760px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>Material Number</TableHead>

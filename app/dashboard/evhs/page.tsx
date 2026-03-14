@@ -35,24 +35,24 @@ export default async function EvhsPage() {
     const allVhsStockData = await getEvhsAllVhsStockData()
 
     return (
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-4 p-3 sm:gap-6 sm:p-6">
             <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">E-VHS Management</h1>
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">E-VHS Management</h1>
                 <p className="text-muted-foreground">
                     Vendor Held Stock (VHS) management for PT Cipta Kridatama Site.
                 </p>
             </div>
 
-            <Tabs id="evhs-tabs" defaultValue="control-tower" className="space-y-4">
-                <TabsList className="bg-muted/50 p-1">
-                    <TabsTrigger value="control-tower">Control Tower</TabsTrigger>
-                    <TabsTrigger value="receipts">Penerimaan</TabsTrigger>
-                    <TabsTrigger value="stock-all-vhs">Stock All VHS</TabsTrigger>
-                    <TabsTrigger value="stock">Stock VHS & WO</TabsTrigger>
-                    <TabsTrigger value="vouchers">Voucher VHS</TabsTrigger>
-                    <TabsTrigger value="gi-matching">GI Matching</TabsTrigger>
-                    <TabsTrigger value="mrko">MRKO & Invoice</TabsTrigger>
-                    <TabsTrigger value="master-price">Master Price CK</TabsTrigger>
+            <Tabs id="evhs-tabs" defaultValue="control-tower" className="space-y-3 sm:space-y-4">
+                <TabsList className="w-full justify-start gap-1 overflow-x-auto bg-muted/50 p-1 whitespace-nowrap">
+                    <TabsTrigger className="shrink-0" value="control-tower">Control Tower</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="receipts">Penerimaan</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="stock-all-vhs">Stock All VHS</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="stock">Stock VHS & WO</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="vouchers">Voucher VHS</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="gi-matching">GI Matching</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="mrko">MRKO & Invoice</TabsTrigger>
+                    <TabsTrigger className="shrink-0" value="master-price">Master Price CK</TabsTrigger>
                 </TabsList>
 
                 {/* Tab 1: Control Tower */}
@@ -64,7 +64,7 @@ export default async function EvhsPage() {
                                 Ringkasan ledger stok, reconciliation, aging, exception center, dan audit trail EVHS.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsControlTower data={controlTowerData} />
                         </CardContent>
                     </Card>
@@ -79,7 +79,7 @@ export default async function EvhsPage() {
                                 Konfirmasi barang yang datang dari Stock Transfer VHS/Consignment.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsReceiptTable
                                 receipts={receipts}
                                 pendingTransfers={pendingTransfers}
@@ -97,7 +97,7 @@ export default async function EvhsPage() {
                                 Rekap stock EVHS yang sudah terekam di tracking saat ini, termasuk indikasi kelengkapan SN.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsStockOverviewTable trackingData={trackingData} />
                         </CardContent>
                     </Card>
@@ -109,7 +109,7 @@ export default async function EvhsPage() {
                                 Sinkronisasi stok lama dari inventory lokal untuk warehouse VHS CK, lengkap dengan detail SN/usage TYRE.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsAllVhsStockTable rows={allVhsStockData} />
                         </CardContent>
                     </Card>
@@ -124,7 +124,7 @@ export default async function EvhsPage() {
                                 Monitoring histori stok per serial number dan input penggunaan barang.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsTrackingTable
                                 trackingData={trackingData}
                             />
@@ -141,7 +141,7 @@ export default async function EvhsPage() {
                                 Generate voucher serah terima barang ke customer.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsVoucherTable
                                 vouchers={vouchers}
                                 products={products}
@@ -160,7 +160,7 @@ export default async function EvhsPage() {
                                 Bandingkan data pengeluaran (GI) Chitra vs Excel Harian Customer.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsGiMatching warehouses={warehouses} />
                         </CardContent>
                     </Card>
@@ -175,7 +175,7 @@ export default async function EvhsPage() {
                                 Tracking status MRKO dan integrasi nomor invoice SAP.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsMrkoTable />
                         </CardContent>
                     </Card>
@@ -190,7 +190,7 @@ export default async function EvhsPage() {
                                 Pengaturan harga khusus Cipta Kridatama untuk kalkulasi GI Matching.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
                             <EvhsMasterPriceTable warehouses={warehouses} />
                         </CardContent>
                     </Card>

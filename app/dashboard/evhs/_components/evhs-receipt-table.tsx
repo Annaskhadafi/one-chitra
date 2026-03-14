@@ -142,8 +142,8 @@ export function EvhsReceiptTable({
                     <CheckCircle2 className="h-5 w-5" />
                     Riwayat Penerimaan E-VHS
                 </h3>
-                <div className="rounded-md border bg-card">
-                    <Table>
+                <div className="rounded-md border bg-card overflow-x-auto">
+                    <Table className="min-w-[900px]">
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Tanggal Datang</TableHead>
