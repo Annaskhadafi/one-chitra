@@ -56,6 +56,7 @@ export const evhsVoucherItems = pgTable("evhs_voucher_items", {
     voucherId: integer("voucher_id").references(() => evhsVouchers.id, { onDelete: 'cascade' }).notNull(),
     productId: integer("product_id").references(() => products.id).notNull(),
     materialNumberCk: varchar("material_number_ck", { length: 100 }), // Material Number Site Customer
+    unitPrice: decimal("unit_price", { precision: 15, scale: 2 }),
     qty: integer("qty").notNull(),
     stockBalance: integer("stock_balance"), // Snapshot sisa stok saat itu
     serialNumber: varchar("serial_number", { length: 100 }), // SN Tire specifically

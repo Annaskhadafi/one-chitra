@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { UserRoleDialog } from "./user-role-dialog"
 import { ResetPasswordDialog } from "./reset-password-dialog"
 
 import { User } from "@/lib/types"
@@ -20,12 +19,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Users, Shield, UserCheck, Trash2, ChevronUp, ChevronDown, Key } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
-import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, getUsers } from "@/app/actions/users"
+import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, getUsers, updateUserAccessSettings } from "@/app/actions/users"
 import { AddUserDialog } from "./add-user-dialog"
 import { ImportUsersDialog } from "./import-users-dialog"
 import { toast } from "sonner"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { UserAccessDialog } from "@/components/user-access-dialog"
+import { type WarehouseOption } from "@/components/warehouse-access-fieldset"
 import {
     ColumnDef,
     flexRender,
@@ -35,19 +36,43 @@ import {
     useReactTable,
 } from "@tanstack/react-table"
 
-interface UserListProps {
-    users: User[]
-    roles: { id: number; name: string }[]
+type UserWarehouseAccessRow = {
+    warehouseId: number
+    accessLevel: "view" | "edit" | string
+    warehouse?: WarehouseOption | null
 }
 
-export function UserList({ users: initialUsers, roles }: UserListProps) {
+type UserListRow = User & {
+    warehouseAccesses?: UserWarehouseAccessRow[]
+}
+
+interface UserListProps {
+    users: UserListRow[]
+    roles: { id: number; name: string }[]
+    warehouses: WarehouseOption[]
+}
+
+function getWarehouseAccessSummary(accesses?: UserWarehouseAccessRow[]) {
+    if (!accesses || accesses.length === 0) {
+        return [{ label: "All Warehouses", tone: "secondary" as const }]
+    }
+
+    return accesses.map((access) => ({
+        label: access.warehouse?.description
+            ? `${access.warehouse.sloc} - ${access.warehouse.description} (${access.accessLevel === "view" ? "View" : "Edit"})`
+            : `${access.warehouse?.sloc || access.warehouseId} (${access.accessLevel === "view" ? "View" : "Edit"})`,
+        tone: "outline" as const,
+    }))
+}
+
+export function UserList({ users: initialUsers, roles, warehouses }: UserListProps) {
     const queryClient = useQueryClient()
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission('users', 'create')
     const canEdit = hasResourcePermission('users', 'edit')
     const canDelete = hasResourcePermission('users', 'delete')
 
-    const { data = initialUsers } = useQuery({
+    const { data = initialUsers } = useQuery<UserListRow[]>({
         queryKey: ["users"],
         queryFn: getUsers,
         initialData: initialUsers,
@@ -63,10 +88,10 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
         mutationFn: (ids: string[]) => ids.length === 1 ? deleteUser(ids[0]) : bulkDeleteUsers(ids),
         onMutate: async (ids) => {
             await queryClient.cancelQueries({ queryKey: ["users"] })
-            const previousUsers = queryClient.getQueryData<User[]>(["users"])
+            const previousUsers = queryClient.getQueryData<UserListRow[]>(["users"])
 
             if (previousUsers) {
-                queryClient.setQueryData<User[]>(["users"], (old) =>
+                queryClient.setQueryData<UserListRow[]>(["users"], (old) =>
                     old?.filter(u => !ids.includes(u.id))
                 )
             }
@@ -88,10 +113,10 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
         mutationFn: ({ ids, role }: { ids: string[], role: string }) => bulkUpdateUserRole(ids, role),
         onMutate: async ({ ids, role }) => {
             await queryClient.cancelQueries({ queryKey: ["users"] })
-            const previousUsers = queryClient.getQueryData<User[]>(["users"])
+            const previousUsers = queryClient.getQueryData<UserListRow[]>(["users"])
 
             if (previousUsers) {
-                queryClient.setQueryData<User[]>(["users"], (old) =>
+                queryClient.setQueryData<UserListRow[]>(["users"], (old) =>
                     old?.map(u => ids.includes(u.id) ? { ...u, role } : u)
                 )
             }
@@ -122,7 +147,7 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
     const adminCount = data.filter(u => u.role?.toLowerCase() === 'admin').length
     const staffCount = data.filter(u => u.role?.toLowerCase() === 'staff').length
 
-    const columns = useMemo<ColumnDef<User>[]>(() => [
+    const columns = useMemo<ColumnDef<UserListRow>[]>(() => [
         {
             id: "select",
             header: ({ table }) => (
@@ -174,6 +199,19 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
             cell: ({ row }) => <Badge variant="outline">{row.original.role}</Badge>,
         },
         {
+            id: "warehouseAccess",
+            header: "Warehouse Scope",
+            cell: ({ row }) => (
+                <div className="flex max-w-md flex-wrap gap-1">
+                    {getWarehouseAccessSummary(row.original.warehouseAccesses).map((item) => (
+                        <Badge key={item.label} variant={item.tone}>
+                            {item.label}
+                        </Badge>
+                    ))}
+                </div>
+            ),
+        },
+        {
             id: "actions",
             header: () => <div className="text-right">Actions</div>,
             cell: ({ row }) => {
@@ -182,13 +220,19 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                     <div className="flex justify-end items-center gap-2">
                         {canEdit && (
                             <>
-                                <UserRoleDialog
+                                <UserAccessDialog
                                     userId={user.id}
                                     currentRole={user.role}
+                                    currentWarehouseAccesses={(user.warehouseAccesses || []).map((access) => ({
+                                        warehouseId: access.warehouseId,
+                                        accessLevel: access.accessLevel === "view" ? "view" : "edit",
+                                    }))}
                                     roles={roles}
+                                    warehouses={warehouses}
+                                    onSave={({ userId, role, warehouseAccesses }) => updateUserAccessSettings(userId, { role, warehouseAccesses })}
                                     trigger={
                                         <Button variant="ghost" size="sm">
-                                            Edit Role
+                                            Edit Access
                                         </Button>
                                     }
                                 />
@@ -217,7 +261,7 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
                 )
             },
         },
-    ], [canEdit, canDelete, roles, handleDelete])
+    ], [canEdit, canDelete, roles, warehouses, handleDelete])
 
     const table = useReactTable({
         data,
@@ -303,7 +347,7 @@ export function UserList({ users: initialUsers, roles }: UserListProps) {
             {canCreate && (
                 <div className="flex justify-end gap-2">
                     <ImportUsersDialog />
-                    <AddUserDialog roles={roles} />
+                    <AddUserDialog roles={roles} warehouses={warehouses} />
                 </div>
             )}
 

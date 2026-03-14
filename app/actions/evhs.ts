@@ -8,13 +8,23 @@ import {
     evhsVoucherItems,
     evhsGiRecords,
     evhsGiItems,
+    evhsMasterPrices,
+    stockLevels,
     stockTransfers, 
     warehouses,
+    zmc9StockSap,
 } from "@/db/schema"
-import { eq, desc, sql } from "drizzle-orm"
+import { eq, desc, sql, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { getAuthenticatedSession } from "@/lib/rbac"
+import { getAuthenticatedSession, getPermissionsByRoleName } from "@/lib/rbac"
+import {
+    assertCurrentUserHasWarehouseAccess,
+    assertCurrentUserHasWarehouseAccessForAll,
+    getAllowedWarehouseIdsForCurrentUser,
+    getWarehouseAccessContextForUserId,
+} from "@/lib/warehouse-access"
+import { findCkMasterPriceSuggestion, type CkMasterPriceReference } from "@/lib/ck-master-price"
 import { recordStockMovement } from "@/app/actions/stock-movement"
 import { syncStockTransferReceipt } from "@/app/actions/stock-transfer"
 
@@ -38,6 +48,7 @@ function normalizeSerialNumber(serialNumber?: string | null) {
 type EvhsMatchedGiItem = {
     materialNumber: string
     qty?: number | string | null
+    price?: number | string | null
 }
 
 type EvhsMatchedGiRecord = {
@@ -55,6 +66,7 @@ type EvhsMatchedVoucherItem = {
     qty: number | string | null
     serialNumber: string | null
     materialNumberCk: string | null
+    unitPrice?: string | null
     pos: string | null
     unitId: string | null
 }
@@ -129,12 +141,80 @@ function parseSerialNumbers(serialNumbers: string[] | string | null | undefined)
     return []
 }
 
+type EvhsVoucherPricingProduct = {
+    id: number
+    materialNumber: string
+    materialNumberCk?: string | null
+}
+
+function normalizeEvhsPrice(value?: string | number | null) {
+    if (value == null || value === "") {
+        return null
+    }
+
+    const numericValue = typeof value === "number" ? value : Number(value)
+    return Number.isFinite(numericValue) ? numericValue : null
+}
+
+function getEvhsVoucherItemUnitPrice(
+    masterPrices: CkMasterPriceReference[],
+    warehouseId: number,
+    product: EvhsVoucherPricingProduct | undefined,
+    materialNumberCkOverride?: string | null,
+    existingUnitPrice?: string | number | null
+) {
+    const storedUnitPrice = normalizeEvhsPrice(existingUnitPrice)
+    if (storedUnitPrice != null) {
+        return storedUnitPrice
+    }
+
+    if (!product) {
+        return null
+    }
+
+    const suggestion = findCkMasterPriceSuggestion({
+        product: {
+            materialNumber: product.materialNumber,
+            materialNumberCk: materialNumberCkOverride || product.materialNumberCk,
+        },
+        warehouseId,
+        masterPrices,
+    })
+
+    return suggestion?.unitPrice ?? null
+}
+
+function hasEvhsWarehouseAccess(allowedWarehouseIds: number[] | null, warehouseId: number | null | undefined) {
+    if (!allowedWarehouseIds) {
+        return true
+    }
+
+    return typeof warehouseId === "number" && allowedWarehouseIds.includes(warehouseId)
+}
+
+function filterEvhsReceiptRowsByWarehouse<
+    T extends { transfer?: { toWarehouseId?: number | null } | null }
+>(rows: T[], allowedWarehouseIds: number[] | null) {
+    if (!allowedWarehouseIds) {
+        return rows
+    }
+
+    return rows.filter((row) => hasEvhsWarehouseAccess(allowedWarehouseIds, row.transfer?.toWarehouseId))
+}
+
 /**
  * Get all E-VHS Receipts
  */
 export async function getEvhsReceipts() {
     try {
-        return await db.query.evhsReceipts.findMany({
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
+        const receipts = await db.query.evhsReceipts.findMany({
             with: {
                 transfer: {
                     with: {
@@ -151,6 +231,8 @@ export async function getEvhsReceipts() {
             },
             orderBy: [desc(evhsReceipts.createdAt)],
         })
+
+        return filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
     } catch (error) {
         console.error("Error fetching E-VHS receipts:", error)
         return []
@@ -163,8 +245,15 @@ export async function getEvhsReceipts() {
  */
 export async function getPendingEvhsTransfers() {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
         // Only show transfers into customer-linked warehouses that have not been confirmed yet.
-        return await db.query.stockTransfers.findMany({
+        const transfers = await db.query.stockTransfers.findMany({
             where: (transfers, { exists, isNotNull, and, eq, not }) => and(
                 exists(
                     db.select()
@@ -198,6 +287,8 @@ export async function getPendingEvhsTransfers() {
             },
             orderBy: [desc(stockTransfers.createdAt)],
         })
+
+        return transfers.filter((transfer) => hasEvhsWarehouseAccess(allowedWarehouseIds, transfer.toWarehouseId))
     } catch (error) {
         console.error("Error fetching pending E-VHS transfers:", error)
         return []
@@ -211,6 +302,19 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
     try {
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
+        const transfer = await db.query.stockTransfers.findFirst({
+            where: eq(stockTransfers.id, data.transferId),
+            columns: {
+                id: true,
+                toWarehouseId: true,
+            },
+        })
+
+        if (!transfer?.toWarehouseId) {
+            return { success: false, error: "Transfer tujuan tidak ditemukan" }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(transfer.toWarehouseId, "edit")
 
         return await db.transaction(async (tx) => {
             const existingReceipt = await tx.query.evhsReceipts.findFirst({
@@ -295,6 +399,7 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
     try {
         const session = await getAuthenticatedSession('evhs', 'create')
         const userId = session.user.id
+        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
 
         // Generate VHS Number: VHS/CP/CK/YYYYMMDD-Random
         const now = new Date()
@@ -349,6 +454,42 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                         id: true,
                         category: true,
                         materialNumber: true,
+                        materialNumberCk: true,
+                    },
+                })
+                : []
+            const requestedMaterialNumbers = Array.from(new Set(
+                requestedProducts
+                    .map((product) => product.materialNumber)
+                    .filter(Boolean)
+            ))
+            const requestedMaterialNumbersCk = Array.from(new Set(
+                [
+                    ...requestedProducts.map((product) => product.materialNumberCk),
+                    ...data.items.map((item) => item.materialNumberCk),
+                ]
+                    .filter((value): value is string => Boolean(value?.trim()))
+            ))
+            const masterPriceFilters = []
+
+            if (requestedMaterialNumbers.length > 0) {
+                masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCp, requestedMaterialNumbers))
+            }
+
+            if (requestedMaterialNumbersCk.length > 0) {
+                masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCk, requestedMaterialNumbersCk))
+            }
+
+            const relevantMasterPrices = masterPriceFilters.length > 0
+                ? await tx.query.evhsMasterPrices.findMany({
+                    where: masterPriceFilters.length === 1
+                        ? masterPriceFilters[0]
+                        : or(...masterPriceFilters),
+                    columns: {
+                        warehouseId: true,
+                        materialNumberCp: true,
+                        materialNumberCk: true,
+                        price: true,
                     },
                 })
                 : []
@@ -358,13 +499,14 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
             const legacyStockByProduct = new Map<number, number>(
                 legacyStockLevels.map((stockLevel) => [stockLevel.productId, Number(stockLevel.totalStock || 0)])
             )
-            const productById = new Map<number, { id: number; category: string; materialNumber: string }>(
+            const productById = new Map<number, { id: number; category: string; materialNumber: string; materialNumberCk?: string | null }>(
                 requestedProducts.map((product) => [
                     product.id,
                     {
                         id: product.id,
                         category: product.category,
                         materialNumber: product.materialNumber,
+                        materialNumberCk: product.materialNumberCk,
                     }
                 ])
             )
@@ -489,11 +631,18 @@ export async function createEvhsVoucher(data: z.infer<typeof _voucherSchema>) {
                     : Math.max(receivedQty - usedQtyBeforeInsert, 0)
                 const alreadyInsertedQty = insertedQtyByProduct.get(item.productId) || 0
                 const remainingAfterInsert = Math.max(availableQtyBeforeInsert - alreadyInsertedQty - item.qty, 0)
+                const unitPrice = getEvhsVoucherItemUnitPrice(
+                    relevantMasterPrices,
+                    data.warehouseId,
+                    productById.get(item.productId),
+                    item.materialNumberCk,
+                )
 
                 await tx.insert(evhsVoucherItems).values({
                     voucherId: voucher.id,
                     productId: item.productId,
                     materialNumberCk: item.materialNumberCk,
+                    unitPrice: unitPrice != null ? unitPrice.toString() : null,
                     qty: item.qty,
                     serialNumber: normalizeSerialNumber(item.serialNumber) || null,
                     stockBalance: item.stockBalance ?? remainingAfterInsert,
@@ -538,6 +687,18 @@ const _editUsageSchema = z.object({
 export async function updateEvhsUsage(data: z.infer<typeof _editUsageSchema>) {
     try {
         await getAuthenticatedSession('evhs', 'edit')
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, data.voucherId),
+            columns: {
+                warehouseId: true,
+            },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
         
         return await db.transaction(async (tx) => {
             if (data.woNo !== undefined) {
@@ -576,6 +737,18 @@ const _editVoucherSchema = z.object({
 export async function updateEvhsVoucher(data: z.infer<typeof _editVoucherSchema>) {
     try {
         await getAuthenticatedSession('evhs', 'edit')
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, data.id),
+            columns: {
+                warehouseId: true,
+            },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
         
         await db.update(evhsVouchers)
             .set({
@@ -601,6 +774,7 @@ export async function deleteEvhsVoucher(voucherId: number) {
     try {
         const session = await getAuthenticatedSession('evhs', 'delete')
         const userId = session.user.id
+        const warehouseAccessContext = await getWarehouseAccessContextForUserId(userId, "edit")
         
         return await db.transaction(async (tx) => {
             const voucher = await tx.query.evhsVouchers.findFirst({
@@ -613,6 +787,22 @@ export async function deleteEvhsVoucher(voucherId: number) {
 
             if (!voucher) {
                 return { success: false, error: "Voucher tidak ditemukan" }
+            }
+
+            if (!warehouseAccessContext.isGlobal) {
+                if (!warehouseAccessContext.warehouseIds.includes(voucher.warehouseId)) {
+                    return {
+                        success: false,
+                        error: "Anda tidak memiliki akses edit ke warehouse voucher ini.",
+                    }
+                }
+
+                if (!voucher.issuedBy || voucher.issuedBy !== userId) {
+                    return {
+                        success: false,
+                        error: "Voucher hanya bisa dihapus oleh pembuat voucher atau admin pusat.",
+                    }
+                }
             }
 
             for (const item of voucher.items) {
@@ -649,7 +839,22 @@ export async function deleteEvhsVoucher(voucherId: number) {
 
 export async function getEvhsVouchers() {
     try {
-        return await db.query.evhsVouchers.findMany({
+        const session = await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+        const warehouseEditContext = await getWarehouseAccessContextForUserId(session.user.id, "edit")
+        const rolePermissions = warehouseEditContext.isGlobal || !warehouseEditContext.role
+            ? []
+            : await getPermissionsByRoleName(warehouseEditContext.role)
+        const canDeleteByRole = warehouseEditContext.isGlobal || rolePermissions.includes("evhs:delete")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
+        const vouchers = await db.query.evhsVouchers.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: {
                 items: {
                     with: {
@@ -661,6 +866,91 @@ export async function getEvhsVouchers() {
             },
             orderBy: [desc(evhsVouchers.createdAt)],
         })
+        const relevantMaterialNumbers = Array.from(new Set(
+            vouchers
+                .flatMap((voucher) => voucher.items)
+                .map((item) => item.product?.materialNumber)
+                .filter(Boolean)
+        ))
+        const relevantMaterialNumbersCk = Array.from(new Set(
+            vouchers
+                .flatMap((voucher) => voucher.items)
+                .map((item) => item.materialNumberCk || item.product?.materialNumberCk)
+                .filter((value): value is string => Boolean(value?.trim()))
+        ))
+        const masterPriceFilters = []
+
+        if (relevantMaterialNumbers.length > 0) {
+            masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCp, relevantMaterialNumbers))
+        }
+
+        if (relevantMaterialNumbersCk.length > 0) {
+            masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCk, relevantMaterialNumbersCk))
+        }
+
+        const relevantMasterPrices = masterPriceFilters.length > 0
+            ? await db.query.evhsMasterPrices.findMany({
+                where: masterPriceFilters.length === 1
+                    ? masterPriceFilters[0]
+                    : or(...masterPriceFilters),
+                columns: {
+                    warehouseId: true,
+                    materialNumberCp: true,
+                    materialNumberCk: true,
+                    price: true,
+                },
+            })
+            : []
+
+        return vouchers.map((voucher) => ({
+            ...voucher,
+            items: voucher.items.map((item) => {
+                const unitPrice = getEvhsVoucherItemUnitPrice(
+                    relevantMasterPrices,
+                    voucher.warehouseId,
+                    item.product
+                        ? {
+                            id: item.productId,
+                            materialNumber: item.product.materialNumber,
+                            materialNumberCk: item.product.materialNumberCk,
+                        }
+                        : undefined,
+                    item.materialNumberCk,
+                    item.unitPrice,
+                )
+                const lineTotal = unitPrice != null ? unitPrice * Number(item.qty || 0) : null
+
+                return {
+                    ...item,
+                    unitPrice: unitPrice != null ? unitPrice.toFixed(2) : null,
+                    lineTotal,
+                }
+            }),
+            totalAmount: voucher.items.reduce((total, item) => {
+                const unitPrice = getEvhsVoucherItemUnitPrice(
+                    relevantMasterPrices,
+                    voucher.warehouseId,
+                    item.product
+                        ? {
+                            id: item.productId,
+                            materialNumber: item.product.materialNumber,
+                            materialNumberCk: item.product.materialNumberCk,
+                        }
+                        : undefined,
+                    item.materialNumberCk,
+                    item.unitPrice,
+                )
+
+                return total + ((unitPrice ?? 0) * Number(item.qty || 0))
+            }, 0),
+            canDelete: canDeleteByRole && (
+                warehouseEditContext.isGlobal ||
+                (
+                    warehouseEditContext.warehouseIds.includes(voucher.warehouseId) &&
+                    voucher.issuedBy === session.user.id
+                )
+            ),
+        }))
     } catch (error) {
         console.error("Error fetching Vouchers:", error)
         return []
@@ -672,7 +962,17 @@ export async function getEvhsVouchers() {
  */
 export async function getGiRecords() {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
         return await db.query.evhsGiRecords.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: {
                 items: true,
                 warehouse: true
@@ -694,6 +994,7 @@ export async function createGiRecord(data: {
 }) {
     try {
         await getAuthenticatedSession('evhs', 'create')
+        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
 
         return await db.transaction(async (tx) => {
             const [record] = await tx.insert(evhsGiRecords).values({
@@ -739,6 +1040,10 @@ export async function importEvhsGiRecords(records: z.infer<typeof giImportRecord
     try {
         await getAuthenticatedSession('evhs', 'create')
         const parsedRecords = z.array(giImportRecordSchema).parse(records)
+        await assertCurrentUserHasWarehouseAccessForAll(
+            parsedRecords.map((record) => record.warehouseId),
+            "edit"
+        )
 
         return await db.transaction(async (tx) => {
             const errors: { record: number; reference: string; error: string }[] = []
@@ -811,6 +1116,18 @@ export async function updateMrko(data: {
 }) {
     try {
         await getAuthenticatedSession('evhs', 'edit')
+        const voucher = await db.query.evhsVouchers.findFirst({
+            where: eq(evhsVouchers.id, data.voucherId),
+            columns: {
+                warehouseId: true,
+            },
+        })
+
+        if (!voucher) {
+            return { success: false, error: "Voucher tidak ditemukan" }
+        }
+
+        await assertCurrentUserHasWarehouseAccess(voucher.warehouseId, "edit")
         
         await db.update(evhsVouchers)
             .set({
@@ -837,7 +1154,17 @@ export async function updateMrko(data: {
  */
 export async function getEvhsMrkoData() {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return { vouchers: [], giRecords: [], sapRevenue: [] }
+        }
+
         const vouchers = await db.query.evhsVouchers.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: {
                 items: { with: { product: true } },
                 warehouse: true
@@ -846,8 +1173,46 @@ export async function getEvhsMrkoData() {
         })
 
         const giRecords = await db.query.evhsGiRecords.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: { items: true }
         })
+        const relevantMaterialNumbers = Array.from(new Set(
+            vouchers
+                .flatMap((voucher) => voucher.items)
+                .map((item) => item.product?.materialNumber)
+                .filter(Boolean)
+        ))
+        const relevantMaterialNumbersCk = Array.from(new Set(
+            vouchers
+                .flatMap((voucher) => voucher.items)
+                .map((item) => item.materialNumberCk || item.product?.materialNumberCk)
+                .filter((value): value is string => Boolean(value?.trim()))
+        ))
+        const masterPriceFilters = []
+
+        if (relevantMaterialNumbers.length > 0) {
+            masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCp, relevantMaterialNumbers))
+        }
+
+        if (relevantMaterialNumbersCk.length > 0) {
+            masterPriceFilters.push(inArray(evhsMasterPrices.materialNumberCk, relevantMaterialNumbersCk))
+        }
+
+        const relevantMasterPrices = masterPriceFilters.length > 0
+            ? await db.query.evhsMasterPrices.findMany({
+                where: masterPriceFilters.length === 1
+                    ? masterPriceFilters[0]
+                    : or(...masterPriceFilters),
+                columns: {
+                    warehouseId: true,
+                    materialNumberCp: true,
+                    materialNumberCk: true,
+                    price: true,
+                },
+            })
+            : []
 
         // Fetch SAP Revenue to sync invoices
         const sapRevenue = await db.query.salesRevenueSap.findMany({
@@ -855,7 +1220,48 @@ export async function getEvhsMrkoData() {
         })
 
         return {
-            vouchers,
+            vouchers: vouchers.map((voucher) => ({
+                ...voucher,
+                items: voucher.items.map((item) => {
+                    const unitPrice = getEvhsVoucherItemUnitPrice(
+                        relevantMasterPrices,
+                        voucher.warehouseId,
+                        item.product
+                            ? {
+                                id: item.productId,
+                                materialNumber: item.product.materialNumber,
+                                materialNumberCk: item.product.materialNumberCk,
+                            }
+                            : undefined,
+                        item.materialNumberCk,
+                        item.unitPrice,
+                    )
+                    const lineTotal = unitPrice != null ? unitPrice * Number(item.qty || 0) : null
+
+                    return {
+                        ...item,
+                        unitPrice: unitPrice != null ? unitPrice.toFixed(2) : null,
+                        lineTotal,
+                    }
+                }),
+                totalAmount: voucher.items.reduce((total, item) => {
+                    const unitPrice = getEvhsVoucherItemUnitPrice(
+                        relevantMasterPrices,
+                        voucher.warehouseId,
+                        item.product
+                            ? {
+                                id: item.productId,
+                                materialNumber: item.product.materialNumber,
+                                materialNumberCk: item.product.materialNumberCk,
+                            }
+                            : undefined,
+                        item.materialNumberCk,
+                        item.unitPrice,
+                    )
+
+                    return total + ((unitPrice ?? 0) * Number(item.qty || 0))
+                }, 0),
+            })),
             giRecords,
             sapRevenue
         }
@@ -870,6 +1276,13 @@ export async function getEvhsMrkoData() {
  */
 export async function getEvhsTrackingData() {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
         const receipts = await db.query.evhsReceipts.findMany({
             with: {
                 transfer: {
@@ -883,18 +1296,26 @@ export async function getEvhsTrackingData() {
         })
         
         const vouchers = await db.query.evhsVouchers.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: {
                 items: true
             }
         })
         
         const giRecords = await db.query.evhsGiRecords.findMany({
+            where: allowedWarehouseIds
+                ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
+                : undefined,
             with: { items: true }
         })
+
+        const filteredReceipts = filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
         
         const trackingRows: EvhsTrackingRow[] = []
         
-        for (const receipt of receipts) {
+        for (const receipt of filteredReceipts) {
             for (const item of receipt.items) {
                 const sns = Array.isArray(item.serialNumbers) 
                     ? item.serialNumbers.filter(Boolean)
@@ -1032,10 +1453,29 @@ type EvhsAllVhsStockRow = {
     materialNumberCk?: string | null
     materialDescription?: string | null
     category: string
+    sapStock: number
     totalStock: number
     usedQty: number
     availableQty: number
     detailRows: EvhsAllVhsStockDetailRow[]
+}
+
+function normalizeEvhsMaterialKey(value?: string | null) {
+    return (value || "").trim().toUpperCase()
+}
+
+function normalizeEvhsSlocKey(value?: string | null) {
+    return (value || "").trim()
+}
+
+function normalizeEvhsSapSlocKey(value?: string | null) {
+    const normalized = normalizeEvhsSlocKey(value)
+    if (!normalized) return ""
+    return /^\d+$/.test(normalized) ? normalized.padStart(4, "0") : normalized
+}
+
+function normalizeEvhsWarehouseDescriptionKey(value?: string | null) {
+    return (value || "").trim().toUpperCase()
 }
 
 function isCkVhsWarehouse(warehouse?: { sloc?: string | null; description?: string | null; type?: string | null } | null) {
@@ -1049,8 +1489,18 @@ function isCkVhsWarehouse(warehouse?: { sloc?: string | null; description?: stri
 
 export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return []
+        }
+
         const [stockRows, trackingRows, vouchers, giRecords] = await Promise.all([
             db.query.stockLevels.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(stockLevels.warehouseId, allowedWarehouseIds)
+                    : undefined,
                 with: {
                     product: true,
                     warehouse: true,
@@ -1058,6 +1508,9 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             }),
             getEvhsTrackingData(),
             db.query.evhsVouchers.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
+                    : undefined,
                 with: {
                     items: {
                         with: {
@@ -1069,6 +1522,9 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                 orderBy: [desc(evhsVouchers.createdAt)],
             }),
             db.query.evhsGiRecords.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
+                    : undefined,
                 with: {
                     items: true,
                 },
@@ -1078,10 +1534,67 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
         const filteredStocks = stockRows.filter((stockRow) =>
             stockRow.totalStock > 0 && isCkVhsWarehouse(stockRow.warehouse)
         )
+        const relevantSlocs = Array.from(new Set(
+            filteredStocks
+                .map((stockRow) => normalizeEvhsSapSlocKey(stockRow.warehouse?.sloc))
+                .filter(Boolean)
+        ))
+        const relevantWarehouseDescriptions = Array.from(new Set(
+            filteredStocks
+                .map((stockRow) => normalizeEvhsWarehouseDescriptionKey(stockRow.warehouse?.description))
+                .filter(Boolean)
+        ))
+        const relevantMaterialNumbers = new Set(
+            filteredStocks
+                .map((stockRow) => normalizeEvhsMaterialKey(stockRow.product?.materialNumber))
+                .filter(Boolean)
+        )
+        const sapStockRows = (relevantSlocs.length > 0 || relevantWarehouseDescriptions.length > 0)
+            ? await db.select({
+                materialNo: zmc9StockSap.materialNo,
+                storLoc: zmc9StockSap.storLoc,
+                totalStock: zmc9StockSap.totalStock,
+                storLocDesc: zmc9StockSap.storLocDesc,
+            })
+                .from(zmc9StockSap)
+                .where(
+                    relevantSlocs.length > 0 && relevantWarehouseDescriptions.length > 0
+                        ? or(
+                            inArray(zmc9StockSap.storLoc, relevantSlocs),
+                            inArray(zmc9StockSap.storLocDesc, relevantWarehouseDescriptions)
+                        )
+                        : relevantSlocs.length > 0
+                            ? inArray(zmc9StockSap.storLoc, relevantSlocs)
+                            : inArray(zmc9StockSap.storLocDesc, relevantWarehouseDescriptions)
+                )
+            : []
+        const sapStockByWarehouseDescKey = new Map<string, number>()
+        const sapStockBySlocKey = new Map<string, number>()
 
         const usedQtyByKey = new Map<string, number>()
         const detailRowsByKey = new Map<string, EvhsAllVhsStockDetailRow[]>()
         const trackedVoucherItemIds = new Set<number>()
+
+        for (const sapStockRow of sapStockRows) {
+            const materialKey = normalizeEvhsMaterialKey(sapStockRow.materialNo)
+            if (!relevantMaterialNumbers.has(materialKey)) {
+                continue
+            }
+
+            const warehouseDescKey = normalizeEvhsWarehouseDescriptionKey(sapStockRow.storLocDesc)
+            if (warehouseDescKey) {
+                const descSapKey = `${materialKey}:${warehouseDescKey}`
+                const currentWarehouseDescStock = sapStockByWarehouseDescKey.get(descSapKey) || 0
+                sapStockByWarehouseDescKey.set(descSapKey, currentWarehouseDescStock + Number(sapStockRow.totalStock || 0))
+            }
+
+            const slocKey = normalizeEvhsSapSlocKey(sapStockRow.storLoc)
+            if (slocKey) {
+                const slocSapKey = `${materialKey}:${slocKey}`
+                const currentSlocStock = sapStockBySlocKey.get(slocSapKey) || 0
+                sapStockBySlocKey.set(slocSapKey, currentSlocStock + Number(sapStockRow.totalStock || 0))
+            }
+        }
 
         for (const voucher of vouchers) {
             for (const voucherItem of voucher.items) {
@@ -1164,6 +1677,16 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             .map((stockRow) => {
                 const warehouseKey = `${stockRow.warehouseId}:${stockRow.productId}`
                 const usedQty = usedQtyByKey.get(warehouseKey) || 0
+                const materialKey = normalizeEvhsMaterialKey(stockRow.product?.materialNumber)
+                const warehouseDescKey = normalizeEvhsWarehouseDescriptionKey(stockRow.warehouse?.description)
+                const slocKey = normalizeEvhsSapSlocKey(stockRow.warehouse?.sloc)
+                const sapStock = (warehouseDescKey
+                    ? sapStockByWarehouseDescKey.get(`${materialKey}:${warehouseDescKey}`)
+                    : undefined
+                ) ?? (slocKey
+                    ? sapStockBySlocKey.get(`${materialKey}:${slocKey}`)
+                    : undefined
+                ) ?? 0
                 const detailRows = (detailRowsByKey.get(warehouseKey) || [])
                     .sort((left, right) => {
                         const leftDate = left.installDate || left.dateIn || left.date
@@ -1185,6 +1708,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                     materialNumberCk: stockRow.product?.materialNumberCk,
                     materialDescription: stockRow.product?.materialDescription,
                     category: stockRow.product?.category || "-",
+                    sapStock,
                     totalStock: stockRow.totalStock,
                     usedQty,
                     availableQty: Math.max(stockRow.totalStock - usedQty, 0),
@@ -1240,6 +1764,36 @@ function formatEvhsWarehouseLabel(warehouse?: { sloc: string; description?: stri
 
 export async function getEvhsControlTowerData() {
     try {
+        await getAuthenticatedSession('evhs', 'view')
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+            return {
+                summary: {
+                    receivedQty: 0,
+                    reservedQty: 0,
+                    usedQty: 0,
+                    reversedQty: 0,
+                    remainingQty: 0,
+                },
+                ledgerRows: [],
+                reconciliationByWarehouse: [],
+                aging: {
+                    idleStockQty: 0,
+                    voucherPendingGiQty: 0,
+                    giPendingMrkoQty: 0,
+                    mrkoPendingInvoiceQty: 0,
+                    buckets: {
+                        pendingGi: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                        giPendingMrko: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                        mrkoPendingInvoice: { "0-3 hari": 0, "4-7 hari": 0, ">7 hari": 0 },
+                    },
+                },
+                exceptionCenter: [],
+                auditTrail: [],
+            }
+        }
+
         const [receipts, vouchers, giRecords] = await Promise.all([
             db.query.evhsReceipts.findMany({
                 with: {
@@ -1258,6 +1812,9 @@ export async function getEvhsControlTowerData() {
                 orderBy: [desc(evhsReceipts.receivedDate)],
             }),
             db.query.evhsVouchers.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(evhsVouchers.warehouseId, allowedWarehouseIds)
+                    : undefined,
                 with: {
                     items: {
                         with: {
@@ -1270,6 +1827,9 @@ export async function getEvhsControlTowerData() {
                 orderBy: [desc(evhsVouchers.createdAt)],
             }),
             db.query.evhsGiRecords.findMany({
+                where: allowedWarehouseIds
+                    ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
+                    : undefined,
                 with: {
                     items: true,
                     warehouse: true,
@@ -1277,6 +1837,7 @@ export async function getEvhsControlTowerData() {
                 orderBy: [desc(evhsGiRecords.createdAt)],
             }),
         ])
+        const filteredReceipts = filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
 
         const duplicateSerialMap = new Map<string, {
             serialNumber: string
@@ -1300,7 +1861,7 @@ export async function getEvhsControlTowerData() {
             confirmedBy: string
         }> = []
 
-        for (const receipt of receipts) {
+        for (const receipt of filteredReceipts) {
             const siteLabel = formatEvhsWarehouseLabel(receipt.transfer?.toWarehouse)
             const reference = receipt.doChitraNo || receipt.transfer?.referenceNumber || `Receipt ${receipt.id}`
 
@@ -1426,7 +1987,7 @@ export async function getEvhsControlTowerData() {
         }>()
 
         const warehouseById = new Map<number, { sloc: string; description?: string | null }>()
-        for (const receipt of receipts) {
+        for (const receipt of filteredReceipts) {
             if (receipt.transfer?.toWarehouse?.id) {
                 warehouseById.set(receipt.transfer.toWarehouse.id, receipt.transfer.toWarehouse)
             }
@@ -1644,7 +2205,7 @@ export async function getEvhsControlTowerData() {
         })
 
         const auditTrail = [
-            ...receipts.map((receipt) => ({
+            ...filteredReceipts.map((receipt) => ({
                 id: `receipt-${receipt.id}`,
                 timestamp: receipt.receivedDate,
                 type: "Receipt Confirmed",

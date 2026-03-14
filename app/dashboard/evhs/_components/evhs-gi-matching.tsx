@@ -45,6 +45,7 @@ type VoucherItem = {
     qty: number
     materialNumberCk?: string | null
     serialNumber?: string | null
+    unitPrice?: string | number | null
     product?: {
         materialNumber?: string | null
         materialDescription?: string | null
@@ -410,7 +411,9 @@ export function EvhsGiMatching({ warehouses = [] }: { warehouses?: WarehouseOpti
                     ? matchedGi?.items?.find((item) => item.materialNumber === materialCk) || matchedGi?.items?.[0] || null
                     : matchedGi?.items?.[0] || null
 
-                const price = findMasterPrice(masterPrices, materialCp, materialCk, voucher.warehouseId)
+                const price = voucherItem?.unitPrice != null
+                    ? Number(voucherItem.unitPrice)
+                    : findMasterPrice(masterPrices, materialCp, materialCk, voucher.warehouseId)
                 const ckMasterPrice = findMasterPrice(masterPrices, undefined, giItem?.materialNumber, voucher.warehouseId)
                 const giLinePrice = giItem?.price != null ? Number(giItem.price) : null
                 const ckPrice = ckMasterPrice ?? giLinePrice
@@ -1125,12 +1128,12 @@ export function EvhsGiMatching({ warehouses = [] }: { warehouses?: WarehouseOpti
                             <TableHead className="border-r px-2">Serial Number</TableHead>
                             <TableHead className="border-r px-2">WO</TableHead>
                             <TableHead className="border-r px-2 text-center">Qty</TableHead>
-                            <TableHead className="border-r px-2 text-right bg-blue-50 font-bold text-blue-800">Price (Master)</TableHead>
+                            <TableHead className="border-r px-2 text-right bg-blue-50 font-bold text-blue-800">Price (Voucher CK)</TableHead>
                             <TableHead className="border-r px-2">Material Description</TableHead>
                             <TableHead className="border-r px-2 bg-amber-50">Material Number CK</TableHead>
                             <TableHead className="border-r px-2">WO</TableHead>
                             <TableHead className="border-r px-2 text-center">Qty</TableHead>
-                            <TableHead className="border-r px-2 text-right font-bold text-emerald-800">Price (Master)</TableHead>
+                            <TableHead className="border-r px-2 text-right font-bold text-emerald-800">Price (GI / Master CK)</TableHead>
                             <TableHead className="border-r px-2">No GI</TableHead>
                             <TableHead className="px-2 text-center">Matched / Unmatched</TableHead>
                         </TableRow>

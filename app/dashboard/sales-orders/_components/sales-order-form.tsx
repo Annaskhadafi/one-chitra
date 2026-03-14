@@ -39,8 +39,9 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Search, Package, Plus, Check, Save, FileDown, Trash2, HelpCircle, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
+import { Search, Package, Plus, Check, Save, Trash2, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
 import Link from "next/link"
+import { findCkDefaultMasterPriceSuggestion, getCkMasterPriceLabel, isCkCustomer, type CkMasterPriceReference } from "@/lib/ck-master-price"
 import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse } from "@/lib/types"
 import { QuickAddProductDialog } from "./quick-add-product-dialog"
@@ -59,6 +60,7 @@ interface SalesOrderFormProps {
     customers: Customer[]
     products: Product[]
     warehouses: Warehouse[]
+    ckMasterPrices: CkMasterPriceReference[]
     initialData?: {
         id: number
         invoiceNumber: string | null
@@ -95,7 +97,7 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
-export function SalesOrderForm({ customers, products, warehouses, initialData }: SalesOrderFormProps) {
+export function SalesOrderForm({ customers, products, warehouses, ckMasterPrices, initialData }: SalesOrderFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
 
@@ -168,16 +170,43 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
             return true
         })
     }, [products])
+    const productById = useMemo(
+        () => new Map(products.map((product) => [product.id, product])),
+        [products]
+    )
 
     const selectedCustomer = useMemo(
         () => customers.find(c => c.id === customerId),
         [customers, customerId]
+    )
+    const isSelectedCkCustomer = useMemo(
+        () => isCkCustomer(selectedCustomer),
+        [selectedCustomer]
     )
 
     const selectedWarehouse = useMemo(
         () => warehouses.find(w => w.id === warehouseId),
         [warehouses, warehouseId]
     )
+    const ckPriceSuggestionLabel = useMemo(
+        () => getCkMasterPriceLabel("default"),
+        []
+    )
+    const getSuggestedCkUnitPrice = useCallback((product: Product) => {
+        if (!isSelectedCkCustomer) {
+            return null
+        }
+
+        const suggestion = findCkDefaultMasterPriceSuggestion({
+            product: {
+                materialNumber: product.materialNumber,
+                materialNumberCk: product.materialNumberCk,
+            },
+            masterPrices: ckMasterPrices,
+        })
+
+        return suggestion?.unitPrice ?? null
+    }, [ckMasterPrices, isSelectedCkCustomer])
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -239,6 +268,8 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
 
     // Add product to order
     const addProduct = useCallback((product: Product) => {
+        const suggestedUnitPrice = getSuggestedCkUnitPrice(product) ?? 0
+
         // Check if already exists
         const existing = items.find(i => i.productId === product.id)
         if (existing) {
@@ -250,13 +281,48 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 quantity: 1,
-                unitPrice: 0,
+                unitPrice: suggestedUnitPrice,
                 discount: 0,
                 tax: 0,
             }])
         }
         setProductOpen(false)
-    }, [items])
+    }, [getSuggestedCkUnitPrice, items])
+
+    useEffect(() => {
+        if (!isSelectedCkCustomer || items.length === 0) {
+            return
+        }
+
+        setItems((previousItems) => {
+            let hasChanges = false
+
+            const nextItems = previousItems.map((item) => {
+                if (item.unitPrice > 0) {
+                    return item
+                }
+
+                const product = productById.get(item.productId)
+                if (!product) {
+                    return item
+                }
+
+                const suggestedUnitPrice = getSuggestedCkUnitPrice(product)
+                if (suggestedUnitPrice == null || suggestedUnitPrice <= 0) {
+                    return item
+                }
+
+                hasChanges = true
+
+                return {
+                    ...item,
+                    unitPrice: suggestedUnitPrice,
+                }
+            })
+
+            return hasChanges ? nextItems : previousItems
+        })
+    }, [getSuggestedCkUnitPrice, isSelectedCkCustomer, items.length, productById])
 
     const removeItem = (index: number) => {
         setItems(prev => prev.filter((_, i) => i !== index))
@@ -492,6 +558,11 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                            {isSelectedCkCustomer ? (
+                                <p className="text-xs text-emerald-700">
+                                    {ckPriceSuggestionLabel}: Unit Price akan otomatis diambil dari Master Price CK.
+                                </p>
+                            ) : null}
                         </div>
 
                         {/* Warehouse */}

@@ -2,9 +2,10 @@
 
 import { db } from "@/db"
 import { stockMovements } from "@/db/schema"
-import { desc, sql } from "drizzle-orm"
+import { desc, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { getAllowedWarehouseIdsForCurrentUser } from "@/lib/warehouse-access"
 
 export type StockMovementType =
     | "GR_SAP"
@@ -158,8 +159,16 @@ export async function recordStockMovement(
 }
 
 export async function getStockMovements() {
+    await getAuthenticatedSession("stock-movements", "view")
+    const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+        return []
+    }
+
     try {
         return await db.query.stockMovements.findMany({
+            where: allowedWarehouseIds ? inArray(stockMovements.warehouseId, allowedWarehouseIds) : undefined,
             with: {
                 product: true,
                 warehouse: true,
@@ -178,6 +187,7 @@ export async function getStockMovements() {
         await ensureStockMovementSourceColumn()
 
         return await db.query.stockMovements.findMany({
+            where: allowedWarehouseIds ? inArray(stockMovements.warehouseId, allowedWarehouseIds) : undefined,
             with: {
                 product: true,
                 warehouse: true,

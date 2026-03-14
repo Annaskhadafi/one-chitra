@@ -25,14 +25,20 @@ import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { Loader2, Plus } from "lucide-react"
 import { createUser } from "@/app/actions/users"
+import {
+    WarehouseAccessFieldset,
+    type WarehouseAccessSelection,
+    type WarehouseOption,
+} from "@/components/warehouse-access-fieldset"
 
 interface AddUserDialogProps {
     roles: { id: number; name: string }[]
+    warehouses: WarehouseOption[]
     defaultRole?: string
     trigger?: React.ReactNode
 }
 
-export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProps) {
+export function AddUserDialog({ roles, warehouses, defaultRole, trigger }: AddUserDialogProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const router = useRouter()
@@ -43,6 +49,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [role, setRole] = useState(defaultRole || "")
+    const [warehouseAccesses, setWarehouseAccesses] = useState<WarehouseAccessSelection[]>([])
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -59,7 +66,8 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
                 name,
                 email,
                 password,
-                role
+                role,
+                warehouseAccesses,
             })
 
             if (result.success) {
@@ -71,7 +79,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
             } else {
                 toast.error(result.error || "Failed to create user")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An unexpected error occurred")
         } finally {
             setIsLoading(false)
@@ -83,6 +91,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
         setEmail("")
         setPassword("")
         setRole(defaultRole || "")
+        setWarehouseAccesses([])
     }
 
     return (
@@ -95,7 +104,7 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-2xl">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>Add New User</DialogTitle>
@@ -159,6 +168,12 @@ export function AddUserDialog({ roles, defaultRole, trigger }: AddUserDialogProp
                                 </SelectContent>
                             </Select>
                         </div>
+                        <WarehouseAccessFieldset
+                            warehouses={warehouses}
+                            value={warehouseAccesses}
+                            onChange={setWarehouseAccesses}
+                            disabled={isLoading}
+                        />
                     </div>
                     <DialogFooter>
                         <Button type="submit" disabled={isLoading}>

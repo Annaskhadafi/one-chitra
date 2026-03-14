@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { getRoles, getRoleWithPermissions } from "@/app/actions/roles"
 import { getAllPermissions } from "@/app/actions/permissions"
+import { getWarehouses } from "@/app/actions/warehouse"
 import { RoleList } from "./_components/role-list"
 import { RoleDialog } from "./_components/role-dialog"
 import { SyncPermissionsButton } from "./_components/sync-button"
@@ -10,8 +11,11 @@ import type { RoleWithPermissions } from "@/lib/types"
 import { PermissionGuard } from "@/components/permission-guard"
 
 export default async function RolesPage() {
-    const roles = await getRoles()
-    const allPermissions = await getAllPermissions() // This also auto-syncs now, but button is good for manual trigger
+    const [roles, allPermissions, warehouses] = await Promise.all([
+        getRoles(),
+        getAllPermissions(),
+        getWarehouses(),
+    ]) // This also auto-syncs now, but button is good for manual trigger
 
     // Fetch detailed permissions for each role
     // In a real app with many roles, this might need optimization
@@ -48,6 +52,7 @@ export default async function RolesPage() {
                 <RoleList
                     roles={rolesWithPerms.filter((r): r is RoleWithPermissions => r !== null)}
                     allPermissions={allPermissions}
+                    warehouses={warehouses}
                 />
             </Suspense>
         </div>

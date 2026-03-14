@@ -14,6 +14,8 @@ type VoucherPreviewItem = {
     qty: number | string
     serialNumber?: string | null
     materialNumberCk?: string | null
+    unitPrice?: string | number | null
+    lineTotal?: number | null
     pos?: string | null
     unitId?: string | null
     product?: {
@@ -38,6 +40,7 @@ type VoucherPreviewData = {
         name?: string | null
     } | null
     items: VoucherPreviewItem[]
+    totalAmount?: number | null
 }
 
 interface EvhsVoucherPreviewProps {
@@ -48,6 +51,13 @@ interface EvhsVoucherPreviewProps {
 
 export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherPreviewProps) {
     if (!voucher) return null
+
+    const formatCurrency = (value?: number | string | null) => {
+        const numericValue = typeof value === "number" ? value : Number(value)
+        if (!Number.isFinite(numericValue)) return "-"
+
+        return numericValue.toLocaleString("id-ID", { minimumFractionDigits: 2 })
+    }
 
     const voucherCss = `
         .pdf-wrapper {
@@ -324,6 +334,8 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                         <th className="w-12 text-center">No</th>
                         <th>Material Number & Description</th>
                         <th className="w-24 text-center">Qty</th>
+                        <th className="w-32 text-right">Unit Price</th>
+                        <th className="w-36 text-right">Line Total</th>
                         <th>Serial Number (Tire)</th>
                         <th className="w-40 text-center">POS & Unit ID</th>
                     </tr>
@@ -340,6 +352,8 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                                 </div>
                             </td>
                             <td className="text-center font-bold">{item.qty}</td>
+                            <td className="text-right font-mono text-[8pt]">{formatCurrency(item.unitPrice)}</td>
+                            <td className="text-right font-mono text-[8pt] font-bold">{formatCurrency(item.lineTotal)}</td>
                             <td className="font-mono text-[8pt] text-center">{item.serialNumber || "-"}</td>
                             <td className="text-center">
                                 <div className="font-bold text-[8pt]">{item.pos || "-"}</div>
@@ -347,6 +361,11 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                             </td>
                         </tr>
                     ))}
+                    <tr>
+                        <td colSpan={4} className="text-right font-bold">Grand Total</td>
+                        <td className="text-right font-mono font-bold">{formatCurrency(voucher.totalAmount)}</td>
+                        <td colSpan={2}></td>
+                    </tr>
                 </tbody>
             </table>
 

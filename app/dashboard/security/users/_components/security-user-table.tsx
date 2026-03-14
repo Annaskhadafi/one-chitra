@@ -16,8 +16,8 @@ import { toast } from "sonner"
 import { UserPlus, Ban, CheckCircle, Trash2, Shield, Search, RefreshCw, KeyRound, Users, UserCheck, Upload, Pencil } from "lucide-react"
 import {
     createSecurityUser,
-    updateSecurityUserRole,
     updateSecurityUserProfile,
+    updateSecurityUserAccessSettings,
     banSecurityUser,
     unbanSecurityUser,
     deleteSecurityUser,
@@ -27,6 +27,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ImportUsersDialog } from "./import-users-dialog"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
+import { UserAccessDialog } from "@/components/user-access-dialog"
+import {
+    WarehouseAccessFieldset,
+    type WarehouseAccessSelection,
+    type WarehouseOption,
+} from "@/components/warehouse-access-fieldset"
 
 type UserRow = {
     id: string
@@ -41,6 +47,11 @@ type UserRow = {
     updatedAt: Date
     emailVerified: boolean
     image: string | null
+    warehouseAccesses?: Array<{
+        warehouseId: number
+        accessLevel: "view" | "edit" | string
+        warehouse?: WarehouseOption | null
+    }>
 }
 
 type RoleRow = { id: number; name: string; description: string | null }
@@ -48,9 +59,22 @@ type RoleRow = { id: number; name: string; description: string | null }
 interface SecurityUserTableProps {
     users: UserRow[]
     roles: RoleRow[]
+    warehouses: WarehouseOption[]
 }
 
-export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTableProps) {
+function getWarehouseAccessSummary(accesses?: UserRow["warehouseAccesses"]) {
+    if (!accesses || accesses.length === 0) {
+        return ["All Warehouses"]
+    }
+
+    return accesses.map((access) => (
+        access.warehouse?.description
+            ? `${access.warehouse.sloc} - ${access.warehouse.description} (${access.accessLevel === "view" ? "View" : "Edit"})`
+            : `${access.warehouse?.sloc || access.warehouseId} (${access.accessLevel === "view" ? "View" : "Edit"})`
+    ))
+}
+
+export function SecurityUserTable({ users: initialUsers, roles, warehouses }: SecurityUserTableProps) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
     const [search, setSearch] = useState("")
@@ -60,7 +84,6 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
     const [createOpen, setCreateOpen] = useState(false)
     const [importOpen, setImportOpen] = useState(false)
     const [banOpen, setBanOpen] = useState<{ user: UserRow } | null>(null)
-    const [roleOpen, setRoleOpen] = useState<{ user: UserRow } | null>(null)
     const [editOpen, setEditOpen] = useState<{ user: UserRow } | null>(null)
     const [deleteOpen, setDeleteOpen] = useState<{ user: UserRow } | null>(null)
     const [changePasswordOpen, setChangePasswordOpen] = useState<{ user: UserRow } | null>(null)
@@ -73,9 +96,9 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
         role: roles[0]?.name ?? "staff",
         department: "",
         jobTitle: "",
+        warehouseAccesses: [] as WarehouseAccessSelection[],
     })
     const [banReason, setBanReason] = useState("")
-    const [selectedRole, setSelectedRole] = useState("")
     const [editUserForm, setEditUserForm] = useState({ name: "", jobTitle: "", department: "" })
     const [newPassword, setNewPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
@@ -105,23 +128,11 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                 role: roles[0]?.name ?? "staff",
                 department: "",
                 jobTitle: "",
+                warehouseAccesses: [],
             })
             refresh()
         } else {
             toast.error(result.error ?? "Failed to create user")
-        }
-    }
-
-    // ── Change Role ────────────────────────────────────────────────────────────
-    async function handleRoleChange() {
-        if (!roleOpen) return
-        const result = await updateSecurityUserRole(roleOpen.user.id, selectedRole)
-        if (result.success) {
-            toast.success("Role updated")
-            setRoleOpen(null)
-            refresh()
-        } else {
-            toast.error(result.error ?? "Failed to update role")
         }
     }
 
@@ -299,6 +310,7 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                         <TableRow>
                             <TableHead>User</TableHead>
                             <TableHead>Role</TableHead>
+                            <TableHead>Warehouse Scope</TableHead>
                             <TableHead>Jabatan</TableHead>
                             <TableHead>Department</TableHead>
                             <TableHead>Status</TableHead>
@@ -309,7 +321,7 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                     <TableBody>
                         {filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                                     No users found.
                                 </TableCell>
                             </TableRow>
@@ -326,6 +338,15 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                                         <Badge variant="outline" className="capitalize">
                                             {u.role}
                                         </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex max-w-md flex-wrap gap-1">
+                                            {getWarehouseAccessSummary(u.warehouseAccesses).map((label) => (
+                                                <Badge key={label} variant={label === "All Warehouses" ? "secondary" : "outline"}>
+                                                    {label}
+                                                </Badge>
+                                            ))}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">{u.jobTitle ?? "-"}</TableCell>
                                     <TableCell className="text-sm text-muted-foreground">{u.department ?? "-"}</TableCell>
@@ -356,17 +377,27 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                                             >
                                                 <Pencil className="h-4 w-4 text-primary" />
                                             </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                title="Change role"
-                                                onClick={() => {
-                                                    setSelectedRole(u.role)
-                                                    setRoleOpen({ user: u })
-                                                }}
-                                            >
-                                                <Shield className="h-4 w-4" />
-                                            </Button>
+                                            <UserAccessDialog
+                                                userId={u.id}
+                                                currentRole={u.role}
+                                                currentWarehouseAccesses={(u.warehouseAccesses || []).map((access) => ({
+                                                    warehouseId: access.warehouseId,
+                                                    accessLevel: access.accessLevel === "view" ? "view" : "edit",
+                                                }))}
+                                                roles={roles}
+                                                warehouses={warehouses}
+                                                queryKey={["security-users"]}
+                                                onSave={({ userId, role, warehouseAccesses }) => updateSecurityUserAccessSettings(userId, { role, warehouseAccesses })}
+                                                trigger={
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        title="Edit role and warehouse access"
+                                                    >
+                                                        <Shield className="h-4 w-4" />
+                                                    </Button>
+                                                }
+                                            />
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -464,38 +495,17 @@ export function SecurityUserTable({ users: initialUsers, roles }: SecurityUserTa
                             <Label>Department</Label>
                             <Input value={newUser.department} onChange={(e) => setNewUser({ ...newUser, department: e.target.value })} placeholder="Contoh: Finance" />
                         </div>
+                        <WarehouseAccessFieldset
+                            warehouses={warehouses}
+                            value={newUser.warehouseAccesses}
+                            onChange={(warehouseAccesses) => setNewUser({ ...newUser, warehouseAccesses })}
+                        />
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
                         <Button onClick={handleCreate} disabled={!newUser.name || !newUser.email || !newUser.password}>
                             Create User
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* ── Change Role Dialog ──────────────────────────────────────────────── */}
-            <Dialog open={!!roleOpen} onOpenChange={(o) => !o && setRoleOpen(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Change Role</DialogTitle>
-                        <DialogDescription>Update role for <strong>{roleOpen?.user.email}</strong></DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Select value={selectedRole} onValueChange={setSelectedRole}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {roles.map((r) => (
-                                    <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setRoleOpen(null)}>Cancel</Button>
-                        <Button onClick={handleRoleChange} disabled={!selectedRole}>Save</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

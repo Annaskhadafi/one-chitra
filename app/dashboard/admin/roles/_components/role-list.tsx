@@ -19,13 +19,15 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { AddUserDialog } from "../../users/_components/add-user-dialog"
 
 import { PermissionGroup } from "./role-dialog"
+import { type WarehouseOption } from "@/components/warehouse-access-fieldset"
 
 interface RoleListProps {
     roles: RoleWithPermissions[]
     allPermissions: PermissionGroup
+    warehouses: WarehouseOption[]
 }
 
-export function RoleList({ roles, allPermissions }: RoleListProps) {
+export function RoleList({ roles, allPermissions, warehouses }: RoleListProps) {
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('roles', 'edit')
     const canDelete = hasResourcePermission('roles', 'delete')
@@ -66,6 +68,7 @@ export function RoleList({ roles, allPermissions }: RoleListProps) {
                                 <div className="flex justify-end gap-2">
                                     <AddUserDialog
                                         roles={roles.map(r => ({ id: r.id, name: r.name }))}
+                                        warehouses={warehouses}
                                         defaultRole={role.name}
                                         trigger={
                                             <Button variant="ghost" size="icon" title={`Add user to ${role.name}`}>

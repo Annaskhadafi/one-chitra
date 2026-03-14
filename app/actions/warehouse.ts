@@ -6,16 +6,23 @@ import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-
-
 import { warehouseSchema } from "@/lib/schemas"
+import { getAllowedWarehouseIdsForCurrentUser } from "@/lib/warehouse-access"
 import { getSetting } from "./settings"
 
 export async function getWarehouses() {
     const manualRate = await getSetting("manual_usd_rate")
     const rate = parseFloat(manualRate || "1")
+    const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+        return []
+    }
 
     const data = await db.query.warehouses.findMany({
+        where: allowedWarehouseIds
+            ? (warehouse, { inArray }) => inArray(warehouse.id, allowedWarehouseIds)
+            : undefined,
         with: {
             stocks: {
                 with: {
@@ -38,7 +45,7 @@ export async function getWarehouses() {
         })
 
         // Remove stocks to keep payload clean, we just need the totals
-        const { stocks, ...rest } = w
+        const { stocks: _stocks, ...rest } = w
         return {
             ...rest,
             totalStock,

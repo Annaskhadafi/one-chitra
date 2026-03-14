@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils"
 type MrkoVoucherItem = {
     qty?: number | null
     materialNumberCk?: string | null
+    unitPrice?: string | number | null
+    lineTotal?: number | null
     product?: {
         materialDescription?: string | null
     } | null
@@ -36,6 +38,7 @@ type MrkoVoucher = {
     sapInvoiceNo?: string | null
     mrkoStatus?: string | null
     items?: MrkoVoucherItem[]
+    totalAmount?: number | null
 }
 
 type MrkoGiItem = {
@@ -67,6 +70,11 @@ export function EvhsMrkoTable() {
         mrkoNo: "",
         sapInvoiceNo: ""
     })
+    const formatCurrency = (value?: number | string | null) => {
+        const numericValue = typeof value === "number" ? value : Number(value)
+        if (!Number.isFinite(numericValue)) return "-"
+        return numericValue.toLocaleString("id-ID", { minimumFractionDigits: 2 })
+    }
 
     const { data, isLoading } = useQuery<MrkoQueryData>({
         queryKey: ["evhs-mrko-data"],
@@ -117,7 +125,8 @@ export function EvhsMrkoTable() {
             ...voucher,
             item: voucherItem,
             matchStatus: status,
-            autoSapInvoice
+            autoSapInvoice,
+            masterUnitPrice: voucher.items?.length === 1 ? (voucherItem?.unitPrice != null ? Number(voucherItem.unitPrice) : null) : null,
         }
     }).filter(v => v.matchStatus === "MATCHED" || v.mrkoStatus === "SETTLED") // Show matched or already settled
 
@@ -165,7 +174,7 @@ export function EvhsMrkoTable() {
             </div>
 
             <div className="rounded-md border bg-card overflow-auto relative h-[600px] scrollbar-thin scrollbar-thumb-accent shadow-sm">
-                <Table className="relative w-full min-w-[1000px]">
+                <Table className="relative w-full min-w-[1240px]">
                     <TableHeader className="sticky top-0 bg-secondary shadow-sm z-10 whitespace-nowrap uppercase text-[10px] tracking-wider font-bold">
                         <TableRow>
                             <TableHead className="w-[180px] border-r">Voucher VHS</TableHead>
@@ -173,6 +182,8 @@ export function EvhsMrkoTable() {
                             <TableHead className="w-[150px] border-r">WO Number</TableHead>
                             <TableHead className="border-r">Material (CK)</TableHead>
                             <TableHead className="w-[60px] border-r text-center">Qty</TableHead>
+                            <TableHead className="w-[140px] border-r text-right bg-blue-50/50">Price Master CK</TableHead>
+                            <TableHead className="w-[160px] border-r text-right bg-emerald-50/50">Nilai Master CK</TableHead>
                             <TableHead className="w-[150px] border-r bg-blue-50/50">MRKO Number</TableHead>
                             <TableHead className="w-[180px] border-r bg-emerald-50/50">SAP Invoice No</TableHead>
                             <TableHead className="w-[120px] text-center">Status</TableHead>
@@ -182,7 +193,7 @@ export function EvhsMrkoTable() {
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center">
+                                <TableCell colSpan={11} className="h-24 text-center">
                                     <div className="flex items-center justify-center gap-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         <span>Memuat data tagihan...</span>
@@ -191,7 +202,7 @@ export function EvhsMrkoTable() {
                             </TableRow>
                         ) : filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground italic">
+                                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground italic">
                                     Tidak ada data yang siap untuk MRKO (Pastikan GI status MATCHED).
                                 </TableCell>
                             </TableRow>
@@ -206,6 +217,16 @@ export function EvhsMrkoTable() {
                                         <p className="text-[10px] text-slate-500 truncate max-w-[200px]">{v.item?.product?.materialDescription}</p>
                                     </TableCell>
                                     <TableCell className="border-r text-center font-bold">{v.item?.qty || 0}</TableCell>
+                                    <TableCell className="border-r bg-blue-50/20 text-right font-mono font-bold text-blue-700">
+                                        {v.masterUnitPrice != null
+                                            ? formatCurrency(v.masterUnitPrice)
+                                            : (v.items?.length || 0) > 1
+                                                ? `${v.items?.length || 0} items`
+                                                : "-"}
+                                    </TableCell>
+                                    <TableCell className="border-r bg-emerald-50/20 text-right font-mono font-bold text-emerald-700">
+                                        {formatCurrency(v.totalAmount)}
+                                    </TableCell>
                                     <TableCell className="border-r bg-blue-50/20">
                                         {editingId === v.id ? (
                                             <Input 

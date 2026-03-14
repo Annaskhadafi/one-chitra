@@ -218,6 +218,20 @@
       "when": 1773287624853,
       "tag": "0030_amusing_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1773455776684,
+      "tag": "0031_smart_banshee",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1773458326166,
+      "tag": "0032_huge_ultragirl",
+      "breakpoints": true
     }
   ]
 }

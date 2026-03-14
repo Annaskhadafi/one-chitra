@@ -1,11 +1,18 @@
 // Trigger recompile
 export { user, session, account, verification } from "./auth";
 import { relations } from "drizzle-orm";
+import { user } from "./auth";
 import { warehouses } from "./warehouses";
 import { stockLevels } from "./stock-levels";
+import { userWarehouseAccess } from "./user-warehouse-access";
 
 export const warehousesRelations = relations(warehouses, ({ many }) => ({
     stocks: many(stockLevels),
+    userAccesses: many(userWarehouseAccess),
+}));
+
+export const userRelations = relations(user, ({ many }) => ({
+    warehouseAccesses: many(userWarehouseAccess),
 }));
 export { settings } from "./settings";
 
@@ -15,6 +22,7 @@ export { roles } from "./roles";
 export { permissions } from "./permissions";
 export { rolePermissions } from "./role-permissions";
 export { warehouses } from "./warehouses";
+export { userWarehouseAccess, userWarehouseAccessRelations } from "./user-warehouse-access";
 export { products } from "./products";
 export { stockLevels, stockLevelsRelations } from "./stock-levels";
 export {
@@ -124,7 +132,6 @@ export {
 } from "./evhs";
 
 // Core Auth Table Relations
-import { user } from "./auth";
 import { salesDocuments } from "./sales-documents";
 import { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 

@@ -72,6 +72,7 @@ type EvhsAllVhsStockRow = {
     materialNumberCk?: string | null
     materialDescription?: string | null
     category: string
+    sapStock: number
     totalStock: number
     usedQty: number
     availableQty: number
@@ -103,6 +104,7 @@ type SortKey =
     | "category"
     | "sloc"
     | "warehouseDescription"
+    | "sapStock"
     | "totalStock"
     | "usedQty"
     | "availableQty"
@@ -110,7 +112,7 @@ type SortKey =
 
 type SortDirection = "asc" | "desc"
 
-const MAIN_TABLE_COLUMN_COUNT = 13
+const MAIN_TABLE_COLUMN_COUNT = 14
 
 function getWarehouseLabel(warehouse: { sloc: string; description?: string | null }) {
     return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
@@ -156,6 +158,9 @@ function sortRows(left: EvhsAllVhsStockRow, right: EvhsAllVhsStockRow, key: Sort
             break
         case "totalStock":
             result = compareNumber(left.totalStock, right.totalStock)
+            break
+        case "sapStock":
+            result = compareNumber(left.sapStock, right.sapStock)
             break
         case "usedQty":
             result = compareNumber(left.usedQty, right.usedQty)
@@ -542,6 +547,9 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                     <SortableHeader label="SLoc Desc" active={sortKey === "warehouseDescription"} direction={sortDirection} onClick={() => requestSort("warehouseDescription")} />
                                 </TableHead>
                                 <TableHead className="text-right">
+                                    <SortableHeader label="Stock SAP" active={sortKey === "sapStock"} direction={sortDirection} onClick={() => requestSort("sapStock")} className="justify-end" />
+                                </TableHead>
+                                <TableHead className="text-right">
                                     <SortableHeader label="Stock Local" active={sortKey === "totalStock"} direction={sortDirection} onClick={() => requestSort("totalStock")} className="justify-end" />
                                 </TableHead>
                                 <TableHead className="text-right">
@@ -619,6 +627,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                 </TableCell>
                                                 <TableCell>{row.warehouse.sloc}</TableCell>
                                                 <TableCell>{row.warehouse.description || "-"}</TableCell>
+                                                <TableCell className="text-right font-mono text-slate-700">{row.sapStock}</TableCell>
                                                 <TableCell className="text-right font-mono font-bold">{row.totalStock}</TableCell>
                                                 <TableCell className="text-right font-mono text-amber-700">{row.usedQty}</TableCell>
                                                 <TableCell className="text-right font-mono text-emerald-700">{row.availableQty}</TableCell>
