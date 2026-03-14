@@ -290,7 +290,6 @@ export async function getPredictionHistoricalInsights(filters: HistoricalInsight
                 )
             )
             .orderBy(desc(aiInventoryPredictions.createdAt))
-            .limit(500)
 
         const riskBuckets = { Safe: 0, Warning: 0, Critical: 0 }
         const productCounter = new Map<string, { count: number; name: string }>()
@@ -2620,4 +2619,3 @@ export async function getNotificationHistory(limit: number = 50) {
         };
     }
 }
-
