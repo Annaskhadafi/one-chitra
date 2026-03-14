@@ -45,6 +45,59 @@ interface MLReportData {
     customerInsights?: string;
 }
 
+const stripCodeFence = (value: string) => value
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim()
+
+export function extractRationaleJson(rationale: string): MLReportData | null {
+    const cleaned = stripCodeFence(rationale)
+
+    const directCandidates = [cleaned, rationale.trim()]
+    for (const candidate of directCandidates) {
+        if (!candidate) continue
+        try {
+            const parsed = JSON.parse(candidate)
+            if (parsed && typeof parsed === "object") return parsed as MLReportData
+        } catch {
+            // Continue to next strategy
+        }
+    }
+
+    const start = cleaned.indexOf("{")
+    const end = cleaned.lastIndexOf("}")
+    if (start >= 0 && end > start) {
+        const jsonLike = cleaned.slice(start, end + 1)
+        try {
+            const parsed = JSON.parse(jsonLike)
+            if (parsed && typeof parsed === "object") return parsed as MLReportData
+        } catch {
+            // ignore
+        }
+    }
+
+    return null
+}
+
+export function extractFallbackSections(rationale: string): Partial<MLReportData> {
+    const lines = rationale.split("\n").map(line => line.trim()).filter(Boolean)
+    const summary = lines[0] || "Analisis tersedia dalam format teks non-standar."
+    const recommendations = lines
+        .filter(line => line.startsWith("-") || line.startsWith("•"))
+        .slice(0, 3)
+        .map((line, idx) => ({
+            title: `Poin ${idx + 1}`,
+            detail: line.replace(/^[-•]\s*/, "")
+        }))
+
+    return {
+        summary,
+        status: "Warning",
+        metrics: [],
+        recommendations: recommendations.length > 0 ? recommendations : undefined
+    }
+}
+
 const IconMap: Record<string, any> = {
     Box,
     TrendingUp,
@@ -59,25 +112,9 @@ const IconMap: Record<string, any> = {
 }
 
 export function MLReportViewer({ rationale }: { rationale: string }) {
-    let data: MLReportData | null = null;
-    let isJson = false;
-
-    try {
-        if (rationale.trim().startsWith('{')) {
-            data = JSON.parse(rationale);
-            isJson = true;
-        }
-    } catch (e) {
-        console.error("Failed to parse ML rationale as JSON:", e);
-    }
-
-    if (!isJson || !data) {
-        return (
-            <div className="text-sm leading-relaxed whitespace-pre-wrap p-2 italic text-muted-foreground">
-                {rationale}
-            </div>
-        );
-    }
+    const parsedData = extractRationaleJson(rationale)
+    const data = parsedData || extractFallbackSections(rationale) as MLReportData
+    const hasFormatWarning = !parsedData
 
     const getStatusStyles = (status: string) => {
         switch (status) {
@@ -117,6 +154,12 @@ export function MLReportViewer({ rationale }: { rationale: string }) {
                     </p>
                 </div>
             </div>
+
+            {hasFormatWarning && (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
+                    Format AI response non-standar. Menampilkan ringkasan parsial dari teks.
+                </div>
+            )}
 
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
