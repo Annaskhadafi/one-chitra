@@ -22,6 +22,8 @@ const DEFAULT_ML_SETTINGS = {
     thinkingMode: false
 };
 
+const nonCancelledHistoryOrderCondition = sql`upper(trim(coalesce(${historyOrders.cancelled}, ''))) != 'X'`
+
 /**
  * Get ML settings from database with fallback to defaults
  * Requirements: 9.9
@@ -624,7 +626,8 @@ export async function generateMLPrediction(productCode: string, predictionType: 
         }).from(historyOrders)
             .where(and(
                 eq(historyOrders.materialNo, normalizedProductCode),
-                sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`
+                sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`,
+                nonCancelledHistoryOrderCondition
             ));
 
         // Group by month in JS for safer handling of string dates, and track customers
@@ -879,7 +882,8 @@ export async function generateMLCustomerRecommendation(customerCode: string) {
         }).from(historyOrders)
             .where(and(
                 eq(historyOrders.customer, customerCode),
-                sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`
+                sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`,
+                nonCancelledHistoryOrderCondition
             ))
             .groupBy(historyOrders.materialNo, historyOrders.materialDescription, historyOrders.materialGroup, historyOrders.sizeDimen)
             .orderBy(desc(sql`MAX(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'))`))
@@ -1050,7 +1054,8 @@ export async function getSalesHistory(materialNo: string) {
             .where(
                 and(
                     eq(historyOrders.materialNo, materialNo),
-                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${sixMonthsAgo}`
+                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${sixMonthsAgo}`,
+                    nonCancelledHistoryOrderCondition
                 )
             );
 

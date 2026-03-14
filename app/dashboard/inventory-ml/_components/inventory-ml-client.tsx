@@ -362,7 +362,15 @@ function ReplenishmentTab() {
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
                                             <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <span className="flex items-center gap-1.5 font-bold"><Box className="w-4 h-4" /> {item.productCode}</span>
+                                                <div className="min-w-0 text-left">
+                                                    <span className="flex items-center gap-1.5 font-bold">
+                                                        <Box className="w-4 h-4 shrink-0" />
+                                                        <span className="truncate">{item.productCode}</span>
+                                                    </span>
+                                                    <p className="pl-5 text-xs font-normal text-muted-foreground truncate">
+                                                        {item.productName || "Nama produk tidak tersedia"}
+                                                    </p>
+                                                </div>
                                                 <span className="text-primary font-bold">{item.recommendedStock} Pcs</span>
                                             </div>
                                         </AccordionTrigger>
@@ -413,7 +421,7 @@ function ReplenishmentTab() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-lg">
                             <Box className="w-5 h-5 text-primary" />
-                            Detail Analisis: {selectedDetail?.productCode}
+                            Detail Analisis: {selectedDetail?.productName || selectedDetail?.productCode}
                             <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
                                 {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
                             </span>
@@ -421,6 +429,7 @@ function ReplenishmentTab() {
                     </DialogHeader>
                     {selectedDetail && (
                         <div className="mt-2 text-left">
+                            <div className="text-sm text-muted-foreground mb-4 px-1">Material Number: {selectedDetail.productCode}</div>
                             <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-muted/50 border">
                                 <span className="text-sm font-medium text-muted-foreground">Stok Rekomendasi ML</span>
                                 <span className="text-2xl font-bold text-primary">{selectedDetail.recommendedStock} Pcs</span>
@@ -574,7 +583,12 @@ function SafetyStockTab() {
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
                                             <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <span className="font-bold">{item.productCode}</span>
+                                                <div className="min-w-0 text-left">
+                                                    <span className="font-bold truncate block">{item.productCode}</span>
+                                                    <p className="text-xs font-normal text-muted-foreground truncate">
+                                                        {item.productName || "Nama produk tidak tersedia"}
+                                                    </p>
+                                                </div>
                                                 <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded text-xs font-bold">
                                                     {item.recommendedStock} Pcs
                                                 </span>
@@ -627,7 +641,7 @@ function SafetyStockTab() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-lg">
                             <ShieldCheck className="w-5 h-5 text-indigo-500" />
-                            Detail Safety Stock: {selectedDetail?.productCode}
+                            Detail Safety Stock: {selectedDetail?.productName || selectedDetail?.productCode}
                             <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
                                 {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
                             </span>
@@ -635,6 +649,7 @@ function SafetyStockTab() {
                     </DialogHeader>
                     {selectedDetail && (
                         <div className="mt-2 text-left">
+                            <div className="text-sm text-muted-foreground mb-4 px-1">Material Number: {selectedDetail.productCode}</div>
                             <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-900/30">
                                 <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Safety Stock Optimal</span>
                                 <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedDetail.recommendedStock} Pcs</span>
@@ -903,17 +918,17 @@ export function InventoryMLClient() {
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <div className="w-full overflow-x-auto pb-1">
-                <TabsList className="w-max min-w-full justify-start gap-1">
-                    <TabsTrigger value="dashboard" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+            <div className="-mx-1 w-[calc(100%+0.5rem)] overflow-x-auto pb-2 pl-1 sm:mx-0 sm:w-full sm:pl-0 [scrollbar-width:thin]">
+                <TabsList className="inline-flex h-auto min-w-max justify-start gap-1 whitespace-nowrap">
+                    <TabsTrigger value="dashboard" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">
                         <LayoutDashboard className="h-4 w-4 mr-1.5 sm:mr-2" />
-                    Dashboard
+                        Dashboard
                     </TabsTrigger>
-                    <TabsTrigger value="replenishment" className="whitespace-nowrap px-3 text-xs sm:text-sm">Predictive Replenishment</TabsTrigger>
-                    <TabsTrigger value="safetystock" className="whitespace-nowrap px-3 text-xs sm:text-sm">Dynamic Safety Stock</TabsTrigger>
-                    <TabsTrigger value="recommendation" className="whitespace-nowrap px-3 text-xs sm:text-sm">Customer Recommendation</TabsTrigger>
+                    <TabsTrigger value="replenishment" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Predictive Replenishment</TabsTrigger>
+                    <TabsTrigger value="safetystock" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Dynamic Safety Stock</TabsTrigger>
+                    <TabsTrigger value="recommendation" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Customer Recommendation</TabsTrigger>
                     {hasSettingsAccess && (
-                        <TabsTrigger value="settings" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+                        <TabsTrigger value="settings" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">
                             <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
                             Settings
                         </TabsTrigger>

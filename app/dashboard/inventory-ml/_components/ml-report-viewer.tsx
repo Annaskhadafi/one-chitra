@@ -210,14 +210,14 @@ export function MLReportViewer({ rationale }: { rationale: string }) {
                                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 font-bold text-muted-foreground">
                                     <tr>
                                         <th className="text-left p-2 border-b">Bulan/Tahun</th>
-                                        <th className="text-right p-2 border-b">Kuantitas</th>
+                                        <th className="text-right p-2 border-b">Total Qty Keluar</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {data.history.map((row, i) => (
                                         <tr key={i} className="hover:bg-primary/5 border-b border-primary/5 last:border-0 transition-colors">
                                             <td className="p-2 ">{row.period}</td>
-                                            <td className="p-2 text-right font-mono font-bold text-primary">{row.qty.toLocaleString()} unit</td>
+                                            <td className="p-2 text-right font-mono font-bold text-primary">{row.qty.toLocaleString()} qty</td>
                                         </tr>
                                     ))}
                                 </tbody>
