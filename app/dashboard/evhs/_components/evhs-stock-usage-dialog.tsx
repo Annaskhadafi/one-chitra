@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { createEvhsVoucher } from "@/app/actions/evhs"
 import { useQuery } from "@tanstack/react-query"
 import { getEvhsMasterPrices } from "@/app/actions/evhs-master"
+import { useRouter } from "next/navigation"
 
 const usageSchema = z.object({
     woNo: z.string().min(1, "Nomor WO wajib diisi"),
@@ -51,8 +52,11 @@ type TrackingDialogItem = {
     qty?: number
     availableQty?: number
     cpDo?: string | null
+    sourceType?: "receipt" | "legacy-stock"
     product: {
         materialDescription?: string | null
+        materialNumberCk?: string | null
+        category?: string | null
     }
 }
 
@@ -66,6 +70,7 @@ export function EvhsStockUsageDialog({
     trackingItem: TrackingDialogItem | null
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const router = useRouter()
     const { data: masterPrices = [] } = useQuery({
         queryKey: ["evhs-master-prices"],
         queryFn: getEvhsMasterPrices,
@@ -100,11 +105,14 @@ export function EvhsStockUsageDialog({
     useEffect(() => {
         if (trackingItem) {
             const availableQty = trackingItem.availableQty ?? trackingItem.qty ?? 1
+            const isLegacyTyre = trackingItem.sourceType === "legacy-stock" && trackingItem.product.category?.toUpperCase() === "TYRE"
 
             form.reset({
                 woNo: "",
-                qty: availableQty,
-                materialNumberCk: trackingItem.materialNumberCk !== "-" ? trackingItem.materialNumberCk : suggestedMaterialCk,
+                qty: isLegacyTyre ? 1 : availableQty,
+                materialNumberCk: trackingItem.materialNumberCk && trackingItem.materialNumberCk !== "-"
+                    ? trackingItem.materialNumberCk
+                    : (suggestedMaterialCk || trackingItem.product.materialNumberCk || ""),
                 serialNumber: trackingItem.sn !== "-" && trackingItem.sn !== "N/A" ? trackingItem.sn : "",
                 pos: "",
                 unitId: "",
@@ -138,6 +146,7 @@ export function EvhsStockUsageDialog({
                     productId: trackingItem.productId,
                     qty: values.qty,
                     serialNumber: values.serialNumber,
+                    sourceType: trackingItem.sourceType || "receipt",
                     materialNumberCk: values.materialNumberCk || "",
                     pos: values.pos,
                     unitId: values.unitId,
@@ -150,6 +159,7 @@ export function EvhsStockUsageDialog({
                 toast.success(`Voucher ${result.vhsNo} berhasil dibuat`)
                 onOpenChange(false)
                 form.reset()
+                router.refresh()
             } else {
                 toast.error(result.error || "Gagal membuat voucher")
             }
@@ -183,6 +193,11 @@ export function EvhsStockUsageDialog({
                         )}
                         {trackingItem.sn !== "-" && trackingItem.sn !== "N/A" && (
                             <p className="text-xs font-mono mt-2">Serial Number Asal: <Badge variant="secondary">{trackingItem.sn}</Badge></p>
+                        )}
+                        {trackingItem.sourceType === "legacy-stock" && trackingItem.product.category?.toUpperCase() === "TYRE" && (
+                            <p className="text-xs font-mono mt-2 text-indigo-700">
+                                Stock legacy TYRE: input 1 SN per voucher dari tab Stock All VHS.
+                            </p>
                         )}
                     </div>
 

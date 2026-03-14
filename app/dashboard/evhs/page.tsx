@@ -7,6 +7,7 @@ import {
     getEvhsVouchers,
     getEvhsTrackingData,
     getEvhsControlTowerData,
+    getEvhsAllVhsStockData,
 } from "@/app/actions/evhs"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { getProducts } from "@/app/actions/product"
@@ -19,6 +20,7 @@ import { EvhsGiMatching } from "./_components/evhs-gi-matching"
 import { EvhsMrkoTable } from "./_components/evhs-mrko-table"
 import { EvhsMasterPriceTable } from "./_components/evhs-master-price-table"
 import { EvhsControlTower } from "./_components/evhs-control-tower"
+import { EvhsAllVhsStockTable } from "./_components/evhs-all-vhs-stock-table"
 import { EvhsStockOverviewTable } from "./_components/evhs-stock-overview-table"
 
 export default async function EvhsPage() {
@@ -30,6 +32,7 @@ export default async function EvhsPage() {
     const products = await getProducts()
     const trackingData = await getEvhsTrackingData()
     const controlTowerData = await getEvhsControlTowerData()
+    const allVhsStockData = await getEvhsAllVhsStockData()
 
     return (
         <div className="flex flex-col gap-6 p-6">
@@ -44,8 +47,8 @@ export default async function EvhsPage() {
                 <TabsList className="bg-muted/50 p-1">
                     <TabsTrigger value="control-tower">Control Tower</TabsTrigger>
                     <TabsTrigger value="receipts">Penerimaan</TabsTrigger>
+                    <TabsTrigger value="stock-all-vhs">Stock All VHS</TabsTrigger>
                     <TabsTrigger value="stock">Stock VHS & WO</TabsTrigger>
-                    <TabsTrigger value="stock-overview">Semua Stock VHS</TabsTrigger>
                     <TabsTrigger value="vouchers">Voucher VHS</TabsTrigger>
                     <TabsTrigger value="gi-matching">GI Matching</TabsTrigger>
                     <TabsTrigger value="mrko">MRKO & Invoice</TabsTrigger>
@@ -85,7 +88,34 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 3: Stock VHS & WO */}
+                {/* Tab 3: Stock All VHS */}
+                <TabsContent value="stock-all-vhs" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Ringkasan Stock EVHS CK</CardTitle>
+                            <CardDescription>
+                                Rekap stock EVHS yang sudah terekam di tracking saat ini, termasuk indikasi kelengkapan SN.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <EvhsStockOverviewTable trackingData={trackingData} />
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Stock All VHS</CardTitle>
+                            <CardDescription>
+                                Sinkronisasi stok lama dari inventory lokal untuk warehouse VHS CK, lengkap dengan detail SN/usage TYRE.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <EvhsAllVhsStockTable rows={allVhsStockData} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tab 4: Stock VHS & WO */}
                 <TabsContent value="stock" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -102,21 +132,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="stock-overview" className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Semua Stock VHS per Site</CardTitle>
-                            <CardDescription>
-                                Ringkasan stok VHS lintas site, termasuk indikator kelengkapan Serial Number (SN).
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <EvhsStockOverviewTable trackingData={trackingData} />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Tab 4: Voucher VHS */}
+                {/* Tab 5: Voucher VHS */}
                 <TabsContent value="vouchers" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -135,7 +151,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 5: GI Matching */}
+                {/* Tab 6: GI Matching */}
                 <TabsContent value="gi-matching" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -150,7 +166,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 6: MRKO & Invoice */}
+                {/* Tab 7: MRKO & Invoice */}
                 <TabsContent value="mrko" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -165,7 +181,7 @@ export default async function EvhsPage() {
                     </Card>
                 </TabsContent>
 
-                {/* Tab 7: Master Data Price */}
+                {/* Tab 8: Master Data Price */}
                 <TabsContent value="master-price" className="space-y-4">
                     <Card>
                         <CardHeader>

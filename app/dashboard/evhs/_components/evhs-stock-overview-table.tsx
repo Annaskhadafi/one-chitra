@@ -49,12 +49,11 @@ type StockOverviewRow = {
 
 const hasRecordedSn = (sn?: string | null) => Boolean(sn && sn !== "-")
 
-
 const isCkVhsWarehouse = (warehouse?: WarehouseOption | null) => {
     const normalizedType = warehouse?.type?.trim().toUpperCase()
     const warehouseLabel = `${warehouse?.sloc || ""} ${warehouse?.description || ""}`.toUpperCase()
 
-    return normalizedType === "VHS" && warehouseLabel.includes("CK")
+    return normalizedType === "WAREHOUSE VHS" && warehouseLabel.includes("CK")
 }
 
 export function EvhsStockOverviewTable({ trackingData }: { trackingData: TrackingRow[] }) {
@@ -126,7 +125,7 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                         placeholder="Cari site, material CP/CK, deskripsi..."
                         className="pl-8"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(event) => setSearchQuery(event.target.value)}
                     />
                 </div>
                 <Badge variant="outline" className="px-3 py-1.5 font-normal text-sm">
@@ -153,7 +152,7 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                         {filteredRows.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={9} className="h-20 text-center text-muted-foreground">
-                                    Belum ada data stok VHS bertipe VHS dengan nama warehouse mengandung CK.
+                                    Belum ada data stok VHS CK yang terekam di tracking EVHS.
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -166,8 +165,8 @@ export function EvhsStockOverviewTable({ trackingData }: { trackingData: Trackin
                                     <TableCell className="text-right">{row.totalReceived}</TableCell>
                                     <TableCell className="text-right">{row.totalAvailable}</TableCell>
                                     <TableCell className="text-right">{row.totalUsed}</TableCell>
-                                    <TableCell className="text-right text-emerald-600 font-medium">{row.withSn}</TableCell>
-                                    <TableCell className="text-right text-amber-600 font-medium">{row.withoutSn}</TableCell>
+                                    <TableCell className="text-right font-medium text-emerald-600">{row.withSn}</TableCell>
+                                    <TableCell className="text-right font-medium text-amber-600">{row.withoutSn}</TableCell>
                                 </TableRow>
                             ))
                         )}
