@@ -379,7 +379,7 @@ export function EvhsVoucherPreview({ open, onOpenChange, voucher }: EvhsVoucherP
                     <p className="font-bold">Issued By,</p>
                     <div className="signature-line"></div>
                     <p className="mt-1 text-[8pt] font-bold">{voucher.issuedByUser?.name || "Warehouse Admin"}</p>
-                    <p className="text-[7pt] text-gray-500">PT Chitra Paritama</p>
+                    <p className="text-[7pt] text-gray-500">PT Chitra Paratama</p>
                 </div>
             </div>
         </div>
