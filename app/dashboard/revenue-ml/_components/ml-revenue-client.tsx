@@ -36,6 +36,16 @@ interface MLRevenueClientProps {
     }
 }
 
+interface RevenueInsightSummary {
+    trend: "up" | "down" | "stable"
+    trendPctAvg: number
+    recentTrendPct: number
+    volatilityCv: number
+    seasonalityStrength: number
+    anomalyCount: number
+    narrative: string
+}
+
 const fmt = (v: number, compact = false) => {
     if (compact && v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1) + "B"
     if (compact && v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M"
@@ -120,6 +130,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
     const [loading, setLoading] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [metrics, setMetrics] = useState({ accuracy: "0", isReliable: false })
+    const [insightSummary, setInsightSummary] = useState<RevenueInsightSummary | null>(null)
 
     const fetchForecast = async (f = filters) => {
         setLoading(true)
@@ -133,17 +144,27 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                     ...d,
                     revenue: safeRevenue,
                     forecast: safeForecast,
-                    upper: safeForecast ? safeForecast * 1.15 : null,
-                    lower: safeForecast ? safeForecast * 0.85 : null
+                    upper: d.upper !== null && !isNaN(d.upper) ? Number(d.upper) : null,
+                    lower: d.lower !== null && !isNaN(d.lower) ? Number(d.lower) : null
                 };
             })
             setData(processed)
+            const incomingInsight = res.insightSummary
+            if (
+                incomingInsight &&
+                (incomingInsight.trend === "up" || incomingInsight.trend === "down" || incomingInsight.trend === "stable")
+            ) {
+                setInsightSummary(incomingInsight as RevenueInsightSummary)
+            } else {
+                setInsightSummary(null)
+            }
             setMetrics({
                 accuracy: res.accuracy || "0",
                 isReliable: (res.accuracy && parseFloat(res.accuracy) > 70) || false
             })
         } else {
             setData([])
+            setInsightSummary(null)
             setMetrics({ accuracy: "0", isReliable: false })
             setErrorMsg(res.error || "Gagal menghasilkan model ML untuk filter ini.")
         }
@@ -253,9 +274,20 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                 <Info className="w-4 h-4 opacity-50" />
                             </div>
                             <div className="text-xs font-bold leading-relaxed mb-4">
-                                {metrics.isReliable
+                                {insightSummary?.narrative || (metrics.isReliable
                                     ? "Proyeksi stabil. Pola musiman terdeteksi kuat pada segmen ini."
-                                    : "Data fluktuatif. Disarankan memantau riwayat transaksi terbaru."}
+                                    : "Data fluktuatif. Disarankan memantau riwayat transaksi terbaru.")}
+                            </div>
+                            {insightSummary && (
+                                <div className="space-y-1 text-[10px] font-bold opacity-90 mb-4">
+                                    <div>Trend 3 Bulan: {insightSummary.recentTrendPct}%</div>
+                                    <div>Volatilitas (CV): {insightSummary.volatilityCv}%</div>
+                                    <div>Musiman: {insightSummary.seasonalityStrength}%</div>
+                                    <div>Anomali: {insightSummary.anomalyCount} bulan</div>
+                                </div>
+                            )}
+                            <div className="text-[9px] font-bold uppercase tracking-wide opacity-70 mb-2">
+                                Insight generated from historical pattern
                             </div>
                             <div className="text-[9px] font-black uppercase flex items-center gap-1.5 opacity-70">
                                 {metrics.isReliable ? <Check className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -268,7 +300,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                 {/* Main Large Chart */}
                 <div className="lg:col-span-12">
                     <Card className="border-2 border-primary/5 shadow-xl min-h-[650px] flex flex-col overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/30 pb-4 px-6 py-6">
+                        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b bg-muted/30 pb-4 px-4 sm:px-6 py-6">
                             <div>
                                 <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2">
                                     <Calendar className="w-6 h-6 text-primary" />
@@ -278,8 +310,8 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                     Historical Analysis (9 Years) vs Machine Learning Prediction
                                 </CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-6 text-[10px] font-black uppercase mr-8">
+                            <div className="flex items-center gap-4 w-full lg:w-auto">
+                                <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-[10px] font-black uppercase lg:mr-8">
                                     <div className="flex items-center gap-2 text-blue-500">
                                         <div className="w-3 h-3 rounded-full bg-blue-500" />
                                         <span>Actual Revenue</span>

@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, X } from "lucide-react"
-import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings } from "@/app/actions/inventory-ml"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, X, LineChart } from "lucide-react"
+import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings, getPredictionHistoricalInsights } from "@/app/actions/inventory-ml"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -132,6 +132,83 @@ function MaterialSearch({ value, onChange }: { value: string; onChange: (val: st
     )
 }
 
+
+function HistoricalInsightsPanel({ predictionType }: { predictionType: "REPLENISHMENT" | "SAFETY_STOCK" | "CUSTOMER_RECOMMENDATION" }) {
+    const [insights, setInsights] = useState<any | null>(null)
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        const loadInsights = async () => {
+            setLoading(true)
+            const res = await getPredictionHistoricalInsights({ predictionType, days: 90 })
+            if (res.success && res.data) {
+                setInsights(res.data)
+            } else {
+                setInsights(null)
+            }
+            setLoading(false)
+        }
+
+        loadInsights()
+    }, [predictionType])
+
+    return (
+        <Card className="md:col-span-2 border-primary/20 bg-primary/5">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                    <LineChart className="h-4 w-4 text-primary" />
+                    Historical Insights
+                </CardTitle>
+                <CardDescription>Ringkasan pola dari history prediksi 90 hari terakhir.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {loading ? (
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Memuat insight historis...
+                    </div>
+                ) : !insights ? (
+                    <p className="text-sm text-muted-foreground">Belum ada insight historis untuk filter ini.</p>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="rounded-lg border bg-background/80 p-3">
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Prediksi</p>
+                                <p className="text-xl font-bold">{insights.totalPredictions}</p>
+                            </div>
+                            <div className="rounded-lg border bg-background/80 p-3">
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Avg. Akurasi</p>
+                                <p className="text-xl font-bold">{insights.avgAccuracy}%</p>
+                            </div>
+                            <div className="rounded-lg border bg-background/80 p-3">
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Tren Rekomendasi</p>
+                                <p className="text-xl font-bold">{insights.recommendationTrend}%</p>
+                            </div>
+                        </div>
+                        <ul className="list-disc list-inside text-sm space-y-1">
+                            {insights.insightBullets?.map((item: string, idx: number) => (
+                                <li key={idx}>{item}</li>
+                            ))}
+                        </ul>
+                        {insights.topProducts?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-bold text-muted-foreground mb-2">Top Recurring Products</p>
+                                <div className="space-y-1 text-sm">
+                                    {insights.topProducts.slice(0, 3).map((item: any) => (
+                                        <div key={item.code} className="flex justify-between rounded border bg-background/80 px-3 py-1.5">
+                                            <span className="truncate">{item.name}</span>
+                                            <span className="font-semibold">{item.count}x</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
 function ReplenishmentTab() {
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -147,9 +224,9 @@ function ReplenishmentTab() {
     useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions({ page: currentPage, pageSize })
+        const res = await getRecentPredictions({ predictionType: "REPLENISHMENT", page: currentPage, pageSize })
         if (res.success && res.data) {
-            setHistory(res.data.filter((d: any) => d.predictionType === 'REPLENISHMENT'))
+            setHistory(res.data)
             setTotalPages(res.totalPages || 1)
             setTotalCount(res.totalCount || 0)
         }
@@ -194,6 +271,7 @@ function ReplenishmentTab() {
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
+            <HistoricalInsightsPanel predictionType="REPLENISHMENT" />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -357,9 +435,9 @@ function SafetyStockTab() {
     useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions({ page: currentPage, pageSize })
+        const res = await getRecentPredictions({ predictionType: "SAFETY_STOCK", page: currentPage, pageSize })
         if (res.success && res.data) {
-            setHistory(res.data.filter((d: any) => d.predictionType === 'SAFETY_STOCK'))
+            setHistory(res.data)
             setTotalPages(res.totalPages || 1)
             setTotalCount(res.totalCount || 0)
         }
@@ -404,6 +482,7 @@ function SafetyStockTab() {
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
+            <HistoricalInsightsPanel predictionType="SAFETY_STOCK" />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -570,9 +649,9 @@ function CustomerRecommendationTab() {
     useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions({ page: currentPage, pageSize })
+        const res = await getRecentPredictions({ predictionType: "CUSTOMER_RECOMMENDATION", page: currentPage, pageSize })
         if (res.success && res.data) {
-            setHistory(res.data.filter((d: any) => d.predictionType === 'CUSTOMER_RECOMMENDATION'))
+            setHistory(res.data)
             setTotalPages(res.totalPages || 1)
             setTotalCount(res.totalCount || 0)
         }
@@ -617,6 +696,7 @@ function CustomerRecommendationTab() {
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
+            <HistoricalInsightsPanel predictionType="CUSTOMER_RECOMMENDATION" />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -807,21 +887,23 @@ export function InventoryMLClient() {
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList>
-                <TabsTrigger value="dashboard">
-                    <LayoutDashboard className="h-4 w-4 mr-2" />
+            <div className="w-full overflow-x-auto pb-1">
+                <TabsList className="w-max min-w-full justify-start gap-1">
+                    <TabsTrigger value="dashboard" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+                        <LayoutDashboard className="h-4 w-4 mr-1.5 sm:mr-2" />
                     Dashboard
-                </TabsTrigger>
-                <TabsTrigger value="replenishment">Predictive Replenishment</TabsTrigger>
-                <TabsTrigger value="safetystock">Dynamic Safety Stock</TabsTrigger>
-                <TabsTrigger value="recommendation">Customer Recommendation</TabsTrigger>
-                {hasSettingsAccess && (
-                    <TabsTrigger value="settings">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Settings
                     </TabsTrigger>
-                )}
-            </TabsList>
+                    <TabsTrigger value="replenishment" className="whitespace-nowrap px-3 text-xs sm:text-sm">Predictive Replenishment</TabsTrigger>
+                    <TabsTrigger value="safetystock" className="whitespace-nowrap px-3 text-xs sm:text-sm">Dynamic Safety Stock</TabsTrigger>
+                    <TabsTrigger value="recommendation" className="whitespace-nowrap px-3 text-xs sm:text-sm">Customer Recommendation</TabsTrigger>
+                    {hasSettingsAccess && (
+                        <TabsTrigger value="settings" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+                            <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
+                            Settings
+                        </TabsTrigger>
+                    )}
+                </TabsList>
+            </div>
             <TabsContent value="dashboard">
                 <DashboardTab onNavigate={setActiveTab} />
             </TabsContent>
