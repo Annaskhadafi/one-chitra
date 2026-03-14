@@ -81,12 +81,6 @@ export function EvhsVoucherTable({
     products: unknown[],
     warehouses: unknown[]
 }) {
-    const formatCurrency = (value?: number | string | null) => {
-        const numericValue = typeof value === "number" ? value : Number(value)
-        if (!Number.isFinite(numericValue)) return "-"
-        return numericValue.toLocaleString("id-ID", { minimumFractionDigits: 2 })
-    }
-
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedVoucher, setSelectedVoucher] = useState<VoucherRow | null>(null)
     const [previewOpen, setPreviewOpen] = useState(false)
@@ -178,7 +172,6 @@ export function EvhsVoucherTable({
                             <TableHead>WO Number</TableHead>
                             <TableHead>Site</TableHead>
                             <TableHead>Items</TableHead>
-                            <TableHead className="text-right">Nilai Master CK</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Aksi</TableHead>
                         </TableRow>
@@ -186,7 +179,7 @@ export function EvhsVoucherTable({
                     <TableBody>
                         {filteredVouchers.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     Belum ada voucher yang di-generate.
                                 </TableCell>
                             </TableRow>
@@ -199,9 +192,6 @@ export function EvhsVoucherTable({
                                     <TableCell>{voucher.warehouse?.sloc}</TableCell>
                                     <TableCell>
                                         <Badge variant="secondary">{voucher.items.length} Items</Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono font-bold text-emerald-700">
-                                        {formatCurrency(voucher.totalAmount)}
                                     </TableCell>
                                     <TableCell>
                                         <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">
