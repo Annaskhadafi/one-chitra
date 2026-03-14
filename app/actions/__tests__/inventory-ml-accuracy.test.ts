@@ -22,6 +22,12 @@ vi.mock('@/lib/rbac', () => ({
 let testUserId: string
 const createdPredictionIds: number[] = []
 const createdSalesIds: number[] = []
+let salesRevIdCounter = Math.floor(Date.now() % 1_000_000_000)
+
+const nextSalesRevId = () => {
+  salesRevIdCounter += 1
+  return salesRevIdCounter
+}
 
 beforeAll(async () => {
   // Create a test user with unique email based on timestamp
@@ -116,6 +122,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
     salesDate.setDate(salesDate.getDate() + 15) // 15 days after prediction
 
     const [salesRecord] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: uniqueProductCode,
       materialDescription: 'Test Accuracy Product',
       customer: 'TEST-CUST',
@@ -178,6 +185,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
     salesDate.setDate(salesDate.getDate() + 10)
 
     const [salesRecord] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: uniqueProductCode,
       materialDescription: 'Perfect Prediction Product',
       customer: 'TEST-CUST',
@@ -232,6 +240,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
     salesDate.setDate(salesDate.getDate() + 10)
 
     const [salesRecord] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: uniqueProductCode,
       materialDescription: 'Poor Prediction Product',
       customer: 'TEST-CUST',
@@ -293,6 +302,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
     salesDate.setDate(salesDate.getDate() + 10)
 
     const [salesRecord] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: uniqueProductCode,
       materialDescription: 'Extreme Variance Product',
       customer: 'TEST-CUST',
@@ -388,6 +398,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
     salesDate.setDate(salesDate.getDate() + 2)
 
     const [salesRecord] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: 'TEST-RECENT-001',
       materialDescription: 'Recent Prediction',
       customer: 'TEST-CUST',
@@ -446,6 +457,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
 
     const salesRecords = await db.insert(salesRevenueSap).values([
       {
+        salesRevId: nextSalesRevId(),
         materialNo: uniqueProductCode,
         materialDescription: 'Multi Sales Product',
         customer: 'TEST-CUST-1',
@@ -455,6 +467,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
         revenueInLocCurr: 7000,
       },
       {
+        salesRevId: nextSalesRevId(),
         materialNo: uniqueProductCode,
         materialDescription: 'Multi Sales Product',
         customer: 'TEST-CUST-2',
@@ -464,6 +477,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
         revenueInLocCurr: 8000,
       },
       {
+        salesRevId: nextSalesRevId(),
         materialNo: uniqueProductCode,
         materialDescription: 'Multi Sales Product',
         customer: 'TEST-CUST-3',

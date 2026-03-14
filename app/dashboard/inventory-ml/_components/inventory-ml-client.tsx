@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, X, LineChart } from "lucide-react"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, LineChart } from "lucide-react"
 import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings, getPredictionHistoricalInsights } from "@/app/actions/inventory-ml"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -18,13 +18,26 @@ import { useMaterialSearch, useCustomerSearch } from "../_hooks/use-sap-data"
 import { MLSettingsClient } from "../settings/_components/ml-settings-client"
 import { MLReportViewer } from "./ml-report-viewer"
 
+type RecentPredictionsResult = Awaited<ReturnType<typeof getRecentPredictions>>
+type PredictionHistoryItem = NonNullable<Extract<RecentPredictionsResult, { success: true }>["data"]>[number]
+type PredictionHistoricalInsights = NonNullable<Extract<Awaited<ReturnType<typeof getPredictionHistoricalInsights>>, { success: true }>["data"]>
+type HistoricalTopProduct = PredictionHistoricalInsights["topProducts"][number]
+type MLSettingsData = Awaited<ReturnType<typeof getMLSettings>>
+
+interface CustomerSearchItem {
+    customerCode: string
+    customerName: string
+}
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : "Terjadi kesalahan"
+
 function CustomerSearch({ value, onChange }: { value: string; onChange: (val: string, name?: string) => void }) {
     const [search, setSearch] = useState("")
     const [showResults, setShowResults] = useState(false)
 
     // Use React Query hook with 1-hour cache (Requirements: 10.3)
     const { data: searchResult, isLoading: isSearching } = useCustomerSearch(search)
-    const results = searchResult?.data || []
+    const results = (searchResult?.data || []) as CustomerSearchItem[]
 
     return (
         <div className="relative">
@@ -53,7 +66,7 @@ function CustomerSearch({ value, onChange }: { value: string; onChange: (val: st
                     ) : results.length === 0 ? (
                         <div className="p-3 text-sm text-muted-foreground">Tidak ditemukan.</div>
                     ) : (
-                        results.map((cust: any) => (
+                        results.map((cust) => (
                             <button
                                 key={cust.customerCode}
                                 type="button"
@@ -134,7 +147,7 @@ function MaterialSearch({ value, onChange }: { value: string; onChange: (val: st
 
 
 function HistoricalInsightsPanel({ predictionType }: { predictionType: "REPLENISHMENT" | "SAFETY_STOCK" | "CUSTOMER_RECOMMENDATION" }) {
-    const [insights, setInsights] = useState<any | null>(null)
+    const [insights, setInsights] = useState<PredictionHistoricalInsights | null>(null)
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -193,7 +206,7 @@ function HistoricalInsightsPanel({ predictionType }: { predictionType: "REPLENIS
                             <div>
                                 <p className="text-xs font-bold text-muted-foreground mb-2">Top Recurring Products</p>
                                 <div className="space-y-1 text-sm">
-                                    {insights.topProducts.slice(0, 3).map((item: any) => (
+                                    {insights.topProducts.slice(0, 3).map((item: HistoricalTopProduct) => (
                                         <div key={item.code} className="flex justify-between rounded border bg-background/80 px-3 py-1.5">
                                             <span className="truncate">{item.name}</span>
                                             <span className="font-semibold">{item.count}x</span>
@@ -212,13 +225,13 @@ function HistoricalInsightsPanel({ predictionType }: { predictionType: "REPLENIS
 function ReplenishmentTab() {
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<any>(null)
+    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
-    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
+    const [selectedDetail, setSelectedDetail] = useState<PredictionHistoryItem | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -261,9 +274,10 @@ function ReplenishmentTab() {
                 setError(res.error || "Gagal membuat prediksi")
                 toast.error(res.error || "Gagal membuat prediksi")
             }
-        } catch (err: any) {
-            setError(err.message)
-            toast.error(err.message || "Terjadi kesalahan")
+        } catch (err: unknown) {
+            const message = getErrorMessage(err)
+            setError(message)
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -423,13 +437,13 @@ function ReplenishmentTab() {
 function SafetyStockTab() {
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<any>(null)
+    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
-    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
+    const [selectedDetail, setSelectedDetail] = useState<PredictionHistoryItem | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -472,9 +486,10 @@ function SafetyStockTab() {
                 setError(res.error || "Gagal membuat perhitungan")
                 toast.error(res.error || "Gagal membuat perhitungan")
             }
-        } catch (err: any) {
-            setError(err.message)
-            toast.error(err.message || "Terjadi kesalahan")
+        } catch (err: unknown) {
+            const message = getErrorMessage(err)
+            setError(message)
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -637,13 +652,13 @@ function CustomerRecommendationTab() {
     const [customerCode, setCustomerCode] = useState("")
     const [customerName, setCustomerName] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<any>(null)
+    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
-    const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<any | null>(null)
+    const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<PredictionHistoryItem | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
@@ -686,9 +701,10 @@ function CustomerRecommendationTab() {
                 setError(res.error || "Gagal membuat rekomendasi")
                 toast.error(res.error || "Gagal membuat rekomendasi")
             }
-        } catch (err: any) {
-            setError(err.message)
-            toast.error(err.message || "Terjadi kesalahan")
+        } catch (err: unknown) {
+            const message = getErrorMessage(err)
+            setError(message)
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -848,7 +864,7 @@ function CustomerRecommendationTab() {
 export function InventoryMLClient() {
     const [activeTab, setActiveTab] = useState("dashboard")
     const { data: session } = useSession()
-    const [mlSettings, setMLSettings] = useState<any>(null)
+    const [mlSettings, setMLSettings] = useState<MLSettingsData | null>(null)
     const [isLoadingSettings, setIsLoadingSettings] = useState(false)
     const [hasSettingsAccess, setHasSettingsAccess] = useState(false)
 
@@ -870,7 +886,7 @@ export function InventoryMLClient() {
         if (activeTab === "settings" && hasSettingsAccess && !mlSettings) {
             loadMLSettings()
         }
-    }, [activeTab, hasSettingsAccess])
+    }, [activeTab, hasSettingsAccess, mlSettings])
 
     const loadMLSettings = async () => {
         setIsLoadingSettings(true)
@@ -887,21 +903,23 @@ export function InventoryMLClient() {
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList>
-                <TabsTrigger value="dashboard">
-                    <LayoutDashboard className="h-4 w-4 mr-2" />
+            <div className="w-full overflow-x-auto pb-1">
+                <TabsList className="w-max min-w-full justify-start gap-1">
+                    <TabsTrigger value="dashboard" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+                        <LayoutDashboard className="h-4 w-4 mr-1.5 sm:mr-2" />
                     Dashboard
-                </TabsTrigger>
-                <TabsTrigger value="replenishment">Predictive Replenishment</TabsTrigger>
-                <TabsTrigger value="safetystock">Dynamic Safety Stock</TabsTrigger>
-                <TabsTrigger value="recommendation">Customer Recommendation</TabsTrigger>
-                {hasSettingsAccess && (
-                    <TabsTrigger value="settings">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Settings
                     </TabsTrigger>
-                )}
-            </TabsList>
+                    <TabsTrigger value="replenishment" className="whitespace-nowrap px-3 text-xs sm:text-sm">Predictive Replenishment</TabsTrigger>
+                    <TabsTrigger value="safetystock" className="whitespace-nowrap px-3 text-xs sm:text-sm">Dynamic Safety Stock</TabsTrigger>
+                    <TabsTrigger value="recommendation" className="whitespace-nowrap px-3 text-xs sm:text-sm">Customer Recommendation</TabsTrigger>
+                    {hasSettingsAccess && (
+                        <TabsTrigger value="settings" className="whitespace-nowrap px-3 text-xs sm:text-sm">
+                            <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
+                            Settings
+                        </TabsTrigger>
+                    )}
+                </TabsList>
+            </div>
             <TabsContent value="dashboard">
                 <DashboardTab onNavigate={setActiveTab} />
             </TabsContent>

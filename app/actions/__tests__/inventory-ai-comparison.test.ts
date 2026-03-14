@@ -8,13 +8,19 @@ import { db } from '@/db'
 import { aiInventoryPredictions } from '@/db/schema/ai-predictions'
 import { salesRevenueSap } from '@/db/schema/sap'
 import { getComparisonData, updateComparisonData } from '../inventory-ai'
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 describe('Comparison Data Aggregation', () => {
   const testProductCode = `TEST-COMP-${Date.now()}`
   const testProductCode2 = `TEST-COMP2-${Date.now()}`
   const testPredictionIds: number[] = []
   const testSalesIds: number[] = []
+  let salesRevIdCounter = Math.floor(Date.now() % 1_000_000_000)
+
+  const nextSalesRevId = () => {
+    salesRevIdCounter += 1
+    return salesRevIdCounter
+  }
 
   beforeAll(async () => {
     // Create test predictions with actual sales data
@@ -194,9 +200,10 @@ describe('Comparison Data Aggregation', () => {
     expect(result.data).toBeDefined()
     
     if (result.success && result.data) {
-      // All predictions should be from the last month
+      // Implementation uses the first day of the previous month as the boundary.
       const oneMonthAgo = new Date()
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1, 1)
+      oneMonthAgo.setHours(0, 0, 0, 0)
       
       result.data.forEach(pred => {
         expect(new Date(pred.predictionDate).getTime()).toBeGreaterThanOrEqual(oneMonthAgo.getTime())
@@ -215,9 +222,10 @@ describe('Comparison Data Aggregation', () => {
     expect(result.data).toBeDefined()
     
     if (result.success && result.data) {
-      // All predictions should be from the last quarter (3 months)
+      // Implementation uses the first day of the month 3 months back.
       const threeMonthsAgo = new Date()
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3, 1)
+      threeMonthsAgo.setHours(0, 0, 0, 0)
       
       result.data.forEach(pred => {
         expect(new Date(pred.predictionDate).getTime()).toBeGreaterThanOrEqual(threeMonthsAgo.getTime())
@@ -285,6 +293,7 @@ describe('Comparison Data Aggregation', () => {
     salesDate.setDate(salesDate.getDate() + 10) // 10 days after prediction
     
     const [sales] = await db.insert(salesRevenueSap).values({
+      salesRevId: nextSalesRevId(),
       materialNo: testProduct,
       materialDescription: 'Update Test Product',
       customer: 'TEST-CUST',

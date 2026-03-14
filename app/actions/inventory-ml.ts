@@ -180,10 +180,9 @@ export async function getRecentPredictions(filters?: PredictionFilters) {
                     )
                 )
                 .orderBy(desc(aiInventoryPredictions.createdAt))
-                .limit(pageSize)
-                .offset(offset);
+                .limit(pageSize);
 
-            data = await query;
+            data = await (offset > 0 ? query.offset(offset) : query);
 
             // Get total count for filtered results
             const countResult = await db
@@ -205,13 +204,14 @@ export async function getRecentPredictions(filters?: PredictionFilters) {
             // Query without material group filter
             const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-            data = await db
+            const query = db
                 .select()
                 .from(aiInventoryPredictions)
                 .where(whereClause)
                 .orderBy(desc(aiInventoryPredictions.createdAt))
-                .limit(pageSize)
-                .offset(offset);
+                .limit(pageSize);
+
+            data = await (offset > 0 ? query.offset(offset) : query);
 
             // Get total count for filtered results (Requirements: 6.8)
             const countResult = await db
@@ -290,7 +290,6 @@ export async function getPredictionHistoricalInsights(filters: HistoricalInsight
                 )
             )
             .orderBy(desc(aiInventoryPredictions.createdAt))
-            .limit(500)
 
         const riskBuckets = { Safe: 0, Warning: 0, Critical: 0 }
         const productCounter = new Map<string, { count: number; name: string }>()
@@ -548,7 +547,7 @@ export async function searchMaterials(query: string) {
         }).from(zmc9StockSap)
             .where(
                 or(
-                    ilike(zmc9StockSap.materialNo, `%${query}%`),
+                    sql`cast(${zmc9StockSap.materialNo} as text) ilike ${`%${query}%`}`,
                     ilike(zmc9StockSap.materialDesc, `%${query}%`)
                 )
             )
@@ -591,7 +590,7 @@ export async function generateMLPrediction(productCode: string, predictionType: 
 
         // 2. Fetch Data (Stock & History Sales)
         const stockData = await db.select().from(zmc9StockSap)
-            .where(ilike(zmc9StockSap.materialNo, `%${productCode}%`));
+            .where(sql`cast(${zmc9StockSap.materialNo} as text) ilike ${`%${productCode}%`}`);
 
         // Fetch 2 years (24 months) of sales history from history_orders table
         const twoYearsAgo = new Date();
@@ -870,7 +869,14 @@ export async function generateMLCustomerRecommendation(customerCode: string) {
         const customerName = salesHistory[0]?.materialDesc ? "Customer Samples" : ""; // Placeholder, will get from list
 
         // Find matching fleet
-        let fleetItems: any[] = [];
+        let fleetItems: Array<{
+            customer?: string
+            site?: string
+            unit_manufacture?: string
+            model?: string
+            tire_size?: string
+            totaltire?: number | string
+        }> = [];
         const custInfo = await db.select({ name: historyOrders.customerName })
             .from(historyOrders)
             .where(eq(historyOrders.customer, customerCode))
@@ -1002,29 +1008,43 @@ export async function getSalesHistory(materialNo: string) {
     try {
         await getAuthenticatedSession("inventory", "view");
 
-        // Calculate date range for last 24 months (2 years)
-        const now = new Date();
-        const twoYearsAgo = new Date(now);
-        twoYearsAgo.setMonth(twoYearsAgo.getMonth() - 24);
+        if (!materialNo.trim()) {
+            return {
+                success: true,
+                data: []
+            };
+        }
 
-        // Query sales data grouped by month from history_orders table
-        // to_date handles the MM/DD/YYYY format
+        // Calculate date range for the last 6 months
+        const now = new Date();
+        const sixMonthsAgo = new Date(now);
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        // Query raw sales rows from history_orders and aggregate in JS.
         const salesDataRaw = await db.select({
-            billingDate: historyOrders.billingDate, // This is text
+            billingDate: historyOrders.billingDate,
             qty: historyOrders.qty,
             revenue: historyOrders.revenueInLocCurr
         }).from(historyOrders)
             .where(
                 and(
                     eq(historyOrders.materialNo, materialNo),
-                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`
+                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${sixMonthsAgo}`
                 )
             );
 
-        // Group by month in JS
         const monthlyAggregation: Record<string, { qty: number, revenue: number }> = {};
 
         salesDataRaw.forEach(item => {
+            if ("month" in item && typeof item.month === "string") {
+                if (!monthlyAggregation[item.month]) {
+                    monthlyAggregation[item.month] = { qty: 0, revenue: 0 };
+                }
+                monthlyAggregation[item.month].qty += Number(item.qty || 0);
+                monthlyAggregation[item.month].revenue += Number(item.revenue || 0);
+                return;
+            }
+
             if (item.billingDate) {
                 const date = new Date(item.billingDate);
                 if (!isNaN(date.getTime())) {
@@ -1040,6 +1060,7 @@ export async function getSalesHistory(materialNo: string) {
 
         const salesData = Object.entries(monthlyAggregation)
             .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-6)
             .map(([month, data]) => ({
                 month,
                 qty: data.qty,
@@ -1837,6 +1858,11 @@ export async function resetMLSettings(updatedBy: string) {
     }
 }
 
+export const getAISettings = getMLSettings;
+export const updateAISettings = updateMLSettings;
+export const testAISettings = testMLSettings;
+export const resetAISettings = resetMLSettings;
+
 /**
  * Export predictions to PDF with company header and formatted tables
  * Includes summary statistics on first page and prediction details in table format
@@ -2620,5 +2646,3 @@ export async function getNotificationHistory(limit: number = 50) {
         };
     }
 }
-
-

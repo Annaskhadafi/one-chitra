@@ -7,6 +7,9 @@ import { Box, ChevronLeft, ChevronRight } from "lucide-react"
 import { getRecentPredictions } from "@/app/actions/inventory-ml"
 import type { PredictionFilters } from "@/app/actions/inventory-ml"
 
+type RecentPredictionsResult = Awaited<ReturnType<typeof getRecentPredictions>>
+type PredictionHistoryItem = NonNullable<Extract<RecentPredictionsResult, { success: true }>["data"]>[number]
+
 interface PredictionHistoryListProps {
     predictionType: 'REPLENISHMENT' | 'SAFETY_STOCK' | 'CUSTOMER_RECOMMENDATION'
     title: string
@@ -26,7 +29,7 @@ export function PredictionHistoryList({
     filters,
     onRefresh
 }: PredictionHistoryListProps) {
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
@@ -34,30 +37,30 @@ export function PredictionHistoryList({
     const pageSize = 20 // Requirements: 10.2 - Load 20 items at a time
 
     useEffect(() => {
-        loadHistory()
-    }, [currentPage, onRefresh, filters])
+        const loadHistory = async () => {
+            setIsLoading(true)
+            try {
+                const res = await getRecentPredictions({
+                    ...filters,
+                    predictionType,
+                    page: currentPage,
+                    pageSize
+                })
 
-    const loadHistory = async () => {
-        setIsLoading(true)
-        try {
-            const res = await getRecentPredictions({
-                ...filters,
-                predictionType,
-                page: currentPage,
-                pageSize
-            })
-
-            if (res.success && res.data) {
-                setHistory(res.data)
-                setTotalPages(res.totalPages || 1)
-                setTotalCount(res.totalCount || 0)
+                if (res.success && res.data) {
+                    setHistory(res.data)
+                    setTotalPages(res.totalPages || 1)
+                    setTotalCount(res.totalCount || 0)
+                }
+            } catch (error) {
+                console.error("Failed to load history:", error)
+            } finally {
+                setIsLoading(false)
             }
-        } catch (error) {
-            console.error("Failed to load history:", error)
-        } finally {
-            setIsLoading(false)
         }
-    }
+
+        void loadHistory()
+    }, [currentPage, onRefresh, filters])
 
     const handlePreviousPage = () => {
         if (currentPage > 1) {

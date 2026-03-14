@@ -3,15 +3,14 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-    Legend, ResponsiveContainer, Brush, Area, ComposedChart
+    Line, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, Brush, Area, ComposedChart
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import {
     Check, ChevronsUpDown, Loader2, TrendingUp, Filter,
-    Target, Calendar, RefreshCcw, Info, AlertCircle
+    Target, Calendar, RefreshCcw, Info, AlertCircle, type LucideIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -29,10 +28,18 @@ import {
 } from "@/components/ui/popover"
 import { getRevenueMLForecast } from "@/app/actions/revenue-ml"
 
+type RevenueFilterOption = {
+    id: string
+    name: string | null
+}
+
+type RevenueMLForecastResult = Awaited<ReturnType<typeof getRevenueMLForecast>>
+type RevenueForecastPoint = NonNullable<Extract<RevenueMLForecastResult, { success: true }>["data"]>[number]
+
 interface MLRevenueClientProps {
     initialFilters: {
-        categories: any[]
-        customers: any[]
+        categories: RevenueFilterOption[]
+        customers: RevenueFilterOption[]
     }
 }
 
@@ -44,6 +51,21 @@ interface RevenueInsightSummary {
     seasonalityStrength: number
     anomalyCount: number
     narrative: string
+}
+
+const isRevenueInsightSummary = (value: unknown): value is RevenueInsightSummary => {
+    if (!value || typeof value !== "object") return false
+
+    const candidate = value as Record<string, unknown>
+    return (
+        (candidate.trend === "up" || candidate.trend === "down" || candidate.trend === "stable") &&
+        typeof candidate.trendPctAvg === "number" &&
+        typeof candidate.recentTrendPct === "number" &&
+        typeof candidate.volatilityCv === "number" &&
+        typeof candidate.seasonalityStrength === "number" &&
+        typeof candidate.anomalyCount === "number" &&
+        typeof candidate.narrative === "string"
+    )
 }
 
 const fmt = (v: number, compact = false) => {
@@ -62,11 +84,11 @@ function SearchableCombobox({
     placeholder,
     icon: Icon
 }: {
-    options: any[],
+    options: RevenueFilterOption[],
     value: string,
     onChange: (v: string) => void,
     placeholder: string,
-    icon: any
+    icon: LucideIcon
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = options.find((o) => o.id === value)
@@ -126,7 +148,7 @@ function SearchableCombobox({
 
 export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
     const [filters, setFilters] = useState({ customer: "", category: "" })
-    const [data, setData] = useState<any[]>([])
+    const [data, setData] = useState<RevenueForecastPoint[]>([])
     const [loading, setLoading] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [metrics, setMetrics] = useState({ accuracy: "0", isReliable: false })
@@ -137,19 +159,24 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
         setErrorMsg(null)
         const res = await getRevenueMLForecast(f)
         if (res.success && res.data) {
-            const processed = res.data.map((d: any) => {
-                const safeForecast = d.forecast !== null && !isNaN(d.forecast) ? Number(d.forecast) : null;
-                const safeRevenue = d.revenue !== null && !isNaN(d.revenue) ? Number(d.revenue) : null;
+            const processed: RevenueForecastPoint[] = res.data.map((d: RevenueForecastPoint) => {
+                const safeForecast = d.forecast !== null && !Number.isNaN(d.forecast) ? Number(d.forecast) : null
+                const safeRevenue = d.revenue !== null && !Number.isNaN(d.revenue) ? Number(d.revenue) : null
                 return {
                     ...d,
                     revenue: safeRevenue,
                     forecast: safeForecast,
-                    upper: d.upper !== null && !isNaN(d.upper) ? Number(d.upper) : null,
-                    lower: d.lower !== null && !isNaN(d.lower) ? Number(d.lower) : null
-                };
+                    upper: d.upper !== null && !Number.isNaN(d.upper) ? Number(d.upper) : null,
+                    lower: d.lower !== null && !Number.isNaN(d.lower) ? Number(d.lower) : null
+                }
             })
             setData(processed)
-            setInsightSummary(res.insightSummary || null)
+            const incomingInsight = res.insightSummary
+            if (isRevenueInsightSummary(incomingInsight)) {
+                setInsightSummary(incomingInsight)
+            } else {
+                setInsightSummary(null)
+            }
             setMetrics({
                 accuracy: res.accuracy || "0",
                 isReliable: (res.accuracy && parseFloat(res.accuracy) > 70) || false
@@ -292,7 +319,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                 {/* Main Large Chart */}
                 <div className="lg:col-span-12">
                     <Card className="border-2 border-primary/5 shadow-xl min-h-[650px] flex flex-col overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/30 pb-4 px-6 py-6">
+                        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b bg-muted/30 pb-4 px-4 sm:px-6 py-6">
                             <div>
                                 <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2">
                                     <Calendar className="w-6 h-6 text-primary" />
@@ -302,8 +329,8 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                     Historical Analysis (9 Years) vs Machine Learning Prediction
                                 </CardDescription>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-6 text-[10px] font-black uppercase mr-8">
+                            <div className="flex items-center gap-4 w-full lg:w-auto">
+                                <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-[10px] font-black uppercase lg:mr-8">
                                     <div className="flex items-center gap-2 text-blue-500">
                                         <div className="w-3 h-3 rounded-full bg-blue-500" />
                                         <span>Actual Revenue</span>
