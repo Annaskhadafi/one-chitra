@@ -79,6 +79,8 @@ type EvhsMasterPriceSuggestion = {
     price: string
 }
 
+const EMPTY_MASTER_PRICES: EvhsMasterPriceSuggestion[] = []
+
 type MultipleTrackingItem = {
     id: string
     warehouseId: number
@@ -111,11 +113,12 @@ export function EvhsMultipleUsageDialog({
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
-    const { data: masterPrices = [] } = useQuery({
+    const { data } = useQuery({
         queryKey: ["evhs-master-prices"],
         queryFn: getEvhsMasterPrices,
         enabled: open,
     })
+    const masterPrices = data ?? EMPTY_MASTER_PRICES
     const firstWarehouseId = trackingItems[0]?.warehouseId
 
     const form = useForm<BatchUsageValues>({

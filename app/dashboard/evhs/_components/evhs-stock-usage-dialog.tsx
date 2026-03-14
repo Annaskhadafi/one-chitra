@@ -43,6 +43,8 @@ type EvhsMasterPriceSuggestion = {
     price: string
 }
 
+const EMPTY_MASTER_PRICES: EvhsMasterPriceSuggestion[] = []
+
 type TrackingDialogItem = {
     warehouseId: number
     productId: number
@@ -71,11 +73,12 @@ export function EvhsStockUsageDialog({
 }) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
-    const { data: masterPrices = [] } = useQuery({
+    const { data } = useQuery({
         queryKey: ["evhs-master-prices"],
         queryFn: getEvhsMasterPrices,
         enabled: open,
     })
+    const masterPrices = data ?? EMPTY_MASTER_PRICES
 
     const suggestedMasterPrice = trackingItem
         ? masterPrices.find((price: EvhsMasterPriceSuggestion) => (
