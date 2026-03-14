@@ -56,19 +56,20 @@ export function AccuracyTracker() {
         setError(null)
         try {
             const result = await getRecentPredictions()
-            if (result.success && result.data) {
-                // Filter only predictions with accuracy data
+            if (!result.success) {
+                const message = result.error || "Failed to load predictions"
+                setError(message)
+                toast.error(message)
+            } else {
                 const withAccuracy = result.data.filter(
-                    (p: any) => p.accuracyPercentage !== null
+                    (prediction) => prediction.accuracyPercentage !== null
                 )
                 setPredictions(withAccuracy)
                 setFilteredPredictions(withAccuracy)
-            } else {
-                setError(result.error || "Failed to load predictions")
-                toast.error(result.error || "Failed to load accuracy data")
             }
-        } catch (err: any) {
-            setError(err.message || "An error occurred")
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "An error occurred"
+            setError(message)
             toast.error("Failed to load accuracy data")
         } finally {
             setIsLoading(false)

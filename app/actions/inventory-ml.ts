@@ -2,9 +2,8 @@
 
 import { db } from "@/db"
 import { aiInventoryPredictions, aiSettings, restockNotifications } from "@/db/schema/ai-predictions"
-import { zmc9StockSap } from "@/db/schema/sap"
+import { me2lPurchDocsSap, salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { historyOrders } from "@/db/schema/history-orders"
-import { salesRevenueSap } from "@/db/schema/sap"
 import { eq, sql, desc, and, ilike, or, gte, lte, lt, gt, inArray } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getFleetList } from "./fleet"
@@ -23,6 +22,239 @@ const DEFAULT_ML_SETTINGS = {
 };
 
 const nonCancelledHistoryOrderCondition = sql`upper(trim(coalesce(${historyOrders.cancelled}, ''))) != 'X'`
+
+const DEFAULT_LEAD_TIME_DAYS = 21
+const MONTHS_OF_HISTORY = 24
+const FORECAST_MONTHS = 6
+
+const SERVICE_LEVEL_Z_SCORES: Record<number, number> = {
+    90: 1.28,
+    95: 1.65,
+    97: 1.88,
+    99: 2.33,
+}
+
+type HistoricalMonthlyPoint = {
+    period: string
+    label: string
+    qty: number
+}
+
+export interface SafetyStockAnalyticsParams {
+    recommendedSafetyStock?: number | null
+}
+
+export interface SafetyStockChartPoint {
+    period: string
+    label: string
+    periodType: "historical" | "forecast"
+    historicalSales: number | null
+    predictedDemand: number | null
+    projectedStockLevel: number | null
+    confidenceLow: number | null
+    confidenceHigh: number | null
+    confidenceBandBase: number | null
+    confidenceBandRange: number | null
+    safetyStockLine: number
+    reorderPointLine: number
+}
+
+export interface SafetyStockScenarioOption {
+    serviceLevel: number
+    label: string
+    zScore: number
+    safetyStock: number
+    reorderPoint: number
+}
+
+export interface SafetyStockAnalytics {
+    materialNo: string
+    materialDesc: string
+    currentStock: number
+    stockValue: number
+    currency: string
+    unitCost: number
+    aiRecommendedSafetyStock: number
+    calculatedSafetyStock: number
+    dynamicSafetyStock: number
+    reorderPoint: number
+    avgMonthlyDemand: number
+    avgDailyDemand: number
+    demandStdDevMonthly: number
+    demandStdDevDaily: number
+    daysOfCover: number | null
+    daysUntilReorder: number | null
+    excessStockUnits: number
+    excessStockValue: number
+    excessStatus: "Lean" | "Balanced" | "Overstock"
+    deadStock: {
+        status: "Healthy" | "Watchlist" | "Dead Risk"
+        monthsWithoutMovement: number
+        lastMovementDate: string | null
+        message: string
+    }
+    leadTime: {
+        averageDays: number
+        stdDevDays: number
+        minDays: number
+        maxDays: number
+        sampleSize: number
+        onTimeRate: number
+        status: "Stable" | "Perlu Perhatian" | "Volatile"
+        usedFallback: boolean
+        bufferIncrease: number
+        insight: string
+        vendors: Array<{
+            name: string
+            averageDays: number
+            sampleSize: number
+            orderedQty: number
+        }>
+    }
+    forecast: {
+        nextMonthDemand: number
+        nextQuarterDemand: number
+        confidenceNote: string
+        seasonalityNote: string
+    }
+    scenarios: {
+        defaultServiceLevel: number
+        options: SafetyStockScenarioOption[]
+        suddenOrderSuggestion: number
+    }
+    chart: SafetyStockChartPoint[]
+    history: HistoricalMonthlyPoint[]
+}
+
+const parseNumber = (value: unknown) => {
+    const numericValue = Number(value)
+    return Number.isFinite(numericValue) ? numericValue : 0
+}
+
+const average = (values: number[]) => {
+    if (values.length === 0) return 0
+    return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+const standardDeviation = (values: number[]) => {
+    if (values.length === 0) return 0
+    const mean = average(values)
+    const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / values.length
+    return Math.sqrt(variance)
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+const getZScore = (serviceLevel: number) => {
+    if (SERVICE_LEVEL_Z_SCORES[serviceLevel]) {
+        return SERVICE_LEVEL_Z_SCORES[serviceLevel]
+    }
+
+    const availableLevels = Object.keys(SERVICE_LEVEL_Z_SCORES).map(Number)
+    const nearest = availableLevels.reduce((closest, current) => {
+        return Math.abs(current - serviceLevel) < Math.abs(closest - serviceLevel) ? current : closest
+    }, 95)
+
+    return SERVICE_LEVEL_Z_SCORES[nearest]
+}
+
+const parseHistoryOrderDate = (value: string | Date | null | undefined) => {
+    if (!value) return null
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value
+    }
+
+    const mmddyyyyMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (mmddyyyyMatch) {
+        const [, month, day, year] = mmddyyyyMatch
+        const parsedDate = new Date(Number(year), Number(month) - 1, Number(day))
+        return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+    }
+
+    const parsedDate = new Date(value)
+    return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
+
+const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
+
+const addMonthsToDate = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 1)
+
+const getMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+
+const monthLabelFormatter = new Intl.DateTimeFormat("id-ID", {
+    month: "short",
+    year: "2-digit",
+})
+
+const getMonthLabel = (date: Date) => monthLabelFormatter.format(date)
+
+const getMonthDifference = (newerDate: Date, olderDate: Date) => {
+    return ((newerDate.getFullYear() - olderDate.getFullYear()) * 12) + (newerDate.getMonth() - olderDate.getMonth())
+}
+
+const toDateString = (date: Date) => {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0"),
+    ].join("-")
+}
+
+const getDateDifferenceInDays = (endDate: Date, startDate: Date) => {
+    const millisecondsPerDay = 1000 * 60 * 60 * 24
+    return Math.round((endDate.getTime() - startDate.getTime()) / millisecondsPerDay)
+}
+
+const calculateLinearTrendSlope = (values: number[]) => {
+    if (values.length < 2) return 0
+
+    const n = values.length
+    const sumX = ((n - 1) * n) / 2
+    const sumY = values.reduce((sum, value) => sum + value, 0)
+    const sumXY = values.reduce((sum, value, index) => sum + (index * value), 0)
+    const sumXX = values.reduce((sum, _value, index) => sum + (index * index), 0)
+    const denominator = (n * sumXX) - (sumX * sumX)
+
+    if (denominator === 0) return 0
+    return ((n * sumXY) - (sumX * sumY)) / denominator
+}
+
+const buildMonthlySeries = (
+    totalsByMonth: Record<string, number>,
+    endMonth: Date,
+    monthCount: number
+): HistoricalMonthlyPoint[] => {
+    const series: HistoricalMonthlyPoint[] = []
+    const startMonth = addMonthsToDate(startOfMonth(endMonth), -(monthCount - 1))
+
+    for (let index = 0; index < monthCount; index += 1) {
+        const currentMonth = addMonthsToDate(startMonth, index)
+        const period = getMonthKey(currentMonth)
+        series.push({
+            period,
+            label: getMonthLabel(currentMonth),
+            qty: Number((totalsByMonth[period] || 0).toFixed(2)),
+        })
+    }
+
+    return series
+}
+
+const buildConfidenceNote = (monthlyStdDev: number, avgMonthlyDemand: number) => {
+    if (avgMonthlyDemand <= 0) {
+        return "Belum ada pola demand aktif, jadi forecast memakai baseline konservatif."
+    }
+
+    const variationRatio = monthlyStdDev / Math.max(avgMonthlyDemand, 1)
+
+    if (variationRatio >= 0.9) {
+        return "Variasi demand tinggi, jadi area bayangan forecast dibuat lebih lebar."
+    }
+    if (variationRatio >= 0.45) {
+        return "Demand masih berubah-ubah, confidence interval menunjukkan range aman perencanaan."
+    }
+    return "Demand relatif stabil, sehingga rentang forecast lebih rapat."
+}
 
 /**
  * Get ML settings from database with fallback to defaults
@@ -73,11 +305,40 @@ export interface PredictionFilters {
     pageSize?: number // Requirements: 10.2 - items per page (default 20)
 }
 
+export interface PredictionListItem {
+    id: number
+    productCode: string
+    productName: string | null
+    predictionType: string
+    recommendedStock: number
+    rationale: string
+    createdAt: Date
+    actualSales: number | null
+    accuracyPercentage: number | null
+    batchId: string | null
+    currentStock: number | null
+}
+
+export type RecentPredictionsResponse =
+    | {
+        success: true
+        data: PredictionListItem[]
+        totalCount: number
+        page: number
+        pageSize: number
+        totalPages: number
+        hasMore: boolean
+    }
+    | {
+        success: false
+        error: string
+    }
+
 /**
  * Get recent predictions with optional filters
  * Requirements: 6.7, 6.8
  */
-export async function getRecentPredictions(filters?: PredictionFilters) {
+export async function getRecentPredictions(filters?: PredictionFilters): Promise<RecentPredictionsResponse> {
     try {
         await getAuthenticatedSession("inventory", "view");
 
@@ -247,6 +508,38 @@ interface HistoricalInsightFilters {
     days?: number
 }
 
+export interface PredictionHistoricalInsightsData {
+    totalPredictions: number
+    avgAccuracy: number
+    riskBuckets: {
+        Safe: number
+        Warning: number
+        Critical: number
+    }
+    topProducts: Array<{
+        code: string
+        name: string
+        count: number
+    }>
+    weeklyTrend: Array<{
+        period: string
+        avgRecommendedStock: number
+        avgAccuracy: number
+    }>
+    recommendationTrend: number
+    insightBullets: string[]
+}
+
+export type PredictionHistoricalInsightsResponse =
+    | {
+        success: true
+        data: PredictionHistoricalInsightsData
+    }
+    | {
+        success: false
+        error: string
+    }
+
 const parseStatusFromRationale = (rationale: string): "Safe" | "Warning" | "Critical" | null => {
     if (!rationale) return null
 
@@ -266,7 +559,9 @@ const parseStatusFromRationale = (rationale: string): "Safe" | "Warning" | "Crit
     return null
 }
 
-export async function getPredictionHistoricalInsights(filters: HistoricalInsightFilters) {
+export async function getPredictionHistoricalInsights(
+    filters: HistoricalInsightFilters
+): Promise<PredictionHistoricalInsightsResponse> {
     try {
         await getAuthenticatedSession("inventory", "view")
 
@@ -828,7 +1123,8 @@ ${jsonSchema}`;
             productName,
             predictionType,
             recommendedStock: Number(parsedResult.recommendedStock) || 0,
-            rationale: JSON.stringify(parsedResult.report || { summary: parsedResult.rationale || "No rationale provided" })
+            rationale: JSON.stringify(parsedResult.report || { summary: parsedResult.rationale || "No rationale provided" }),
+            currentStock: Math.round(currentStock),
         }).returning();
 
         console.log("[AI] Prediction saved to DB:", saved.id);
@@ -1021,6 +1317,378 @@ ${jsonSchema}`;
         console.error("[AI] Failed to generate customer recommendation:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to generate recommendation";
         return { success: false, error: errorMessage };
+    }
+}
+
+export async function getSafetyStockAnalytics(
+    materialNo: string,
+    params?: SafetyStockAnalyticsParams
+) {
+    try {
+        await getAuthenticatedSession("inventory", "view")
+
+        const normalizedMaterialNo = materialNo.trim()
+        if (!normalizedMaterialNo) {
+            return { success: false, error: "Material Number wajib diisi" }
+        }
+
+        const stockSelection = {
+            materialNo: zmc9StockSap.materialNo,
+            materialDesc: zmc9StockSap.materialDesc,
+            totalStock: zmc9StockSap.totalStock,
+            valueStock: zmc9StockSap.valueStock,
+            currency: zmc9StockSap.currency,
+        }
+
+        let stockRows = await db
+            .select(stockSelection)
+            .from(zmc9StockSap)
+            .where(sql`trim(cast(${zmc9StockSap.materialNo} as text)) = ${normalizedMaterialNo}`)
+
+        if (stockRows.length === 0) {
+            stockRows = await db
+                .select(stockSelection)
+                .from(zmc9StockSap)
+                .where(sql`cast(${zmc9StockSap.materialNo} as text) ilike ${`%${normalizedMaterialNo}%`}`)
+        }
+
+        if (stockRows.length === 0) {
+            return { success: false, error: "Material tidak ditemukan di data stok" }
+        }
+
+        const canonicalMaterialNo = stockRows[0]?.materialNo?.trim() || normalizedMaterialNo
+        const materialDesc = stockRows.find((row) => row.materialDesc)?.materialDesc || "Unknown Product"
+        const currentStock = stockRows.reduce((sum, row) => sum + parseNumber(row.totalStock), 0)
+        const stockValue = stockRows.reduce((sum, row) => sum + parseNumber(row.valueStock), 0)
+        const unitCost = currentStock > 0 ? stockValue / currentStock : 0
+        const currency = stockRows.find((row) => row.currency)?.currency || "IDR"
+
+        const historyWindowStart = startOfMonth(addMonthsToDate(new Date(), -(MONTHS_OF_HISTORY - 1)))
+        const movementWindowStart = startOfMonth(addMonthsToDate(new Date(), -35))
+
+        const salesRows = await db
+            .select({
+                billingDate: historyOrders.billingDate,
+                qty: historyOrders.qty,
+            })
+            .from(historyOrders)
+            .where(
+                and(
+                    eq(historyOrders.materialNo, canonicalMaterialNo),
+                    sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${movementWindowStart}`,
+                    nonCancelledHistoryOrderCondition
+                )
+            )
+
+        const monthlyTotals: Record<string, number> = {}
+        let lastMovementTimestamp: number | null = null
+
+        salesRows.forEach((row) => {
+            const parsedDate = parseHistoryOrderDate(row.billingDate)
+            if (!parsedDate) {
+                return
+            }
+
+            const monthKey = getMonthKey(startOfMonth(parsedDate))
+            monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + parseNumber(row.qty)
+
+            const parsedTimestamp = parsedDate.getTime()
+            if (lastMovementTimestamp === null || parsedTimestamp > lastMovementTimestamp) {
+                lastMovementTimestamp = parsedTimestamp
+            }
+        })
+
+        const historicalMonths = buildMonthlySeries(monthlyTotals, new Date(), MONTHS_OF_HISTORY)
+        const recentSixMonths = historicalMonths.slice(-6).map((point) => point.qty)
+        const recentTwelveMonths = historicalMonths.slice(-12).map((point) => point.qty)
+        const lastThreeMonthsTotal = recentSixMonths.slice(-3).reduce((sum, value) => sum + value, 0)
+        const lastSixMonthsTotal = recentSixMonths.reduce((sum, value) => sum + value, 0)
+
+        const avgMonthlyDemand = Number((
+            (average(recentSixMonths) * 0.6) +
+            (average(recentTwelveMonths) * 0.4)
+        ).toFixed(2))
+        const avgDailyDemand = Number((avgMonthlyDemand / 30).toFixed(2))
+        const demandStdDevMonthly = Number(standardDeviation(recentTwelveMonths).toFixed(2))
+        const demandStdDevDaily = Number((demandStdDevMonthly / Math.sqrt(30)).toFixed(2))
+
+        const purchaseRows = await db
+            .select({
+                vendorName: me2lPurchDocsSap.vendorName,
+                docDate: me2lPurchDocsSap.docDate,
+                grProcessedDate: me2lPurchDocsSap.grProcessedDate,
+                orderQty: me2lPurchDocsSap.orderQty,
+            })
+            .from(me2lPurchDocsSap)
+            .where(
+                and(
+                    eq(me2lPurchDocsSap.material, canonicalMaterialNo),
+                    gte(me2lPurchDocsSap.docDate, toDateString(historyWindowStart)),
+                    sql`${me2lPurchDocsSap.grProcessedDate} IS NOT NULL`
+                )
+            )
+
+        const leadTimeSamples: number[] = []
+        const vendorPerformance = new Map<string, { totalDays: number; sampleSize: number; orderedQty: number }>()
+
+        purchaseRows.forEach((row) => {
+            const docDate = parseHistoryOrderDate(row.docDate)
+            const receivedDate = parseHistoryOrderDate(row.grProcessedDate)
+
+            if (!docDate || !receivedDate) {
+                return
+            }
+
+            const leadTimeDays = getDateDifferenceInDays(receivedDate, docDate)
+            if (leadTimeDays < 0) {
+                return
+            }
+
+            leadTimeSamples.push(leadTimeDays)
+
+            const vendorName = row.vendorName?.trim() || "Vendor tidak diketahui"
+            const currentVendor = vendorPerformance.get(vendorName) || {
+                totalDays: 0,
+                sampleSize: 0,
+                orderedQty: 0,
+            }
+
+            currentVendor.totalDays += leadTimeDays
+            currentVendor.sampleSize += 1
+            currentVendor.orderedQty += parseNumber(row.orderQty)
+            vendorPerformance.set(vendorName, currentVendor)
+        })
+
+        const hasLeadTimeHistory = leadTimeSamples.length > 0
+        const leadTimeAverage = Number((hasLeadTimeHistory ? average(leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS).toFixed(2))
+        const leadTimeStdDev = Number((hasLeadTimeHistory ? standardDeviation(leadTimeSamples) : 0).toFixed(2))
+        const leadTimeMin = hasLeadTimeHistory ? Math.min(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
+        const leadTimeMax = hasLeadTimeHistory ? Math.max(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
+        const onTimeThreshold = leadTimeAverage + Math.max(leadTimeStdDev, 2)
+        const onTimeRate = hasLeadTimeHistory
+            ? Number(((leadTimeSamples.filter((days) => days <= onTimeThreshold).length / leadTimeSamples.length) * 100).toFixed(1))
+            : 0
+        const leadTimeBuffer = Math.ceil(avgDailyDemand * leadTimeStdDev)
+
+        let leadTimeStatus: SafetyStockAnalytics["leadTime"]["status"] = "Stable"
+        if (!hasLeadTimeHistory) {
+            leadTimeStatus = "Perlu Perhatian"
+        } else if (leadTimeStdDev >= 6 || onTimeRate < 65) {
+            leadTimeStatus = "Volatile"
+        } else if (leadTimeStdDev >= 3 || onTimeRate < 80) {
+            leadTimeStatus = "Perlu Perhatian"
+        }
+
+        const calculatedSafetyStock = Math.max(
+            Math.ceil(getZScore(95) * demandStdDevDaily * Math.sqrt(Math.max(leadTimeAverage, 1))),
+            avgMonthlyDemand > 0 ? 1 : 0
+        )
+        const aiRecommendedSafetyStock = Math.max(Math.round(params?.recommendedSafetyStock || 0), 0)
+        const dynamicSafetyStock = Math.max(aiRecommendedSafetyStock, calculatedSafetyStock + leadTimeBuffer)
+        const reorderPoint = Math.ceil((avgDailyDemand * leadTimeAverage) + dynamicSafetyStock)
+        const daysOfCover = avgDailyDemand > 0 ? Number((currentStock / avgDailyDemand).toFixed(1)) : null
+        const daysUntilReorder = avgDailyDemand > 0
+            ? Math.max(0, Math.floor((currentStock - reorderPoint) / avgDailyDemand))
+            : null
+
+        const excessStockUnits = Math.max(0, Math.ceil(currentStock - reorderPoint))
+        const excessStockValue = Number((excessStockUnits * unitCost).toFixed(2))
+
+        let excessStatus: SafetyStockAnalytics["excessStatus"] = "Balanced"
+        if (currentStock <= dynamicSafetyStock) {
+            excessStatus = "Lean"
+        } else if (currentStock > (reorderPoint * 1.25)) {
+            excessStatus = "Overstock"
+        }
+
+        const lastMovementDate = lastMovementTimestamp !== null ? new Date(lastMovementTimestamp) : null
+        const monthsWithoutMovement = lastMovementDate
+            ? Math.max(0, getMonthDifference(startOfMonth(new Date()), startOfMonth(lastMovementDate)))
+            : MONTHS_OF_HISTORY
+
+        let deadStockStatus: SafetyStockAnalytics["deadStock"]["status"] = "Healthy"
+        let deadStockMessage = "Pergerakan stok masih sehat untuk mendukung demand aktif."
+
+        if (currentStock > reorderPoint && lastSixMonthsTotal === 0 && monthsWithoutMovement >= 6) {
+            deadStockStatus = "Dead Risk"
+            deadStockMessage = "Stok tinggi tanpa pergerakan 6 bulan. Prioritaskan cuci gudang atau promo clearance."
+        } else if (currentStock > dynamicSafetyStock * 2 && lastThreeMonthsTotal === 0 && monthsWithoutMovement >= 3) {
+            deadStockStatus = "Watchlist"
+            deadStockMessage = "Tidak ada pergerakan 3 bulan terakhir saat stok masih tinggi. Pertimbangkan bundling atau promo."
+        }
+
+        const overallAverage = average(recentTwelveMonths)
+        const lastThreeAverage = average(recentSixMonths.slice(-3))
+        const sixMonthAverage = average(recentSixMonths)
+        const trendSlope = calculateLinearTrendSlope(recentTwelveMonths)
+
+        const forecastPoints: SafetyStockChartPoint[] = []
+        let projectedStock = currentStock
+
+        for (let monthOffset = 1; monthOffset <= FORECAST_MONTHS; monthOffset += 1) {
+            const futureMonth = addMonthsToDate(startOfMonth(new Date()), monthOffset)
+            const sameMonthSamples = historicalMonths
+                .filter((point) => {
+                    const [yearText, monthText] = point.period.split("-")
+                    const pointMonth = new Date(Number(yearText), Number(monthText) - 1, 1)
+                    return pointMonth.getMonth() === futureMonth.getMonth()
+                })
+                .map((point) => point.qty)
+
+            const seasonalFactor = sameMonthSamples.length > 0 && overallAverage > 0
+                ? clamp(average(sameMonthSamples) / overallAverage, 0.75, 1.4)
+                : 1
+
+            const baselineDemand = (lastThreeAverage * 0.45) + (sixMonthAverage * 0.35) + (overallAverage * 0.2)
+            const forecastDemand = Math.max(0, (baselineDemand + (trendSlope * monthOffset)) * seasonalFactor)
+            const uncertainty = Math.max(demandStdDevMonthly * (1 + (monthOffset * 0.08)), forecastDemand * 0.18)
+            const confidenceLow = Math.max(0, Math.round(forecastDemand - (uncertainty * 0.6)))
+            const confidenceHigh = Math.max(confidenceLow, Math.round(forecastDemand + uncertainty))
+
+            projectedStock = Math.max(0, Math.round(projectedStock - forecastDemand))
+
+            forecastPoints.push({
+                period: getMonthKey(futureMonth),
+                label: getMonthLabel(futureMonth),
+                periodType: "forecast",
+                historicalSales: null,
+                predictedDemand: Math.round(forecastDemand),
+                projectedStockLevel: projectedStock,
+                confidenceLow,
+                confidenceHigh,
+                confidenceBandBase: confidenceLow,
+                confidenceBandRange: confidenceHigh - confidenceLow,
+                safetyStockLine: dynamicSafetyStock,
+                reorderPointLine: reorderPoint,
+            })
+        }
+
+        const chart: SafetyStockChartPoint[] = [
+            ...historicalMonths.map((point) => ({
+                period: point.period,
+                label: point.label,
+                periodType: "historical" as const,
+                historicalSales: Number(point.qty.toFixed(0)),
+                predictedDemand: null,
+                projectedStockLevel: null,
+                confidenceLow: null,
+                confidenceHigh: null,
+                confidenceBandBase: null,
+                confidenceBandRange: null,
+                safetyStockLine: dynamicSafetyStock,
+                reorderPointLine: reorderPoint,
+            })),
+            ...forecastPoints,
+        ]
+
+        const vendorBreakdown = Array.from(vendorPerformance.entries())
+            .map(([name, values]) => ({
+                name,
+                averageDays: Number((values.totalDays / Math.max(values.sampleSize, 1)).toFixed(1)),
+                sampleSize: values.sampleSize,
+                orderedQty: Number(values.orderedQty.toFixed(0)),
+            }))
+            .sort((left, right) => right.orderedQty - left.orderedQty)
+            .slice(0, 3)
+
+        const leadTimeInsight = !hasLeadTimeHistory
+            ? `Belum ada histori penerimaan vendor, jadi lead time memakai fallback ${DEFAULT_LEAD_TIME_DAYS} hari.`
+            : leadTimeStatus === "Volatile"
+                ? `Lead time sering molor dengan deviasi ${leadTimeStdDev.toFixed(1)} hari. Tambahkan buffer ${leadTimeBuffer} unit di safety stock.`
+                : leadTimeStatus === "Perlu Perhatian"
+                    ? `Lead time cukup berubah-ubah. Pantau vendor prioritas agar review safety stock tidak terlambat.`
+                    : `Lead time vendor relatif stabil dengan rata-rata ${leadTimeAverage.toFixed(1)} hari.`
+
+        const seasonalPeak = Math.max(...historicalMonths.map((point) => point.qty), 0)
+        const seasonalityRatio = overallAverage > 0 ? seasonalPeak / overallAverage : 0
+        const seasonalityNote = seasonalityRatio >= 1.35
+            ? "Ada puncak musiman yang cukup jelas, jadi stok perlu dipantau saat bulan peak demand mendekat."
+            : "Pola demand cenderung datar, belum terlihat lonjakan musiman yang tajam."
+
+        const scenarioOptions: SafetyStockScenarioOption[] = [90, 95, 99].map((serviceLevel) => {
+            const zScore = getZScore(serviceLevel)
+            const safetyStock = Math.max(
+                Math.ceil(zScore * demandStdDevDaily * Math.sqrt(Math.max(leadTimeAverage, 1))) + leadTimeBuffer,
+                avgMonthlyDemand > 0 ? 1 : 0
+            )
+
+            return {
+                serviceLevel,
+                label: `${serviceLevel}%`,
+                zScore,
+                safetyStock,
+                reorderPoint: Math.ceil((avgDailyDemand * leadTimeAverage) + safetyStock),
+            }
+        })
+
+        const serializedLastMovementDate = lastMovementTimestamp !== null
+            ? new Date(lastMovementTimestamp).toISOString()
+            : null
+
+        const analytics: SafetyStockAnalytics = {
+            materialNo: canonicalMaterialNo,
+            materialDesc,
+            currentStock: Number(currentStock.toFixed(2)),
+            stockValue: Number(stockValue.toFixed(2)),
+            currency,
+            unitCost: Number(unitCost.toFixed(2)),
+            aiRecommendedSafetyStock,
+            calculatedSafetyStock,
+            dynamicSafetyStock,
+            reorderPoint,
+            avgMonthlyDemand,
+            avgDailyDemand,
+            demandStdDevMonthly,
+            demandStdDevDaily,
+            daysOfCover,
+            daysUntilReorder,
+            excessStockUnits,
+            excessStockValue,
+            excessStatus,
+            deadStock: {
+                status: deadStockStatus,
+                monthsWithoutMovement,
+                lastMovementDate: serializedLastMovementDate,
+                message: deadStockMessage,
+            },
+            leadTime: {
+                averageDays: leadTimeAverage,
+                stdDevDays: leadTimeStdDev,
+                minDays: leadTimeMin,
+                maxDays: leadTimeMax,
+                sampleSize: leadTimeSamples.length,
+                onTimeRate,
+                status: leadTimeStatus,
+                usedFallback: !hasLeadTimeHistory,
+                bufferIncrease: leadTimeBuffer,
+                insight: leadTimeInsight,
+                vendors: vendorBreakdown,
+            },
+            forecast: {
+                nextMonthDemand: forecastPoints[0]?.predictedDemand || 0,
+                nextQuarterDemand: forecastPoints.slice(0, 3).reduce((sum, point) => sum + (point.predictedDemand || 0), 0),
+                confidenceNote: buildConfidenceNote(demandStdDevMonthly, avgMonthlyDemand),
+                seasonalityNote,
+            },
+            scenarios: {
+                defaultServiceLevel: 95,
+                options: scenarioOptions,
+                suddenOrderSuggestion: Math.max(10, Math.round(avgMonthlyDemand * 0.5)),
+            },
+            chart,
+            history: historicalMonths,
+        }
+
+        return {
+            success: true,
+            data: analytics,
+        }
+    } catch (error) {
+        console.error("Failed to generate safety stock analytics:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to generate safety stock analytics",
+        }
     }
 }
 

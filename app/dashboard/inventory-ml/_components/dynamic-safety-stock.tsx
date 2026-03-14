@@ -1,184 +1,1021 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { MaterialCombobox } from "./material-combobox"
-import { Label } from "@/components/ui/label"
-import { Loader2, BrainCircuit, ShieldAlert, ShieldCheck } from "lucide-react"
-import { generateAIPrediction, getRecentPredictions, getSalesHistory } from "@/app/actions/inventory-ml"
+import { useEffect, useState } from "react"
+import {
+    AlertTriangle,
+    BarChart3,
+    BrainCircuit,
+    Boxes,
+    Clock3,
+    Coins,
+    Gauge,
+    Loader2,
+    Package,
+    ShieldAlert,
+    ShieldCheck,
+    Sparkles,
+    Target,
+    TrendingUp,
+    Truck,
+} from "lucide-react"
 import { toast } from "sonner"
+
+import {
+    generateAIPrediction,
+    getRecentPredictions,
+    getSafetyStockAnalytics,
+    type SafetyStockAnalytics,
+} from "@/app/actions/inventory-ml"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { PredictionChart } from "./prediction-chart"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+import { cn } from "@/lib/utils"
+import { MaterialCombobox } from "./material-combobox"
+import { SafetyStockInsightsChart } from "./safety-stock-insights-chart"
+
+interface PredictionHistoryItem {
+    id: number
+    productCode: string
+    productName: string | null
+    predictionType: string
+    recommendedStock: number
+    rationale: string
+    createdAt: string | Date
+}
+
+interface SafetyStockPredictionResult {
+    productCode: string
+    productName: string | null
+    recommendedStock: number
+    rationale: string
+    currentStock?: number | null
+}
+
+interface SafetyStockReportMetric {
+    label?: string
+    value?: string
+    icon?: string
+}
+
+interface SafetyStockRecommendation {
+    title?: string
+    detail?: string
+}
+
+interface SafetyStockReport {
+    summary?: string
+    status?: "Safe" | "Warning" | "Critical"
+    metrics?: SafetyStockReportMetric[]
+    recommendations?: SafetyStockRecommendation[]
+}
+
+const currencyFormatter = new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+})
+
+const numberFormatter = new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+})
+
+const oneDecimalFormatter = new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+})
+
+const serviceLevelOptions = ["90", "95", "99"] as const
+
+const formatQuantity = (value: number | null | undefined) => {
+    if (value === null || value === undefined) {
+        return "-"
+    }
+
+    if (Math.abs(value) > 0 && Math.abs(value) < 1) {
+        return `${value.toFixed(2)} qty`
+    }
+
+    if (Math.abs(value) < 10 && !Number.isInteger(value)) {
+        return `${oneDecimalFormatter.format(value)} qty`
+    }
+
+    return `${numberFormatter.format(value)} qty`
+}
+
+const formatCurrency = (value: number) => currencyFormatter.format(value)
+
+const formatDateTime = (value: string | Date) => new Date(value).toLocaleString("id-ID")
+
+const formatDate = (value: string | Date | null) => {
+    if (!value) {
+        return "-"
+    }
+
+    return new Date(value).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    })
+}
+
+const formatDays = (value: number | null | undefined) => {
+    if (value === null || value === undefined) {
+        return "Belum ada demand"
+    }
+
+    return `${oneDecimalFormatter.format(value)} hari`
+}
+
+const parseReport = (rationale: string): SafetyStockReport | null => {
+    try {
+        const parsed = JSON.parse(rationale) as SafetyStockReport
+        return parsed && typeof parsed === "object" ? parsed : null
+    } catch {
+        return null
+    }
+}
+
+const getSummaryText = (rationale: string) => {
+    const report = parseReport(rationale)
+    return report?.summary || rationale
+}
+
+const getStatusBadgeVariant = (status?: string) => {
+    if (status === "Safe") return "success"
+    if (status === "Warning") return "warning"
+    if (status === "Critical") return "destructive"
+    return "outline"
+}
+
+const getDeadStockTone = (status: SafetyStockAnalytics["deadStock"]["status"]) => {
+    if (status === "Dead Risk") return "border-rose-200 bg-rose-50 text-rose-900"
+    if (status === "Watchlist") return "border-amber-200 bg-amber-50 text-amber-900"
+    return "border-emerald-200 bg-emerald-50 text-emerald-900"
+}
+
+const getExcessTone = (status: SafetyStockAnalytics["excessStatus"]) => {
+    if (status === "Overstock") return "border-amber-200 bg-amber-50 text-amber-900"
+    if (status === "Lean") return "border-rose-200 bg-rose-50 text-rose-900"
+    return "border-emerald-200 bg-emerald-50 text-emerald-900"
+}
+
+const getLeadTimeTone = (status: SafetyStockAnalytics["leadTime"]["status"]) => {
+    if (status === "Volatile") return "border-rose-200 bg-rose-50 text-rose-900"
+    if (status === "Perlu Perhatian") return "border-amber-200 bg-amber-50 text-amber-900"
+    return "border-sky-200 bg-sky-50 text-sky-900"
+}
 
 export function DynamicSafetyStock() {
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<any>(null)
-    const [history, setHistory] = useState<any[]>([])
-    const [salesHistory, setSalesHistory] = useState<any[]>([])
-    const [isLoadingChart, setIsLoadingChart] = useState(false)
+    const [isLoadingInsights, setIsLoadingInsights] = useState(false)
+    const [result, setResult] = useState<SafetyStockPredictionResult | null>(null)
+    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
+    const [analytics, setAnalytics] = useState<SafetyStockAnalytics | null>(null)
+    const [serviceLevel, setServiceLevel] = useState<(typeof serviceLevelOptions)[number]>("95")
+    const [suddenOrderQty, setSuddenOrderQty] = useState(100)
 
     useEffect(() => {
         loadHistory()
     }, [])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions()
-        if (res.success && res.data) {
-            setHistory(res.data.filter((d: any) => d.predictionType === 'SAFETY_STOCK'))
+        const response = await getRecentPredictions()
+        if (response.success && response.data) {
+            setHistory(response.data.filter((item) => item.predictionType === "SAFETY_STOCK"))
         }
     }
 
     const handleGenerate = async () => {
-        if (!productCode) {
+        if (!productCode.trim()) {
             toast.error("Silakan masukkan Material Number")
             return
         }
-        setIsLoading(true)
-        setResult(null)
-        setSalesHistory([])
-        try {
-            const res = await generateAIPrediction(productCode, 'SAFETY_STOCK')
-            if (res.success) {
-                setResult(res.data)
-                if (res.cached) {
-                    toast.success("Mengambil data prediksi dari cache (24 jam terakhir)")
-                } else {
-                    toast.success("Analisis Safety Stock berhasil dibuat")
-                }
-                loadHistory()
 
-                // Load sales history for chart
-                setIsLoadingChart(true)
-                const historyRes = await getSalesHistory(productCode)
-                if (historyRes.success && historyRes.data) {
-                    setSalesHistory(historyRes.data)
-                }
-                setIsLoadingChart(false)
-            } else {
-                toast.error(res.error || "Gagal membuat perhitungan")
+        setIsLoading(true)
+        setIsLoadingInsights(false)
+        setResult(null)
+        setAnalytics(null)
+
+        try {
+            const predictionResponse = await generateAIPrediction(productCode, "SAFETY_STOCK")
+
+            if (!predictionResponse.success || !predictionResponse.data) {
+                toast.error(predictionResponse.error || "Gagal membuat perhitungan")
+                return
             }
-        } catch (err: any) {
-            toast.error(err.message || "Terjadi kesalahan")
+
+            const nextResult: SafetyStockPredictionResult = {
+                productCode: predictionResponse.data.productCode,
+                productName: predictionResponse.data.productName,
+                recommendedStock: predictionResponse.data.recommendedStock,
+                rationale: predictionResponse.data.rationale,
+                currentStock: predictionResponse.data.currentStock,
+            }
+
+            setResult(nextResult)
+
+            if (predictionResponse.cached) {
+                toast.success("Mengambil data prediksi dari cache 24 jam terakhir")
+            } else {
+                toast.success("Analisis Safety Stock berhasil dibuat")
+            }
+
+            setIsLoadingInsights(true)
+            const analyticsResponse = await getSafetyStockAnalytics(nextResult.productCode, {
+                recommendedSafetyStock: nextResult.recommendedStock,
+            })
+
+            await loadHistory()
+
+            if (analyticsResponse.success && analyticsResponse.data) {
+                setAnalytics(analyticsResponse.data)
+                setSuddenOrderQty(analyticsResponse.data.scenarios.suddenOrderSuggestion)
+            } else {
+                toast.error(analyticsResponse.error || "Insight lanjutan gagal dimuat")
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Terjadi kesalahan"
+            toast.error(message)
         } finally {
             setIsLoading(false)
+            setIsLoadingInsights(false)
         }
     }
 
+    const report = result ? parseReport(result.rationale) : null
+    const selectedScenario = analytics?.scenarios.options.find(
+        (option) => String(option.serviceLevel) === serviceLevel
+    ) ?? analytics?.scenarios.options[0]
+    const simulatedStock = analytics ? Math.max(0, analytics.currentStock - suddenOrderQty) : 0
+    const simulatedDaysOfCover = analytics && analytics.avgDailyDemand > 0
+        ? Number((simulatedStock / analytics.avgDailyDemand).toFixed(1))
+        : null
+    const simulatedDaysUntilReorder = analytics && selectedScenario && analytics.avgDailyDemand > 0
+        ? Math.max(0, Math.floor((simulatedStock - selectedScenario.reorderPoint) / analytics.avgDailyDemand))
+        : null
+    const simulatedGapToRop = selectedScenario
+        ? Math.max(0, selectedScenario.reorderPoint - simulatedStock)
+        : 0
+    const scenarioSliderMax = analytics
+        ? Math.max(100, Math.ceil(analytics.currentStock + analytics.dynamicSafetyStock))
+        : 400
+
     return (
         <div className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <BrainCircuit className="w-5 h-5 text-indigo-500" />
-                                Hitung Safety Stock Pintar
-                            </CardTitle>
-                            <CardDescription>
-                                Gunakan model AI untuk menentukan buffer inventory yang tepat agar tidak overstock dan tidak stockout.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Material Number</Label>
-                                <MaterialCombobox
-                                    value={productCode}
-                                    onChange={setProductCode}
-                                />
-                            </div>
-                            <Button
-                                onClick={handleGenerate}
-                                disabled={isLoading}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        AI Computing...
-                                    </>
-                                ) : (
-                                    "Kalkulasi Safety Stock"
-                                )}
-                            </Button>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)]">
+                <Card className="overflow-hidden border-indigo-100 shadow-sm">
+                    <CardHeader className="bg-gradient-to-br from-indigo-50 via-white to-sky-50">
+                        <CardTitle className="flex items-center gap-2">
+                            <BrainCircuit className="h-5 w-5 text-indigo-500" />
+                            Dynamic Safety Stock
+                        </CardTitle>
+                        <CardDescription className="max-w-2xl text-sm leading-relaxed">
+                            Hitung safety stock, baca risiko stockout lebih cepat lewat chart time-series,
+                            dan lihat dampak modal mengendap langsung dari material SAP yang Anda pilih.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 p-5">
+                        <div className="space-y-2">
+                            <Label>Material Number</Label>
+                            <MaterialCombobox value={productCode} onChange={setProductCode} />
+                        </div>
 
-                            {result && (
-                                <div className="pt-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                    <Alert className="bg-indigo-50 border-indigo-200">
-                                        <ShieldCheck className="h-4 w-4 text-indigo-600" />
-                                        <AlertTitle className="text-indigo-800 font-semibold">
-                                            Rekomendasi Safety Stock: {result.recommendedStock} Pcs
-                                        </AlertTitle>
-                                        <AlertDescription className="mt-2 text-sm leading-relaxed text-indigo-900/80">
-                                            {result.rationale}
-                                        </AlertDescription>
-                                    </Alert>
-                                </div>
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={isLoading}
+                            className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Menghitung Dynamic Safety Stock...
+                                </>
+                            ) : (
+                                "Kalkulasi Safety Stock"
                             )}
-                        </CardContent>
-                    </Card>
-                </div>
+                        </Button>
 
-                <div className="space-y-6">
-                    <Card className="h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                                <ShieldAlert className="w-5 h-5" />
-                                History Perhitungan
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                {history.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground text-center py-8">
-                                        Belum ada data history perhitungan.
-                                    </p>
-                                ) : (
-                                    history.map((item) => (
-                                        <div key={item.id} className="p-3 rounded-lg border border-indigo-100 bg-white shadow-sm space-y-2 text-sm">
-                                            <div className="flex justify-between items-center font-medium">
-                                                <span className="text-slate-700">{item.productCode}</span>
-                                                <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded text-xs font-bold">
-                                                    {item.recommendedStock} Pcs
-                                                </span>
+                        {result && (
+                            <Alert className="border-indigo-200 bg-indigo-50/80">
+                                <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                                <AlertTitle className="flex flex-wrap items-center gap-2 text-indigo-900">
+                                    <span>Safety Stock AI: {numberFormatter.format(result.recommendedStock)} qty</span>
+                                    {report?.status && (
+                                        <Badge variant={getStatusBadgeVariant(report.status)}>
+                                            {report.status}
+                                        </Badge>
+                                    )}
+                                </AlertTitle>
+                                <AlertDescription className="mt-2 space-y-3 text-sm leading-relaxed text-indigo-950/80">
+                                    <p>{report?.summary || "Model AI telah membuat ringkasan safety stock terbaru."}</p>
+                                    {report?.metrics && report.metrics.length > 0 && (
+                                        <div className="grid gap-2 sm:grid-cols-3">
+                                            {report.metrics.slice(0, 3).map((metric) => (
+                                                <div
+                                                    key={`${metric.label}-${metric.value}`}
+                                                    className="rounded-xl border border-indigo-100 bg-white/80 p-3"
+                                                >
+                                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-500">
+                                                        {metric.label}
+                                                    </p>
+                                                    <p className="mt-1 text-base font-semibold text-slate-900">
+                                                        {metric.value || "-"}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="border-slate-200 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                            <ShieldAlert className="h-5 w-5" />
+                            History Perhitungan
+                        </CardTitle>
+                        <CardDescription>
+                            Safety stock yang baru dihitung akan muncul di sini beserta ringkasan hasilnya.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="max-h-[420px] space-y-4 overflow-y-auto pr-1">
+                            {history.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-muted-foreground">
+                                    Belum ada data history perhitungan.
+                                </p>
+                            ) : (
+                                history.map((item) => {
+                                    const itemReport = parseReport(item.rationale)
+
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="space-y-2 rounded-2xl border border-indigo-100 bg-white p-4 text-sm shadow-sm"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-slate-900">{item.productCode}</p>
+                                                    {item.productName && (
+                                                        <p className="truncate text-xs text-muted-foreground">
+                                                            {item.productName}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">
+                                                        {numberFormatter.format(item.recommendedStock)} qty
+                                                    </p>
+                                                    {itemReport?.status && (
+                                                        <Badge
+                                                            variant={getStatusBadgeVariant(itemReport.status)}
+                                                            className="mt-2"
+                                                        >
+                                                            {itemReport.status}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
-                                            {item.productName && <p className="text-muted-foreground text-xs">{item.productName}</p>}
-                                            <p className="pt-1 text-slate-600">{item.rationale}</p>
-                                            <div className="text-[10px] text-slate-400 pt-2 text-right">
-                                                {new Date(item.createdAt).toLocaleString('id-ID')}
+                                            <p className="line-clamp-3 text-slate-600">
+                                                {getSummaryText(item.rationale)}
+                                            </p>
+                                            <div className="text-right text-[10px] text-slate-400">
+                                                {formatDateTime(item.createdAt)}
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-
-            {/* Sales Trend Chart */}
-            {result && salesHistory.length > 0 && (
-                <div className="animate-in fade-in slide-in-from-bottom-3 duration-700">
-                    <PredictionChart
-                        data={salesHistory}
-                        productCode={result.productCode}
-                        productName={result.productName}
-                        currentStock={result.currentStock}
-                        recommendedStock={result.recommendedStock}
-                    />
-                </div>
-            )}
-
-            {result && isLoadingChart && (
-                <Card>
-                    <CardContent className="flex items-center justify-center h-[400px]">
-                        <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                            <p className="text-sm text-muted-foreground">Loading sales history...</p>
+                                    )
+                                })
+                            )}
                         </div>
                     </CardContent>
                 </Card>
+            </div>
+
+            {result && isLoadingInsights && (
+                <Card>
+                    <CardContent className="flex h-[260px] items-center justify-center">
+                        <div className="flex flex-col items-center gap-3 text-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <div className="space-y-1">
+                                <p className="font-medium text-slate-900">Menyusun insight Dynamic Safety Stock...</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Menyiapkan forecast, analisa excess stock, ROP, dan simulasi what-if.
+                                </p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {analytics && (
+                <>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                                    <Package className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Current Stock
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                                        {numberFormatter.format(analytics.currentStock)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-rose-100 shadow-sm">
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <div className="rounded-2xl bg-rose-50 p-3 text-rose-700">
+                                    <ShieldCheck className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Dynamic Safety Stock
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                                        {numberFormatter.format(analytics.dynamicSafetyStock)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-violet-100 shadow-sm">
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <div className="rounded-2xl bg-violet-50 p-3 text-violet-700">
+                                    <Target className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Reorder Point
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                                        {numberFormatter.format(analytics.reorderPoint)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-amber-100 shadow-sm">
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <div className="rounded-2xl bg-amber-50 p-3 text-amber-700">
+                                    <Clock3 className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Days of Cover
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                                        {formatDays(analytics.daysOfCover)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-emerald-100 shadow-sm">
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
+                                    <Coins className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Excess Value
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                                        {formatCurrency(analytics.excessStockValue)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <SafetyStockInsightsChart analytics={analytics} />
+
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Coins className="h-5 w-5 text-amber-600" />
+                                    Analisa Excess Stock
+                                </CardTitle>
+                                <CardDescription>
+                                    Melihat apakah stok saat ini masih efisien atau justru terlalu besar dibanding demand.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div
+                                    className={cn(
+                                        "rounded-2xl border p-4",
+                                        getExcessTone(analytics.excessStatus)
+                                    )}
+                                >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                                                Status Stok
+                                            </p>
+                                            <p className="mt-2 text-xl font-bold">{analytics.excessStatus}</p>
+                                        </div>
+                                        <Badge variant="outline" className="bg-white/70">
+                                            Unit cost approx. {formatCurrency(analytics.unitCost)}
+                                        </Badge>
+                                    </div>
+                                    <p className="mt-3 text-sm leading-relaxed">
+                                        Stok saat ini {numberFormatter.format(analytics.currentStock)} qty.
+                                        Dengan ROP {numberFormatter.format(analytics.reorderPoint)} qty,
+                                        ada potensi modal mengendap sebanyak{" "}
+                                        <span className="font-semibold">
+                                            {numberFormatter.format(analytics.excessStockUnits)} qty
+                                        </span>{" "}
+                                        atau sekitar{" "}
+                                        <span className="font-semibold">
+                                            {formatCurrency(analytics.excessStockValue)}
+                                        </span>.
+                                    </p>
+                                </div>
+
+                                <div
+                                    className={cn(
+                                        "rounded-2xl border p-4",
+                                        getDeadStockTone(analytics.deadStock.status)
+                                    )}
+                                >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <p className="font-semibold">
+                                            Dead Stock Alert: {analytics.deadStock.status}
+                                        </p>
+                                    </div>
+                                    <p className="mt-3 text-sm leading-relaxed">
+                                        {analytics.deadStock.message}
+                                    </p>
+                                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                        <div className="rounded-xl bg-white/70 p-3">
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]">
+                                                Last Movement
+                                            </p>
+                                            <p className="mt-1 font-semibold">
+                                                {formatDate(analytics.deadStock.lastMovementDate)}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-white/70 p-3">
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]">
+                                                No Movement
+                                            </p>
+                                            <p className="mt-1 font-semibold">
+                                                {analytics.deadStock.monthsWithoutMovement} bulan
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Truck className="h-5 w-5 text-violet-600" />
+                                    Dynamic Reorder Point & Lead Time
+                                </CardTitle>
+                                <CardDescription>
+                                    Kapan mulai pesan lagi dan seberapa stabil vendor mengirim material ini.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">
+                                            Countdown to Reorder
+                                        </p>
+                                        <p className="mt-2 text-2xl font-bold text-slate-900">
+                                            {analytics.daysUntilReorder === null
+                                                ? "Belum ada demand"
+                                                : analytics.daysUntilReorder === 0
+                                                    ? "Pesan sekarang"
+                                                    : `${numberFormatter.format(analytics.daysUntilReorder)} hari lagi`}
+                                        </p>
+                                        <p className="mt-2 text-sm text-slate-600">
+                                            Formula ROP = (Average Daily Sales x Lead Time) + Safety Stock
+                                        </p>
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "rounded-2xl border p-4",
+                                            getLeadTimeTone(analytics.leadTime.status)
+                                        )}
+                                    >
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                                            Vendor Performance
+                                        </p>
+                                        <p className="mt-2 text-2xl font-bold">{analytics.leadTime.status}</p>
+                                        <p className="mt-2 text-sm leading-relaxed">
+                                            {analytics.leadTime.insight}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Avg Lead Time
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {oneDecimalFormatter.format(analytics.leadTime.averageDays)} hari
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Variability
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {oneDecimalFormatter.format(analytics.leadTime.stdDevDays)} hari
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Buffer Added
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {numberFormatter.format(analytics.leadTime.bufferIncrease)} qty
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Top Vendors
+                                    </p>
+                                    <div className="mt-3 space-y-3">
+                                        {analytics.leadTime.vendors.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">
+                                                Belum ada histori vendor yang cukup untuk material ini.
+                                            </p>
+                                        ) : (
+                                            analytics.leadTime.vendors.map((vendor) => (
+                                                <div
+                                                    key={vendor.name}
+                                                    className="flex items-start justify-between gap-4 rounded-xl border bg-white p-3"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-semibold text-slate-900">
+                                                            {vendor.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {vendor.sampleSize} PO • {numberFormatter.format(vendor.orderedQty)} qty
+                                                        </p>
+                                                    </div>
+                                                    <p className="shrink-0 text-sm font-semibold text-slate-700">
+                                                        {oneDecimalFormatter.format(vendor.averageDays)} hari
+                                                    </p>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)]">
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5 text-sky-600" />
+                                    Simulasi What-If
+                                </CardTitle>
+                                <CardDescription>
+                                    Uji skenario order mendadak dan bandingkan safety stock berdasarkan service level.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-5">
+                                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_200px]">
+                                    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <Label htmlFor="sudden-order" className="font-medium">
+                                                Pesanan Mendadak
+                                            </Label>
+                                            <span className="text-sm font-semibold text-slate-700">
+                                                {numberFormatter.format(suddenOrderQty)} qty
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            value={[suddenOrderQty]}
+                                            onValueChange={(values) => setSuddenOrderQty(values[0] || 0)}
+                                            min={0}
+                                            max={scenarioSliderMax}
+                                            step={5}
+                                        />
+                                        <Input
+                                            id="sudden-order"
+                                            type="number"
+                                            min={0}
+                                            max={scenarioSliderMax}
+                                            value={suddenOrderQty}
+                                            onChange={(event) => setSuddenOrderQty(Number(event.target.value) || 0)}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                                        <Label htmlFor="service-level" className="font-medium">
+                                            Service Level
+                                        </Label>
+                                        <Select
+                                            value={serviceLevel}
+                                            onValueChange={(value) => {
+                                                if (serviceLevelOptions.includes(value as (typeof serviceLevelOptions)[number])) {
+                                                    setServiceLevel(value as (typeof serviceLevelOptions)[number])
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger id="service-level" className="w-full bg-white">
+                                                <SelectValue placeholder="Pilih service level" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {serviceLevelOptions.map((value) => (
+                                                    <SelectItem key={value} value={value}>
+                                                        {value}%
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs leading-relaxed text-muted-foreground">
+                                            99% berarti hampir tidak pernah stockout, tapi stok pengaman akan lebih tinggi.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-3">
+                                    {analytics.scenarios.options.map((option) => (
+                                        <div
+                                            key={option.serviceLevel}
+                                            className={cn(
+                                                "rounded-2xl border p-4 transition-colors",
+                                                String(option.serviceLevel) === serviceLevel
+                                                    ? "border-sky-300 bg-sky-50"
+                                                    : "border-slate-200 bg-white"
+                                            )}
+                                        >
+                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                Service Level
+                                            </p>
+                                            <p className="mt-1 text-2xl font-bold text-slate-900">{option.label}</p>
+                                            <div className="mt-3 space-y-2 text-sm text-slate-600">
+                                                <p>Safety Stock: {formatQuantity(option.safetyStock)}</p>
+                                                <p>ROP: {formatQuantity(option.reorderPoint)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {selectedScenario && (
+                                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-5">
+                                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                    After Shock Stock
+                                                </p>
+                                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                                    {formatQuantity(simulatedStock)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                    New Cover
+                                                </p>
+                                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                                    {formatDays(simulatedDaysOfCover)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                    Reorder Countdown
+                                                </p>
+                                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                                    {simulatedDaysUntilReorder === null
+                                                        ? "Belum ada demand"
+                                                        : simulatedDaysUntilReorder === 0
+                                                            ? "Segera order"
+                                                            : `${numberFormatter.format(simulatedDaysUntilReorder)} hari`}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                    Gap to ROP
+                                                </p>
+                                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                                    {formatQuantity(simulatedGapToRop)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                                            Jika ada order mendadak {numberFormatter.format(suddenOrderQty)} qty
+                                            dengan target service level {selectedScenario.label}, maka safety stock
+                                            ideal menjadi {numberFormatter.format(selectedScenario.safetyStock)} qty
+                                            dan titik pesan ulang ada di {numberFormatter.format(selectedScenario.reorderPoint)} qty.
+                                        </p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <BarChart3 className="h-5 w-5 text-emerald-600" />
+                                    Insight Sekarang vs Masa Depan
+                                </CardTitle>
+                                <CardDescription>
+                                    Ringkasan perbandingan kondisi saat ini dan peluang optimasi berikutnya.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Saat Ini
+                                        </p>
+                                        <p className="mt-2 text-lg font-bold text-slate-900">
+                                            {report?.status || analytics.excessStatus}
+                                        </p>
+                                        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                                            Safety stock AI saat ini {numberFormatter.format(result?.recommendedStock || 0)} qty
+                                            dengan ketahanan stok {formatDays(analytics.daysOfCover)}.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                            Deep Insight
+                                        </p>
+                                        <p className="mt-2 text-lg font-bold text-slate-900">
+                                            {analytics.excessStatus === "Overstock" ? "Safe, but inefficient" : "Safe and responsive"}
+                                        </p>
+                                        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                                            Dashboard sekarang juga membaca modal mengendap, countdown ke ROP,
+                                            performa vendor, dan simulasi service level 90% vs 99%.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {(report?.recommendations && report.recommendations.length > 0
+                                        ? report.recommendations
+                                        : [
+                                            {
+                                                title: "Review Safety Stock Berkala",
+                                                detail: "Naikkan review cadence saat lead time vendor volatile atau demand musiman mulai naik.",
+                                            },
+                                            {
+                                                title: "Optimasi Modal Mengendap",
+                                                detail: "Gunakan excess stock value untuk memutuskan promosi, bundling, atau redistribusi antar lokasi.",
+                                            },
+                                        ]
+                                    ).slice(0, 3).map((recommendation) => (
+                                        <div
+                                            key={`${recommendation.title}-${recommendation.detail}`}
+                                            className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                                        >
+                                            <p className="font-semibold text-slate-900">
+                                                {recommendation.title || "Strategi Safety Stock"}
+                                            </p>
+                                            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                                                {recommendation.detail || "Gunakan insight ini sebagai acuan review mingguan."}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.92fr)]">
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <TrendingUp className="h-5 w-5 text-sky-600" />
+                                    Riwayat Penjualan Tetap Tersedia
+                                </CardTitle>
+                                <CardDescription>
+                                    Grafik membantu membaca pola lebih cepat, tapi tabel ini tetap disediakan untuk audit angka.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="overflow-hidden rounded-2xl border">
+                                    <div className="max-h-[360px] overflow-y-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="sticky top-0 bg-slate-100 text-slate-600">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left font-semibold">Bulan</th>
+                                                    <th className="px-4 py-3 text-right font-semibold">Total Qty Keluar</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {analytics.history.map((entry) => (
+                                                    <tr key={entry.period} className="border-t bg-white">
+                                                        <td className="px-4 py-3">{entry.label}</td>
+                                                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                                            {numberFormatter.format(entry.qty)} qty
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Gauge className="h-5 w-5 text-indigo-600" />
+                                    Demand & Forecast Summary
+                                </CardTitle>
+                                <CardDescription>
+                                    Angka ringkas untuk membantu review cepat saat meeting procurement atau warehouse.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Avg Monthly Demand
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {formatQuantity(analytics.avgMonthlyDemand)}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Avg Daily Demand
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {formatQuantity(analytics.avgDailyDemand)}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Base Calc Safety Stock
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {formatQuantity(analytics.calculatedSafetyStock)}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-2xl border bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            AI Recommendation
+                                        </p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">
+                                            {formatQuantity(analytics.aiRecommendedSafetyStock)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Snapshot
+                                    </p>
+                                    <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate-600">
+                                        <p>
+                                            Forecast demand bulan depan sekitar{" "}
+                                            <span className="font-semibold text-slate-900">
+                                                {numberFormatter.format(analytics.forecast.nextMonthDemand)} qty
+                                            </span>
+                                            , sedangkan kebutuhan kuartal berikutnya diperkirakan{" "}
+                                            <span className="font-semibold text-slate-900">
+                                                {numberFormatter.format(analytics.forecast.nextQuarterDemand)} qty
+                                            </span>.
+                                        </p>
+                                        <p>{analytics.forecast.confidenceNote}</p>
+                                        <p>{analytics.forecast.seasonalityNote}</p>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                                    <div className="flex items-start gap-3">
+                                        <Boxes className="mt-0.5 h-5 w-5 text-indigo-600" />
+                                        <div>
+                                            <p className="font-semibold text-slate-900">
+                                                Kenapa angka dynamic safety stock bisa lebih tinggi?
+                                            </p>
+                                            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                                                Karena rekomendasi akhir sekarang juga mempertimbangkan variability demand
+                                                dan deviasi lead time vendor. Jadi bukan hanya aman dari stockout,
+                                                tapi juga lebih realistis terhadap risiko keterlambatan pasokan.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </>
             )}
         </div>
     )

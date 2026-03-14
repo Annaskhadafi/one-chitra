@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, LineChart } from "lucide-react"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, History, Box, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, LineChart } from "lucide-react"
 import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings, getPredictionHistoricalInsights } from "@/app/actions/inventory-ml"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -17,6 +17,7 @@ import { DashboardTab } from "./dashboard-tab"
 import { useMaterialSearch, useCustomerSearch } from "../_hooks/use-sap-data"
 import { MLSettingsClient } from "../settings/_components/ml-settings-client"
 import { MLReportViewer } from "./ml-report-viewer"
+import { DynamicSafetyStock } from "./dynamic-safety-stock"
 
 type RecentPredictionsResult = Awaited<ReturnType<typeof getRecentPredictions>>
 type PredictionHistoryItem = NonNullable<Extract<RecentPredictionsResult, { success: true }>["data"]>[number]
@@ -271,7 +272,7 @@ function ReplenishmentTab() {
         setError(null)
         try {
             const res = await generateMLPrediction(productCode.trim(), 'REPLENISHMENT')
-            if (res.success) {
+            if (res.success && res.data) {
                 setResult(res.data)
                 toast.success(res.cached ? "Dari cache (24 jam)" : "Prediksi ML berhasil!")
                 loadHistory()
@@ -451,225 +452,7 @@ function ReplenishmentTab() {
 }
 
 function SafetyStockTab() {
-    const [productCode, setProductCode] = useState("")
-    const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
-    const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
-    const [currentPage, setCurrentPage] = useState(1)
-    const [totalPages, setTotalPages] = useState(1)
-    const [totalCount, setTotalCount] = useState(0)
-    const [selectedDetail, setSelectedDetail] = useState<PredictionHistoryItem | null>(null)
-    const pageSize = 20
-
-    useEffect(() => { loadHistory() }, [currentPage])
-
-    const loadHistory = async () => {
-        const res = await getRecentPredictions({ predictionType: "SAFETY_STOCK", page: currentPage, pageSize })
-        if (res.success && res.data) {
-            setHistory(res.data)
-            setTotalPages(res.totalPages || 1)
-            setTotalCount(res.totalCount || 0)
-        }
-    }
-
-    const handleDelete = async (id: number) => {
-        if (!confirm("Hapus history ini?")) return
-        const res = await deleteMLPrediction(id)
-        if (res.success) {
-            toast.success("Riwayat dihapus")
-            loadHistory()
-        } else {
-            toast.error(res.error || "Gagal menghapus")
-        }
-    }
-
-    const handleGenerate = async () => {
-        if (!productCode.trim()) {
-            toast.error("Silakan masukkan Material Number")
-            return
-        }
-        setIsLoading(true)
-        setResult(null)
-        setError(null)
-        try {
-            const res = await generateMLPrediction(productCode.trim(), 'SAFETY_STOCK')
-            if (res.success) {
-                setResult(res.data)
-                toast.success(res.cached ? "Dari cache (24 jam)" : "Safety Stock berhasil dihitung!")
-                loadHistory()
-            } else {
-                setError(res.error || "Gagal membuat perhitungan")
-                toast.error(res.error || "Gagal membuat perhitungan")
-            }
-        } catch (err: unknown) {
-            const message = getErrorMessage(err)
-            setError(message)
-            toast.error(message)
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    return (
-        <div className="grid gap-6 md:grid-cols-2">
-            <HistoricalInsightsPanel predictionType="SAFETY_STOCK" />
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <BrainCircuit className="w-5 h-5 text-indigo-500" />
-                        Hitung Safety Stock Pintar
-                    </CardTitle>
-                    <CardDescription>
-                        Gunakan ML untuk menentukan buffer inventory optimal.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Material Number</Label>
-                        <MaterialSearch value={productCode} onChange={setProductCode} />
-                    </div>
-                    <Button onClick={handleGenerate} disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
-                        {isLoading ? (
-                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> ML Computing...</>
-                        ) : "Kalkulasi Safety Stock"}
-                    </Button>
-
-                    {error && (
-                        <Alert variant="destructive">
-                            <AlertTitle>Error</AlertTitle>
-                            <AlertDescription className="text-xs break-all">{error}</AlertDescription>
-                        </Alert>
-                    )}
-
-                    {result && (
-                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 pt-4">
-                            <MLReportViewer rationale={result.rationale} />
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                        <ShieldAlert className="w-5 h-5" /> History Perhitungan
-                    </CardTitle>
-                    <CardDescription>
-                        {totalCount > 0 && `Menampilkan ${history.length} dari ${totalCount} riwayat`}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                        {history.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-8">Belum ada history.</p>
-                        ) : history.map((item) => (
-                            <div key={item.id} className="p-3 rounded-lg border bg-card shadow-sm space-y-1 text-sm group relative">
-                                {/* Action buttons */}
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 text-indigo-500 hover:bg-indigo-500/10"
-                                        title="Lihat Detail"
-                                        onClick={() => setSelectedDetail(item)}
-                                    >
-                                        <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                        title="Hapus"
-                                        onClick={() => handleDelete(item.id)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                                <Accordion type="single" collapsible className="w-full">
-                                    <AccordionItem value="report" className="border-none">
-                                        <AccordionTrigger className="py-2 hover:no-underline">
-                                            <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <div className="min-w-0 text-left">
-                                                    <span className="font-bold truncate block">{item.productCode}</span>
-                                                    <p className="text-xs font-normal text-muted-foreground truncate">
-                                                        {item.productName || "Nama produk tidak tersedia"}
-                                                    </p>
-                                                </div>
-                                                <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded text-xs font-bold">
-                                                    {item.recommendedStock} Pcs
-                                                </span>
-                                            </div>
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="border-t pt-4 mt-2">
-                                                <MLReportViewer rationale={item.rationale} />
-                                            </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
-                                <div className="text-[10px] text-muted-foreground text-right">
-                                    {new Date(item.createdAt).toLocaleString('id-ID')}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                            >
-                                <ChevronLeft className="h-4 w-4 mr-1" />
-                                Previous
-                            </Button>
-                            <span className="text-sm text-muted-foreground">
-                                Page {currentPage} of {totalPages}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                            >
-                                Next
-                                <ChevronRight className="h-4 w-4 ml-1" />
-                            </Button>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Detail Popup Full-Width */}
-            <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
-                    <DialogHeader>
-                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
-                            <span className="flex min-w-0 items-start gap-2">
-                                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" />
-                                <span className="min-w-0 break-words">Detail Safety Stock: {selectedDetail?.productName || selectedDetail?.productCode}</span>
-                            </span>
-                            <span className="text-sm font-normal text-muted-foreground">
-                                {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
-                            </span>
-                        </DialogTitle>
-                    </DialogHeader>
-                    {selectedDetail && (
-                        <div className="mt-2 text-left">
-                            <div className="text-sm text-muted-foreground mb-4 px-1">Material Number: {selectedDetail.productCode}</div>
-                            <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-900/30">
-                                <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Safety Stock Optimal</span>
-                                <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedDetail.recommendedStock} Pcs</span>
-                            </div>
-                            <MLReportViewer rationale={selectedDetail.rationale} />
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
-        </div>
-    )
+    return <DynamicSafetyStock />
 }
 
 function CustomerRecommendationTab() {
@@ -717,7 +500,7 @@ function CustomerRecommendationTab() {
         setError(null)
         try {
             const res = await generateMLCustomerRecommendation(customerCode.trim())
-            if (res.success) {
+            if (res.success && res.data) {
                 setResult(res.data)
                 toast.success(res.cached ? "Dari cache (24 jam)" : "Rekomendasi berhasil dibuat!")
                 loadHistory()
