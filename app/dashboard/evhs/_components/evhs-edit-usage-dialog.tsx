@@ -119,7 +119,7 @@ export function EvhsEditUsageDialog({
                     <div className="bg-slate-50 p-3 rounded-md border text-sm space-y-2 mb-2 mt-2">
                         <div className="font-bold text-slate-800">{trackingItem.materialNumberCp}</div>
                         <div className="text-slate-600 line-clamp-1 text-xs">{trackingItem.product?.materialDescription}</div>
-                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200">
+                        <div className="mt-2 grid grid-cols-1 gap-2 border-t border-slate-200 pt-2 sm:grid-cols-2">
                             <div>
                                 <span className="text-muted-foreground mr-2 text-xs">Voucher:</span>
                                 <span className="font-bold font-mono text-xs">{trackingItem.voucherNo}</span>
@@ -151,7 +151,7 @@ export function EvhsEditUsageDialog({
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="pos" className="text-xs">POS (Posisi Install)</Label>
                             <Input
@@ -172,7 +172,7 @@ export function EvhsEditUsageDialog({
                         </div>
                     </div>
 
-                    <DialogFooter className="mt-6 pt-4 border-t">
+                    <DialogFooter className="mt-6 border-t pt-4 flex-col-reverse gap-2 sm:flex-row">
                         <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Batal
                         </Button>

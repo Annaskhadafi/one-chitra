@@ -323,8 +323,8 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                 )}
             </div>
 
-            <div className="rounded-md border bg-card overflow-hidden shadow-sm">
-                <Table>
+            <div className="rounded-md border bg-card overflow-x-auto shadow-sm">
+                <Table className="min-w-[1100px]">
                     <TableHeader className="bg-slate-50 uppercase text-[10px] tracking-wider font-bold">
                         <TableRow>
                             <TableHead className="w-[40px] px-2 text-center border-r">
@@ -415,7 +415,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                                     ))}
                                 </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="matCp" className="text-xs font-bold uppercase tracking-wide">Material CP <span className="text-red-500">*</span></Label>
                                     <Input id="matCp" placeholder="110149C112" className="h-9 text-sm" value={formData.materialNumberCp} onChange={(e) => setFormData({...formData, materialNumberCp: e.target.value})} />
@@ -456,7 +456,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                         <div className="space-y-4 py-4">
                             <div className="grid gap-3">
                                 {(["sloc", "materialNumberCp", "materialNumberCk", "price"] as CsvMappingField[]).map((field) => (
-                                    <div key={field} className="grid grid-cols-2 items-center gap-4">
+                                    <div key={field} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-2 sm:gap-4">
                                         <Label className="text-[10px] font-bold uppercase">
                                             {field === "materialNumberCp" ? "Material CP" : field === "materialNumberCk" ? "Material CK" : field}
                                             {field !== "materialNumberCk" && " (Wajib)"}
@@ -491,7 +491,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
 
                     {importStep === "result" && (
                         <div className="space-y-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="bg-green-50 p-4 rounded-lg border border-green-100 text-center">
                                     <p className="text-2xl font-bold text-green-700">{importResults.success}</p>
                                     <p className="text-[10px] text-green-600 uppercase font-bold">Berhasil</p>
