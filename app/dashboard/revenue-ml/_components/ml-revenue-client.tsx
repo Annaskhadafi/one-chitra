@@ -60,6 +60,7 @@ import {
     RevenueMLStockInsight,
     simulateRevenueScenario,
 } from "@/lib/revenue-ml-forecast"
+import { calculateMovingAverage } from "@/lib/ai-utils"
 import { cn } from "@/lib/utils"
 
 type RevenueFilterOption = {
@@ -72,6 +73,30 @@ interface MLRevenueClientProps {
         categories: RevenueFilterOption[]
         customers: RevenueFilterOption[]
     }
+}
+
+const MOVING_AVERAGE_WINDOW = 6
+
+const calculateTrendline = (values: number[]) => {
+    if (values.length < 2) {
+        return values.map(() => null as number | null)
+    }
+
+    const count = values.length
+    const sumX = values.reduce((sum, _value, index) => sum + index, 0)
+    const sumY = values.reduce((sum, value) => sum + value, 0)
+    const sumXY = values.reduce((sum, value, index) => sum + (index * value), 0)
+    const sumXX = values.reduce((sum, _value, index) => sum + (index * index), 0)
+    const denominator = (count * sumXX) - (sumX * sumX)
+
+    if (denominator === 0) {
+        return values.map(() => null as number | null)
+    }
+
+    const slope = ((count * sumXY) - (sumX * sumY)) / denominator
+    const intercept = (sumY - (slope * sumX)) / count
+
+    return values.map((_value, index) => Math.max(0, intercept + (slope * index)))
 }
 
 const fmt = (value: number, compact = false) => {
@@ -112,15 +137,34 @@ function SearchableCombobox({
     onChange,
     placeholder,
     icon: Icon,
+    hydrated,
 }: {
     options: RevenueFilterOption[]
     value: string
     onChange: (value: string) => void
     placeholder: string
     icon: LucideIcon
+    hydrated: boolean
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = options.find((option) => option.id === value)
+
+    if (!hydrated) {
+        return (
+            <Button
+                variant="outline"
+                type="button"
+                disabled
+                className="h-10 w-full justify-between border-2 font-bold hover:bg-muted/50 lg:w-[300px]"
+            >
+                <div className="flex items-center gap-2 truncate">
+                    <Icon className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="truncate">{selected ? selected.name : placeholder}</span>
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+        )
+    }
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -179,6 +223,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
     const [filters, setFilters] = useState({ customer: "", category: "" })
     const [data, setData] = useState<RevenueMLForecastPoint[]>([])
     const [loading, setLoading] = useState(false)
+    const [hydrated, setHydrated] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [metrics, setMetrics] = useState({ accuracy: "0", isReliable: false })
     const [insightSummary, setInsightSummary] = useState<RevenueMLInsightSummary | null>(null)
@@ -238,6 +283,10 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
     }
 
     useEffect(() => {
+        setHydrated(true)
+    }, [])
+
+    useEffect(() => {
         fetchForecast()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -247,16 +296,35 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
     }
 
     const stockScenarioValue = stockScenarioPct[0] ?? 0
+    const historicalSeries = data
+        .filter((point) => point.type === "history")
+        .map((point) => point.revenue || 0)
+    const historicalMovingAverage = calculateMovingAverage(historicalSeries, MOVING_AVERAGE_WINDOW)
+    const historicalTrendline = calculateTrendline(historicalSeries)
+    let historicalIndex = 0
+
     const chartData = data.map((point) => {
+        const historyPointIndex = point.type === "history" ? historicalIndex++ : -1
+        const movingAverage = historyPointIndex >= 0
+            ? historicalMovingAverage[historyPointIndex] ?? null
+            : null
+        const trendline = historyPointIndex >= 0
+            ? historicalTrendline[historyPointIndex] ?? null
+            : null
+
         if (point.type !== "forecast" || point.forecast === null || !simulation) {
             return {
                 ...point,
+                movingAverage,
+                trendline,
                 scenarioForecast: null as number | null,
             }
         }
 
         return {
             ...point,
+            movingAverage,
+            trendline,
             scenarioForecast: Number(simulateRevenueScenario(point.forecast, simulation, stockScenarioValue).toFixed(0)),
         }
     })
@@ -298,6 +366,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                             }}
                             placeholder="Pilih Kategori..."
                             icon={Target}
+                            hydrated={hydrated}
                         />
                         <SearchableCombobox
                             options={initialFilters.customers}
@@ -309,6 +378,7 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                             }}
                             placeholder="Pilih Customer..."
                             icon={RefreshCcw}
+                            hydrated={hydrated}
                         />
                     </div>
                 </div>
@@ -550,6 +620,14 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                 <div className="h-3 w-3 rounded-full border-2 border-emerald-500 bg-emerald-500/20" />
                                 <span>What-If</span>
                             </div>
+                            <div className="flex items-center gap-2 text-slate-500">
+                                <div className="h-3 w-3 rounded-full border-2 border-dashed border-slate-500 bg-slate-500/10" />
+                                <span>{MOVING_AVERAGE_WINDOW}M Moving Avg</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-teal-700">
+                                <div className="h-3 w-3 rounded-full border-2 border-dashed border-teal-700 bg-teal-700/10" />
+                                <span>Trendline</span>
+                            </div>
                             <div className="flex items-center gap-2 text-amber-500">
                                 <div className="h-3 w-3 rounded-full bg-amber-500" />
                                 <span>Anomaly</span>
@@ -603,6 +681,8 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                             if (name === "upper" || name === "lower") return null
                                             if (name === "anomalyValue") return [fmt(value), "Anomaly"]
                                             if (name === "scenarioForecast") return [fmt(value), "What-If Forecast"]
+                                            if (name === "movingAverage") return [fmt(value), `${MOVING_AVERAGE_WINDOW}M Moving Average`]
+                                            if (name === "trendline") return [fmt(value), "Trendline"]
                                             return [fmt(value), name === "revenue" ? "Actual Revenue" : "Hybrid Forecast"]
                                         }}
                                         contentStyle={{
@@ -638,9 +718,29 @@ export function MLRevenueClient({ initialFilters }: MLRevenueClientProps) {
                                         dataKey="forecast"
                                         stroke="#ec4899"
                                         strokeWidth={4}
-                                        strokeDasharray="10 10"
                                         dot={{ r: 4, fill: "#ec4899", strokeWidth: 0 }}
                                         activeDot={{ r: 8, strokeWidth: 0, fill: "#ec4899" }}
+                                    />
+                                    <Line
+                                        name="movingAverage"
+                                        type="monotone"
+                                        dataKey="movingAverage"
+                                        stroke="#64748b"
+                                        strokeWidth={3}
+                                        strokeDasharray="7 5"
+                                        dot={false}
+                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#64748b" }}
+                                        connectNulls
+                                    />
+                                    <Line
+                                        name="trendline"
+                                        type="linear"
+                                        dataKey="trendline"
+                                        stroke="#0f766e"
+                                        strokeWidth={2}
+                                        dot={false}
+                                        activeDot={{ r: 6, strokeWidth: 0, fill: "#0f766e" }}
+                                        connectNulls
                                     />
                                     {scenarioActive && (
                                         <Line
