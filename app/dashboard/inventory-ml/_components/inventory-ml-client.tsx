@@ -30,7 +30,11 @@ interface CustomerSearchItem {
 }
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : "Terjadi kesalahan"
-const detailDialogContentClassName = "w-[min(96vw,1400px)] max-w-none max-h-[92vh] overflow-y-auto p-5 sm:p-6 lg:p-8"
+const detailDialogContentClassName = "max-h-[94vh] overflow-y-auto p-4 sm:p-6 lg:p-8"
+const detailDialogStyle = {
+    width: "min(98vw, 1800px)",
+    maxWidth: "min(98vw, 1800px)",
+}
 
 function CustomerSearch({ value, onChange }: { value: string; onChange: (val: string, name?: string) => void }) {
     const [search, setSearch] = useState("")
@@ -418,7 +422,7 @@ function ReplenishmentTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className={detailDialogContentClassName}>
+                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
                     <DialogHeader>
                         <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
                             <span className="flex min-w-0 items-start gap-2">
@@ -640,7 +644,7 @@ function SafetyStockTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className={detailDialogContentClassName}>
+                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
                     <DialogHeader>
                         <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
                             <span className="flex min-w-0 items-start gap-2">
@@ -859,7 +863,7 @@ function CustomerRecommendationTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedCustomerDetail} onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}>
-                <DialogContent className={detailDialogContentClassName}>
+                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
                     <DialogHeader>
                         <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
                             <span className="flex min-w-0 items-start gap-2">
