@@ -30,6 +30,7 @@ interface CustomerSearchItem {
 }
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : "Terjadi kesalahan"
+const detailDialogContentClassName = "w-[min(96vw,1400px)] max-w-none max-h-[92vh] overflow-y-auto p-5 sm:p-6 lg:p-8"
 
 function CustomerSearch({ value, onChange }: { value: string; onChange: (val: string, name?: string) => void }) {
     const [search, setSearch] = useState("")
@@ -417,12 +418,14 @@ function ReplenishmentTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className={detailDialogContentClassName}>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-lg">
-                            <Box className="w-5 h-5 text-primary" />
-                            Detail Analisis: {selectedDetail?.productName || selectedDetail?.productCode}
-                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
+                            <span className="flex min-w-0 items-start gap-2">
+                                <Box className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                                <span className="min-w-0 break-words">Detail Analisis: {selectedDetail?.productName || selectedDetail?.productCode}</span>
+                            </span>
+                            <span className="text-sm font-normal text-muted-foreground">
                                 {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
                             </span>
                         </DialogTitle>
@@ -637,12 +640,14 @@ function SafetyStockTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className={detailDialogContentClassName}>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-lg">
-                            <ShieldCheck className="w-5 h-5 text-indigo-500" />
-                            Detail Safety Stock: {selectedDetail?.productName || selectedDetail?.productCode}
-                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
+                            <span className="flex min-w-0 items-start gap-2">
+                                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" />
+                                <span className="min-w-0 break-words">Detail Safety Stock: {selectedDetail?.productName || selectedDetail?.productCode}</span>
+                            </span>
+                            <span className="text-sm font-normal text-muted-foreground">
                                 {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
                             </span>
                         </DialogTitle>
@@ -854,12 +859,14 @@ function CustomerRecommendationTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedCustomerDetail} onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}>
-                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                <DialogContent className={detailDialogContentClassName}>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-lg">
-                            <Target className="w-5 h-5 text-rose-500" />
-                            Detail Rekomendasi: {selectedCustomerDetail?.productName || selectedCustomerDetail?.productCode}
-                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
+                            <span className="flex min-w-0 items-start gap-2">
+                                <Target className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+                                <span className="min-w-0 break-words">Detail Rekomendasi: {selectedCustomerDetail?.productName || selectedCustomerDetail?.productCode}</span>
+                            </span>
+                            <span className="text-sm font-normal text-muted-foreground">
                                 {selectedCustomerDetail && new Date(selectedCustomerDetail.createdAt).toLocaleString('id-ID')}
                             </span>
                         </DialogTitle>
