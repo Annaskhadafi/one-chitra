@@ -42,13 +42,13 @@ export function PredictionHistoryList({
         try {
             const res = await getRecentPredictions({
                 ...filters,
+                predictionType,
                 page: currentPage,
                 pageSize
             })
 
             if (res.success && res.data) {
-                const filteredData = res.data.filter((d: any) => d.predictionType === predictionType)
-                setHistory(filteredData)
+                setHistory(res.data)
                 setTotalPages(res.totalPages || 1)
                 setTotalCount(res.totalCount || 0)
             }

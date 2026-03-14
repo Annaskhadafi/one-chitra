@@ -60,6 +60,7 @@ export async function getMLSettings() {
  * Requirements: 6.2, 6.3, 6.4, 6.5, 6.6
  */
 export interface PredictionFilters {
+    predictionType?: "REPLENISHMENT" | "SAFETY_STOCK" | "CUSTOMER_RECOMMENDATION"
     dateFrom?: Date
     dateTo?: Date
     materialGroup?: string
@@ -90,6 +91,10 @@ export async function getRecentPredictions(filters?: PredictionFilters) {
             const endDate = new Date(filters.dateTo);
             endDate.setDate(endDate.getDate() + 1);
             conditions.push(lt(aiInventoryPredictions.createdAt, endDate));
+        }
+
+        if (filters?.predictionType) {
+            conditions.push(eq(aiInventoryPredictions.predictionType, filters.predictionType));
         }
 
         // Stock range filter (Requirements: 6.4)
@@ -234,6 +239,145 @@ export async function getRecentPredictions(filters?: PredictionFilters) {
         return { success: false, error: "Failed to fetch AI predictions" };
     }
 }
+
+interface HistoricalInsightFilters {
+    predictionType: "REPLENISHMENT" | "SAFETY_STOCK" | "CUSTOMER_RECOMMENDATION"
+    days?: number
+}
+
+const parseStatusFromRationale = (rationale: string): "Safe" | "Warning" | "Critical" | null => {
+    if (!rationale) return null
+
+    try {
+        const parsed = JSON.parse(rationale)
+        if (parsed?.status === "Safe" || parsed?.status === "Warning" || parsed?.status === "Critical") {
+            return parsed.status
+        }
+    } catch {
+        // Ignore parse error and fallback to keyword matching
+    }
+
+    const normalized = rationale.toLowerCase()
+    if (normalized.includes("critical") || normalized.includes("kritis")) return "Critical"
+    if (normalized.includes("warning") || normalized.includes("peringatan")) return "Warning"
+    if (normalized.includes("safe") || normalized.includes("aman")) return "Safe"
+    return null
+}
+
+export async function getPredictionHistoricalInsights(filters: HistoricalInsightFilters) {
+    try {
+        await getAuthenticatedSession("inventory", "view")
+
+        const days = filters.days ?? 90
+        const sinceDate = new Date()
+        sinceDate.setDate(sinceDate.getDate() - days)
+
+        const data = await db
+            .select({
+                id: aiInventoryPredictions.id,
+                productCode: aiInventoryPredictions.productCode,
+                productName: aiInventoryPredictions.productName,
+                recommendedStock: aiInventoryPredictions.recommendedStock,
+                accuracyPercentage: aiInventoryPredictions.accuracyPercentage,
+                rationale: aiInventoryPredictions.rationale,
+                createdAt: aiInventoryPredictions.createdAt,
+            })
+            .from(aiInventoryPredictions)
+            .where(
+                and(
+                    eq(aiInventoryPredictions.predictionType, filters.predictionType),
+                    gte(aiInventoryPredictions.createdAt, sinceDate)
+                )
+            )
+            .orderBy(desc(aiInventoryPredictions.createdAt))
+            .limit(500)
+
+        const riskBuckets = { Safe: 0, Warning: 0, Critical: 0 }
+        const productCounter = new Map<string, { count: number; name: string }>()
+
+        data.forEach((item) => {
+            const key = item.productCode
+            if (!productCounter.has(key)) {
+                productCounter.set(key, { count: 0, name: item.productName || item.productCode })
+            }
+            const current = productCounter.get(key)!
+            current.count += 1
+
+            const status = parseStatusFromRationale(item.rationale)
+            if (status) riskBuckets[status] += 1
+        })
+
+        const topProducts = Array.from(productCounter.entries())
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 5)
+            .map(([code, value]) => ({
+                code,
+                name: value.name,
+                count: value.count,
+            }))
+
+        const weeklyMap = new Map<string, { totalRecommended: number; count: number; accuracySum: number; accuracyCount: number }>()
+        data.forEach((item) => {
+            const date = new Date(item.createdAt)
+            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-W${Math.ceil(date.getDate() / 7)}`
+            if (!weeklyMap.has(key)) {
+                weeklyMap.set(key, { totalRecommended: 0, count: 0, accuracySum: 0, accuracyCount: 0 })
+            }
+            const bucket = weeklyMap.get(key)!
+            bucket.totalRecommended += item.recommendedStock || 0
+            bucket.count += 1
+            if (typeof item.accuracyPercentage === "number") {
+                bucket.accuracySum += item.accuracyPercentage
+                bucket.accuracyCount += 1
+            }
+        })
+
+        const weeklyTrend = Array.from(weeklyMap.entries())
+            .map(([period, bucket]) => ({
+                period,
+                avgRecommendedStock: bucket.count > 0 ? Number((bucket.totalRecommended / bucket.count).toFixed(2)) : 0,
+                avgAccuracy: bucket.accuracyCount > 0 ? Number((bucket.accuracySum / bucket.accuracyCount).toFixed(2)) : 0,
+            }))
+            .sort((a, b) => a.period.localeCompare(b.period))
+            .slice(-8)
+
+        const firstRecommended = weeklyTrend[0]?.avgRecommendedStock ?? 0
+        const lastRecommended = weeklyTrend[weeklyTrend.length - 1]?.avgRecommendedStock ?? 0
+        const recommendationTrend = weeklyTrend.length > 1
+            ? (((lastRecommended - firstRecommended) / Math.max(firstRecommended, 1)) * 100)
+            : 0
+
+        const accuracyValues = data
+            .filter((item) => typeof item.accuracyPercentage === "number")
+            .map((item) => item.accuracyPercentage as number)
+        const avgAccuracy = accuracyValues.length > 0
+            ? accuracyValues.reduce((sum, value) => sum + value, 0) / accuracyValues.length
+            : 0
+
+        const insightBullets = [
+            `Total ${data.length} prediksi ${filters.predictionType} dalam ${days} hari terakhir.`,
+            `Rata-rata akurasi tercatat ${avgAccuracy.toFixed(1)}% dengan tren rekomendasi ${recommendationTrend >= 0 ? "naik" : "turun"} ${Math.abs(recommendationTrend).toFixed(1)}%.`,
+            `Distribusi risiko: Safe ${riskBuckets.Safe}, Warning ${riskBuckets.Warning}, Critical ${riskBuckets.Critical}.`
+        ]
+
+        return {
+            success: true,
+            data: {
+                totalPredictions: data.length,
+                avgAccuracy: Number(avgAccuracy.toFixed(2)),
+                riskBuckets,
+                topProducts,
+                weeklyTrend,
+                recommendationTrend: Number(recommendationTrend.toFixed(2)),
+                insightBullets,
+            }
+        }
+    } catch (error) {
+        console.error("Failed to generate prediction historical insights:", error)
+        return { success: false, error: "Failed to generate historical insights" }
+    }
+}
+
 
 export async function getDashboardMetrics() {
     try {
