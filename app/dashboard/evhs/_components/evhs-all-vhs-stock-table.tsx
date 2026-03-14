@@ -1,11 +1,13 @@
 "use client"
 
 import { Fragment, useMemo, useState } from "react"
+import type { CheckedState } from "@radix-ui/react-checkbox"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Table,
     TableBody,
@@ -14,14 +16,17 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Search, ChevronRight, ChevronDown, Package, Layers3, History, Edit2 } from "lucide-react"
+import { Search, ChevronRight, ChevronDown, Package, Layers3, History, Edit2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
+import { EvhsMultipleUsageDialog } from "./evhs-multiple-usage-dialog"
+import { toast } from "sonner"
 
 type EvhsAllVhsDetailRow = {
     id: string
     dateIn?: Date | string | null
     cpDo?: string | null
+    sourceLabel?: string
     materialNumberCp: string
     materialNumberCk?: string | null
     sn?: string | null
@@ -81,6 +86,7 @@ type UsageTrackingItem = {
     sn: string
     qty?: number
     availableQty?: number
+    defaultQty?: number
     cpDo?: string | null
     sourceType?: "receipt" | "legacy-stock"
     product: {
@@ -90,7 +96,129 @@ type UsageTrackingItem = {
     }
 }
 
-const MAIN_TABLE_COLUMN_COUNT = 12
+type SortKey =
+    | "default"
+    | "materialNumber"
+    | "materialDescription"
+    | "category"
+    | "sloc"
+    | "warehouseDescription"
+    | "totalStock"
+    | "usedQty"
+    | "availableQty"
+    | "status"
+
+type SortDirection = "asc" | "desc"
+
+const MAIN_TABLE_COLUMN_COUNT = 13
+
+function getWarehouseLabel(warehouse: { sloc: string; description?: string | null }) {
+    return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
+}
+
+function getCategoryPriority(category: string) {
+    return category.toUpperCase() === "TYRE" ? 0 : 1
+}
+
+function getStatusLabel(row: Pick<EvhsAllVhsStockRow, "availableQty" | "usedQty">) {
+    if (row.availableQty === 0) return "Used Out"
+    if (row.usedQty > 0) return "Partial"
+    return "Ready"
+}
+
+function compareText(left: string, right: string) {
+    return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
+}
+
+function compareNumber(left: number, right: number) {
+    return left - right
+}
+
+function sortRows(left: EvhsAllVhsStockRow, right: EvhsAllVhsStockRow, key: SortKey, direction: SortDirection) {
+    const directionFactor = direction === "asc" ? 1 : -1
+    let result = 0
+
+    switch (key) {
+        case "materialNumber":
+            result = compareText(left.materialNumber, right.materialNumber)
+            break
+        case "materialDescription":
+            result = compareText(left.materialDescription || "", right.materialDescription || "")
+            break
+        case "category":
+            result = compareText(left.category, right.category)
+            break
+        case "sloc":
+            result = compareText(left.warehouse.sloc, right.warehouse.sloc)
+            break
+        case "warehouseDescription":
+            result = compareText(left.warehouse.description || "", right.warehouse.description || "")
+            break
+        case "totalStock":
+            result = compareNumber(left.totalStock, right.totalStock)
+            break
+        case "usedQty":
+            result = compareNumber(left.usedQty, right.usedQty)
+            break
+        case "availableQty":
+            result = compareNumber(left.availableQty, right.availableQty)
+            break
+        case "status":
+            result = compareText(getStatusLabel(left), getStatusLabel(right))
+            break
+        case "default":
+        default:
+            result = compareText(getWarehouseLabel(left.warehouse), getWarehouseLabel(right.warehouse))
+            if (result === 0) {
+                result = compareNumber(getCategoryPriority(left.category), getCategoryPriority(right.category))
+            }
+            if (result === 0) {
+                result = compareText(left.materialNumber, right.materialNumber)
+            }
+            break
+    }
+
+    if (result !== 0) {
+        return result * directionFactor
+    }
+
+    const siteFallback = compareText(getWarehouseLabel(left.warehouse), getWarehouseLabel(right.warehouse))
+    if (siteFallback !== 0) return siteFallback
+
+    const categoryFallback = compareNumber(getCategoryPriority(left.category), getCategoryPriority(right.category))
+    if (categoryFallback !== 0) return categoryFallback
+
+    return compareText(left.materialNumber, right.materialNumber)
+}
+
+function SortableHeader({
+    label,
+    active,
+    direction,
+    onClick,
+    className,
+}: {
+    label: string
+    active: boolean
+    direction: SortDirection
+    onClick: () => void
+    className?: string
+}) {
+    const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown
+
+    return (
+        <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={`h-auto px-0 py-0 text-[10px] font-semibold uppercase tracking-wider text-slate-700 hover:bg-transparent ${className || ""}`}
+            onClick={onClick}
+        >
+            {label}
+            <Icon className="ml-1 h-3 w-3" />
+        </Button>
+    )
+}
 
 export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
     const [searchQuery, setSearchQuery] = useState("")
@@ -100,6 +228,10 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
     const [usageDialogOpen, setUsageDialogOpen] = useState(false)
     const [selectedEditItem, setSelectedEditItem] = useState<EvhsAllVhsDetailRow | null>(null)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
+    const [multipleUsageDialogOpen, setMultipleUsageDialogOpen] = useState(false)
+    const [selectedItemsForBatch, setSelectedItemsForBatch] = useState<string[]>([])
+    const [sortKey, setSortKey] = useState<SortKey>("default")
+    const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
 
     const warehouseOptions = useMemo(() => {
         return Array.from(
@@ -131,8 +263,12 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
         })
     }, [rows, searchQuery, warehouseFilter])
 
+    const sortedRows = useMemo(() => {
+        return [...filteredRows].sort((left, right) => sortRows(left, right, sortKey, sortDirection))
+    }, [filteredRows, sortKey, sortDirection])
+
     const stats = useMemo(() => {
-        return filteredRows.reduce((accumulator, row) => {
+        return sortedRows.reduce((accumulator, row) => {
             accumulator.totalItems += 1
             accumulator.totalStock += row.totalStock
             accumulator.usedQty += row.usedQty
@@ -144,7 +280,24 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
             usedQty: 0,
             availableQty: 0,
         })
-    }, [filteredRows])
+    }, [sortedRows])
+
+    const selectedBatchRows = useMemo(() => {
+        return rows.filter((row) => selectedItemsForBatch.includes(row.id))
+    }, [rows, selectedItemsForBatch])
+
+    const lockedWarehouseId = selectedBatchRows[0]?.warehouseId || null
+    const lockedWarehouseLabel = selectedBatchRows[0]?.warehouse
+        ? getWarehouseLabel(selectedBatchRows[0].warehouse)
+        : null
+
+    const selectableRowsInView = sortedRows.filter((row) => row.availableQty > 0)
+    const selectableRowsForLockedWarehouse = selectableRowsInView.filter((row) => (
+        !lockedWarehouseId || row.warehouseId === lockedWarehouseId
+    ))
+    const isAllSelected = selectableRowsForLockedWarehouse.length > 0 && (
+        selectableRowsForLockedWarehouse.every((row) => selectedItemsForBatch.includes(row.id))
+    )
 
     const toggleExpanded = (rowId: string) => {
         setExpandedRows((currentRows) =>
@@ -152,6 +305,55 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                 ? currentRows.filter((currentRowId) => currentRowId !== rowId)
                 : [...currentRows, rowId]
         )
+    }
+
+    const requestSort = (nextSortKey: SortKey) => {
+        if (sortKey === nextSortKey) {
+            setSortDirection((currentDirection) => currentDirection === "asc" ? "desc" : "asc")
+            return
+        }
+
+        setSortKey(nextSortKey)
+        setSortDirection("asc")
+    }
+
+    const handleSelectItem = (row: EvhsAllVhsStockRow, checked: CheckedState) => {
+        const isChecked = checked === true
+        if (!isChecked) {
+            setSelectedItemsForBatch((currentRows) => currentRows.filter((currentRowId) => currentRowId !== row.id))
+            return
+        }
+
+        if (lockedWarehouseId && lockedWarehouseId !== row.warehouseId) {
+            toast("Multi select voucher hanya bisa untuk 1 warehouse yang sama.")
+            return
+        }
+
+        setSelectedItemsForBatch((currentRows) => (
+            currentRows.includes(row.id) ? currentRows : [...currentRows, row.id]
+        ))
+    }
+
+    const handleSelectAll = (checked: CheckedState) => {
+        if (checked !== true) {
+            setSelectedItemsForBatch([])
+            return
+        }
+
+        if (selectableRowsInView.length === 0) {
+            return
+        }
+
+        const targetWarehouseId = lockedWarehouseId || selectableRowsInView[0]?.warehouseId
+        const rowsToSelect = selectableRowsInView
+            .filter((row) => row.warehouseId === targetWarehouseId)
+            .map((row) => row.id)
+
+        setSelectedItemsForBatch(rowsToSelect)
+
+        if (!lockedWarehouseId && warehouseFilter === "all" && selectableRowsInView.some((row) => row.warehouseId !== targetWarehouseId)) {
+            toast("Select all mengikuti warehouse pertama yang tampil. Gunakan filter site untuk memilih warehouse lain.")
+        }
     }
 
     const openLegacyUsage = (row: EvhsAllVhsStockRow) => {
@@ -163,6 +365,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
             sn: "-",
             qty: row.availableQty,
             availableQty: row.availableQty,
+            defaultQty: row.category.toUpperCase() === "TYRE" ? 1 : row.availableQty,
             cpDo: "LEGACY STOCK",
             sourceType: "legacy-stock",
             product: {
@@ -270,38 +473,98 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                     </div>
                 </div>
                 <Badge variant="outline" className="px-3 py-1.5 text-sm font-normal">
-                    Total baris: <strong>{filteredRows.length}</strong>
+                    Total baris: <strong>{sortedRows.length}</strong>
                 </Badge>
             </div>
+
+            {selectedItemsForBatch.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-3">
+                            <Badge variant="secondary" className="border-transparent bg-blue-600 text-white">
+                                {selectedItemsForBatch.length} item terpilih
+                            </Badge>
+                            <span className="text-sm font-medium text-blue-900">Siap dibuat 1 voucher bundle.</span>
+                        </div>
+                        <p className="text-xs text-blue-800">
+                            Multi select hanya untuk 1 warehouse yang sama{lockedWarehouseLabel ? `: ${lockedWarehouseLabel}` : ""}.
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="bg-white"
+                            onClick={() => setSelectedItemsForBatch([])}
+                        >
+                            Batalkan
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={() => setMultipleUsageDialogOpen(true)}
+                        >
+                            Generate Multiple Voucher
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             <div className="rounded-md border bg-card">
                 <div className="relative h-[640px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
                     <Table>
                         <TableHeader className="sticky top-0 z-10 bg-secondary shadow-sm">
                             <TableRow className="whitespace-nowrap uppercase text-[10px] tracking-wider">
+                                <TableHead className="w-[52px] text-center">
+                                    <Checkbox
+                                        checked={isAllSelected}
+                                        onCheckedChange={handleSelectAll}
+                                        aria-label="Pilih semua item"
+                                    />
+                                </TableHead>
                                 <TableHead className="w-[52px] text-center">Detail</TableHead>
                                 <TableHead className="w-[52px] text-center">No</TableHead>
-                                <TableHead>Material #</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>SLoc</TableHead>
-                                <TableHead>SLoc Desc</TableHead>
-                                <TableHead className="text-right">Stock Local</TableHead>
-                                <TableHead className="text-right">Used EVHS</TableHead>
-                                <TableHead className="text-right">Available EVHS</TableHead>
-                                <TableHead>Status</TableHead>
+                                <TableHead>
+                                    <SortableHeader label="Material #" active={sortKey === "materialNumber"} direction={sortDirection} onClick={() => requestSort("materialNumber")} />
+                                </TableHead>
+                                <TableHead>
+                                    <SortableHeader label="Description" active={sortKey === "materialDescription"} direction={sortDirection} onClick={() => requestSort("materialDescription")} />
+                                </TableHead>
+                                <TableHead>
+                                    <SortableHeader label="Category" active={sortKey === "category"} direction={sortDirection} onClick={() => requestSort("category")} />
+                                </TableHead>
+                                <TableHead>
+                                    <SortableHeader label="SLoc" active={sortKey === "sloc"} direction={sortDirection} onClick={() => requestSort("sloc")} />
+                                </TableHead>
+                                <TableHead>
+                                    <SortableHeader label="SLoc Desc" active={sortKey === "warehouseDescription"} direction={sortDirection} onClick={() => requestSort("warehouseDescription")} />
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <SortableHeader label="Stock Local" active={sortKey === "totalStock"} direction={sortDirection} onClick={() => requestSort("totalStock")} className="justify-end" />
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <SortableHeader label="Used EVHS" active={sortKey === "usedQty"} direction={sortDirection} onClick={() => requestSort("usedQty")} className="justify-end" />
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <SortableHeader label="Available EVHS" active={sortKey === "availableQty"} direction={sortDirection} onClick={() => requestSort("availableQty")} className="justify-end" />
+                                </TableHead>
+                                <TableHead>
+                                    <SortableHeader label="Status" active={sortKey === "status"} direction={sortDirection} onClick={() => requestSort("status")} />
+                                </TableHead>
                                 <TableHead className="text-right">Aksi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredRows.length === 0 ? (
+                            {sortedRows.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={MAIN_TABLE_COLUMN_COUNT} className="h-24 text-center text-muted-foreground">
                                         Tidak ada stock VHS CK yang cocok dengan filter.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredRows.map((row, index) => {
+                                sortedRows.map((row, index) => {
                                     const isTyre = row.category.toUpperCase() === "TYRE"
                                     const isExpanded = expandedRows.includes(row.id)
                                     const statusVariant = row.availableQty === 0
@@ -309,15 +572,25 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                         : row.usedQty > 0
                                             ? "bg-amber-100 text-amber-700 border-amber-200"
                                             : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                                    const statusLabel = row.availableQty === 0
-                                        ? "Used Out"
-                                        : row.usedQty > 0
-                                            ? "Partial"
-                                            : "Ready"
+                                    const statusLabel = getStatusLabel(row)
+                                    const isSelected = selectedItemsForBatch.includes(row.id)
+                                    const selectionLockedByOtherWarehouse = Boolean(lockedWarehouseId && lockedWarehouseId !== row.warehouseId && !isSelected)
 
                                     return (
                                         <Fragment key={row.id}>
-                                            <TableRow key={row.id} className="whitespace-nowrap text-xs">
+                                            <TableRow key={row.id} className={`whitespace-nowrap text-xs ${isSelected ? "bg-blue-50/50" : ""}`}>
+                                                <TableCell className="text-center">
+                                                    {row.availableQty > 0 ? (
+                                                        <Checkbox
+                                                            checked={isSelected}
+                                                            disabled={selectionLockedByOtherWarehouse}
+                                                            onCheckedChange={(checked) => handleSelectItem(row, checked)}
+                                                            aria-label={`Pilih ${row.materialNumber}`}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-muted-foreground">-</span>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="text-center">
                                                     {isTyre ? (
                                                         <Button
@@ -390,6 +663,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                                             <TableHead>Date In</TableHead>
                                                                             <TableHead>Site VHS</TableHead>
                                                                             <TableHead>CP DO</TableHead>
+                                                                            <TableHead>Source</TableHead>
                                                                             <TableHead>Material Number CP</TableHead>
                                                                             <TableHead>Material Number CK</TableHead>
                                                                             <TableHead>SN</TableHead>
@@ -408,7 +682,7 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                                     <TableBody>
                                                                         {row.detailRows.length === 0 ? (
                                                                             <TableRow>
-                                                                                <TableCell colSpan={17} className="h-20 text-center text-muted-foreground">
+                                                                                <TableCell colSpan={18} className="h-20 text-center text-muted-foreground">
                                                                                     Belum ada SN atau usage EVHS untuk material ini. Gunakan tombol <strong>Input SN / Usage</strong> di baris utama.
                                                                                 </TableCell>
                                                                             </TableRow>
@@ -432,6 +706,11 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                                                                                                 : `${row.warehouse.sloc} - ${row.warehouse.description || ""}`}
                                                                                         </TableCell>
                                                                                         <TableCell>{detailRow.cpDo || "-"}</TableCell>
+                                                                                        <TableCell>
+                                                                                            <Badge variant={detailRow.sourceLabel === "Voucher Legacy" ? "secondary" : "outline"} className="text-[10px]">
+                                                                                                {detailRow.sourceLabel || "Penerimaan EVHS"}
+                                                                                            </Badge>
+                                                                                        </TableCell>
                                                                                         <TableCell className="font-semibold">{detailRow.materialNumberCp}</TableCell>
                                                                                         <TableCell>{detailRow.materialNumberCk || "-"}</TableCell>
                                                                                         <TableCell className="font-mono font-medium">{detailRow.sn || "-"}</TableCell>
@@ -504,6 +783,32 @@ export function EvhsAllVhsStockTable({ rows }: { rows: EvhsAllVhsStockRow[] }) {
                 open={usageDialogOpen}
                 onOpenChange={setUsageDialogOpen}
                 trackingItem={selectedUsageItem}
+            />
+
+            <EvhsMultipleUsageDialog
+                open={multipleUsageDialogOpen}
+                onOpenChange={setMultipleUsageDialogOpen}
+                trackingItems={rows
+                    .filter((row) => selectedItemsForBatch.includes(row.id) && row.availableQty > 0)
+                    .map((row) => ({
+                        id: row.id,
+                        warehouseId: row.warehouseId,
+                        warehouseLabel: getWarehouseLabel(row.warehouse),
+                        productId: row.productId,
+                        materialNumberCp: row.materialNumber,
+                        materialNumberCk: row.materialNumberCk,
+                        sn: "-",
+                        qty: row.availableQty,
+                        availableQty: row.availableQty,
+                        defaultQty: 1,
+                        sourceType: "legacy-stock" as const,
+                        product: {
+                            materialDescription: row.materialDescription,
+                            materialNumberCk: row.materialNumberCk,
+                            category: row.category,
+                        },
+                    }))}
+                onSuccess={() => setSelectedItemsForBatch([])}
             />
 
             <EvhsEditUsageDialog

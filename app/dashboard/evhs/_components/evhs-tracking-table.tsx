@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
     Table,
     TableBody,
@@ -19,6 +19,8 @@ import { EvhsStockUsageDialog } from "./evhs-stock-usage-dialog"
 import { EvhsEditUsageDialog } from "./evhs-edit-usage-dialog"
 import { EvhsMultipleUsageDialog } from "./evhs-multiple-usage-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import type { CheckedState } from "@radix-ui/react-checkbox"
+import { toast } from "sonner"
 
 type WarehouseOption = {
     id: number
@@ -53,6 +55,7 @@ type TrackingRow = {
     product?: {
         materialDescription?: string | null
         materialNumberCk?: string | null
+        category?: string | null
     } | null
 }
 
@@ -92,25 +95,57 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
         )
     })
 
-    const handleSelectItem = (id: string) => {
-        setSelectedItemsForBatch(prev => 
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    const selectedBatchItems = useMemo(() => (
+        trackingData.filter((item) => selectedItemsForBatch.includes(item.id))
+    ), [trackingData, selectedItemsForBatch])
+
+    const lockedWarehouseId = selectedBatchItems[0]?.warehouseId || null
+
+    const handleSelectItem = (item: TrackingRow, checked: CheckedState) => {
+        const isChecked = checked === true
+
+        if (!isChecked) {
+            setSelectedItemsForBatch(prev => prev.filter(i => i !== item.id))
+            return
+        }
+
+        if (lockedWarehouseId && lockedWarehouseId !== item.warehouseId) {
+            toast("Multi select voucher hanya bisa untuk 1 warehouse yang sama.")
+            return
+        }
+
+        setSelectedItemsForBatch(prev =>
+            prev.includes(item.id) ? prev : [...prev, item.id]
         )
     }
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            const selectableIds = filteredData
-                .filter(item => getAvailableQty(item) > 0)
-                .map(item => item.id.toString())
-            setSelectedItemsForBatch(selectableIds)
-        } else {
+    const handleSelectAll = (checked: CheckedState) => {
+        if (checked !== true) {
             setSelectedItemsForBatch([])
+            return
+        }
+
+        const selectableItems = filteredData.filter(item => getAvailableQty(item) > 0)
+        if (selectableItems.length === 0) return
+
+        const targetWarehouseId = lockedWarehouseId || selectableItems[0]?.warehouseId
+        const selectableIds = selectableItems
+            .filter(item => item.warehouseId === targetWarehouseId)
+            .map(item => item.id.toString())
+
+        setSelectedItemsForBatch(selectableIds)
+
+        if (!lockedWarehouseId && warehouseFilter === "all" && selectableItems.some(item => item.warehouseId !== targetWarehouseId)) {
+            toast("Select all mengikuti warehouse pertama yang tampil. Gunakan filter site untuk memilih warehouse lain.")
         }
     }
 
-    const selectableItemsCount = filteredData.filter(item => getAvailableQty(item) > 0).length
-    const isAllSelected = selectedItemsForBatch.length > 0 && selectedItemsForBatch.length === selectableItemsCount
+    const selectableItemsCount = filteredData.filter(item => (
+        getAvailableQty(item) > 0 && (!lockedWarehouseId || item.warehouseId === lockedWarehouseId)
+    )).length
+    const isAllSelected = selectableItemsCount > 0 && filteredData
+        .filter(item => getAvailableQty(item) > 0 && (!lockedWarehouseId || item.warehouseId === lockedWarehouseId))
+        .every(item => selectedItemsForBatch.includes(item.id.toString()))
 
     return (
         <div className="space-y-4">
@@ -237,7 +272,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                     <TableBody>
                         {filteredData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={16} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={18} className="h-24 text-center text-muted-foreground">
                                     Tidak ada data pelacakan.
                                 </TableCell>
                             </TableRow>
@@ -249,7 +284,8 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                                         {getAvailableQty(item) > 0 && (
                                             <Checkbox 
                                                 checked={selectedItemsForBatch.includes(item.id.toString())}
-                                                onCheckedChange={() => handleSelectItem(item.id.toString())}
+                                                disabled={Boolean(lockedWarehouseId && lockedWarehouseId !== item.warehouseId && !selectedItemsForBatch.includes(item.id.toString()))}
+                                                onCheckedChange={(checked) => handleSelectItem(item, checked)}
                                             />
                                         )}
                                     </TableCell>
@@ -323,7 +359,13 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
             <EvhsMultipleUsageDialog
                 open={multipleUsageDialogOpen}
                 onOpenChange={setMultipleUsageDialogOpen}
-                trackingItems={filteredData.filter(item => selectedItemsForBatch.includes(item.id.toString()) && getAvailableQty(item) > 0)}
+                trackingItems={filteredData
+                    .filter(item => selectedItemsForBatch.includes(item.id.toString()) && getAvailableQty(item) > 0)
+                    .map((item) => ({
+                        ...item,
+                        warehouseLabel: item.warehouse ? `${item.warehouse.sloc} - ${item.warehouse.description || ""}` : undefined,
+                        sourceType: "receipt" as const,
+                    }))}
                 onSuccess={() => setSelectedItemsForBatch([])}
             />
 

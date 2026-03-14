@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { recordStockMovement } from "@/app/actions/stock-movement"
+import { syncStockTransferReceipt } from "@/app/actions/stock-transfer"
 
 // Schema for Receipt Confirmation
 const _confirmReceiptSchema = z.object({
@@ -107,6 +108,7 @@ type EvhsTrackingRow = {
         materialNumber: string
         materialDescription?: string | null
         materialNumberCk?: string | null
+        category?: string | null
     }
     warehouseId: number | null | undefined
     warehouse: { id: number; sloc: string; description?: string | null; type?: string | null } | null | undefined
@@ -211,6 +213,18 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
         const userId = session.user.id
 
         return await db.transaction(async (tx) => {
+            const existingReceipt = await tx.query.evhsReceipts.findFirst({
+                where: eq(evhsReceipts.transferId, data.transferId),
+                columns: { id: true },
+            })
+
+            if (existingReceipt) {
+                return {
+                    success: false,
+                    error: "Transfer ini sudah pernah dikonfirmasi di E-VHS.",
+                }
+            }
+
             // 1. Create Receipt Header
             const [receipt] = await tx.insert(evhsReceipts).values({
                 transferId: data.transferId,
@@ -231,6 +245,15 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
                 })
             }
 
+            await syncStockTransferReceipt(tx, {
+                transferId: data.transferId,
+                userId,
+                receivedItems: data.items.map((item) => ({
+                    productId: item.productId,
+                    quantity: item.confirmedQty,
+                })),
+            })
+
             return { success: true, receiptId: receipt.id }
         })
     } catch (error) {
@@ -238,6 +261,11 @@ export async function confirmEvhsReceipt(data: z.infer<typeof _confirmReceiptSch
         return { success: false, error: error instanceof Error ? error.message : "Failed to confirm receipt" }
     } finally {
         revalidatePath("/dashboard/evhs")
+        revalidatePath("/dashboard/stock-transfers")
+        revalidatePath("/dashboard/inventory")
+        revalidatePath("/dashboard/stocks")
+        revalidatePath("/dashboard/warehouse")
+        revalidatePath("/dashboard/stock-movements")
     }
 }
 
@@ -1070,7 +1098,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             const currentRows = detailRowsByKey.get(warehouseKey) || []
             currentRows.push({
                 ...trackingRow,
-                sourceLabel: trackingRow.cpDo || "Receipt EVHS",
+                sourceLabel: "Penerimaan EVHS",
             })
             detailRowsByKey.set(warehouseKey, currentRows)
 
@@ -1125,7 +1153,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                         },
                     warehouseId: voucher.warehouseId,
                     warehouse: voucher.warehouse,
-                    sourceLabel: "Legacy Stock",
+                    sourceLabel: "Voucher Legacy",
                 })
 
                 detailRowsByKey.set(warehouseKey, currentRows)
