@@ -66,7 +66,7 @@ export async function getRevenueMLForecast(filters: {
             stockValue: sql<number>`COALESCE(SUM(COALESCE(${zmc9StockSap.valueStock}, 0)), 0)`,
             stockedMaterials: sql<number>`COUNT(DISTINCT trim(${zmc9StockSap.materialNo}))`,
         }).from(zmc9StockSap)
-            .innerJoin(segmentMaterials, sql`trim(${zmc9StockSap.materialNo}) = ${segmentMaterials.materialNo}`)
+            .innerJoin(segmentMaterials, sql`trim(${zmc9StockSap.materialNo}) = ${sql.raw('"segment_materials"."material_no"')}`)
 
         const forecast = buildRevenueMLForecast(
             data.map((point) => ({
