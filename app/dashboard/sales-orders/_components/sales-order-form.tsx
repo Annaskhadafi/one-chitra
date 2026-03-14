@@ -201,6 +201,10 @@ export function SalesOrderForm({
         () => warehouses.find(w => w.id === warehouseId),
         [warehouses, warehouseId]
     )
+    const defaultWarehouse = useMemo(
+        () => warehouses.find((warehouse) => warehouse.sloc === "101"),
+        [warehouses]
+    )
     const ckPriceSuggestionLabel = useMemo(
         () => getCkMasterPriceLabel("default"),
         []
@@ -301,6 +305,14 @@ export function SalesOrderForm({
         }
         setProductOpen(false)
     }, [getSuggestedCkUnitPrice, items])
+
+    useEffect(() => {
+        if (initialData || warehouseId || !defaultWarehouse) {
+            return
+        }
+
+        setWarehouseId(defaultWarehouse.id)
+    }, [defaultWarehouse, initialData, warehouseId])
 
     useEffect(() => {
         if (!isSelectedCkCustomer || items.length === 0) {
