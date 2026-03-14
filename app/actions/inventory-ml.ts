@@ -567,13 +567,18 @@ export async function generateMLPrediction(productCode: string, predictionType: 
     try {
         await getAuthenticatedSession("inventory", "edit");
 
+        const normalizedProductCode = productCode.trim()
+        if (!normalizedProductCode) {
+            return { success: false, error: "Material Number wajib diisi" };
+        }
+
         // Get ML settings from database (Requirement 9.9)
         const aiConfig = await getMLSettings();
 
         // 1. Check if prediction within cache duration exists
         const existing = await db.select().from(aiInventoryPredictions)
             .where(and(
-                eq(aiInventoryPredictions.productCode, productCode),
+                eq(aiInventoryPredictions.productCode, normalizedProductCode),
                 eq(aiInventoryPredictions.predictionType, predictionType)
             ))
             .orderBy(desc(aiInventoryPredictions.createdAt))
@@ -589,8 +594,24 @@ export async function generateMLPrediction(productCode: string, predictionType: 
         }
 
         // 2. Fetch Data (Stock & History Sales)
-        const stockData = await db.select().from(zmc9StockSap)
-            .where(sql`cast(${zmc9StockSap.materialNo} as text) ilike ${`%${productCode}%`}`);
+        const stockSelection = {
+            materialNo: zmc9StockSap.materialNo,
+            materialDesc: zmc9StockSap.materialDesc,
+            totalStock: zmc9StockSap.totalStock,
+            plantCode: zmc9StockSap.plantCode,
+            plantName: zmc9StockSap.plantName,
+            storLoc: zmc9StockSap.storLoc,
+            storLocDesc: zmc9StockSap.storLocDesc,
+            baseUnitOfMeasure: zmc9StockSap.baseUnitOfMeasure,
+        };
+
+        let stockData = await db.select(stockSelection).from(zmc9StockSap)
+            .where(sql`trim(cast(${zmc9StockSap.materialNo} as text)) = ${normalizedProductCode}`);
+
+        if (stockData.length === 0) {
+            stockData = await db.select(stockSelection).from(zmc9StockSap)
+                .where(sql`cast(${zmc9StockSap.materialNo} as text) ilike ${`%${normalizedProductCode}%`}`);
+        }
 
         // Fetch 2 years (24 months) of sales history from history_orders table
         const twoYearsAgo = new Date();
@@ -602,7 +623,7 @@ export async function generateMLPrediction(productCode: string, predictionType: 
             customerName: historyOrders.customerName
         }).from(historyOrders)
             .where(and(
-                eq(historyOrders.materialNo, productCode),
+                eq(historyOrders.materialNo, normalizedProductCode),
                 sql`to_date(${historyOrders.billingDate}, 'MM/DD/YYYY') >= ${twoYearsAgo}`
             ));
 
@@ -680,7 +701,7 @@ export async function generateMLPrediction(productCode: string, predictionType: 
 Tugas Anda adalah memberikan "Laporan Analisis Pengadaan Barang" dalam format JSON TERSTRUKTUR.
 
 --- DATA INPUT ---
-Produk: ${productName} (${productCode})
+Produk: ${productName} (${normalizedProductCode})
 Stok SAP: ${currentStock}
 Avg Consumption: ${avgMonthlyConsumption.toFixed(2)} unit/bulan
 Run-out: ${daysToRunOut.toFixed(1)} hari
@@ -702,7 +723,7 @@ ${jsonSchema}`;
 Tugas Anda adalah memberikan "Laporan Optimasi Stok Minimum (Safety Stock)" dalam format JSON TERSTRUKTUR.
 
 --- DATA INPUT ---
-Produk: ${productName} (${productCode})
+Produk: ${productName} (${normalizedProductCode})
 Stok SAP: ${currentStock}
 Safety Stock (Math): ${safetyStockMath}
 Std Dev: ${stdDev.toFixed(2)}
@@ -800,7 +821,7 @@ ${jsonSchema}`;
 
         // 5. Save to Database
         const [saved] = await db.insert(aiInventoryPredictions).values({
-            productCode,
+            productCode: normalizedProductCode,
             productName,
             predictionType,
             recommendedStock: Number(parsedResult.recommendedStock) || 0,
