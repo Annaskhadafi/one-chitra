@@ -23,11 +23,12 @@ export const deliveryCostRequests = pgTable("delivery_cost_requests", {
 
 export const deliveryCostRequestItems = pgTable("delivery_cost_request_items", {
     id: serial("id").primaryKey(),
-    requestId: integer("request_id").references(() => deliveryCostRequests.id, { onDelete: "cascade" }),
-    deliveryId: integer("delivery_id").references(() => deliveries.id, { onDelete: "set null" }),
+    requestId: integer("request_id"), // .references(() => deliveryCostRequests.id, { onDelete: "cascade" }),
+    deliveryId: integer("delivery_id"), // .references(() => deliveries.id, { onDelete: "set null" }),
     noPol: text("no_pol"),
     driverName: text("driver_name"),
     tripDestination: text("trip_destination"),
+    fuelCost: decimal("fuel_cost", { precision: 20, scale: 2 }).default("0"), // Keep old column to prevent data loss
     fuelCostDexlite: decimal("fuel_cost_dexlite", { precision: 20, scale: 2 }).default("0"),
     fuelCostBio: decimal("fuel_cost_bio", { precision: 20, scale: 2 }).default("0"),
     mealAllowance: decimal("meal_allowance", { precision: 20, scale: 2 }).default("0"),

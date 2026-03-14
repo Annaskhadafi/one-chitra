@@ -8,6 +8,7 @@ import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { replaceUserWarehouseAccess, type WarehouseAccessLevel } from "@/lib/warehouse-access"
 import { syncPermissions } from "@/app/actions/permissions"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,7 +71,16 @@ export async function getSecurityStats() {
 
 export async function getSecurityUsers() {
     await getAuthenticatedSession("security", "view")
-    return await db.select().from(user).orderBy(desc(user.createdAt))
+    return await db.query.user.findMany({
+        with: {
+            warehouseAccesses: {
+                with: {
+                    warehouse: true,
+                },
+            },
+        },
+        orderBy: [desc(user.createdAt)],
+    })
 }
 
 export async function createSecurityUser(data: {
@@ -80,6 +90,10 @@ export async function createSecurityUser(data: {
     role: string
     department?: string
     jobTitle?: string
+    warehouseAccesses?: Array<{
+        warehouseId: number
+        accessLevel?: WarehouseAccessLevel | null
+    }>
 }) {
     const session = await getAuthenticatedSession("security", "create")
 
@@ -95,6 +109,8 @@ export async function createSecurityUser(data: {
                 jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
                 updatedAt: new Date(),
             }).where(eq(user.id, result.user.id))
+
+            await replaceUserWarehouseAccess(db, result.user.id, data.warehouseAccesses || [])
         }
 
         await writeAuditLog(
@@ -104,6 +120,7 @@ export async function createSecurityUser(data: {
         )
 
         revalidatePath("/dashboard/security/users")
+        revalidatePath("/dashboard/admin/users")
         return { success: true, userId: result.user.id }
     } catch (error) {
         return {
@@ -128,6 +145,40 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
     )
 
     revalidatePath("/dashboard/security/users")
+    revalidatePath("/dashboard/admin/users")
+    return { success: true }
+}
+
+export async function updateSecurityUserAccessSettings(targetUserId: string, data: {
+    role: string
+    warehouseAccesses: Array<{
+        warehouseId: number
+        accessLevel?: WarehouseAccessLevel | null
+    }>
+}) {
+    const session = await getAuthenticatedSession("security", "edit")
+
+    const [targetUser] = await db.select().from(user).where(eq(user.id, targetUserId))
+    if (!targetUser) return { success: false, error: "User not found" }
+
+    await db.transaction(async (tx) => {
+        await tx.update(user).set({
+            role: data.role,
+            updatedAt: new Date(),
+        }).where(eq(user.id, targetUserId))
+
+        await replaceUserWarehouseAccess(tx, targetUserId, data.warehouseAccesses || [])
+    })
+
+    await writeAuditLog(
+        session.user.id,
+        "user.access_update",
+        `Updated role and warehouse access for ${targetUser.email}`
+    )
+
+    revalidatePath("/dashboard/security/users")
+    revalidatePath("/dashboard/admin/users")
+    revalidatePath("/dashboard/account")
     return { success: true }
 }
 
@@ -160,6 +211,7 @@ export async function updateSecurityUserProfile(targetUserId: string, data: {
     )
 
     revalidatePath("/dashboard/security/users")
+    revalidatePath("/dashboard/admin/users")
     return { success: true }
 }
 
@@ -181,6 +233,7 @@ export async function banSecurityUser(targetUserId: string, reason: string) {
     )
 
     revalidatePath("/dashboard/security/users")
+    revalidatePath("/dashboard/admin/users")
     return { success: true }
 }
 
@@ -226,6 +279,7 @@ export async function deleteSecurityUser(targetUserId: string) {
         )
 
         revalidatePath("/dashboard/security/users")
+        revalidatePath("/dashboard/admin/users")
         return { success: true }
     } catch (error: unknown) {
         const errorCode = typeof error === "object" && error !== null && "code" in error

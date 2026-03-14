@@ -2,17 +2,32 @@
 
 import { db } from "@/db"
 import { stockLevels, products, warehouses } from "@/db/schema"
-import { eq, and, inArray, sql } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import {
+    assertCurrentUserHasWarehouseAccess,
+    assertCurrentUserHasWarehouseAccessForAll,
+    getAllowedWarehouseIdsForCurrentUser,
+} from "@/lib/warehouse-access"
 
 import { stockSchema } from "@/lib/schemas"
 
 export async function getStocks() {
+    await getAuthenticatedSession("stocks", "view")
+    const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
+        return []
+    }
+
     // Optimized query - hanya ambil kolom yang diperlukan
     return await db.query.stockLevels.findMany({
+        where: allowedWarehouseIds
+            ? (stockLevel, { inArray }) => inArray(stockLevel.warehouseId, allowedWarehouseIds)
+            : undefined,
         columns: {
             id: true,
             productId: true,
@@ -47,6 +62,7 @@ export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number
     try {
         const session = await getAuthenticatedSession('stocks', id ? 'edit' : 'create')
         const userId = session.user.id
+        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
 
         await db.transaction(async (tx) => {
             let oldStock = 0
@@ -119,6 +135,8 @@ export async function deleteStock(id: number) {
             })
 
             if (existing) {
+                await assertCurrentUserHasWarehouseAccess(existing.warehouseId, "edit")
+
                 // Record Movement (Adjustment/Removal)
                 await recordStockMovement(tx, {
                     productId: existing.productId,
@@ -143,6 +161,15 @@ export async function deleteStock(id: number) {
 
 export async function bulkDeleteStocks(ids: number[]) {
     try {
+        await getAuthenticatedSession("stocks", "delete")
+        const rows = await db.query.stockLevels.findMany({
+            where: inArray(stockLevels.id, ids),
+            columns: {
+                warehouseId: true,
+            },
+        })
+
+        await assertCurrentUserHasWarehouseAccessForAll(rows.map((row) => row.warehouseId), "edit")
         await db.delete(stockLevels).where(inArray(stockLevels.id, ids))
         revalidatePath("/dashboard/stocks")
         return { success: true }
@@ -153,6 +180,15 @@ export async function bulkDeleteStocks(ids: number[]) {
 
 export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
     try {
+        await getAuthenticatedSession("stocks", "edit")
+        const rows = await db.query.stockLevels.findMany({
+            where: inArray(stockLevels.id, ids),
+            columns: {
+                warehouseId: true,
+            },
+        })
+
+        await assertCurrentUserHasWarehouseAccessForAll(rows.map((row) => row.warehouseId), "edit")
         await db.update(stockLevels)
             .set({ minStock, updatedAt: new Date() })
             .where(inArray(stockLevels.id, ids))
@@ -165,6 +201,14 @@ export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
 
 export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
     try {
+        await getAuthenticatedSession("stocks", "create")
+        await assertCurrentUserHasWarehouseAccessForAll(
+            data
+                .map((item) => item.warehouseId)
+                .filter((warehouseId): warehouseId is number => typeof warehouseId === "number"),
+            "edit"
+        )
+
         for (const item of data) {
             if (!item.productId || !item.warehouseId) continue
 
@@ -205,6 +249,8 @@ export type ImportChunkResult = {
 
 export async function importStockChunk(chunk: StockImportItem[]): Promise<ImportChunkResult> {
     try {
+        await getAuthenticatedSession("stocks", "create")
+        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("edit")
         const materialNumbers = chunk.map(i => i.materialNumber).filter(Boolean)
         const slocs = chunk.map(i => i.sloc).filter(Boolean)
 
@@ -240,6 +286,11 @@ export async function importStockChunk(chunk: StockImportItem[]): Promise<Import
             if (!warehouseId) {
                 failed++
                 errors.push(`Sloc not found: ${item.sloc}`)
+                continue
+            }
+            if (allowedWarehouseIds && !allowedWarehouseIds.includes(warehouseId)) {
+                failed++
+                errors.push(`Warehouse access denied: ${item.sloc}`)
                 continue
             }
 

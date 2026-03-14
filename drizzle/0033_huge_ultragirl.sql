@@ -1,0 +1,1 @@
+ALTER TABLE "evhs_voucher_items" ADD COLUMN "unit_price" numeric(15, 2);

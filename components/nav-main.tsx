@@ -43,7 +43,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-1">
         <SidebarMenu className="px-1">
-          {items.map((item) => {
+          {items.map((item, itemIndex) => {
             const hasChildren = item.items && item.items.length > 0;
             const isChildActive = hasChildren && item.items?.some(child => pathname === child.url);
             const isActive = pathname === item.url || isChildActive;
@@ -51,7 +51,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
             if (hasChildren) {
               return (
                 <Collapsible
-                  key={item.id ?? item.title}
+                  key={item.id ?? `${item.title}-${item.url}-${itemIndex}`}
                   asChild
                   defaultOpen={false}
                   className="group/collapsible"
@@ -69,8 +69,8 @@ export function NavMain({ items }: { items: NavItem[] }) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {item.items?.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.id ?? subItem.title}>
+                        {item.items?.map((subItem, subIndex) => (
+                          <SidebarMenuSubItem key={subItem.id ?? `${subItem.title}-${subItem.url}-${subIndex}`}>
                             <SidebarMenuSubButton
                               asChild
                               isActive={pathname === subItem.url}
@@ -94,7 +94,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
             }
 
             return (
-              <SidebarMenuItem key={item.id ?? item.title}>
+              <SidebarMenuItem key={item.id ?? `${item.title}-${item.url}-${itemIndex}`}>
                 <SidebarMenuButton
                   asChild
                   tooltip={item.title}

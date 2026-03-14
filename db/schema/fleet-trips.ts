@@ -15,6 +15,7 @@ export const fleetTrips = pgTable("fleet_trips", {
 
     // Cost Fields
     tripDestination: varchar("trip_destination", { length: 255 }),
+    costGasoline: decimal("cost_gasoline", { precision: 15, scale: 2 }).default("0"), // Keep old column to prevent data loss
     costGasolineDexlite: decimal("cost_gasoline_dexlite", { precision: 15, scale: 2 }).default("0"),
     costGasolineBio: decimal("cost_gasoline_bio", { precision: 15, scale: 2 }).default("0"),
     costToll: decimal("cost_toll", { precision: 15, scale: 2 }).default("0"),
