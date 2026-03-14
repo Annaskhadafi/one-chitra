@@ -226,7 +226,7 @@ export function EvhsMultipleUsageDialog({
                 </DialogHeader>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 flex flex-col flex-1 overflow-hidden mt-4">
-                    <div className="grid grid-cols-2 gap-4 shrink-0">
+                    <div className="grid grid-cols-1 gap-4 shrink-0 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="woNo" className="text-xs">Nomor WO Keseluruhan <span className="text-red-500">*</span></Label>
                             <Input id="woNo" placeholder="Contoh: WO-CK-123" {...form.register("woNo")} className="h-8 text-sm" />
@@ -256,7 +256,7 @@ export function EvhsMultipleUsageDialog({
                             <Label htmlFor="receivedByName" className="text-xs">Received By (Customer)</Label>
                             <Input id="receivedByName" placeholder="Nama..." {...form.register("receivedByName")} className="h-8 text-sm" />
                         </div>
-                        <div className="col-span-2 space-y-2">
+                        <div className="space-y-2 sm:col-span-2">
                             <Label htmlFor="remark" className="text-xs">Remark / Catatan</Label>
                             <Input id="remark" placeholder="Keterangan tambahan..." {...form.register("remark")} className="h-8 text-sm" />
                         </div>
@@ -350,7 +350,7 @@ export function EvhsMultipleUsageDialog({
                         </div>
                     </div>
 
-                    <DialogFooter className="mt-4 pt-4 border-t shrink-0">
+                    <DialogFooter className="mt-4 border-t pt-4 shrink-0 flex-col-reverse gap-2 sm:flex-row">
                         <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Batal
                         </Button>

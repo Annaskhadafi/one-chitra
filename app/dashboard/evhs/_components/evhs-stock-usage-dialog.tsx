@@ -204,7 +204,7 @@ export function EvhsStockUsageDialog({
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="woNo">Nomor WO (Customer)</Label>
                             <Input id="woNo" placeholder="Contoh: WO-CK-123" {...form.register("woNo")} />
@@ -224,7 +224,7 @@ export function EvhsStockUsageDialog({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="serialNumber">Serial Number (jika Ban)</Label>
                             <Input
@@ -243,7 +243,7 @@ export function EvhsStockUsageDialog({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="pos">POS (Posisi Install)</Label>
                             <Input
@@ -262,7 +262,7 @@ export function EvhsStockUsageDialog({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="approvedByName">Approved By (Customer)</Label>
                             <Input id="approvedByName" placeholder="Nama..." {...form.register("approvedByName")} />
@@ -278,7 +278,7 @@ export function EvhsStockUsageDialog({
                         <Textarea id="remark" placeholder="Keterangan tambahan..." {...form.register("remark")} />
                     </div>
 
-                    <DialogFooter className="pt-4">
+                    <DialogFooter className="pt-4 flex-col-reverse gap-2 sm:flex-row">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Batal
                         </Button>

@@ -163,8 +163,8 @@ export function EvhsVoucherTable({
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card">
-                <Table>
+            <div className="rounded-md border bg-card overflow-x-auto">
+                <Table className="min-w-[860px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>Voucher No</TableHead>
