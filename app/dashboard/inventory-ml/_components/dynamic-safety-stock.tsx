@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
     AlertTriangle,
     BarChart3,
@@ -8,24 +8,31 @@ import {
     Boxes,
     Clock3,
     Coins,
+    Download,
+    FileText,
     Gauge,
     Loader2,
     Package,
+    ReceiptText,
     ShieldAlert,
     ShieldCheck,
     Sparkles,
     Target,
     TrendingUp,
     Truck,
+    Users,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
     generateAIPrediction,
+    getMaterialSalesRevenueHistory,
     getRecentPredictions,
     getSafetyStockAnalytics,
+    type SalesRevenueHistoryYearGroup,
     type SafetyStockAnalytics,
 } from "@/app/actions/inventory-ml"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,11 +56,13 @@ interface PredictionHistoryItem {
 }
 
 interface SafetyStockPredictionResult {
+    id?: number
     productCode: string
     productName: string | null
     recommendedStock: number
     rationale: string
     currentStock?: number | null
+    createdAt?: string | Date
 }
 
 interface SafetyStockReportMetric {
@@ -89,7 +98,31 @@ const oneDecimalFormatter = new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 1,
 })
 
+const docCurrencyFallbackFormatter = new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+})
+
 const serviceLevelOptions = ["90", "95", "99"] as const
+const exportHiddenClassName = "export-button-hide"
+
+const waitForNextPaint = () =>
+    new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+const triggerBrowserDownload = (blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.rel = "noopener"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+
+    window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl)
+    }, 1000)
+}
 
 const formatQuantity = (value: number | null | undefined) => {
     if (value === null || value === undefined) {
@@ -110,6 +143,23 @@ const formatQuantity = (value: number | null | undefined) => {
 const formatCurrency = (value: number) => currencyFormatter.format(value)
 
 const formatDateTime = (value: string | Date) => new Date(value).toLocaleString("id-ID")
+
+const formatDocumentCurrency = (value: number, currency: string | null | undefined) => {
+    if (!currency) {
+        return docCurrencyFallbackFormatter.format(value)
+    }
+
+    try {
+        return new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        }).format(value)
+    } catch {
+        return `${currency} ${docCurrencyFallbackFormatter.format(value)}`
+    }
+}
 
 const formatDate = (value: string | Date | null) => {
     if (!value) {
@@ -145,6 +195,16 @@ const getSummaryText = (rationale: string) => {
     return report?.summary || rationale
 }
 
+const getRevenueSummaryLabel = (group: SalesRevenueHistoryYearGroup) => {
+    if (group.revenueByCurrency.length === 0) {
+        return docCurrencyFallbackFormatter.format(group.totalRevenueInDocCurr)
+    }
+
+    return group.revenueByCurrency
+        .map((item) => formatDocumentCurrency(item.totalRevenueInDocCurr, item.currency))
+        .join(" • ")
+}
+
 const getStatusBadgeVariant = (status?: string) => {
     if (status === "Safe") return "success"
     if (status === "Warning") return "warning"
@@ -171,12 +231,20 @@ const getLeadTimeTone = (status: SafetyStockAnalytics["leadTime"]["status"]) => 
 }
 
 export function DynamicSafetyStock() {
+    const reportRef = useRef<HTMLDivElement | null>(null)
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isLoadingInsights, setIsLoadingInsights] = useState(false)
+    const [isLoadingSalesHistory, setIsLoadingSalesHistory] = useState(false)
+    const [isExportingPdf, setIsExportingPdf] = useState(false)
+    const [isPreparingPdf, setIsPreparingPdf] = useState(false)
     const [result, setResult] = useState<SafetyStockPredictionResult | null>(null)
     const [history, setHistory] = useState<PredictionHistoryItem[]>([])
     const [analytics, setAnalytics] = useState<SafetyStockAnalytics | null>(null)
+    const [salesHistoryGroups, setSalesHistoryGroups] = useState<SalesRevenueHistoryYearGroup[]>([])
+    const [expandedSalesYears, setExpandedSalesYears] = useState<string[]>([])
+    const [reportGeneratedAt, setReportGeneratedAt] = useState<string | null>(null)
+    const [activeHistoryId, setActiveHistoryId] = useState<number | null>(null)
     const [serviceLevel, setServiceLevel] = useState<(typeof serviceLevelOptions)[number]>("95")
     const [suddenOrderQty, setSuddenOrderQty] = useState(100)
 
@@ -191,6 +259,96 @@ export function DynamicSafetyStock() {
         }
     }
 
+    const scrollReportIntoView = () => {
+        requestAnimationFrame(() => {
+            reportRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            })
+        })
+    }
+
+    const loadPredictionDetails = async (
+        prediction: SafetyStockPredictionResult,
+        options?: {
+            preserveActiveYear?: boolean
+        }
+    ) => {
+        try {
+            setResult(prediction)
+            setProductCode(prediction.productCode)
+            setReportGeneratedAt(
+                prediction.createdAt ? new Date(prediction.createdAt).toISOString() : new Date().toISOString()
+            )
+            setAnalytics(null)
+            setSalesHistoryGroups([])
+            if (!options?.preserveActiveYear) {
+                setExpandedSalesYears([])
+            }
+            setIsLoadingInsights(true)
+            setIsLoadingSalesHistory(true)
+
+            const [analyticsResponse, salesHistoryResponse] = await Promise.all([
+                getSafetyStockAnalytics(prediction.productCode, {
+                    recommendedSafetyStock: prediction.recommendedStock,
+                }),
+                getMaterialSalesRevenueHistory(prediction.productCode),
+            ])
+
+            if (analyticsResponse.success && analyticsResponse.data) {
+                setAnalytics(analyticsResponse.data)
+                setSuddenOrderQty(analyticsResponse.data.scenarios.suddenOrderSuggestion)
+            } else {
+                toast.error(analyticsResponse.error || "Insight lanjutan gagal dimuat")
+            }
+
+            if (salesHistoryResponse.success && salesHistoryResponse.data) {
+                setSalesHistoryGroups(salesHistoryResponse.data)
+                setExpandedSalesYears((previousYears) => {
+                    if (previousYears.length > 0) {
+                        const validYears = previousYears.filter((year) =>
+                            salesHistoryResponse.data?.some((group) => group.year === year)
+                        )
+                        if (validYears.length > 0) {
+                            return validYears
+                        }
+                    }
+
+                    return salesHistoryResponse.data.slice(0, 1).map((group) => group.year)
+                })
+            } else if (!salesHistoryResponse.success) {
+                toast.error(salesHistoryResponse.error || "History penjualan produk gagal dimuat")
+            }
+
+            scrollReportIntoView()
+        } finally {
+            setIsLoadingInsights(false)
+            setIsLoadingSalesHistory(false)
+        }
+    }
+
+    const handleSelectHistory = async (item: PredictionHistoryItem) => {
+        setActiveHistoryId(item.id)
+
+        try {
+            await loadPredictionDetails(
+                {
+                    id: item.id,
+                    productCode: item.productCode,
+                    productName: item.productName,
+                    recommendedStock: item.recommendedStock,
+                    rationale: item.rationale,
+                    createdAt: item.createdAt,
+                },
+                { preserveActiveYear: false }
+            )
+            toast.success(`History ${item.productCode} berhasil ditampilkan`)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Gagal membuka history analisa"
+            toast.error(message)
+        }
+    }
+
     const handleGenerate = async () => {
         if (!productCode.trim()) {
             toast.error("Silakan masukkan Material Number")
@@ -199,8 +357,13 @@ export function DynamicSafetyStock() {
 
         setIsLoading(true)
         setIsLoadingInsights(false)
+        setIsLoadingSalesHistory(false)
         setResult(null)
         setAnalytics(null)
+        setSalesHistoryGroups([])
+        setExpandedSalesYears([])
+        setReportGeneratedAt(null)
+        setActiveHistoryId(null)
 
         try {
             const predictionResponse = await generateAIPrediction(productCode, "SAFETY_STOCK")
@@ -211,14 +374,15 @@ export function DynamicSafetyStock() {
             }
 
             const nextResult: SafetyStockPredictionResult = {
+                id: predictionResponse.data.id,
                 productCode: predictionResponse.data.productCode,
                 productName: predictionResponse.data.productName,
                 recommendedStock: predictionResponse.data.recommendedStock,
                 rationale: predictionResponse.data.rationale,
                 currentStock: predictionResponse.data.currentStock,
+                createdAt: predictionResponse.data.createdAt,
             }
-
-            setResult(nextResult)
+            setActiveHistoryId(predictionResponse.data.id)
 
             if (predictionResponse.cached) {
                 toast.success("Mengambil data prediksi dari cache 24 jam terakhir")
@@ -226,25 +390,92 @@ export function DynamicSafetyStock() {
                 toast.success("Analisis Safety Stock berhasil dibuat")
             }
 
-            setIsLoadingInsights(true)
-            const analyticsResponse = await getSafetyStockAnalytics(nextResult.productCode, {
-                recommendedSafetyStock: nextResult.recommendedStock,
-            })
+            await loadPredictionDetails(nextResult, { preserveActiveYear: false })
 
             await loadHistory()
-
-            if (analyticsResponse.success && analyticsResponse.data) {
-                setAnalytics(analyticsResponse.data)
-                setSuddenOrderQty(analyticsResponse.data.scenarios.suddenOrderSuggestion)
-            } else {
-                toast.error(analyticsResponse.error || "Insight lanjutan gagal dimuat")
-            }
         } catch (error) {
             const message = error instanceof Error ? error.message : "Terjadi kesalahan"
             toast.error(message)
         } finally {
             setIsLoading(false)
-            setIsLoadingInsights(false)
+        }
+    }
+
+    const handleExportPdf = async () => {
+        if (!reportRef.current || !analytics || !result) {
+            toast.error("Silakan hitung Dynamic Safety Stock terlebih dahulu")
+            return
+        }
+
+        const previousExpandedYears = [...expandedSalesYears]
+
+        try {
+            setIsExportingPdf(true)
+            setIsPreparingPdf(true)
+
+            if (salesHistoryGroups.length > 0) {
+                setExpandedSalesYears(salesHistoryGroups.map((group) => group.year))
+            }
+
+            await waitForNextPaint()
+
+            const { toCanvas } = await import("html-to-image")
+            const { jsPDF } = await import("jspdf")
+            const canvas = await toCanvas(reportRef.current, {
+                backgroundColor: "#ffffff",
+                pixelRatio: 2,
+                cacheBust: true,
+                skipAutoScale: true,
+                filter: (node) => {
+                    return !(
+                        node instanceof HTMLElement &&
+                        node.classList.contains(exportHiddenClassName)
+                    )
+                },
+            })
+
+            const pdf = new jsPDF({
+                orientation: "p",
+                unit: "mm",
+                format: "a4",
+            })
+
+            const margin = 10
+            const pageWidth = pdf.internal.pageSize.getWidth()
+            const pageHeight = pdf.internal.pageSize.getHeight()
+            const printableWidth = pageWidth - (margin * 2)
+            const printableHeight = pageHeight - (margin * 2)
+            const imageHeight = (canvas.height * printableWidth) / canvas.width
+            const imageData = canvas.toDataURL("image/png")
+
+            let remainingHeight = imageHeight
+            let position = margin
+
+            pdf.addImage(imageData, "PNG", margin, position, printableWidth, imageHeight, undefined, "FAST")
+            remainingHeight -= printableHeight
+
+            while (remainingHeight > 0) {
+                position = margin - (imageHeight - remainingHeight)
+                pdf.addPage()
+                pdf.addImage(imageData, "PNG", margin, position, printableWidth, imageHeight, undefined, "FAST")
+                remainingHeight -= printableHeight
+            }
+
+            const safeMaterialNo = result.productCode.replace(/[^a-zA-Z0-9-_]+/g, "-")
+            const exportDate = new Date().toISOString().slice(0, 10)
+            const filename = `dynamic-safety-stock-${safeMaterialNo}-${exportDate}.pdf`
+            const pdfBlob = pdf.output("blob")
+
+            triggerBrowserDownload(pdfBlob, filename)
+            toast.success("Report PDF berhasil dibuat")
+        } catch (error) {
+            console.error("Dynamic Safety Stock PDF export failed:", error)
+            const message = error instanceof Error ? error.message : "Gagal membuat PDF"
+            toast.error(message)
+        } finally {
+            setExpandedSalesYears(previousExpandedYears)
+            setIsPreparingPdf(false)
+            setIsExportingPdf(false)
         }
     }
 
@@ -286,20 +517,41 @@ export function DynamicSafetyStock() {
                             <MaterialCombobox value={productCode} onChange={setProductCode} />
                         </div>
 
-                        <Button
-                            onClick={handleGenerate}
-                            disabled={isLoading}
-                            className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Menghitung Dynamic Safety Stock...
-                                </>
-                            ) : (
-                                "Kalkulasi Safety Stock"
-                            )}
-                        </Button>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                            <Button
+                                onClick={handleGenerate}
+                                disabled={isLoading}
+                                className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Menghitung Dynamic Safety Stock...
+                                    </>
+                                ) : (
+                                    "Kalkulasi Safety Stock"
+                                )}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleExportPdf}
+                                disabled={!analytics || isExportingPdf || isLoading}
+                                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                            >
+                                {isExportingPdf ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Menyiapkan PDF...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Save PDF Report
+                                    </>
+                                )}
+                            </Button>
+                        </div>
 
                         {result && (
                             <Alert className="border-indigo-200 bg-indigo-50/80">
@@ -344,7 +596,7 @@ export function DynamicSafetyStock() {
                             History Perhitungan
                         </CardTitle>
                         <CardDescription>
-                            Safety stock yang baru dihitung akan muncul di sini beserta ringkasan hasilnya.
+                            Klik history untuk menampilkan kembali analisa lama di layout report yang sama.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -358,9 +610,17 @@ export function DynamicSafetyStock() {
                                     const itemReport = parseReport(item.rationale)
 
                                     return (
-                                        <div
+                                        <button
+                                            type="button"
                                             key={item.id}
-                                            className="space-y-2 rounded-2xl border border-indigo-100 bg-white p-4 text-sm shadow-sm"
+                                            onClick={() => void handleSelectHistory(item)}
+                                            disabled={isLoadingInsights || isLoading}
+                                            className={cn(
+                                                "w-full space-y-2 rounded-2xl border p-4 text-left text-sm shadow-sm transition-all",
+                                                activeHistoryId === item.id
+                                                    ? "border-indigo-300 bg-indigo-50/70 shadow-indigo-100"
+                                                    : "border-indigo-100 bg-white hover:border-indigo-200 hover:bg-indigo-50/40"
+                                            )}
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
@@ -388,10 +648,15 @@ export function DynamicSafetyStock() {
                                             <p className="line-clamp-3 text-slate-600">
                                                 {getSummaryText(item.rationale)}
                                             </p>
-                                            <div className="text-right text-[10px] text-slate-400">
-                                                {formatDateTime(item.createdAt)}
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="text-[11px] font-medium text-indigo-600">
+                                                    {activeHistoryId === item.id ? "Sedang ditampilkan" : "Tampilkan analisa"}
+                                                </span>
+                                                <div className="text-right text-[10px] text-slate-400">
+                                                    {formatDateTime(item.createdAt)}
+                                                </div>
                                             </div>
-                                        </div>
+                                        </button>
                                     )
                                 })
                             )}
@@ -417,7 +682,108 @@ export function DynamicSafetyStock() {
             )}
 
             {analytics && (
-                <>
+                <div ref={reportRef} className="space-y-6">
+                    <Card className="border-slate-200 shadow-sm">
+                        <CardContent className="space-y-5 p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700">
+                                        <FileText className="h-4 w-4" />
+                                        Report Dynamic Safety Stock
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-slate-900">
+                                            {analytics.materialNo}
+                                        </h3>
+                                        <p className="mt-1 text-sm text-slate-600">
+                                            {analytics.materialDesc || result?.productName || "Material SAP"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Generated At
+                                    </p>
+                                    <p className="mt-1 font-semibold text-slate-900">
+                                        {formatDateTime(reportGeneratedAt || new Date())}
+                                    </p>
+                                    <p className="mt-2 text-xs text-slate-500">
+                                        Detail transaksi diambil dari tabel `Sales_revenue_sap`.
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleExportPdf}
+                                        disabled={!analytics || isExportingPdf}
+                                        className={cn(
+                                            "mt-3 w-full border-indigo-200 text-indigo-700 hover:bg-indigo-50",
+                                            exportHiddenClassName
+                                        )}
+                                    >
+                                        {isExportingPdf ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Menyiapkan PDF...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Save PDF Report
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <div className="rounded-2xl border bg-slate-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Safety Stock AI
+                                    </p>
+                                    <p className="mt-1 text-xl font-bold text-slate-900">
+                                        {formatQuantity(result?.recommendedStock || 0)}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Current Stock
+                                    </p>
+                                    <p className="mt-1 text-xl font-bold text-slate-900">
+                                        {formatQuantity(analytics.currentStock)}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Reorder Point
+                                    </p>
+                                    <p className="mt-1 text-xl font-bold text-slate-900">
+                                        {formatQuantity(analytics.reorderPoint)}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Status
+                                    </p>
+                                    <div className="mt-2">
+                                        <Badge variant={getStatusBadgeVariant(report?.status || analytics.excessStatus)}>
+                                            {report?.status || analytics.excessStatus}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">
+                                    Executive Summary
+                                </p>
+                                <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                                    {report?.summary || "Model AI telah membuat ringkasan safety stock terbaru."}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                         <Card className="border-slate-200 shadow-sm">
                             <CardContent className="flex items-center gap-4 p-5">
@@ -907,7 +1273,7 @@ export function DynamicSafetyStock() {
                             </CardHeader>
                             <CardContent>
                                 <div className="overflow-hidden rounded-2xl border">
-                                    <div className="max-h-[360px] overflow-y-auto">
+                                    <div className={cn(isPreparingPdf ? "overflow-visible" : "max-h-[360px] overflow-y-auto")}>
                                         <table className="w-full text-sm">
                                             <thead className="sticky top-0 bg-slate-100 text-slate-600">
                                                 <tr>
@@ -1015,7 +1381,136 @@ export function DynamicSafetyStock() {
                             </CardContent>
                         </Card>
                     </div>
-                </>
+
+                    <Card className="border-slate-200 shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <ReceiptText className="h-5 w-5 text-indigo-600" />
+                                History Penjualan Product
+                            </CardTitle>
+                            <CardDescription>
+                                Detail transaksi per tahun dari `Sales_revenue_sap` dengan customer, nomor PO,
+                                tanggal PO, qty, dan revenue in doc curr.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {isLoadingSalesHistory ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Memuat detail history penjualan produk...
+                                </div>
+                            ) : salesHistoryGroups.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
+                                    Belum ada detail history penjualan untuk material ini di `Sales_revenue_sap`.
+                                </div>
+                            ) : (
+                                <Accordion
+                                    type="multiple"
+                                    value={expandedSalesYears}
+                                    onValueChange={setExpandedSalesYears}
+                                    className="space-y-3"
+                                >
+                                    {salesHistoryGroups.map((group) => (
+                                        <AccordionItem
+                                            key={group.year}
+                                            value={group.year}
+                                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                                        >
+                                            <AccordionTrigger className="px-4 py-4 hover:no-underline">
+                                                <div className="flex w-full flex-col gap-4 text-left lg:flex-row lg:items-start lg:justify-between">
+                                                    <div>
+                                                        <p className="text-lg font-bold text-slate-900">
+                                                            Tahun {group.year}
+                                                        </p>
+                                                        <p className="mt-1 text-sm text-slate-500">
+                                                            Total setahun: {getRevenueSummaryLabel(group)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="grid gap-3 sm:grid-cols-3">
+                                                        <div className="rounded-xl border bg-slate-50 px-3 py-2">
+                                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                                Total Qty
+                                                            </p>
+                                                            <p className="mt-1 font-semibold text-slate-900">
+                                                                {formatQuantity(group.totalQty)}
+                                                            </p>
+                                                        </div>
+                                                        <div className="rounded-xl border bg-slate-50 px-3 py-2">
+                                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                                Customer
+                                                            </p>
+                                                            <p className="mt-1 font-semibold text-slate-900">
+                                                                {group.totalCustomers} customer
+                                                            </p>
+                                                        </div>
+                                                        <div className="rounded-xl border bg-slate-50 px-3 py-2">
+                                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                                Total PO
+                                                            </p>
+                                                            <p className="mt-1 font-semibold text-slate-900">
+                                                                {group.totalOrders} transaksi
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="px-4 pb-4">
+                                                <div className="overflow-hidden rounded-2xl border">
+                                                    <div className={cn(isPreparingPdf ? "overflow-visible" : "max-h-[360px] overflow-y-auto")}>
+                                                        <table className="w-full text-sm">
+                                                            <thead className="sticky top-0 bg-slate-100 text-slate-600">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 text-left font-semibold">Customer</th>
+                                                                    <th className="px-4 py-3 text-left font-semibold">No. PO</th>
+                                                                    <th className="px-4 py-3 text-left font-semibold">Date PO</th>
+                                                                    <th className="px-4 py-3 text-right font-semibold">Qty</th>
+                                                                    <th className="px-4 py-3 text-right font-semibold">Revenue in Doc Curr</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {group.rows.map((row) => (
+                                                                    <tr key={row.id} className="border-t bg-white">
+                                                                        <td className="px-4 py-3">
+                                                                            <div className="flex items-start gap-2">
+                                                                                <Users className="mt-0.5 h-4 w-4 text-slate-400" />
+                                                                                <div>
+                                                                                    <p className="font-semibold text-slate-900">
+                                                                                        {row.customerName || row.customerCode || "-"}
+                                                                                    </p>
+                                                                                    {row.customerCode && row.customerName && (
+                                                                                        <p className="text-xs text-muted-foreground">
+                                                                                            {row.customerCode}
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 font-medium text-slate-700">
+                                                                            {row.poNo || "-"}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-slate-700">
+                                                                            {formatDate(row.poDate)}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                                                            {formatQuantity(row.qty)}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                                                            {formatDocumentCurrency(row.revenueInDocCurr, row.currency)}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
             )}
         </div>
     )

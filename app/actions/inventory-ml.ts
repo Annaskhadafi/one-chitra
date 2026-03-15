@@ -22,6 +22,7 @@ const DEFAULT_ML_SETTINGS = {
 };
 
 const nonCancelledHistoryOrderCondition = sql`upper(trim(coalesce(${historyOrders.cancelled}, ''))) != 'X'`
+const nonCancelledSalesRevenueCondition = sql`upper(trim(coalesce(${salesRevenueSap.cancelled}, ''))) != 'X'`
 
 const DEFAULT_LEAD_TIME_DAYS = 21
 const MONTHS_OF_HISTORY = 24
@@ -126,6 +127,30 @@ export interface SafetyStockAnalytics {
     history: HistoricalMonthlyPoint[]
 }
 
+export interface SalesRevenueHistoryDetailItem {
+    id: number
+    customerCode: string | null
+    customerName: string | null
+    poNo: string | null
+    poDate: string | null
+    qty: number
+    revenueInDocCurr: number
+    currency: string | null
+}
+
+export interface SalesRevenueHistoryYearGroup {
+    year: string
+    totalQty: number
+    totalOrders: number
+    totalCustomers: number
+    totalRevenueInDocCurr: number
+    revenueByCurrency: Array<{
+        currency: string
+        totalRevenueInDocCurr: number
+    }>
+    rows: SalesRevenueHistoryDetailItem[]
+}
+
 const parseNumber = (value: unknown) => {
     const numericValue = Number(value)
     return Number.isFinite(numericValue) ? numericValue : 0
@@ -198,6 +223,11 @@ const toDateString = (date: Date) => {
         String(date.getMonth() + 1).padStart(2, "0"),
         String(date.getDate()).padStart(2, "0"),
     ].join("-")
+}
+
+const serializeDateValue = (value: string | Date | null | undefined) => {
+    const parsedDate = parseHistoryOrderDate(value)
+    return parsedDate ? toDateString(parsedDate) : value ? String(value) : null
 }
 
 const getDateDifferenceInDays = (endDate: Date, startDate: Date) => {
@@ -1688,6 +1718,150 @@ export async function getSafetyStockAnalytics(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to generate safety stock analytics",
+        }
+    }
+}
+
+export async function getMaterialSalesRevenueHistory(materialNo: string) {
+    try {
+        await getAuthenticatedSession("inventory", "view")
+
+        const normalizedMaterialNo = materialNo.trim()
+        if (!normalizedMaterialNo) {
+            return {
+                success: true,
+                data: [] as SalesRevenueHistoryYearGroup[],
+            }
+        }
+
+        const salesSelection = {
+            id: salesRevenueSap.salesRevId,
+            customerCode: salesRevenueSap.customer,
+            customerName: salesRevenueSap.customerName,
+            poNo: salesRevenueSap.poNo,
+            poDate: salesRevenueSap.poDate,
+            billingDate: salesRevenueSap.billingDate,
+            qty: salesRevenueSap.qty,
+            revenueInDocCurr: salesRevenueSap.revenueInDocCurr,
+            currency: salesRevenueSap.curr,
+        }
+
+        let salesRows = await db
+            .select(salesSelection)
+            .from(salesRevenueSap)
+            .where(
+                and(
+                    sql`trim(cast(${salesRevenueSap.materialNo} as text)) = ${normalizedMaterialNo}`,
+                    nonCancelledSalesRevenueCondition
+                )
+            )
+
+        if (salesRows.length === 0) {
+            salesRows = await db
+                .select(salesSelection)
+                .from(salesRevenueSap)
+                .where(
+                    and(
+                        sql`cast(${salesRevenueSap.materialNo} as text) ilike ${`%${normalizedMaterialNo}%`}`,
+                        nonCancelledSalesRevenueCondition
+                    )
+                )
+        }
+
+        type GroupAccumulator = {
+            year: string
+            totalQty: number
+            totalRevenueInDocCurr: number
+            customerKeys: Set<string>
+            currencyTotals: Map<string, number>
+            rows: Array<SalesRevenueHistoryDetailItem & { sortTimestamp: number }>
+        }
+
+        const groupedByYear = new Map<string, GroupAccumulator>()
+
+        salesRows.forEach((row) => {
+            const poDate = parseHistoryOrderDate(row.poDate)
+            const billingDate = parseHistoryOrderDate(row.billingDate)
+            const referenceDate = poDate || billingDate
+            const year = referenceDate ? String(referenceDate.getFullYear()) : "Tanpa Tanggal"
+            const qty = parseNumber(row.qty)
+            const revenueInDocCurr = parseNumber(row.revenueInDocCurr)
+            const currency = row.currency?.trim() || null
+
+            const existingGroup = groupedByYear.get(year) || {
+                year,
+                totalQty: 0,
+                totalRevenueInDocCurr: 0,
+                customerKeys: new Set<string>(),
+                currencyTotals: new Map<string, number>(),
+                rows: [],
+            }
+
+            existingGroup.totalQty += qty
+            existingGroup.totalRevenueInDocCurr += revenueInDocCurr
+
+            if (currency) {
+                existingGroup.currencyTotals.set(
+                    currency,
+                    (existingGroup.currencyTotals.get(currency) || 0) + revenueInDocCurr
+                )
+            }
+
+            const customerKey = row.customerCode?.trim() || row.customerName?.trim() || `row-${row.id}`
+            existingGroup.customerKeys.add(customerKey)
+
+            existingGroup.rows.push({
+                id: row.id,
+                customerCode: row.customerCode,
+                customerName: row.customerName,
+                poNo: row.poNo,
+                poDate: serializeDateValue(row.poDate),
+                qty,
+                revenueInDocCurr,
+                currency,
+                sortTimestamp: referenceDate?.getTime() || 0,
+            })
+
+            groupedByYear.set(year, existingGroup)
+        })
+
+        const data: SalesRevenueHistoryYearGroup[] = Array.from(groupedByYear.values())
+            .sort((left, right) => {
+                if (left.year === "Tanpa Tanggal") return 1
+                if (right.year === "Tanpa Tanggal") return -1
+                return Number(right.year) - Number(left.year)
+            })
+            .map((group) => ({
+                year: group.year,
+                totalQty: Number(group.totalQty.toFixed(2)),
+                totalOrders: group.rows.length,
+                totalCustomers: group.customerKeys.size,
+                totalRevenueInDocCurr: Number(group.totalRevenueInDocCurr.toFixed(2)),
+                revenueByCurrency: Array.from(group.currencyTotals.entries())
+                    .sort((left, right) => right[1] - left[1])
+                    .map(([currency, totalRevenueInDocCurr]) => ({
+                        currency,
+                        totalRevenueInDocCurr: Number(totalRevenueInDocCurr.toFixed(2)),
+                    })),
+                rows: group.rows
+                    .sort((left, right) => {
+                        if (right.sortTimestamp !== left.sortTimestamp) {
+                            return right.sortTimestamp - left.sortTimestamp
+                        }
+                        return right.id - left.id
+                    })
+                    .map(({ sortTimestamp: _sortTimestamp, ...row }) => row),
+            }))
+
+        return {
+            success: true,
+            data,
+        }
+    } catch (error) {
+        console.error("Failed to fetch material sales revenue history:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to fetch material sales revenue history",
         }
     }
 }

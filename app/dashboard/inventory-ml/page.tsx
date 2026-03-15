@@ -1,7 +1,6 @@
 import { Metadata } from "next"
 import { PageHeader } from "@/components/page-header"
-import { InventoryMLClient } from "./_components/inventory-ml-client"
-import { FilterProvider } from "./_components/filter-context"
+import { DynamicSafetyStock } from "./_components/dynamic-safety-stock"
 
 export const metadata: Metadata = {
     title: "ML Inventory Forecast",
@@ -15,9 +14,7 @@ export default function InventoryMLPage() {
                 title="ML Inventory Forecast"
                 subtitle="ML-powered predictive replenishment and dynamic safety stock optimization."
             />
-            <FilterProvider>
-                <InventoryMLClient />
-            </FilterProvider>
+            <DynamicSafetyStock />
         </div>
     )
 }
