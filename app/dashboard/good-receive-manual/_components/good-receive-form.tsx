@@ -1,19 +1,15 @@
 "use client"
 
-import * as React from "react"
 import { useForm, useFieldArray, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2, PackagePlus, FileText, AlertTriangle, Check, ChevronsUpDown, Plus } from "lucide-react"
+import { CalendarIcon, Trash2, Plus, Loader2, PackagePlus, FileText } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { createGoodReceiveManual, type ManualGoodReceivePoLineOption, type ManualGoodReceivePoOption } from "@/app/actions/good-receive-manual"
-import { getProducts } from "@/app/actions/product"
-import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
+import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
     Form,
@@ -27,23 +23,22 @@ import {
     Select,
     SelectContent,
     SelectItem,
-    SelectTrigger, SelectValue,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select"
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { Separator } from "@/components/ui/separator"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
@@ -55,337 +50,50 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
-const itemSchema = z.object({
-    poItem: z.coerce.number().min(1, "PO Item is required"),
-    materialNumber: z.string().min(1, "Material is required"),
-    materialDescription: z.string().optional(),
-    openQty: z.coerce.number().min(0, "Open Qty is required"),
-    productId: z.coerce.number().min(0),
-    quantity: z.coerce.number().min(0, "Quantity tidak boleh negatif"),
-    notes: z.string().optional(),
-})
-
 const formSchema = z.object({
-    supplier: z.string().min(1, "Vendor is required"),
+    supplier: z.string().min(1, "Supplier is required"),
     poNumber: z.string().min(1, "PO Number is required"),
-    warehouseId: z.coerce.number().min(1, "Warehouse is required"),
     receiveDate: z.date(),
     deliveryType: z.enum(["Partial", "Complete"]),
     referenceDocument: z.string().optional(),
-    items: z.array(itemSchema).min(1, "At least one item is required"),
-}).superRefine((data, ctx) => {
-    const selectedItems = new Set<number>()
-    let hasPositiveQty = false
-
-    data.items.forEach((item, idx) => {
-        if (selectedItems.has(item.poItem)) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["items", idx, "poItem"],
-                message: "PO Item sudah dipilih di baris lain",
-            })
-        } else {
-            selectedItems.add(item.poItem)
-        }
-
-        if (item.quantity > item.openQty) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["items", idx, "quantity"],
-                message: `Quantity melebihi Open Qty (${item.openQty})`,
-            })
-        }
-
-        if (item.productId < 1 && item.quantity > 0) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["items", idx, "quantity"],
-                message: "Material belum ter-mapping ke produk internal",
-            })
-        }
-
-        if (item.quantity > 0) {
-            hasPositiveQty = true
-        }
-    })
-
-    if (!hasPositiveQty) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["items"],
-            message: "Minimal satu item harus memiliki Quantity > 0",
-        })
-    }
+    items: z.array(z.object({
+        productId: z.coerce.number().min(1, "Product is required"),
+        warehouseId: z.coerce.number().min(1, "Warehouse is required"),
+        quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
+        notes: z.string().optional(),
+    })).min(1, "At least one item is required"),
 })
 
-type FormValues = z.infer<typeof formSchema>
-
-type ProductOption = {
-    id: number
-    materialNumber: string
-    materialDescription: string | null
-    oldMaterialNo: string | null
-    materialNumberCk: string | null
-    sloc: string | null
-}
-
 type GoodReceiveFormProps = {
+    products: {
+        id: number
+        materialNumber: string
+        materialDescription: string | null
+    }[]
     warehouses: {
         id: number
         sloc: string
         description: string | null
     }[]
-    poOptions: ManualGoodReceivePoOption[]
-    poLineOptions: ManualGoodReceivePoLineOption[]
-    productOptions: ProductOption[]
 }
 
-function createEmptyItem(): FormValues["items"][number] {
-    return {
-        poItem: 0,
-        materialNumber: "",
-        materialDescription: "",
-        openQty: 0,
-        productId: 0,
-        quantity: 0,
-        notes: "",
-    }
-}
-
-function normalizeCode(value: string | null | undefined) {
-    return (value || "").trim().toUpperCase()
-}
-
-function findMatchedProductId(materialNumber: string, options: ProductOption[]) {
-    const normalizedMaterial = normalizeCode(materialNumber)
-    if (!normalizedMaterial) return 0
-
-    const matched = options.find((product) => (
-        normalizeCode(product.materialNumber) === normalizedMaterial
-        || normalizeCode(product.oldMaterialNo) === normalizedMaterial
-        || normalizeCode(product.materialNumberCk) === normalizedMaterial
-    ))
-
-    return matched?.id ?? 0
-}
-
-function formatPoDate(poDate: string | null) {
-    if (!poDate) return "-"
-
-    const parsed = new Date(poDate)
-    if (Number.isNaN(parsed.getTime())) return poDate
-    return format(parsed, "dd MMM yyyy")
-}
-
-type ProductComboboxProps = {
-    value: number
-    options: ProductOption[]
-    onSelect: (id: number) => void
-}
-
-function ProductCombobox({ value, options, onSelect }: ProductComboboxProps) {
-    const [open, setOpen] = React.useState(false)
-    const selectedProduct = React.useMemo(
-        () => options.find((option) => option.id === value),
-        [options, value]
-    )
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className={cn(
-                        "w-full justify-between h-9 px-3 font-normal",
-                        !selectedProduct && "text-muted-foreground"
-                    )}
-                >
-                    {selectedProduct ? (
-                        <span className="truncate text-left font-mono text-xs">{selectedProduct.materialNumber}</span>
-                    ) : (
-                        <span>Pilih produk internal...</span>
-                    )}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[420px] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="Cari produk internal..." />
-                    <CommandList>
-                        <CommandEmpty>Produk tidak ditemukan.</CommandEmpty>
-                        <CommandGroup>
-                            {options.map((option) => (
-                                <CommandItem
-                                    key={option.id}
-                                    value={[
-                                        option.materialNumber,
-                                        option.materialDescription || "",
-                                        option.oldMaterialNo || "",
-                                        option.materialNumberCk || "",
-                                        option.sloc || "",
-                                    ].join(" ")}
-                                    onSelect={() => {
-                                        onSelect(option.id)
-                                        setOpen(false)
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4 shrink-0",
-                                            value === option.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    <div className="min-w-0">
-                                        <p className="font-mono text-xs truncate">{option.materialNumber}</p>
-                                        <p className="text-[11px] text-muted-foreground truncate">{option.materialDescription || "-"}</p>
-                                        <p className="text-[10px] text-muted-foreground truncate">
-                                            Old: {option.oldMaterialNo || "-"} | CK: {option.materialNumberCk || "-"} | SLoc: {option.sloc || "-"}
-                                        </p>
-                                    </div>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    )
-}
-
-export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productOptions }: GoodReceiveFormProps) {
+export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) {
     const router = useRouter()
-    const form = useForm<FormValues>({
-        resolver: zodResolver(formSchema) as Resolver<FormValues>,
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
         defaultValues: {
-            supplier: "",
-            poNumber: "",
-            warehouseId: 0,
             receiveDate: new Date(),
             deliveryType: "Complete",
-            referenceDocument: "",
-            items: [createEmptyItem()],
+            items: [{ productId: 0, warehouseId: 0, quantity: 0, notes: "" }],
         },
     })
 
-    const { fields, replace } = useFieldArray({
+    const { fields, append, remove } = useFieldArray({
         control: form.control,
         name: "items",
     })
 
-    const [poComboboxOpen, setPoComboboxOpen] = React.useState(false)
-    const [productCatalog, setProductCatalog] = React.useState<ProductOption[]>(productOptions)
-    const [isRefreshingProducts, setIsRefreshingProducts] = React.useState(false)
-    const [isMobileLayout, setIsMobileLayout] = React.useState(false)
-    const lastSelectedPoRef = React.useRef("")
-
-    const selectedPoNumber = form.watch("poNumber")
-    const selectedWarehouseId = form.watch("warehouseId")
-    const watchedItems = form.watch("items")
-
-    React.useEffect(() => {
-        setProductCatalog(productOptions)
-    }, [productOptions])
-
-    React.useEffect(() => {
-        const mediaQuery = window.matchMedia("(max-width: 767px)")
-        const updateLayout = () => setIsMobileLayout(mediaQuery.matches)
-        updateLayout()
-        mediaQuery.addEventListener("change", updateLayout)
-        return () => mediaQuery.removeEventListener("change", updateLayout)
-    }, [])
-
-    const selectedPoLines = React.useMemo(
-        () => poLineOptions.filter((line) => line.poNumber === selectedPoNumber),
-        [poLineOptions, selectedPoNumber]
-    )
-
-    const poVendorMap = React.useMemo(
-        () => new Map(poOptions.map((po) => [po.poNumber, po.vendorName])),
-        [poOptions]
-    )
-
-    const selectedPoMeta = React.useMemo(
-        () => poOptions.find((po) => po.poNumber === selectedPoNumber) || null,
-        [poOptions, selectedPoNumber]
-    )
-
-    const selectedWarehouse = React.useMemo(
-        () => warehouses.find((warehouse) => warehouse.id === Number(selectedWarehouseId)) || null,
-        [warehouses, selectedWarehouseId]
-    )
-
-    const sortedProductOptions = React.useMemo(
-        () => [...productCatalog].sort((a, b) => a.materialNumber.localeCompare(b.materialNumber)),
-        [productCatalog]
-    )
-
-    const productById = React.useMemo(
-        () => new Map(sortedProductOptions.map((product) => [product.id, product])),
-        [sortedProductOptions]
-    )
-
-    const refreshProductCatalog = React.useCallback(async () => {
-        setIsRefreshingProducts(true)
-        try {
-            const latestProducts = await getProducts()
-            const mappedProducts: ProductOption[] = latestProducts.map((product) => ({
-                id: product.id,
-                materialNumber: product.materialNumber,
-                materialDescription: product.materialDescription,
-                oldMaterialNo: product.oldMaterialNo,
-                materialNumberCk: product.materialNumberCk,
-                sloc: product.sloc,
-            }))
-            setProductCatalog(mappedProducts)
-            toast.success("Daftar produk internal diperbarui")
-        } catch (_error) {
-            toast.error("Gagal memuat daftar produk internal")
-        } finally {
-            setIsRefreshingProducts(false)
-        }
-    }, [])
-
-    React.useEffect(() => {
-        const vendorName = poVendorMap.get(selectedPoNumber) || ""
-        form.setValue("supplier", vendorName, { shouldValidate: true, shouldDirty: false })
-
-        if (!selectedPoNumber) {
-            lastSelectedPoRef.current = ""
-            replace([createEmptyItem()])
-            return
-        }
-
-        const poChanged = lastSelectedPoRef.current !== selectedPoNumber
-        const existingItems = poChanged ? [] : form.getValues("items")
-        const existingByPoItem = new Map(existingItems.map((item) => [item.poItem, item]))
-
-        const mappedItems = selectedPoLines.map((line) => {
-            const prev = existingByPoItem.get(line.poItem)
-            const prevQtyRaw = Number(prev?.quantity ?? 0)
-            const prevQty = Number.isFinite(prevQtyRaw) ? prevQtyRaw : 0
-            const quantity = poChanged ? 0 : Math.min(Math.max(prevQty, 0), line.openQty)
-            const prevProductId = Number(prev?.productId || 0)
-            const autoMatchedProductId = line.productId ?? findMatchedProductId(line.materialNumber, productCatalog)
-
-            return {
-                poItem: line.poItem,
-                materialNumber: line.materialNumber,
-                materialDescription: line.materialDescription,
-                openQty: line.openQty,
-                productId: (!poChanged && prevProductId > 0) ? prevProductId : autoMatchedProductId,
-                quantity,
-                notes: poChanged ? "" : (prev?.notes || ""),
-            }
-        })
-
-        replace(mappedItems.length ? mappedItems : [createEmptyItem()])
-        lastSelectedPoRef.current = selectedPoNumber
-    }, [selectedPoNumber, selectedPoLines, poVendorMap, replace, form, productCatalog])
-
-    async function onSubmit(values: FormValues) {
+    async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
             const result = await createGoodReceiveManual(values)
             if (result.success) {
@@ -401,603 +109,326 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
     }
 
     const isSubmitting = form.formState.isSubmitting
-    const itemsErrorMessage = typeof (form.formState.errors.items as { message?: string } | undefined)?.message === "string"
-        ? (form.formState.errors.items as { message: string }).message
-        : null
 
     return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 sm:space-y-6">
+        <TooltipProvider>
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-                <Card className="shadow-sm">
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-indigo-500" />
-                            <CardTitle className="text-base">Header Information</CardTitle>
-                        </div>
-                        <CardDescription className="text-xs">
-                            Pilih PO Number dari daftar SAP. Vendor terisi otomatis. Warehouse dipilih sekali di header.
-                        </CardDescription>
-                    </CardHeader>
-                    <Separator />
-                    <CardContent className="pt-5">
-                        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                            <FormField
-                                control={form.control}
-                                name="supplier"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendor (Auto)</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                placeholder="Akan terisi otomatis setelah pilih PO"
-                                                className="focus-visible:ring-indigo-500 bg-muted/40"
-                                                readOnly
-                                                {...field}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="poNumber"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</FormLabel>
-                                        <Popover open={poComboboxOpen} onOpenChange={setPoComboboxOpen}>
-                                            <PopoverTrigger asChild>
-                                                <FormControl>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        role="combobox"
-                                                        aria-expanded={poComboboxOpen}
-                                                        className={cn(
-                                                            "w-full justify-between font-normal focus-visible:ring-indigo-500",
-                                                            !field.value && "text-muted-foreground"
-                                                        )}
-                                                    >
-                                                        {field.value ? (
-                                                            <span className="min-w-0 text-left truncate">
-                                                                <span className="font-mono">{field.value}</span>
-                                                                {selectedPoMeta && (
-                                                                    <span className="ml-2 text-xs text-muted-foreground">
-                                                                        {formatPoDate(selectedPoMeta.poDate)} | Open {selectedPoMeta.totalOpenQty}
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                        ) : (
-                                                            <span>{poOptions.length > 0 ? "Pilih PO Number..." : "Tidak ada PO open"}</span>
-                                                        )}
-                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                    </Button>
-                                                </FormControl>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                                                <Command>
-                                                    <CommandInput placeholder="Cari PO Number, vendor, tanggal..." />
-                                                    <CommandList>
-                                                        <CommandEmpty>PO tidak ditemukan.</CommandEmpty>
-                                                        <CommandGroup>
-                                                            {poOptions.map((po) => (
-                                                                <CommandItem
-                                                                    key={po.poNumber}
-                                                                    value={`${po.poNumber} ${po.vendorName} ${po.poDate || ""} ${po.totalOpenQty} ${po.itemCount}`}
-                                                                    onSelect={() => {
-                                                                        field.onChange(po.poNumber)
-                                                                        setPoComboboxOpen(false)
-                                                                    }}
-                                                                >
-                                                                    <Check
-                                                                        className={cn(
-                                                                            "mr-2 h-4 w-4 shrink-0",
-                                                                            field.value === po.poNumber ? "opacity-100" : "opacity-0"
-                                                                        )}
-                                                                    />
-                                                                    <div className="min-w-0">
-                                                                        <p className="font-mono text-xs">{po.poNumber}</p>
-                                                                        <p className="text-[11px] text-muted-foreground truncate">{po.vendorName}</p>
-                                                                        <p className="text-[10px] text-muted-foreground">
-                                                                            Tanggal PO: {formatPoDate(po.poDate)} | Open Qty: {po.totalOpenQty} | {po.itemCount} item
-                                                                        </p>
-                                                                    </div>
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
-                                                    </CommandList>
-                                                </Command>
-                                            </PopoverContent>
-                                        </Popover>
-                                        {selectedPoMeta && (
-                                            <p className="text-[11px] text-muted-foreground">
-                                                Tanggal PO: {formatPoDate(selectedPoMeta.poDate)} | Tinggal/Open PO: {selectedPoMeta.totalOpenQty} | {selectedPoMeta.itemCount} item
-                                            </p>
-                                        )}
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="warehouseId"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Warehouse</FormLabel>
-                                        <Select
-                                            onValueChange={(val) => field.onChange(Number(val))}
-                                            value={field.value && field.value > 0 ? String(field.value) : ""}
-                                        >
+                    {/* Section 1: Header Information */}
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-indigo-500" />
+                                <CardTitle className="text-base">Header Information</CardTitle>
+                            </div>
+                            <CardDescription className="text-xs">
+                                Fill in the supplier and document details for this receipt.
+                            </CardDescription>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="pt-5">
+                            <div className="grid gap-5 md:grid-cols-2">
+                                <FormField
+                                    control={form.control}
+                                    name="supplier"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supplier</FormLabel>
                                             <FormControl>
-                                                <SelectTrigger className="focus:ring-indigo-500">
-                                                    <SelectValue placeholder="Pilih warehouse" />
-                                                </SelectTrigger>
+                                                <Input placeholder="Supplier Name" className="focus-visible:ring-indigo-500" {...field} />
                                             </FormControl>
-                                            <SelectContent>
-                                                {warehouses.map((warehouse) => (
-                                                    <SelectItem key={warehouse.id} value={warehouse.id.toString()}>
-                                                        {warehouse.sloc} - {warehouse.description}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="receiveDate"
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Receive Date</FormLabel>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <FormControl>
-                                                    <Button
-                                                        variant={"outline"}
-                                                        className={cn(
-                                                            "w-full pl-3 text-left font-normal focus-visible:ring-indigo-500",
-                                                            !field.value && "text-muted-foreground"
-                                                        )}
-                                                    >
-                                                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                                    </Button>
-                                                </FormControl>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start">
-                                                <Calendar
-                                                    mode="single"
-                                                    selected={field.value}
-                                                    onSelect={field.onChange}
-                                                    disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                                                    initialFocus
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="deliveryType"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delivery Type</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger className="focus:ring-indigo-500">
-                                                    <SelectValue placeholder="Select type" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="Complete">Complete</SelectItem>
-                                                <SelectItem value="Partial">Partial</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="referenceDocument"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reference Document <span className="normal-case font-normal">(Optional)</span></FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="DO-12345" className="font-mono focus-visible:ring-indigo-500" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="shadow-sm">
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center gap-2">
-                            <PackagePlus className="h-4 w-4 text-indigo-500" />
-                            <CardTitle className="text-base">
-                                Items
-                                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold w-5 h-5">
-                                    {selectedPoNumber ? selectedPoLines.length : 0}
-                                </span>
-                            </CardTitle>
-                        </div>
-                        <CardDescription className="text-xs">
-                            Semua item dari PO akan tampil otomatis. Isi Qty oleh gudang, dan boleh 0 untuk item yang belum datang.
-                        </CardDescription>
-                    </CardHeader>
-                    <Separator />
-                    <CardContent className="pt-0 px-0 pb-0">
-                        {isMobileLayout ? (
-                            selectedPoNumber ? (
-                                <div className="space-y-3 p-3">
-                                    {fields.map((field, index) => {
-                                        const watchedRow = watchedItems?.[index]
-                                        const poItemValue = Number(watchedRow?.poItem ?? field.poItem ?? 0)
-                                        const materialNumberValue = watchedRow?.materialNumber ?? field.materialNumber
-                                        const materialDescriptionValue = watchedRow?.materialDescription ?? field.materialDescription
-                                        const openQtyValue = Number(watchedRow?.openQty ?? field.openQty ?? 0)
-                                        const currentProductId = Number(watchedRow?.productId ?? field.productId ?? 0)
-                                        const selectedInternalProduct = productById.get(currentProductId)
-                                        const isMapped = currentProductId > 0
-
-                                        return (
-                                            <Card
-                                                key={`mobile-${field.id}`}
-                                                className={cn("shadow-none border", !isMapped && "border-amber-300 bg-amber-50/40 dark:bg-amber-950/10")}
-                                            >
-                                                <CardContent className="p-3 space-y-3">
-                                                    <input type="hidden" {...form.register(`items.${index}.poItem`, { valueAsNumber: true })} />
-                                                    <input type="hidden" {...form.register(`items.${index}.materialNumber`)} />
-                                                    <input type="hidden" {...form.register(`items.${index}.materialDescription`)} />
-                                                    <input type="hidden" {...form.register(`items.${index}.openQty`, { valueAsNumber: true })} />
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div>
-                                                            <p className="text-xs text-muted-foreground">Item #{index + 1}</p>
-                                                            <p className="font-mono text-xs">{poItemValue > 0 ? `PO Item ${poItemValue}` : "-"}</p>
-                                                        </div>
-                                                        <Badge variant="outline" className="text-[10px]">
-                                                            Open Qty: {openQtyValue}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="space-y-0.5">
-                                                        <p className="font-mono text-[11px] break-all">{materialNumberValue || "-"}</p>
-                                                        <p className="text-xs text-muted-foreground">{materialDescriptionValue || "-"}</p>
-                                                        {!isMapped && (
-                                                            <p className="text-[11px] text-amber-700 dark:text-amber-400 inline-flex items-center gap-1">
-                                                                <AlertTriangle className="h-3 w-3" />
-                                                                Material belum ter-mapping ke produk internal
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`items.${index}.productId`}
-                                                        render={({ field: productField }) => (
-                                                            <FormItem className="space-y-1">
-                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                                    Material Internal
-                                                                </FormLabel>
-                                                                <FormControl>
-                                                                    <ProductCombobox
-                                                                        value={Number(productField.value || 0)}
-                                                                        options={sortedProductOptions}
-                                                                        onSelect={(id) => productField.onChange(id)}
-                                                                    />
-                                                                </FormControl>
-                                                                {!isMapped && (
-                                                                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                                                                        <ProductDialog
-                                                                            initialValues={{
-                                                                                category: "Material Consumable",
-                                                                                materialNumber: materialNumberValue || "",
-                                                                                oldMaterialNo: materialNumberValue || "",
-                                                                                materialDescription: materialDescriptionValue || "",
-                                                                                sloc: selectedWarehouse?.sloc || "",
-                                                                                slocDescription: selectedWarehouse?.description || "",
-                                                                            }}
-                                                                            trigger={(
-                                                                                <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]">
-                                                                                    <Plus className="mr-1 h-3 w-3" />
-                                                                                    Tambah Produk
-                                                                                </Button>
-                                                                            )}
-                                                                            onSuccess={refreshProductCatalog}
-                                                                        />
-                                                                        <Button
-                                                                            type="button"
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-8 text-[11px]"
-                                                                            onClick={refreshProductCatalog}
-                                                                            disabled={isRefreshingProducts}
-                                                                        >
-                                                                            {isRefreshingProducts ? "Memuat..." : "Refresh List"}
-                                                                        </Button>
-                                                                    </div>
-                                                                )}
-                                                                {selectedInternalProduct && (
-                                                                    <p className="text-[10px] text-muted-foreground">
-                                                                        {selectedInternalProduct.materialDescription || "-"}
-                                                                    </p>
-                                                                )}
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`items.${index}.quantity`}
-                                                        render={({ field: qtyField }) => (
-                                                            <FormItem className="space-y-1">
-                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                                    Quantity
-                                                                </FormLabel>
-                                                                <FormControl>
-                                                                    <Input
-                                                                        type="number"
-                                                                        min={0}
-                                                                        step={1}
-                                                                        inputMode="numeric"
-                                                                        className="h-10 focus-visible:ring-indigo-500"
-                                                                        value={qtyField.value}
-                                                                        disabled={!isMapped}
-                                                                        onChange={(e) => {
-                                                                            const value = Number(e.target.value)
-                                                                            qtyField.onChange(Number.isFinite(value) ? value : 0)
-                                                                        }}
-                                                                        onBlur={(e) => {
-                                                                            const openQty = Number(form.getValues(`items.${index}.openQty`) || 0)
-                                                                            const value = Number(e.target.value)
-                                                                            const normalized = Number.isFinite(value) ? Math.min(Math.max(value, 0), openQty) : 0
-                                                                            qtyField.onChange(normalized)
-                                                                        }}
-                                                                    />
-                                                                </FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`items.${index}.notes`}
-                                                        render={({ field: notesField }) => (
-                                                            <FormItem className="space-y-1">
-                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                                    Notes
-                                                                </FormLabel>
-                                                                <FormControl>
-                                                                    <Input placeholder="Optional notes..." className="h-10 focus-visible:ring-indigo-500" {...notesField} />
-                                                                </FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                </CardContent>
-                                            </Card>
-                                        )
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="h-24 flex items-center justify-center text-center text-sm text-muted-foreground px-4">
-                                    Pilih PO Number terlebih dahulu untuk menampilkan item.
-                                </div>
-                            )
-                        ) : (
-                            <div className="rounded-b-lg overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <Table className="min-w-[1180px]">
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                        <TableHead className="w-[40px] text-xs font-semibold text-muted-foreground pl-4">#</TableHead>
-                                        <TableHead className="w-[130px] text-xs font-semibold text-muted-foreground">PO Item</TableHead>
-                                        <TableHead className="w-[300px] text-xs font-semibold text-muted-foreground">Material</TableHead>
-                                        <TableHead className="w-[300px] text-xs font-semibold text-muted-foreground">Material Internal</TableHead>
-                                        <TableHead className="w-[120px] text-xs font-semibold text-muted-foreground">Open Qty</TableHead>
-                                        <TableHead className="w-[130px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
-                                        <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {!selectedPoNumber && (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                                                Pilih PO Number terlebih dahulu untuk menampilkan item.
-                                            </TableCell>
-                                        </TableRow>
+                                            <FormMessage />
+                                        </FormItem>
                                     )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="poNumber"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="PO-12345" className="font-mono focus-visible:ring-indigo-500" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="receiveDate"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Receive Date</FormLabel>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <FormControl>
+                                                        <Button
+                                                            variant={"outline"}
+                                                            className={cn(
+                                                                "w-full pl-3 text-left font-normal focus-visible:ring-indigo-500",
+                                                                !field.value && "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {field.value ? (
+                                                                format(field.value, "PPP")
+                                                            ) : (
+                                                                <span>Pick a date</span>
+                                                            )}
+                                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </FormControl>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        disabled={(date) =>
+                                                            date > new Date() || date < new Date("1900-01-01")
+                                                        }
+                                                        initialFocus
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="deliveryType"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delivery Type</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger className="focus:ring-indigo-500">
+                                                        <SelectValue placeholder="Select type" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="Complete">Complete</SelectItem>
+                                                    <SelectItem value="Partial">Partial</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="referenceDocument"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reference Document <span className="normal-case font-normal">(Optional)</span></FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="DO-12345" className="font-mono focus-visible:ring-indigo-500" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                                    {selectedPoNumber && fields.map((field, index) => {
-                                        const watchedRow = watchedItems?.[index]
-                                        const poItemValue = Number(watchedRow?.poItem ?? field.poItem ?? 0)
-                                        const materialNumberValue = watchedRow?.materialNumber ?? field.materialNumber
-                                        const materialDescriptionValue = watchedRow?.materialDescription ?? field.materialDescription
-                                        const openQtyValue = Number(watchedRow?.openQty ?? field.openQty ?? 0)
-                                        const currentProductId = Number(watchedRow?.productId ?? field.productId ?? 0)
-                                        const selectedInternalProduct = productById.get(currentProductId)
-                                        const isMapped = currentProductId > 0
-
-                                        return (
-                                            <TableRow key={field.id} className={cn("hover:bg-muted/30 transition-colors", !isMapped && "bg-amber-50/30 dark:bg-amber-950/10")}>
-                                                <TableCell className="pl-4 text-sm text-muted-foreground font-medium">
-                                                    <input type="hidden" {...form.register(`items.${index}.poItem`, { valueAsNumber: true })} />
-                                                    <input type="hidden" {...form.register(`items.${index}.materialNumber`)} />
-                                                    <input type="hidden" {...form.register(`items.${index}.materialDescription`)} />
-                                                    <input type="hidden" {...form.register(`items.${index}.openQty`, { valueAsNumber: true })} />
-                                                    {index + 1}
-                                                </TableCell>
-                                                <TableCell className="font-mono text-xs">
-                                                    {poItemValue > 0 ? `Item ${poItemValue}` : "-"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="space-y-0.5">
-                                                        <p className="font-mono text-[11px]">{materialNumberValue || "-"}</p>
-                                                        <p className="text-xs text-muted-foreground">{materialDescriptionValue || "-"}</p>
-                                                        {!isMapped && (
-                                                            <p className="text-[11px] text-amber-700 dark:text-amber-400 inline-flex items-center gap-1">
-                                                                <AlertTriangle className="h-3 w-3" />
-                                                                Material belum ter-mapping ke produk internal
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
+                    {/* Section 2: Items */}
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <PackagePlus className="h-4 w-4 text-indigo-500" />
+                                    <CardTitle className="text-base">
+                                        Items
+                                        <span className="ml-2 inline-flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold w-5 h-5">{fields.length}</span>
+                                    </CardTitle>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => append({ productId: 0, warehouseId: 0, quantity: 1, notes: "" })}
+                                    className="border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Add Item
+                                </Button>
+                            </div>
+                            <CardDescription className="text-xs">
+                                Add products with their target warehouse and quantity.
+                            </CardDescription>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="pt-0 px-0 pb-0">
+                            <div className="rounded-b-lg overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                            <TableHead className="w-[40px] text-xs font-semibold text-muted-foreground pl-4">#</TableHead>
+                                            <TableHead className="w-[300px] text-xs font-semibold text-muted-foreground">Product</TableHead>
+                                            <TableHead className="w-[200px] text-xs font-semibold text-muted-foreground">Warehouse</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
+                                            <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
+                                            <TableHead className="w-[50px]"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {fields.map((field, index) => (
+                                            <TableRow key={field.id} className="hover:bg-muted/30 transition-colors">
+                                                <TableCell className="pl-4 text-sm text-muted-foreground font-medium">{index + 1}</TableCell>
                                                 <TableCell>
                                                     <FormField
                                                         control={form.control}
                                                         name={`items.${index}.productId`}
-                                                        render={({ field: productField }) => (
-                                                            <FormItem className="space-y-1">
-                                                                <FormControl>
-                                                                    <ProductCombobox
-                                                                        value={Number(productField.value || 0)}
-                                                                        options={sortedProductOptions}
-                                                                        onSelect={(id) => productField.onChange(id)}
-                                                                    />
-                                                                </FormControl>
-                                                                {!isMapped && (
-                                                                    <div className="flex items-center gap-2 pt-1">
-                                                                        <ProductDialog
-                                                                            initialValues={{
-                                                                                category: "Material Consumable",
-                                                                                materialNumber: materialNumberValue || "",
-                                                                                oldMaterialNo: materialNumberValue || "",
-                                                                                materialDescription: materialDescriptionValue || "",
-                                                                                sloc: selectedWarehouse?.sloc || "",
-                                                                                slocDescription: selectedWarehouse?.description || "",
-                                                                            }}
-                                                                            trigger={(
-                                                                                <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]">
-                                                                                    <Plus className="mr-1 h-3 w-3" />
-                                                                                    Tambah Produk
-                                                                                </Button>
-                                                                            )}
-                                                                            onSuccess={refreshProductCatalog}
-                                                                        />
-                                                                        <Button
-                                                                            type="button"
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-8 text-[11px]"
-                                                                            onClick={refreshProductCatalog}
-                                                                            disabled={isRefreshingProducts}
-                                                                        >
-                                                                            {isRefreshingProducts ? "Memuat..." : "Refresh List"}
-                                                                        </Button>
-                                                                    </div>
-                                                                )}
-                                                                {selectedInternalProduct && (
-                                                                    <p className="text-[10px] text-muted-foreground truncate">
-                                                                        {selectedInternalProduct.materialDescription || "-"}
-                                                                    </p>
-                                                                )}
+                                                        render={({ field }) => (
+                                                            <FormItem className="space-y-0">
+                                                                <Select
+                                                                    onValueChange={(val) => field.onChange(parseInt(val))}
+                                                                    value={field.value?.toString() === "0" ? "" : field.value?.toString()}
+                                                                >
+                                                                    <FormControl>
+                                                                        <SelectTrigger className="focus:ring-indigo-500">
+                                                                            <SelectValue placeholder="Select product" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
+                                                                    <SelectContent>
+                                                                        {products.map((product) => (
+                                                                            <SelectItem key={product.id} value={product.id.toString()}>
+                                                                                {product.materialNumber} - {product.materialDescription}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
                                                                 <FormMessage />
                                                             </FormItem>
                                                         )}
                                                     />
                                                 </TableCell>
-                                                <TableCell className="text-sm font-semibold">{openQtyValue}</TableCell>
+                                                <TableCell>
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.warehouseId`}
+                                                        render={({ field }) => (
+                                                            <FormItem className="space-y-0">
+                                                                <Select
+                                                                    onValueChange={(val) => field.onChange(parseInt(val))}
+                                                                    value={field.value?.toString() === "0" ? "" : field.value?.toString()}
+                                                                >
+                                                                    <FormControl>
+                                                                        <SelectTrigger className="focus:ring-indigo-500">
+                                                                            <SelectValue placeholder="Select warehouse" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
+                                                                    <SelectContent>
+                                                                        {warehouses.map((warehouse) => (
+                                                                            <SelectItem key={warehouse.id} value={warehouse.id.toString()}>
+                                                                                {warehouse.sloc} - {warehouse.description}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                </TableCell>
                                                 <TableCell>
                                                     <FormField
                                                         control={form.control}
                                                         name={`items.${index}.quantity`}
-                                                        render={({ field: qtyField }) => (
-                                                            <FormItem className="space-y-1">
-                                                                <FormControl>
-                                                                    <Input
-                                                                        type="number"
-                                                                        min={0}
-                                                                        step={1}
-                                                                        className="focus-visible:ring-indigo-500"
-                                                                        value={qtyField.value}
-                                                                        disabled={!isMapped}
-                                                                        onChange={(e) => {
-                                                                            const value = Number(e.target.value)
-                                                                            qtyField.onChange(Number.isFinite(value) ? value : 0)
-                                                                        }}
-                                                                        onBlur={(e) => {
-                                                                            const openQty = Number(form.getValues(`items.${index}.openQty`) || 0)
-                                                                            const value = Number(e.target.value)
-                                                                            const normalized = Number.isFinite(value) ? Math.min(Math.max(value, 0), openQty) : 0
-                                                                            qtyField.onChange(normalized)
-                                                                        }}
-                                                                    />
-                                                                </FormControl>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`items.${index}.notes`}
-                                                        render={({ field: notesField }) => (
+                                                        render={({ field }) => (
                                                             <FormItem className="space-y-0">
                                                                 <FormControl>
-                                                                    <Input placeholder="Optional notes..." className="focus-visible:ring-indigo-500" {...notesField} />
+                                                                    <Input
+                                                                        type="number"
+                                                                        className="focus-visible:ring-indigo-500"
+                                                                        {...field}
+                                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                                    />
                                                                 </FormControl>
                                                                 <FormMessage />
                                                             </FormItem>
                                                         )}
                                                     />
                                                 </TableCell>
+                                                <TableCell>
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.notes`}
+                                                        render={({ field }) => (
+                                                            <FormItem className="space-y-0">
+                                                                <FormControl>
+                                                                    <Input placeholder="Optional notes..." className="focus-visible:ring-indigo-500" {...field} />
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => remove(index)}
+                                                                disabled={fields.length === 1}
+                                                                className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                                                            >
+                                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="left">
+                                                            <p>Remove item</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TableCell>
                                             </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
-                                </div>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
-                        )}
+                            {form.formState.errors.items?.root && (
+                                <p className="text-sm font-medium text-destructive px-4 pb-4">
+                                    {form.formState.errors.items.root.message}
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
 
-                        {itemsErrorMessage && (
-                            <p className="text-sm font-medium text-destructive px-4 py-3">{itemsErrorMessage}</p>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => router.back()}
-                        disabled={isSubmitting}
-                        className="w-full sm:w-auto"
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white sm:min-w-[160px]"
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Submitting...
-                            </>
-                        ) : (
-                            <>
-                                <PackagePlus className="mr-2 h-4 w-4" />
-                                Submit Good Receive
-                            </>
-                        )}
-                    </Button>
-                </div>
-            </form>
-        </Form>
+                    {/* Form Actions */}
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => router.back()}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[160px]"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Submitting...
+                                </>
+                            ) : (
+                                <>
+                                    <PackagePlus className="mr-2 h-4 w-4" />
+                                    Submit Good Receive
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </form>
+            </Form>
+        </TooltipProvider>
     )
 }
