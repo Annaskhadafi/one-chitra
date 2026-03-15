@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import {
     AlertTriangle,
     BarChart3,
@@ -26,6 +27,7 @@ import { toast } from "sonner"
 
 import {
     generateAIPrediction,
+    getLatestSafetyStockPredictionByMaterial,
     getMaterialSalesRevenueHistory,
     getRecentPredictions,
     getSafetyStockAnalytics,
@@ -232,6 +234,8 @@ const getLeadTimeTone = (status: SafetyStockAnalytics["leadTime"]["status"]) => 
 
 export function DynamicSafetyStock() {
     const reportRef = useRef<HTMLDivElement | null>(null)
+    const autoLinkHandledRef = useRef<string | null>(null)
+    const searchParams = useSearchParams()
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isLoadingInsights, setIsLoadingInsights] = useState(false)
@@ -349,11 +353,14 @@ export function DynamicSafetyStock() {
         }
     }
 
-    const handleGenerate = async () => {
-        if (!productCode.trim()) {
+    const runSafetyStockCalculation = async (materialInput: string) => {
+        const normalizedMaterial = materialInput.trim()
+        if (!normalizedMaterial) {
             toast.error("Silakan masukkan Material Number")
             return
         }
+
+        setProductCode(normalizedMaterial)
 
         setIsLoading(true)
         setIsLoadingInsights(false)
@@ -366,7 +373,7 @@ export function DynamicSafetyStock() {
         setActiveHistoryId(null)
 
         try {
-            const predictionResponse = await generateAIPrediction(productCode, "SAFETY_STOCK")
+            const predictionResponse = await generateAIPrediction(normalizedMaterial, "SAFETY_STOCK", { forceRefresh: true })
 
             if (!predictionResponse.success || !predictionResponse.data) {
                 toast.error(predictionResponse.error || "Gagal membuat perhitungan")
@@ -400,6 +407,57 @@ export function DynamicSafetyStock() {
             setIsLoading(false)
         }
     }
+
+    const handleGenerate = async () => {
+        await runSafetyStockCalculation(productCode)
+    }
+
+    // This hydration should only react to URL query changes.
+    /* eslint-disable react-hooks/exhaustive-deps */
+    useEffect(() => {
+        const materialFromQuery = searchParams.get("material")?.trim()
+        if (!materialFromQuery) {
+            return
+        }
+
+        const autoRun = searchParams.get("autoRun") === "1"
+        const queryKey = `${materialFromQuery}|${searchParams.get("predictionId") || ""}|${autoRun ? "1" : "0"}`
+        if (autoLinkHandledRef.current === queryKey) {
+            return
+        }
+        autoLinkHandledRef.current = queryKey
+
+        const hydrateFromLinkedMaterial = async () => {
+            setProductCode(materialFromQuery)
+
+            const latestPrediction = await getLatestSafetyStockPredictionByMaterial(materialFromQuery)
+
+            if (latestPrediction.success && latestPrediction.data) {
+                setActiveHistoryId(latestPrediction.data.id)
+                await loadPredictionDetails(
+                    {
+                        id: latestPrediction.data.id,
+                        productCode: latestPrediction.data.productCode,
+                        productName: latestPrediction.data.productName,
+                        recommendedStock: latestPrediction.data.recommendedStock,
+                        rationale: latestPrediction.data.rationale,
+                        currentStock: latestPrediction.data.currentStock,
+                        createdAt: latestPrediction.data.createdAt,
+                    },
+                    { preserveActiveYear: false }
+                )
+                await loadHistory()
+                return
+            }
+
+            if (autoRun) {
+                await runSafetyStockCalculation(materialFromQuery)
+            }
+        }
+
+        void hydrateFromLinkedMaterial()
+    }, [searchParams])
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     const handleExportPdf = async () => {
         if (!reportRef.current || !analytics || !result) {

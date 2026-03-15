@@ -1,11 +1,16 @@
-import { getReorderAlerts } from "@/app/actions/stock-alerts"
+import { getReorderAlerts, getReorderPredictionStocks } from "@/app/actions/stock-alerts"
 import { ReorderAlertTable } from "./_components/reorder-alert-table"
+import { ReorderPredictionTable } from "./_components/reorder-prediction-table"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart3 } from "lucide-react"
 
 export default async function StockAlertsPage() {
-    const alerts = await getReorderAlerts()
+    const [alerts, predictionStocks] = await Promise.all([
+        getReorderAlerts(),
+        getReorderPredictionStocks(),
+    ])
 
     const critical = alerts.filter((a) => a.urgency === "critical").length
     const warning = alerts.filter((a) => a.urgency === "warning").length
@@ -110,7 +115,20 @@ export default async function StockAlertsPage() {
             </Accordion>
 
             <div className="flex-1">
-                <ReorderAlertTable data={alerts} />
+                <Tabs defaultValue="reorder-alert" className="space-y-4">
+                    <TabsList>
+                        <TabsTrigger value="reorder-alert">Reorder Alert</TabsTrigger>
+                        <TabsTrigger value="reorder-prediction">Re Order Prediction</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="reorder-alert" className="mt-0">
+                        <ReorderAlertTable data={alerts} />
+                    </TabsContent>
+
+                    <TabsContent value="reorder-prediction" className="mt-0">
+                        <ReorderPredictionTable data={predictionStocks} />
+                    </TabsContent>
+                </Tabs>
             </div>
         </div>
     )

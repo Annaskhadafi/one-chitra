@@ -890,7 +890,11 @@ export async function searchMaterials(query: string) {
     }
 }
 
-export async function generateMLPrediction(productCode: string, predictionType: 'REPLENISHMENT' | 'SAFETY_STOCK') {
+export async function generateMLPrediction(
+    productCode: string,
+    predictionType: 'REPLENISHMENT' | 'SAFETY_STOCK',
+    options?: { forceRefresh?: boolean }
+) {
     try {
         await getAuthenticatedSession("inventory", "edit");
 
@@ -898,6 +902,8 @@ export async function generateMLPrediction(productCode: string, predictionType: 
         if (!normalizedProductCode) {
             return { success: false, error: "Material Number wajib diisi" };
         }
+
+        const forceRefresh = options?.forceRefresh === true
 
         // Get ML settings from database (Requirement 9.9)
         const aiConfig = await getMLSettings();
@@ -911,7 +917,7 @@ export async function generateMLPrediction(productCode: string, predictionType: 
             .orderBy(desc(aiInventoryPredictions.createdAt))
             .limit(1);
 
-        if (existing.length > 0) {
+        if (!forceRefresh && existing.length > 0) {
             const lastPred = existing[0];
             const hoursSince = (new Date().getTime() - lastPred.createdAt.getTime()) / (1000 * 60 * 60);
             // Use configurable cache duration (Requirement 9.9)
@@ -1147,15 +1153,35 @@ ${jsonSchema}`;
             }
         }
 
-        // 5. Save to Database
-        const [saved] = await db.insert(aiInventoryPredictions).values({
+        const payload = {
             productCode: normalizedProductCode,
             productName,
             predictionType,
             recommendedStock: Number(parsedResult.recommendedStock) || 0,
             rationale: JSON.stringify(parsedResult.report || { summary: parsedResult.rationale || "No rationale provided" }),
             currentStock: Math.round(currentStock),
-        }).returning();
+        }
+
+        // 5. Save to Database
+        // Force refresh updates latest record so rerun always reflects newest history order.
+        let saved
+        if (forceRefresh && existing.length > 0) {
+            [saved] = await db
+                .update(aiInventoryPredictions)
+                .set({
+                    ...payload,
+                    actualSales: null,
+                    accuracyPercentage: null,
+                    createdAt: new Date(),
+                })
+                .where(eq(aiInventoryPredictions.id, existing[0].id))
+                .returning()
+        } else {
+            [saved] = await db
+                .insert(aiInventoryPredictions)
+                .values(payload)
+                .returning()
+        }
 
         console.log("[AI] Prediction saved to DB:", saved.id);
         return { success: true, data: saved, cached: false };
@@ -1718,6 +1744,49 @@ export async function getSafetyStockAnalytics(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to generate safety stock analytics",
+        }
+    }
+}
+
+export async function getLatestSafetyStockPredictionByMaterial(materialNo: string) {
+    try {
+        await getAuthenticatedSession("inventory", "view")
+
+        const normalizedMaterialNo = materialNo.trim()
+        if (!normalizedMaterialNo) {
+            return { success: true, data: null as null }
+        }
+
+        const [prediction] = await db
+            .select({
+                id: aiInventoryPredictions.id,
+                productCode: aiInventoryPredictions.productCode,
+                productName: aiInventoryPredictions.productName,
+                predictionType: aiInventoryPredictions.predictionType,
+                recommendedStock: aiInventoryPredictions.recommendedStock,
+                rationale: aiInventoryPredictions.rationale,
+                createdAt: aiInventoryPredictions.createdAt,
+                currentStock: aiInventoryPredictions.currentStock,
+            })
+            .from(aiInventoryPredictions)
+            .where(
+                and(
+                    eq(aiInventoryPredictions.predictionType, "SAFETY_STOCK"),
+                    sql`trim(${aiInventoryPredictions.productCode}) = ${normalizedMaterialNo}`
+                )
+            )
+            .orderBy(desc(aiInventoryPredictions.createdAt))
+            .limit(1)
+
+        return {
+            success: true,
+            data: prediction ?? null,
+        }
+    } catch (error) {
+        console.error("Failed to fetch latest safety stock prediction:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to fetch latest safety stock prediction",
         }
     }
 }

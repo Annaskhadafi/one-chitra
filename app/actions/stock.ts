@@ -43,6 +43,7 @@ export async function getStocks() {
                     materialDescription: true,
                     plant: true,
                     category: true,
+                    brand: true,
                     oldMaterialNo: true,
                     costSap: true,
                 }

@@ -155,6 +155,14 @@ export type ReorderAlert = Stock & {
     urgency: 'critical' | 'warning' | 'ok'
 }
 
+export type ReorderPredictionStock = Stock & {
+    product: Product
+    warehouse: Warehouse
+    mlMinimumStock: number | null
+    mlPredictionId: number | null
+    mlPredictedAt: Date | string | null
+}
+
 // Price Management
 export type PriceList = InferSelectModel<typeof priceLists> & {
     customer?: Pick<Customer, 'id' | 'customerCode' | 'name'> | null

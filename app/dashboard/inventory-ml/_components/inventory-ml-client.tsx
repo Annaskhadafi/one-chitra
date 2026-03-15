@@ -271,7 +271,7 @@ function ReplenishmentTab() {
         setResult(null)
         setError(null)
         try {
-            const res = await generateMLPrediction(productCode.trim(), 'REPLENISHMENT')
+            const res = await generateMLPrediction(productCode.trim(), 'REPLENISHMENT', { forceRefresh: true })
             if (res.success && res.data) {
                 setResult(res.data)
                 toast.success(res.cached ? "Dari cache (24 jam)" : "Prediksi ML berhasil!")
