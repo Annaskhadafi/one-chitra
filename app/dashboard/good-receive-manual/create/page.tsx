@@ -1,6 +1,7 @@
 import { GoodReceiveForm } from "../_components/good-receive-form";
 import { getWarehouses } from "@/app/actions/warehouse";
 import { getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
+import { getProducts } from "@/app/actions/product";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
@@ -8,12 +9,21 @@ import Link from "next/link";
 export default async function CreateGoodReceiveManualPage() {
     const warehouses = await getWarehouses();
     const poOptionsResult = await getManualGoodReceivePoOptions();
+    const products = await getProducts();
 
     const formattedWarehouses = warehouses.map(w => ({
         id: w.id,
         sloc: w.sloc,
         description: w.description,
     }));
+    const productOptions = products.map((product) => ({
+        id: product.id,
+        materialNumber: product.materialNumber,
+        materialDescription: product.materialDescription,
+        oldMaterialNo: product.oldMaterialNo,
+        materialNumberCk: product.materialNumberCk,
+        sloc: product.sloc,
+    }))
     return (
         <div className="space-y-5 p-4 sm:space-y-6 sm:p-6">
             {/* Back Navigation */}
@@ -42,6 +52,7 @@ export default async function CreateGoodReceiveManualPage() {
                 warehouses={formattedWarehouses}
                 poOptions={poOptionsResult.success ? poOptionsResult.data.poOptions : []}
                 poLineOptions={poOptionsResult.success ? poOptionsResult.data.poLineOptions : []}
+                productOptions={productOptions}
             />
         </div>
     );
