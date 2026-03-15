@@ -21,6 +21,9 @@ import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ScoreCard } from "@/components/score-card"
@@ -33,11 +36,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
     AlertDialog,
@@ -49,7 +47,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, FilterX, RefreshCcw } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -141,7 +139,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [yearFilter, setYearFilter] = useState<string[]>([])
     const [monthFilter, setMonthFilter] = useState<string[]>([])
-    const [sorting, setSorting] = useState<SortingState>([])
+    const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [rowSelection, setRowSelection] = useState({})
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
     const [pagination, setPagination] = useState<PaginationState>({
@@ -303,6 +301,108 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             ),
             enableSorting: false,
             enableHiding: false,
+        },
+        {
+            id: "actions",
+            header: () => "Actions",
+            cell: ({ row }) => {
+                const order = row.original
+                return (
+                    <div className="flex justify-start gap-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                {canView && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            setViewOrder(order)
+                                            setIsViewOpen(true)
+                                        }}
+                                    >
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        Preview Detail
+                                    </DropdownMenuItem>
+                                )}
+                                {order.poDocument && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            setPoPreviewOrder(order)
+                                            setIsPoPreviewOpen(true)
+                                        }}
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview Customer PO
+                                    </DropdownMenuItem>
+                                )}
+                                {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
+                                    <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
+                                        <DropdownMenuItem>
+                                            <Pencil className="mr-2 h-4 w-4" />
+                                            Edit
+                                        </DropdownMenuItem>
+                                    </Link>
+                                )}
+                                {canDelete && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete Sales Order</AlertDialogTitle>
+                                                    <AlertDialogHeader>
+                                                        Are you sure you want to delete {order.invoiceNumber}? This action cannot be undone.
+                                                    </AlertDialogHeader>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(order.id)}
+                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    >
+                                                        Delete
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )
+            },
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "createdAt",
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                    className="-ml-4 h-8"
+                >
+                    Created Date
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString("id-ID", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            }),
         },
         {
             accessorKey: "invoiceNumber",
@@ -496,77 +596,6 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 </div>
             ),
         },
-        {
-            id: "actions",
-            header: () => <div className="text-right">Actions</div>,
-            cell: ({ row }) => {
-                const order = row.original
-                return (
-                    <div className="flex justify-end gap-1">
-                        {canView && (
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-                                onClick={() => {
-                                    setViewOrder(order)
-                                    setIsViewOpen(true)
-                                }}
-                            >
-                                <Eye className="h-4 w-4" />
-                            </Button>
-                        )}
-                        {order.poDocument && (
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
-                                onClick={() => {
-                                    setPoPreviewOrder(order)
-                                    setIsPoPreviewOpen(true)
-                                }}
-                                title="Preview Customer PO"
-                            >
-                                <FileText className="h-4 w-4" />
-                            </Button>
-                        )}
-                        {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
-                            <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                            </Link>
-                        )}
-                        {canDelete && (
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete Sales Order</AlertDialogTitle>
-                                        <AlertDialogHeader>
-                                            Are you sure you want to delete {order.invoiceNumber}? This action cannot be undone.
-                                        </AlertDialogHeader>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction
-                                            onClick={() => handleDelete(order.id)}
-                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        >
-                                            Delete
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        )}
-                    </div>
-                )
-            },
-        },
     ], [mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
 
     const table = useReactTable({
@@ -648,10 +677,11 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     }
 
     const handleExport = () => {
-        const headers = ["Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
+        const headers = ["Created Date", "Invoice Number", "Customer PO", "Customer", "PIC Sales", "Date PO", "Cat. PO", "Category", "Items", "Grand Total", "Status", "Created By"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const order = row.original
             return [
+                new Date(order.createdAt).toLocaleDateString("id-ID"),
                 order.invoiceNumber || "",
                 order.customerPo || "",
                 order.customer?.name || "",
@@ -941,6 +971,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                     .filter((column) => column.getCanHide())
                                     .map((column) => {
                                         const label = {
+                                            createdAt: "Created Date",
                                             invoiceNumber: "Invoice Number",
                                             customerPo: "No PO Customer",
                                             customerName: "Customer",
@@ -1040,6 +1071,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                     .filter((column) => column.getCanHide())
                                     .map((column) => {
                                         const label = {
+                                            createdAt: "Created Date",
                                             invoiceNumber: "Invoice Number",
                                             customerPo: "No PO Customer",
                                             customerName: "Customer",
@@ -1079,7 +1111,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
+                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-20 bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(

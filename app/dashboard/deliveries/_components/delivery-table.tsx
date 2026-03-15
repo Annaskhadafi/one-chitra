@@ -54,7 +54,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
@@ -123,6 +123,57 @@ interface DeliveryTableProps {
     itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
 }
 
+const EMPTY_DELIVERIES: DeliveryWithRelations[] = []
+
+function toDateKey(dateInput: Date | string | null | undefined): string | null {
+    if (!dateInput) return null
+    const date = new Date(dateInput)
+    if (Number.isNaN(date.getTime())) return null
+
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+}
+
+function parseDateKey(dateKey: string): Date {
+    const [year, month, day] = dateKey.split("-").map(Number)
+    return new Date(year, month - 1, day)
+}
+
+function isSameDate(left: Date, right: Date): boolean {
+    const leftKey = toDateKey(left)
+    const rightKey = toDateKey(right)
+    return Boolean(leftKey && rightKey && leftKey === rightKey)
+}
+
+function startOfLocalDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function diffCalendarDays(from: Date, to: Date): number {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000
+    const start = startOfLocalDay(from).getTime()
+    const end = startOfLocalDay(to).getTime()
+    return Math.floor((end - start) / MS_PER_DAY)
+}
+
+function matchesDeliverySearch(delivery: DeliveryWithRelations, filterValue: string): boolean {
+    const search = filterValue.trim().toLowerCase()
+    if (!search) return true
+
+    return !!(
+        delivery.deliveryNumber?.toLowerCase().includes(search) ||
+        delivery.doSap?.toLowerCase().includes(search) ||
+        delivery.salesOrder?.invoiceNumber?.toLowerCase().includes(search) ||
+        delivery.salesOrder?.customer?.name?.toLowerCase().includes(search) ||
+        delivery.driverName?.toLowerCase().includes(search) ||
+        delivery.vehicleNumber?.toLowerCase().includes(search) ||
+        delivery.createdByUser?.name?.toLowerCase().includes(search) ||
+        delivery.salesOrder?.customerPo?.toLowerCase().includes(search)
+    )
+}
+
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500, 1000]
 const DEFAULT_PAGE_SIZE = 25
 
@@ -161,7 +212,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const canEdit = hasResourcePermission('deliveries', 'edit')
     const canDelete = hasResourcePermission('deliveries', 'delete')
 
-    const [sorting, setSorting] = useState<SortingState>([])
+    const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
     const [rowSelection, setRowSelection] = useState({})
@@ -170,7 +221,10 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         pageIndex: 0,
         pageSize: DEFAULT_PAGE_SIZE,
     })
-    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items">("list")
+    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items" | "calendar">("list")
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
+    const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
+    const [calendarStatusFilter, setCalendarStatusFilter] = useState<string>("all")
 
     const [deleting, setDeleting] = useState<number | null>(null)
     const [previewDelivery, setPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
@@ -377,6 +431,118 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             enableHiding: false,
         },
         {
+            id: "actions",
+            header: () => "Actions",
+            cell: ({ row }) => {
+                const delivery = row.original
+                return (
+                    <div className="flex justify-start gap-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        setPreviewDelivery(delivery)
+                                        setIsPreviewOpen(true)
+                                    }}
+                                >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    Preview Detail
+                                </DropdownMenuItem>
+                                {delivery.salesOrder?.poDocument && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            setPoPreviewDelivery(delivery)
+                                            setIsPoPreviewOpen(true)
+                                        }}
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview Customer PO
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        setPdfDelivery(delivery)
+                                        setIsPdfOpen(true)
+                                    }}
+                                >
+                                    <FileDown className="mr-2 h-4 w-4" />
+                                    Cetak PDF
+                                </DropdownMenuItem>
+                                {canEdit && (
+                                    <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                        <DropdownMenuItem>
+                                            <Pencil className="mr-2 h-4 w-4" />
+                                            Edit
+                                        </DropdownMenuItem>
+                                    </Link>
+                                )}
+                                {canDelete && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will permanently delete delivery{" "}
+                                                        <strong>{delivery.deliveryNumber}</strong>. This action
+                                                        cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleDelete(delivery.id)}
+                                                        disabled={deleting === delivery.id}
+                                                        className="bg-red-600 hover:bg-red-700"
+                                                    >
+                                                        {deleting === delivery.id ? "Deleting..." : "Delete"}
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )
+            },
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            accessorKey: "createdAt",
+            header: ({ column }) => (
+                <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
+                    Created Date
+                    {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                </Button>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm">
+                    {new Date(row.original.createdAt).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                    })}
+                </span>
+            ),
+        },
+        {
             accessorKey: "deliveryNumber",
             header: ({ column }) => (
                 <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} className="-ml-4 h-8">
@@ -426,11 +592,35 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                 </Button>
             ),
-            cell: ({ row }) => new Date(row.original.scheduledDate).toLocaleDateString("id-ID", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-            }),
+            cell: ({ row }) => {
+                const scheduledDate = new Date(row.original.scheduledDate)
+                const scheduledDateKey = toDateKey(scheduledDate)
+                const todayKey = toDateKey(new Date())
+                const isOverdueScheduled = (
+                    row.original.status === "scheduled" &&
+                    !row.original.deliveryDate &&
+                    Boolean(scheduledDateKey && todayKey && scheduledDateKey < todayKey)
+                )
+                const overdueDays = isOverdueScheduled ? Math.max(1, diffCalendarDays(scheduledDate, new Date())) : 0
+
+                return (
+                    <div className="space-y-0.5">
+                        <div>
+                            {scheduledDate.toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                            })}
+                        </div>
+                        {isOverdueScheduled && (
+                            <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600">
+                                <AlertTriangle className="h-3 w-3" />
+                                Overdue {overdueDays} hari
+                            </div>
+                        )}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "deliveryDate",
@@ -499,33 +689,70 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             cell: ({ row }) => {
                 const status = row.original.status
                 const id = row.original.id
-                if (!mounted) return <Badge variant={statusVariants[status] || "secondary"}>{statusLabels[status] || status}</Badge>
+                const scheduledDate = new Date(row.original.scheduledDate)
+                const scheduledDateKey = toDateKey(scheduledDate)
+                const todayKey = toDateKey(new Date())
+                const isOverdueScheduled = (
+                    status === "scheduled" &&
+                    !row.original.deliveryDate &&
+                    Boolean(scheduledDateKey && todayKey && scheduledDateKey < todayKey)
+                )
+                const overdueDays = isOverdueScheduled ? Math.max(1, diffCalendarDays(scheduledDate, new Date())) : 0
+                if (!mounted) {
+                    return (
+                        <div className="space-y-1">
+                            <Badge variant={statusVariants[status] || "secondary"}>{statusLabels[status] || status}</Badge>
+                            {isOverdueScheduled && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Overdue {overdueDays} hari
+                                </Badge>
+                            )}
+                        </div>
+                    )
+                }
 
                 return canEdit ? (
-                    <Select
-                        defaultValue={status}
-                        onValueChange={(value) => handleUpdateStatus(id, value)}
-                    >
-                        <SelectTrigger className={cn(
-                            "h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
-                            status === "delivered" && "bg-emerald-500 text-white dark:bg-emerald-600",
-                            (status === "ready" || status === "partial") && "bg-amber-500 text-white dark:bg-amber-600",
-                            status === "cancelled" && "bg-destructive text-white",
-                            status === "in_transit" && "bg-blue-500 text-white dark:bg-blue-600",
-                            status === "scheduled" && "bg-secondary text-secondary-foreground"
-                        )}>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {Object.entries(statusLabels).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="space-y-1">
+                        <Select
+                            defaultValue={status}
+                            onValueChange={(value) => handleUpdateStatus(id, value)}
+                        >
+                            <SelectTrigger className={cn(
+                                "h-8 w-[120px] text-xs font-medium border-none shadow-none focus:ring-0 transition-colors capitalize",
+                                status === "delivered" && "bg-emerald-500 text-white dark:bg-emerald-600",
+                                (status === "ready" || status === "partial") && "bg-amber-500 text-white dark:bg-amber-600",
+                                status === "cancelled" && "bg-destructive text-white",
+                                status === "in_transit" && "bg-blue-500 text-white dark:bg-blue-600",
+                                status === "scheduled" && "bg-secondary text-secondary-foreground"
+                            )}>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {Object.entries(statusLabels).map(([value, label]) => (
+                                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {isOverdueScheduled && (
+                            <Badge variant="destructive" className="text-[10px]">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Overdue {overdueDays} hari
+                            </Badge>
+                        )}
+                    </div>
                 ) : (
-                    <Badge variant={statusVariants[status] || "secondary"}>
-                        {statusLabels[status] || status}
-                    </Badge>
+                    <div className="space-y-1">
+                        <Badge variant={statusVariants[status] || "secondary"}>
+                            {statusLabels[status] || status}
+                        </Badge>
+                        {isOverdueScheduled && (
+                            <Badge variant="destructive" className="text-[10px]">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Overdue {overdueDays} hari
+                            </Badge>
+                        )}
+                    </div>
                 )
             },
             filterFn: (row, columnId, filterValue) => {
@@ -646,99 +873,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 )
             },
         },
-        {
-            id: "actions",
-            header: () => <div className="text-right">Actions</div>,
-            cell: ({ row }) => {
-                const delivery = row.original
-                return (
-                    <div className="flex justify-end gap-1">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <span className="sr-only">Open menu</span>
-                                    <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        setPreviewDelivery(delivery)
-                                        setIsPreviewOpen(true)
-                                    }}
-                                >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    Preview Detail
-                                </DropdownMenuItem>
-                                {delivery.salesOrder?.poDocument && (
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            setPoPreviewDelivery(delivery)
-                                            setIsPoPreviewOpen(true)
-                                        }}
-                                    >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Preview Customer PO
-                                    </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        setPdfDelivery(delivery)
-                                        setIsPdfOpen(true)
-                                    }}
-                                >
-                                    <FileDown className="mr-2 h-4 w-4" />
-                                    Cetak PDF
-                                </DropdownMenuItem>
-                                {canEdit && (
-                                    <Link href={`/dashboard/deliveries/${delivery.id}`}>
-                                        <DropdownMenuItem>
-                                            <Pencil className="mr-2 h-4 w-4" />
-                                            Edit
-                                        </DropdownMenuItem>
-                                    </Link>
-                                )}
-                                {canDelete && (
-                                    <>
-                                        <DropdownMenuSeparator />
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Delete
-                                                </DropdownMenuItem>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete Delivery?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This will permanently delete delivery{" "}
-                                                        <strong>{delivery.deliveryNumber}</strong>. This action
-                                                        cannot be undone.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        onClick={() => handleDelete(delivery.id)}
-                                                        disabled={deleting === delivery.id}
-                                                        className="bg-red-600 hover:bg-red-700"
-                                                    >
-                                                        {deleting === delivery.id ? "Deleting..." : "Delete"}
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                )
-            },
-        },
-    ], [canEdit, canDelete, deleting, handleUpdateDeliveryDate, handleUpdateStatus, handleDelete])
+    ], [mounted, canEdit, canDelete, deleting, handleUpdateDeliveryDate, handleUpdateStatus, handleDelete])
 
     const table = useReactTable({
         data: filteredData,
@@ -761,27 +896,263 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const search = filterValue.toLowerCase()
-            const d = row.original
-            return !!(
-                d.deliveryNumber?.toLowerCase().includes(search) ||
-                d.doSap?.toLowerCase().includes(search) ||
-                d.salesOrder?.invoiceNumber?.toLowerCase().includes(search) ||
-                d.salesOrder?.customer?.name?.toLowerCase().includes(search) ||
-                d.driverName?.toLowerCase().includes(search) ||
-                d.vehicleNumber?.toLowerCase().includes(search) ||
-                d.createdByUser?.name?.toLowerCase().includes(search) ||
-                d.salesOrder?.customerPo?.toLowerCase().includes(search)
-            )
+        globalFilterFn: (row, _columnId, filterValue) => {
+            return matchesDeliverySearch(row.original, String(filterValue ?? ""))
         },
     })
 
     const rows = table.getRowModel().rows
+    const today = useMemo(() => new Date(), [])
+    const todayDateKey = toDateKey(today)
+    const isOverdueScheduledDelivery = useCallback((delivery: DeliveryWithRelations) => {
+        const scheduledKey = toDateKey(delivery.scheduledDate)
+        if (!scheduledKey || !todayDateKey) return false
+        return delivery.status === "scheduled" && !delivery.deliveryDate && scheduledKey < todayDateKey
+    }, [todayDateKey])
+    const calendarData = useMemo(
+        () => filteredData.filter((delivery) => matchesDeliverySearch(delivery, globalFilter)),
+        [filteredData, globalFilter]
+    )
+    const groupedCalendarDeliveries = useMemo(() => {
+        const grouped: Record<string, DeliveryWithRelations[]> = {}
+
+        calendarData.forEach((delivery) => {
+            const dateKey = toDateKey(delivery.scheduledDate)
+            if (!dateKey) return
+
+            if (!grouped[dateKey]) grouped[dateKey] = []
+            grouped[dateKey].push(delivery)
+        })
+
+        Object.keys(grouped).forEach((key) => {
+            grouped[key].sort(
+                (a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+            )
+        })
+
+        return grouped
+    }, [calendarData])
+    const sortedCalendarDateKeys = useMemo(
+        () => Object.keys(groupedCalendarDeliveries).sort(),
+        [groupedCalendarDeliveries]
+    )
+    const highlightedScheduleDates = useMemo(
+        () => sortedCalendarDateKeys.map(parseDateKey),
+        [sortedCalendarDateKeys]
+    )
+    const selectedCalendarDateKey = toDateKey(selectedCalendarDate)
+    const selectedCalendarDeliveries = useMemo(() => {
+        if (!selectedCalendarDateKey) return EMPTY_DELIVERIES
+        return groupedCalendarDeliveries[selectedCalendarDateKey] || EMPTY_DELIVERIES
+    }, [selectedCalendarDateKey, groupedCalendarDeliveries])
+    const filteredSelectedCalendarDeliveries = useMemo(() => {
+        if (calendarStatusFilter === "overdue") {
+            return selectedCalendarDeliveries.filter(isOverdueScheduledDelivery)
+        }
+        if (calendarStatusFilter === "all") return selectedCalendarDeliveries
+        return selectedCalendarDeliveries.filter((delivery) => delivery.status === calendarStatusFilter)
+    }, [selectedCalendarDeliveries, calendarStatusFilter, isOverdueScheduledDelivery])
+    const calendarStatusOptions = useMemo(() => {
+        const statusCounts: Record<string, number> = {}
+        selectedCalendarDeliveries.forEach((delivery) => {
+            statusCounts[delivery.status] = (statusCounts[delivery.status] || 0) + 1
+        })
+        const overdueCount = selectedCalendarDeliveries.filter(isOverdueScheduledDelivery).length
+
+        return [
+            { value: "all", label: "Semua", count: selectedCalendarDeliveries.length },
+            { value: "overdue", label: "Overdue", count: overdueCount },
+            ...Object.keys(statusCounts).map((status) => ({
+                value: status,
+                label: statusLabels[status] || status,
+                count: statusCounts[status],
+            })),
+        ]
+    }, [selectedCalendarDeliveries, isOverdueScheduledDelivery])
+    const selectedCalendarDateLabel = selectedCalendarDate.toLocaleDateString("id-ID", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+    })
+    const monthSummary = useMemo(() => {
+        const monthPrefix = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}`
+        let totalDeliveries = 0
+        let activeDays = 0
+
+        Object.entries(groupedCalendarDeliveries).forEach(([dateKey, deliveries]) => {
+            if (!dateKey.startsWith(monthPrefix)) return
+            activeDays += 1
+            totalDeliveries += deliveries.length
+        })
+
+        return { totalDeliveries, activeDays }
+    }, [calendarMonth, groupedCalendarDeliveries])
+    const todayDeliveries = useMemo(() => {
+        if (!todayDateKey) return EMPTY_DELIVERIES
+        return groupedCalendarDeliveries[todayDateKey] || EMPTY_DELIVERIES
+    }, [todayDateKey, groupedCalendarDeliveries])
+    const todayStatusSummary = useMemo(() => {
+        const counts: Record<string, number> = {}
+        todayDeliveries.forEach((delivery) => {
+            counts[delivery.status] = (counts[delivery.status] || 0) + 1
+        })
+        return counts
+    }, [todayDeliveries])
+    const overdueScheduledRecords = useMemo(() => {
+        return calendarData
+            .filter(isOverdueScheduledDelivery)
+            .map((delivery) => ({
+                delivery,
+                delayDays: Math.max(1, diffCalendarDays(new Date(delivery.scheduledDate), today)),
+            }))
+            .sort((a, b) => b.delayDays - a.delayDays)
+    }, [calendarData, isOverdueScheduledDelivery, today])
+    const overdueScheduleDateKeys = useMemo(() => (
+        Array.from(
+            new Set(
+                overdueScheduledRecords
+                    .map((item) => toDateKey(item.delivery.scheduledDate))
+                    .filter((key): key is string => Boolean(key))
+            )
+        )
+    ), [overdueScheduledRecords])
+    const overdueScheduleDates = useMemo(
+        () => overdueScheduleDateKeys.map(parseDateKey),
+        [overdueScheduleDateKeys]
+    )
+    const dueDeliveries = useMemo(() => {
+        if (!todayDateKey) return EMPTY_DELIVERIES
+        return calendarData.filter((delivery) => {
+            const scheduledKey = toDateKey(delivery.scheduledDate)
+            return Boolean(scheduledKey && scheduledKey <= todayDateKey)
+        })
+    }, [calendarData, todayDateKey])
+    const lateDeliveredDueCount = useMemo(() => (
+        dueDeliveries.filter((delivery) => {
+            if (!delivery.deliveryDate) return false
+            return diffCalendarDays(new Date(delivery.scheduledDate), new Date(delivery.deliveryDate)) > 0
+        }).length
+    ), [dueDeliveries])
+    const onTimeDeliveredDueCount = useMemo(() => (
+        dueDeliveries.filter((delivery) => {
+            if (!delivery.deliveryDate) return false
+            return diffCalendarDays(new Date(delivery.scheduledDate), new Date(delivery.deliveryDate)) <= 0
+        }).length
+    ), [dueDeliveries])
+    const scheduleDeviationLogs = useMemo(() => {
+        const logs = calendarData.flatMap((delivery) => {
+            const scheduledAt = new Date(delivery.scheduledDate)
+            const actualDate = delivery.deliveryDate ? new Date(delivery.deliveryDate) : null
+
+            if (actualDate) {
+                const delayDays = diffCalendarDays(scheduledAt, actualDate)
+                if (delayDays > 0) {
+                    return [{
+                        delivery,
+                        type: "Terlambat Dikirim",
+                        delayDays,
+                        actualDate,
+                    }]
+                }
+                return []
+            }
+
+            if (isOverdueScheduledDelivery(delivery)) {
+                const delayDays = Math.max(1, diffCalendarDays(scheduledAt, today))
+                return [{
+                    delivery,
+                    type: "Belum Delivery (Overdue)",
+                    delayDays,
+                    actualDate: null as Date | null,
+                }]
+            }
+
+            return []
+        })
+
+        return logs.sort((a, b) => b.delayDays - a.delayDays)
+    }, [calendarData, isOverdueScheduledDelivery, today])
+    const scheduleEffectiveness = useMemo(() => {
+        const dueTotal = dueDeliveries.length
+        const overdueOpen = overdueScheduledRecords.length
+        const deliveredLate = lateDeliveredDueCount
+        const onTime = onTimeDeliveredDueCount
+        const effectiveRate = dueTotal > 0 ? Math.round((onTime / dueTotal) * 100) : 100
+        const deviationRate = dueTotal > 0 ? Math.round(((overdueOpen + deliveredLate) / dueTotal) * 100) : 0
+
+        return {
+            dueTotal,
+            onTime,
+            deliveredLate,
+            overdueOpen,
+            effectiveRate,
+            deviationRate,
+        }
+    }, [dueDeliveries.length, overdueScheduledRecords.length, lateDeliveredDueCount, onTimeDeliveredDueCount])
+    const upcomingCalendarDateKeys = useMemo(() => {
+        if (!sortedCalendarDateKeys.length) return []
+        if (!todayDateKey) return sortedCalendarDateKeys.slice(0, 6)
+
+        const upcoming = sortedCalendarDateKeys.filter((dateKey) => dateKey >= todayDateKey).slice(0, 6)
+        if (upcoming.length) return upcoming
+        return sortedCalendarDateKeys.slice(0, 6)
+    }, [sortedCalendarDateKeys, todayDateKey])
+    const hasTodaySchedule = todayDeliveries.length > 0
+
+    const handleSelectCalendarDate = useCallback((date: Date) => {
+        const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+        setSelectedCalendarDate(normalized)
+        setCalendarMonth(new Date(normalized.getFullYear(), normalized.getMonth(), 1))
+    }, [])
+
+    const handleGoToToday = useCallback(() => {
+        handleSelectCalendarDate(new Date())
+    }, [handleSelectCalendarDate])
+
+    const handlePrioritizeOverdue = useCallback(() => {
+        if (!overdueScheduledRecords.length) return
+        setCalendarStatusFilter("overdue")
+        handleSelectCalendarDate(new Date(overdueScheduledRecords[0].delivery.scheduledDate))
+    }, [overdueScheduledRecords, handleSelectCalendarDate])
+
+    const handleGoToNextScheduledDate = useCallback(() => {
+        if (!sortedCalendarDateKeys.length) return
+
+        const currentKey = selectedCalendarDateKey || todayDateKey || ""
+        const nextKey = sortedCalendarDateKeys.find((dateKey) => dateKey > currentKey)
+            || sortedCalendarDateKeys.find((dateKey) => todayDateKey ? dateKey >= todayDateKey : false)
+            || sortedCalendarDateKeys[0]
+
+        if (nextKey) {
+            handleSelectCalendarDate(parseDateKey(nextKey))
+        }
+    }, [sortedCalendarDateKeys, selectedCalendarDateKey, todayDateKey, handleSelectCalendarDate])
 
     React.useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
     }, [globalFilter, selectedYear, selectedMonth, selectedCategory, selectedWarehouse, selectedCreatedBy, viewMode])
+
+    React.useEffect(() => {
+        if (calendarStatusFilter === "all") return
+        if (calendarStatusFilter === "overdue") {
+            if (selectedCalendarDeliveries.some(isOverdueScheduledDelivery)) return
+            setCalendarStatusFilter("all")
+            return
+        }
+        if (selectedCalendarDeliveries.some((delivery) => delivery.status === calendarStatusFilter)) return
+        setCalendarStatusFilter("all")
+    }, [selectedCalendarDeliveries, calendarStatusFilter, isOverdueScheduledDelivery])
+
+    React.useEffect(() => {
+        if (!sortedCalendarDateKeys.length) return
+        if (selectedCalendarDateKey && groupedCalendarDeliveries[selectedCalendarDateKey]) return
+
+        const firstDateKey = sortedCalendarDateKeys[0]
+        if (firstDateKey) {
+            handleSelectCalendarDate(parseDateKey(firstDateKey))
+        }
+    }, [groupedCalendarDeliveries, sortedCalendarDateKeys, selectedCalendarDateKey, handleSelectCalendarDate])
 
     const handleBulkDelete = async () => {
         const selectedIds = table.getSelectedRowModel().flatRows.map(r => r.original.id)
@@ -817,10 +1188,11 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     }
 
     const handleExport = () => {
-        const headers = ["Delivery No", "DO SAP", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
+        const headers = ["Created Date", "Delivery No", "DO SAP", "Customer PO", "Customer", "Scheduled", "Delivery Date", "Status", "Type", "Driver", "Vehicle", "Warehouse", "Created By"]
         const csvData = table.getFilteredRowModel().rows.map(r => {
             const d = r.original
             return [
+                new Date(d.createdAt).toLocaleDateString("id-ID"),
                 d.deliveryNumber || "",
                 d.doSap || "",
                 d.salesOrder?.customerPo || "",
@@ -1096,13 +1468,13 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 </AccordionItem>
             </Accordion>
 
-            {/* Tab Switcher: Semua Delivery / By PO */}
-            <div className="flex items-center gap-1 border-b pb-0">
+            {/* Tab Switcher: Semua Delivery / By PO / Calendar / Items */}
+            <div className="flex items-center gap-1 border-b pb-0 overflow-x-auto">
                 <button
                     type="button"
                     onClick={() => setViewMode("list")}
                     className={cn(
-                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
                         viewMode === "list"
                             ? "border-primary text-primary"
                             : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1115,7 +1487,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     type="button"
                     onClick={() => setViewMode("by-po")}
                     className={cn(
-                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
                         viewMode === "by-po"
                             ? "border-primary text-primary"
                             : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1128,6 +1500,22 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                             {new Set(data.map(d => d.salesOrder?.customerPo).filter(Boolean)).size}
                         </span>
                     )}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setViewMode("calendar")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
+                        viewMode === "calendar"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <CalendarClock className="h-4 w-4" />
+                    Kalender Jadwal
+                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                        {calendarData.length}
+                    </span>
                 </button>
                 <button
                     type="button"
@@ -1165,6 +1553,413 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     pageSizeOptions={PAGE_SIZE_OPTIONS}
                     defaultPageSize={DEFAULT_PAGE_SIZE}
                 />
+            )}
+
+            {/* Calendar View */}
+            {viewMode === "calendar" && (
+                <div className="pt-4 space-y-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="relative max-w-sm w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Cari delivery, customer, driver, atau PO..."
+                                value={globalFilter}
+                                onChange={(e) => setGlobalFilter(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                variant={isSameDate(selectedCalendarDate, today) ? "default" : "outline"}
+                                size="sm"
+                                onClick={handleGoToToday}
+                            >
+                                <CalendarIcon className="h-4 w-4 mr-1" />
+                                Today
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleGoToNextScheduledDate}
+                                disabled={!sortedCalendarDateKeys.length}
+                            >
+                                <CalendarClock className="h-4 w-4 mr-1" />
+                                Jadwal Berikutnya
+                            </Button>
+                            {overdueScheduledRecords.length > 0 && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={handlePrioritizeOverdue}
+                                >
+                                    <AlertTriangle className="h-4 w-4 mr-1" />
+                                    Prioritaskan Overdue ({overdueScheduledRecords.length})
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {overdueScheduledRecords.length > 0 && (
+                        <Card className="border-red-300 bg-red-50/40 dark:bg-red-950/10">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm flex items-center gap-2 text-red-700 dark:text-red-300">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    Warning: Ada {overdueScheduledRecords.length} schedule lewat hari belum delivery
+                                </CardTitle>
+                                <CardDescription className="text-red-700/80 dark:text-red-300/80">
+                                    Delivery masih status Scheduled tapi melewati tanggal rencana. Mohon diprioritaskan.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                {overdueScheduledRecords.slice(0, 5).map((item) => (
+                                    <button
+                                        key={item.delivery.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setCalendarStatusFilter("overdue")
+                                            handleSelectCalendarDate(new Date(item.delivery.scheduledDate))
+                                        }}
+                                        className="w-full text-left rounded-md border border-red-200 dark:border-red-900 px-3 py-2 bg-background hover:bg-red-50/50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-mono text-xs text-foreground">
+                                                {item.delivery.deliveryNumber || `Delivery-${item.delivery.id}`}
+                                            </span>
+                                            <Badge variant="destructive" className="text-[10px]">
+                                                Overdue {item.delayDays} hari
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                                            {item.delivery.salesOrder?.customer?.name || "Unknown customer"} •{" "}
+                                            {new Date(item.delivery.scheduledDate).toLocaleDateString("id-ID", {
+                                                day: "2-digit",
+                                                month: "short",
+                                                year: "numeric",
+                                            })}
+                                        </p>
+                                    </button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <button
+                            type="button"
+                            onClick={handleGoToToday}
+                            className={cn(
+                                "rounded-lg border p-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5",
+                                isSameDate(selectedCalendarDate, today) && "border-primary/50 bg-primary/10"
+                            )}
+                        >
+                            <p className="text-xs text-muted-foreground">Hari Ini</p>
+                            <p className="text-lg font-semibold">{todayDeliveries.length} Jadwal</p>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                                {Object.entries(todayStatusSummary).map(([status, count]) => (
+                                    <Badge key={status} variant={statusVariants[status] || "secondary"} className="text-[10px]">
+                                        {statusLabels[status] || status}: {count}
+                                    </Badge>
+                                ))}
+                                {!hasTodaySchedule && (
+                                    <span className="text-xs text-muted-foreground">Belum ada jadwal hari ini.</span>
+                                )}
+                            </div>
+                        </button>
+
+                        <div className="rounded-lg border p-3 bg-muted/10">
+                            <p className="text-xs text-muted-foreground">Bulan Aktif</p>
+                            <p className="text-lg font-semibold">
+                                {calendarMonth.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {monthSummary.totalDeliveries} delivery pada {monthSummary.activeDays} hari terjadwal.
+                            </p>
+                        </div>
+
+                        <div className="rounded-lg border p-3 bg-muted/10">
+                            <p className="text-xs text-muted-foreground">Tanggal Dipilih</p>
+                            <p className="text-lg font-semibold">
+                                {selectedCalendarDeliveries.length} Jadwal
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                                {selectedCalendarDateLabel}
+                            </p>
+                        </div>
+
+                        <div className={cn(
+                            "rounded-lg border p-3",
+                            scheduleEffectiveness.overdueOpen > 0 ? "bg-red-50/40 border-red-200 dark:bg-red-950/10 dark:border-red-900" : "bg-muted/10"
+                        )}>
+                            <p className="text-xs text-muted-foreground">Efektivitas Schedule</p>
+                            <p className="text-lg font-semibold">
+                                {scheduleEffectiveness.effectiveRate}%
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Overdue terbuka: {scheduleEffectiveness.overdueOpen} | Deviasi: {scheduleEffectiveness.deviationRate}%
+                            </p>
+                        </div>
+                    </div>
+
+                    {upcomingCalendarDateKeys.length > 0 && (
+                        <div className="rounded-lg border bg-muted/5 p-3">
+                            <p className="text-xs text-muted-foreground mb-2">Quick Pick Jadwal Terdekat</p>
+                            <div className="flex flex-wrap gap-2">
+                                {upcomingCalendarDateKeys.map((dateKey) => {
+                                    const count = groupedCalendarDeliveries[dateKey]?.length || 0
+                                    const dateObj = parseDateKey(dateKey)
+                                    return (
+                                        <button
+                                            key={dateKey}
+                                            type="button"
+                                            onClick={() => handleSelectCalendarDate(dateObj)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                                                selectedCalendarDateKey === dateKey
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-background hover:bg-muted"
+                                            )}
+                                        >
+                                            {dateObj.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })} • {count}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                        <Card className="xl:col-span-2 border-dashed bg-muted/5">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <CalendarClock className="h-4 w-4 text-primary" />
+                                    Kalender Jadwal Delivery
+                                </CardTitle>
+                                <CardDescription>
+                                    Tanggal dengan jadwal delivery akan ditandai.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                                <Calendar
+                                    mode="single"
+                                    month={calendarMonth}
+                                    onMonthChange={setCalendarMonth}
+                                    selected={selectedCalendarDate}
+                                    onSelect={(date) => {
+                                        if (date) handleSelectCalendarDate(date)
+                                    }}
+                                    modifiers={{
+                                        hasDelivery: highlightedScheduleDates,
+                                        todayWithDelivery: hasTodaySchedule ? [today] : [],
+                                        overdueSchedule: overdueScheduleDates,
+                                    }}
+                                    modifiersClassNames={{
+                                        hasDelivery: "bg-primary/10 text-primary font-semibold rounded-md border border-primary/25",
+                                        todayWithDelivery: "ring-2 ring-emerald-500/80 ring-offset-1",
+                                        overdueSchedule: "bg-red-100 text-red-700 border border-red-300 rounded-md",
+                                    }}
+                                    className="rounded-md border p-3 w-full"
+                                />
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2 w-2 rounded-full bg-primary/70" />
+                                        Ada jadwal
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                        Today dengan jadwal
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2 w-2 rounded-full bg-red-500" />
+                                        Overdue schedule
+                                    </span>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="xl:col-span-3">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Truck className="h-4 w-4 text-primary" />
+                                    Jadwal {selectedCalendarDateLabel}
+                                </CardTitle>
+                                <CardDescription>
+                                    {selectedCalendarDeliveries.length} delivery terjadwal pada tanggal ini.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {calendarStatusOptions.map((option) => (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setCalendarStatusFilter(option.value)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                                                calendarStatusFilter === option.value
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-background hover:bg-muted"
+                                            )}
+                                        >
+                                            {option.label} ({option.count})
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {filteredSelectedCalendarDeliveries.length === 0 && (
+                                    <div className="h-28 border rounded-md flex items-center justify-center text-sm text-muted-foreground">
+                                        Tidak ada delivery pada tanggal ini untuk filter status yang dipilih.
+                                    </div>
+                                )}
+
+                                {filteredSelectedCalendarDeliveries.map((delivery) => {
+                                    const overdueDays = isOverdueScheduledDelivery(delivery)
+                                        ? Math.max(1, diffCalendarDays(new Date(delivery.scheduledDate), today))
+                                        : 0
+
+                                    return (
+                                    <div
+                                        key={delivery.id}
+                                        className={cn(
+                                            "rounded-lg border p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                                            overdueDays > 0 && "border-red-300 bg-red-50/40 dark:bg-red-950/10"
+                                        )}
+                                    >
+                                        <div className="min-w-0 space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <Link href={`/dashboard/deliveries/${delivery.id}`} className="font-mono text-sm text-primary hover:underline">
+                                                    {delivery.deliveryNumber || `Delivery-${delivery.id}`}
+                                                </Link>
+                                                <Badge variant={statusVariants[delivery.status] || "secondary"} className="text-[11px]">
+                                                    {statusLabels[delivery.status] || delivery.status}
+                                                </Badge>
+                                                {overdueDays > 0 && (
+                                                    <Badge variant="destructive" className="text-[10px]">
+                                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                                        Overdue {overdueDays} hari
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-muted-foreground truncate">
+                                                {delivery.salesOrder?.customer?.name || "Unknown customer"} • {delivery.warehouse?.description || delivery.warehouse?.sloc || "Warehouse -"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {new Date(delivery.scheduledDate).toLocaleDateString("id-ID", {
+                                                    day: "2-digit",
+                                                    month: "short",
+                                                    year: "numeric",
+                                                })} • DO SAP: {delivery.doSap || "-"} • Driver: {delivery.driverName || "-"} • Vehicle: {delivery.vehicleNumber || "-"}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setPreviewDelivery(delivery)
+                                                    setIsPreviewOpen(true)
+                                                }}
+                                            >
+                                                <Eye className="h-4 w-4 mr-1" />
+                                                Detail
+                                            </Button>
+                                            {canEdit && (
+                                                <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                                    <Button variant="outline" size="sm">
+                                                        <Pencil className="h-4 w-4 mr-1" />
+                                                        Edit
+                                                    </Button>
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </div>
+                                )})}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-red-600" />
+                                Log Ketidaksesuaian Jadwal
+                            </CardTitle>
+                            <CardDescription>
+                                Catatan schedule yang tidak sesuai (overdue belum delivery atau terkirim terlambat).
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
+                                <div className="rounded-md border p-2 bg-muted/10">
+                                    <p className="text-[10px] text-muted-foreground">Jadwal Jatuh Tempo</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.dueTotal}</p>
+                                </div>
+                                <div className="rounded-md border p-2 bg-emerald-50/40 dark:bg-emerald-950/10">
+                                    <p className="text-[10px] text-muted-foreground">On Time</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.onTime}</p>
+                                </div>
+                                <div className="rounded-md border p-2 bg-orange-50/40 dark:bg-orange-950/10">
+                                    <p className="text-[10px] text-muted-foreground">Terlambat Dikirim</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.deliveredLate}</p>
+                                </div>
+                                <div className="rounded-md border p-2 bg-red-50/40 dark:bg-red-950/10">
+                                    <p className="text-[10px] text-muted-foreground">Overdue Belum Delivery</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.overdueOpen}</p>
+                                </div>
+                                <div className="rounded-md border p-2">
+                                    <p className="text-[10px] text-muted-foreground">Efektivitas</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.effectiveRate}%</p>
+                                </div>
+                                <div className="rounded-md border p-2">
+                                    <p className="text-[10px] text-muted-foreground">Rate Deviasi</p>
+                                    <p className="text-sm font-semibold">{scheduleEffectiveness.deviationRate}%</p>
+                                </div>
+                            </div>
+
+                            {scheduleDeviationLogs.length === 0 && (
+                                <div className="h-24 border rounded-md flex items-center justify-center text-sm text-muted-foreground">
+                                    Tidak ada ketidaksesuaian jadwal pada filter saat ini.
+                                </div>
+                            )}
+
+                            {scheduleDeviationLogs.slice(0, 20).map((log) => (
+                                <div key={`${log.type}-${log.delivery.id}`} className="rounded-md border p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-mono text-xs">{log.delivery.deliveryNumber || `Delivery-${log.delivery.id}`}</span>
+                                            <Badge variant={log.type.includes("Overdue") ? "destructive" : "warning"} className="text-[10px]">
+                                                {log.type}
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                                            {log.delivery.salesOrder?.customer?.name || "Unknown customer"} • Scheduled{" "}
+                                            {new Date(log.delivery.scheduledDate).toLocaleDateString("id-ID", {
+                                                day: "2-digit",
+                                                month: "short",
+                                                year: "numeric",
+                                            })}
+                                            {log.actualDate && (
+                                                <> • Actual{" "}
+                                                    {new Date(log.actualDate).toLocaleDateString("id-ID", {
+                                                        day: "2-digit",
+                                                        month: "short",
+                                                        year: "numeric",
+                                                    })}
+                                                </>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <Badge variant="destructive" className="shrink-0 text-[10px]">
+                                        Delay {log.delayDays} hari
+                                    </Badge>
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                </div>
             )}
 
             {/* Regular List View */}
@@ -1325,6 +2120,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                                 .filter((column) => column.getCanHide())
                                                 .map((column) => {
                                                     const label = {
+                                                        createdAt: "Created Date",
                                                         deliveryNumber: "Delivery No",
                                                         doSap: "DO SAP",
                                                         customerPo: "No. PO Customer",
@@ -1447,6 +2243,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                     .filter((column) => column.getCanHide())
                                     .map((column) => {
                                         const label = {
+                                            createdAt: "Created Date",
                                             deliveryNumber: "Delivery No",
                                             doSap: "DO SAP",
                                             customerPo: "No. PO Customer",
@@ -1487,7 +2284,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                 {table.getHeaderGroups().map((headerGroup) => (
                                     <TableRow key={headerGroup.id}>
                                         {headerGroup.headers.map((header) => (
-                                            <TableHead key={header.id} className="sticky top-[var(--header-height)] z-[60] bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
+                                            <TableHead key={header.id} className="sticky top-[var(--header-height)] z-20 bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                             </TableHead>
                                         ))}

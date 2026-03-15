@@ -13,8 +13,8 @@ export default async function SalesOrdersPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <AutoCloseSidebar />
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex-1">
+            <div className="flex flex-col items-start gap-3">
+                <div className="min-w-0 w-full">
                     <PageHeader
                         title="Sales Order Record"
                         subtitle="Manage sales orders, invoices, and order tracking."
@@ -22,8 +22,8 @@ export default async function SalesOrdersPage() {
                     />
                 </div>
                 <PermissionGuard resource="sales-orders" action="create">
-                    <Link href="/dashboard/sales-orders/create">
-                        <Button>
+                    <Link href="/dashboard/sales-orders/create" className="w-full sm:w-auto">
+                        <Button className="w-full sm:w-auto sm:min-w-[190px] justify-center">
                             <Plus className="mr-2 h-4 w-4" />
                             Create Sales Order
                         </Button>
