@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2, FileText } from "lucide-react"
+import { ChevronRight, ClipboardList, CheckCircle2, XCircle, Clock, Trash2, FileText, Eye } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -91,7 +91,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
             } else {
                 toast.error(result.error || "Gagal menghapus sesi")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan saat menghapus sesi")
         } finally {
             setIsDeleting(false)
@@ -119,7 +119,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
             } else {
                 toast.error(result.error || "Gagal menghapus sesi")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan saat menghapus sesi")
         } finally {
             setIsDeleting(false)
@@ -214,6 +214,11 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                         const totalItems = session.items?.length ?? 0
                         const countedItems = session.items?.filter((i) => i.countedQty !== null).length ?? 0
                         const variantItems = session.items?.filter((i) => i.variance !== null && i.variance !== 0).length ?? 0
+                        const participantCount = session.signatures?.length ?? 0
+                        const participantPreview = (session.signatures ?? []).slice(0, 2).map((sig) => sig.name).join(", ")
+                        const formattedOpnameDate = session.opnameDate
+                            ? new Date(session.opnameDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+                            : "-"
                         const progress = totalItems > 0 ? Math.round((countedItems / totalItems) * 100) : 0
 
                         return (
@@ -249,6 +254,25 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                                 <span>Ditutup: {new Date(session.closedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                                             )}
                                         </div>
+                                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
+                                            <span>Tgl Opname: <strong className="text-foreground">{formattedOpnameDate}</strong></span>
+                                            <span>Waktu: <strong className="text-foreground">{session.opnameTime ?? "-"}</strong></span>
+                                            <span>Lokasi: <strong className="text-foreground">{session.location ?? "-"}</strong></span>
+                                            <span>
+                                                Peserta:{" "}
+                                                <strong className="text-foreground">
+                                                    {participantCount > 0
+                                                        ? `${participantCount} orang${participantPreview ? ` (${participantPreview}${participantCount > 2 ? ", ..." : ""})` : ""}`
+                                                        : "-"}
+                                                </strong>
+                                            </span>
+                                            <span>
+                                                Hasil Scan:{" "}
+                                                <strong className={session.documentUrl ? "text-blue-600" : "text-muted-foreground"}>
+                                                    {session.documentUrl ? "Tersedia" : "Belum ada"}
+                                                </strong>
+                                            </span>
+                                        </div>
                                         {totalItems > 0 && (
                                             <div className="mt-2 flex items-center gap-2">
                                                 <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
@@ -270,21 +294,28 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                     </div>
                                     <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                                 </Link>
-                                {session.documentUrl && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="flex-none text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                                        onClick={(e) => {
-                                            e.preventDefault()
-                                            e.stopPropagation()
-                                            setPreviewSession(session)
-                                        }}
-                                        title="Dokumen Hasil Audit Lapangan (Sudah TTD)"
-                                    >
-                                        <FileText className="h-4 w-4" />
-                                    </Button>
-                                )}
+                                <Button variant="ghost" size="icon" className="flex-none" asChild title="Lihat detail sesi">
+                                    <Link href={`/dashboard/stock-opname/${session.id}`}>
+                                        <Eye className="h-4 w-4" />
+                                    </Link>
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={!session.documentUrl}
+                                    className="flex-none text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 disabled:text-muted-foreground/40 disabled:hover:bg-transparent"
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        if (!session.documentUrl) return
+                                        setPreviewSession(session)
+                                    }}
+                                    title={session.documentUrl
+                                        ? "Lihat hasil scan audit lapangan"
+                                        : "Belum ada hasil scan audit"}
+                                >
+                                    <FileText className="h-4 w-4" />
+                                </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"

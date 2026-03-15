@@ -1,0 +1,18 @@
+
+> codeguide-starter-fullstack@0.1.0 dev
+> next dev --turbopack --hostname 127.0.0.1 --port 3100
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://127.0.0.1:3100
+- Network:       http://127.0.0.1:3100
+- Environments: .env
+- Experiments (use with caution):
+  · clientTraceMetadata
+  · serverActions
+
+✓ Starting...
+⨯ Unable to acquire lock at D:\[01] PROJECT\one chitra\.next\dev\lock, is another instance of next dev running?
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h
+
+D:\[01] PROJECT\one chitra>

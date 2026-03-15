@@ -70,6 +70,9 @@ export async function getStockOpnameSessions() {
         with: {
             warehouse: true,
             createdBy: true,
+            signatures: {
+                orderBy: (signatures, { asc }) => [asc(signatures.order)],
+            },
             items: true,
         },
         orderBy: [desc(stockOpnameSessions.createdAt)],
@@ -296,6 +299,71 @@ export async function updateOpnameItemCount(
     } catch (error) {
         console.error("Update opname item error:", error)
         return { success: false, error: "Gagal update hitungan" }
+    }
+}
+
+// ─── Update Opname Session Document Metadata ───────────────────────────────
+
+export async function updateStockOpnameDocument(
+    sessionId: number,
+    data: {
+        url: string
+        originalFileName?: string
+        fileType?: string
+        fileSize?: number
+        title?: string
+    }
+) {
+    try {
+        const session = await getAuthenticatedSession("stock-opname", "edit")
+        const userId = session.user.id
+
+        const opnameSession = await db.query.stockOpnameSessions.findFirst({
+            where: eq(stockOpnameSessions.id, sessionId),
+            columns: { id: true, name: true },
+        })
+
+        if (!opnameSession) {
+            return { success: false, error: "Sesi tidak ditemukan" }
+        }
+
+        const trimmedUrl = data.url?.trim()
+        if (!trimmedUrl) {
+            return { success: false, error: "URL dokumen tidak valid" }
+        }
+
+        const fileName = data.originalFileName?.trim() || null
+        const fileType = data.fileType?.trim() || null
+        const normalizedFileSize =
+            typeof data.fileSize === "number" && Number.isFinite(data.fileSize)
+                ? Math.max(0, Math.round(data.fileSize))
+                : null
+        const title =
+            data.title?.trim() ||
+            fileName ||
+            `Dokumen Hasil Audit - ${opnameSession.name}`
+
+        await db
+            .update(stockOpnameSessions)
+            .set({
+                documentUrl: trimmedUrl,
+                documentTitle: title,
+                documentFileName: fileName,
+                documentFileType: fileType,
+                documentFileSize: normalizedFileSize,
+                documentUploadedAt: new Date(),
+                documentUploadedBy: userId,
+                updatedAt: new Date(),
+            })
+            .where(eq(stockOpnameSessions.id, sessionId))
+
+        revalidatePath("/dashboard/stock-opname")
+        revalidatePath(`/dashboard/stock-opname/${sessionId}`)
+        revalidatePath(`/dashboard/stock-opname/${sessionId}/print-checklist`)
+        return { success: true }
+    } catch (error) {
+        console.error("Update opname document error:", error)
+        return { success: false, error: "Gagal menyimpan metadata dokumen" }
     }
 }
 

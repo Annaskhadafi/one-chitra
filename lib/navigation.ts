@@ -172,7 +172,7 @@ export const navigationConfig: NavSection[] = [
                         resource: "inventory",
                     },
                     {
-                        title: "ML & Predictions",
+                        title: "Dynamic Safety Stock",
                         url: "/dashboard/inventory-ml",
                         resource: "inventory",
                     },

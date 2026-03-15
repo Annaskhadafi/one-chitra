@@ -39,6 +39,7 @@ import {
     updateOpnameItemCount,
     closeStockOpnameSession,
     cancelStockOpnameSession,
+    updateStockOpnameDocument,
 } from "@/app/actions/stock-opname"
 import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
@@ -61,6 +62,18 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     const [closing, setClosing] = useState(false)
     const [applyAdjustments, setApplyAdjustments] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const orderedSignatures = useMemo(
+        () => [...(session.signatures ?? [])].sort((a, b) => a.order - b.order),
+        [session.signatures]
+    )
+
+    const formattedOpnameDate = session.opnameDate
+        ? new Date(session.opnameDate).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        })
+        : "-"
 
     async function handlePrintPdf(mode: 'checklist' | 'report' = 'report') {
         if (mode === 'report' && session.status !== "closed") {
@@ -83,12 +96,24 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         try {
             const uploadResult = await uploadFile(formData)
             if (uploadResult.success && uploadResult.url) {
-                toast.success("Dokumen hasil audit berhasil diunggah")
-                router.refresh()
+                const saveResult = await updateStockOpnameDocument(session.id, {
+                    url: uploadResult.url,
+                    originalFileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size,
+                    title: "Dokumen Hasil Audit Lapangan",
+                })
+
+                if (saveResult.success) {
+                    toast.success("Dokumen hasil audit berhasil diunggah")
+                    router.refresh()
+                } else {
+                    toast.error(saveResult.error || "Gagal menyimpan metadata dokumen")
+                }
             } else {
                 toast.error(uploadResult.error || "Gagal mengunggah file")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan saat mengunggah")
         } finally {
             setIsUploading(false)
@@ -172,6 +197,53 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
 
     return (
         <div className="flex flex-col gap-4">
+            {/* Session Information */}
+            <Card>
+                <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium">Detail Form Stock Opname</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Tanggal Opname</p>
+                            <p className="text-sm font-semibold mt-1">{formattedOpnameDate}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Waktu</p>
+                            <p className="text-sm font-semibold mt-1">{session.opnameTime ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Lokasi</p>
+                            <p className="text-sm font-semibold mt-1">{session.location ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Dibuat Oleh</p>
+                            <p className="text-sm font-semibold mt-1">{session.createdBy?.name ?? "-"}</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <p className="text-[11px] text-muted-foreground">Peserta / Tanda Tangan</p>
+                        {orderedSignatures.length === 0 ? (
+                            <p className="text-sm mt-1 text-muted-foreground">Belum ada data peserta</p>
+                        ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {orderedSignatures.map((sig) => (
+                                    <Badge key={sig.id} variant="secondary" className="text-xs font-normal">
+                                        {sig.name} ({sig.position})
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <p className="text-[11px] text-muted-foreground">Catatan Form</p>
+                        <p className="text-sm mt-1">{session.notes?.trim() || "-"}</p>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Toolbar */}
             <div className="flex flex-wrap items-center gap-3 justify-between">
                 <div className="flex flex-wrap gap-3 flex-1">
