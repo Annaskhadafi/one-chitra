@@ -148,6 +148,8 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
         .filter(Boolean)
         .join(" ")
     const address = delivery.shippingAddress || customerAddress
+    const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
+    const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -283,7 +285,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
 
                             <table className="items-table">
                                 <thead>
-                                    {customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA") ? (
+                                    {isCiptaKridatama ? (
                                         <>
                                             <tr>
                                                 <th className="col-item" rowSpan={2} style={{ verticalAlign: "middle" }}>Item</th>
@@ -307,9 +309,16 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                     )}
                                 </thead>
                                 <tbody>
-                                    {delivery.items.map((item, idx) => {
+                                    {printableItems.length === 0 && (
+                                        <tr>
+                                            <td colSpan={isCiptaKridatama ? 6 : 4} style={{ textAlign: "center", padding: "16px 8px", fontWeight: 600 }}>
+                                                Tidak ada item terkirim (Qty 0 tidak ditampilkan)
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {printableItems.map((item, idx) => {
                                         const isTyre = item.product.category?.toUpperCase() === "TYRE"
-                                        const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
 
                                         if (isCiptaKridatama) {
                                             return (

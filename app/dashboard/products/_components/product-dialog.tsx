@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -41,13 +41,14 @@ type ProductFormValues = z.infer<typeof productSchema>
 
 interface ProductDialogProps {
     product?: Product
+    initialValues?: Partial<ProductFormValues>
     trigger?: React.ReactNode
     onSuccess?: () => void
 }
 
 const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
 
-export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProps) {
+export function ProductDialog({ product, initialValues, trigger, onSuccess }: ProductDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [warehouses, setWarehouses] = useState<{ sloc: string, description: string | null }[]>([])
@@ -63,21 +64,30 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
         }
     }, [isOpen])
 
+    const defaultValues = useMemo<ProductFormValues>(() => ({
+        category: product?.category ?? initialValues?.category ?? "TYRE",
+        materialNumber: product?.materialNumber ?? initialValues?.materialNumber ?? "",
+        oldMaterialNo: product?.oldMaterialNo ?? initialValues?.oldMaterialNo ?? "",
+        materialDescription: product?.materialDescription ?? initialValues?.materialDescription ?? "",
+        brand: product?.brand ?? initialValues?.brand ?? "",
+        costSap: product?.costSap ?? initialValues?.costSap ?? "",
+        plant: product?.plant ?? initialValues?.plant ?? "",
+        sloc: product?.sloc ?? initialValues?.sloc ?? "",
+        slocDescription: product?.slocDescription ?? initialValues?.slocDescription ?? "",
+        typeWarehouse: product?.typeWarehouse ?? initialValues?.typeWarehouse ?? "",
+        imageUrl: product?.imageUrl ?? initialValues?.imageUrl ?? "",
+    }), [product, initialValues])
+
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productSchema),
-        defaultValues: {
-            category: product?.category ?? "TYRE",
-            materialNumber: product?.materialNumber ?? "",
-            oldMaterialNo: product?.oldMaterialNo ?? "",
-            materialDescription: product?.materialDescription ?? "",
-            brand: product?.brand ?? "",
-            costSap: product?.costSap ?? "",
-            plant: product?.plant ?? "",
-            sloc: product?.sloc ?? "",
-            slocDescription: product?.slocDescription ?? "",
-            imageUrl: product?.imageUrl ?? "",
-        },
+        defaultValues,
     })
+
+    useEffect(() => {
+        if (isOpen) {
+            form.reset(defaultValues)
+        }
+    }, [defaultValues, form, isOpen])
 
     const handleSubmit = async (data: ProductFormValues) => {
         setIsLoading(true)
@@ -87,7 +97,7 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
             if (result.success) {
                 toast.success(`Product ${isEdit ? "updated" : "created"} successfully`)
                 setIsOpen(false)
-                if (!isEdit) form.reset()
+                if (!isEdit) form.reset(defaultValues)
                 onSuccess?.()
             } else {
                 toast.error(result.error)
@@ -291,7 +301,7 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
                                             } else {
                                                 toast.error(res.error || "Upload failed")
                                             }
-                                        } catch (err) {
+                                        } catch (_err) {
                                             toast.error("Upload error")
                                         } finally {
                                             setIsLoading(false)

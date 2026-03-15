@@ -1,5 +1,6 @@
 import { GoodReceiveForm } from "../_components/good-receive-form";
 import { getWarehouses } from "@/app/actions/warehouse";
+import { getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
 import { getProducts } from "@/app/actions/product";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck } from "lucide-react";
@@ -7,20 +8,22 @@ import Link from "next/link";
 
 export default async function CreateGoodReceiveManualPage() {
     const warehouses = await getWarehouses();
-    const products = await getProducts(); // Assuming this action exists and returns products
-
-    // Filter validation: Ensure we only pass necessary data
-    const formattedProducts = products.map(p => ({
-        id: p.id,
-        materialNumber: p.materialNumber,
-        materialDescription: p.materialDescription,
-    }));
+    const poOptionsResult = await getManualGoodReceivePoOptions();
+    const products = await getProducts();
 
     const formattedWarehouses = warehouses.map(w => ({
         id: w.id,
         sloc: w.sloc,
         description: w.description,
     }));
+    const productOptions = products.map((product) => ({
+        id: product.id,
+        materialNumber: product.materialNumber,
+        materialDescription: product.materialDescription,
+        oldMaterialNo: product.oldMaterialNo,
+        materialNumberCk: product.materialNumberCk,
+        sloc: product.sloc,
+    }))
 
     return (
         <div className="space-y-6 p-6">
@@ -47,8 +50,10 @@ export default async function CreateGoodReceiveManualPage() {
 
             {/* Form */}
             <GoodReceiveForm
-                products={formattedProducts}
                 warehouses={formattedWarehouses}
+                poOptions={poOptionsResult.success ? poOptionsResult.data.poOptions : []}
+                poLineOptions={poOptionsResult.success ? poOptionsResult.data.poLineOptions : []}
+                productOptions={productOptions}
             />
         </div>
     );
