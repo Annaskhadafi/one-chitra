@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Search, Warehouse, Package, ArrowRight, ChevronUp, ChevronDown, CalendarDays, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
+import { Loader2, Search, Warehouse, Package, ChevronUp, ChevronDown, CalendarDays, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -33,12 +33,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import {
     Tabs,
     TabsContent,
@@ -79,9 +74,18 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
     const [globalFilter, setGlobalFilter] = useState("")
     const [rowSelection, setRowSelection] = useState({})
     const [isHydrated, setIsHydrated] = useState(false)
+    const [isMobileLayout, setIsMobileLayout] = useState(false)
 
     React.useEffect(() => {
         setIsHydrated(true)
+    }, [])
+
+    React.useEffect(() => {
+        const mediaQuery = window.matchMedia("(max-width: 767px)")
+        const updateLayout = () => setIsMobileLayout(mediaQuery.matches)
+        updateLayout()
+        mediaQuery.addEventListener("change", updateLayout)
+        return () => mediaQuery.removeEventListener("change", updateLayout)
     }, [])
 
     // Watch period changes and update date pickers
@@ -147,7 +151,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
         if (isHydrated && startDate && endDate) {
             handleFetch()
         }
-    }, [isHydrated, handleFetch])
+    }, [isHydrated, startDate, endDate, handleFetch])
 
     const itemHasMaterial = (item: SAPGoodReceiveItem) => {
         return !!(item.materialnumb && item.materialnumb !== "-") && !item.isProcessed
@@ -359,7 +363,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
 
     if (!isHydrated) {
         return (
-            <div className="flex flex-col gap-6 p-6 animate-pulse">
+            <div className="flex flex-col gap-6 p-4 sm:p-6 animate-pulse">
                 <div className="h-24 bg-muted rounded-xl" />
                 <div className="h-12 w-[400px] bg-muted rounded-lg" />
                 <div className="h-40 bg-muted rounded-xl" />
@@ -370,10 +374,10 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
 
     return (
         <TooltipProvider>
-            <div className="flex flex-col gap-6 p-6">
+            <div className="flex flex-col gap-5 sm:gap-6 p-4 sm:p-6">
 
                 {/* Page Header */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                     <div className="flex items-center gap-3">
                         <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2">
                             <Warehouse className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -384,7 +388,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full sm:w-auto items-center gap-2">
                         <Badge variant="outline" className="flex items-center gap-1.5 text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5 shadow-sm">
                             <span className="relative flex h-2 w-2">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -397,7 +401,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                             size="sm"
                             onClick={handleFetch}
                             disabled={isFetching}
-                            className="h-9 shadow-sm"
+                            className="h-9 shadow-sm w-full sm:w-auto"
                         >
                             {isFetching ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -409,9 +413,9 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                     </div>
                 </div>
 
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-2">
-                        <TabsList className="grid w-full md:w-[400px] grid-cols-2 shadow-sm">
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v === "history" ? "history" : "pending")} className="w-full">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 mb-2">
+                        <TabsList className="grid w-full md:w-[400px] grid-cols-2 shadow-sm h-10">
                             <TabsTrigger value="pending" className="flex items-center gap-2">
                                 <Package className="h-4 w-4" />
                                 SAP Pending
@@ -427,10 +431,10 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                             </TabsTrigger>
                         </TabsList>
 
-                        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
                             <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border">
                                 <Select value={period} onValueChange={setPeriod}>
-                                    <SelectTrigger className="w-[140px] h-8 border-none bg-transparent shadow-none focus:ring-0 text-xs">
+                                    <SelectTrigger className="w-[130px] sm:w-[140px] h-8 border-none bg-transparent shadow-none focus:ring-0 text-xs">
                                         <CalendarDays className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
                                         <SelectValue placeholder="Pilih Periode" />
                                     </SelectTrigger>
@@ -516,9 +520,9 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                                 className="pl-9 h-9"
                                             />
                                         </div>
-                                        <div className="flex items-center gap-2 w-full sm:w-auto rounded-lg border bg-muted/20 p-1">
+                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto rounded-lg border bg-muted/20 p-1">
                                             <Select value={targetWarehouseId} onValueChange={setTargetWarehouseId}>
-                                                <SelectTrigger className="w-full sm:w-[180px] h-8 border-none bg-transparent shadow-none focus:ring-0 text-sm">
+                                                <SelectTrigger className="w-full sm:w-[180px] h-9 sm:h-8 border-none bg-transparent shadow-none focus:ring-0 text-sm">
                                                     <Warehouse className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
                                                     <SelectValue placeholder="Gudang Tujuan" />
                                                 </SelectTrigger>
@@ -533,7 +537,7 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                             <Button
                                                 onClick={handleProcess}
                                                 disabled={isProcessing || selectedCount === 0 || !targetWarehouseId}
-                                                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                                                className="h-9 sm:h-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm w-full sm:w-auto"
                                                 size="sm"
                                             >
                                                 {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5 mr-1" />}
@@ -544,63 +548,119 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                 </CardHeader>
                                 <Separator />
                                 <div className="relative overflow-hidden rounded-b-xl border-t">
-                                    <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
-                                        <Table>
-                                            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
-                                                {table.getHeaderGroups().map((headerGroup) => (
-                                                    <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
-                                                        {headerGroup.headers.map((header) => (
-                                                            <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
-                                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                            </TableHead>
-                                                        ))}
-                                                    </TableRow>
-                                                ))}
-                                            </TableHeader>
-                                            <TableBody>
-                                                {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                                    <>
-                                                        <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
-                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                    {isMobileLayout ? (
+                                        <div className="max-h-[70vh] overflow-y-auto space-y-2 p-3">
+                                            {table.getRowModel().rows.length > 0 ? (
+                                                table.getRowModel().rows.map((row) => {
+                                                    const item = row.original
+                                                    const isSelectable = itemHasMaterial(item)
+
+                                                    return (
+                                                        <Card
+                                                            key={row.id}
+                                                            className={cn("shadow-none border", !isSelectable && "opacity-60")}
+                                                        >
+                                                            <CardContent className="p-3 space-y-2">
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-mono text-xs break-all">{item.ponumb}</p>
+                                                                        <p className="text-[11px] text-muted-foreground">Item: {item.item}</p>
+                                                                    </div>
+                                                                    <Checkbox
+                                                                        checked={row.getIsSelected()}
+                                                                        onCheckedChange={(value) => row.toggleSelected(!!value)}
+                                                                        disabled={!isSelectable}
+                                                                        aria-label="Select row"
+                                                                    />
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground break-words">{item.vendor}</p>
+                                                                <div className="space-y-0.5">
+                                                                    <p className="font-mono text-[11px] break-all">{item.materialnumb || "-"}</p>
+                                                                    <p className="text-xs text-muted-foreground break-words">{item.material || "-"}</p>
+                                                                </div>
+                                                                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">PO Qty</p>
+                                                                        <p className="font-semibold">{item.poqty}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">To Inv</p>
+                                                                        <p className="font-semibold">{item.toinvo}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">To GR</p>
+                                                                        <p className="font-semibold text-indigo-600 dark:text-indigo-400">{item.togr}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    )
+                                                })
+                                            ) : (
+                                                <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">
+                                                    No items found.
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                            <Table>
+                                                <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
+                                                    {table.getHeaderGroups().map((headerGroup) => (
+                                                        <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
+                                                            {headerGroup.headers.map((header) => (
+                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                                </TableHead>
+                                                            ))}
                                                         </TableRow>
-                                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                            const row = rows[virtualRow.index]
-                                                            const isSelectable = itemHasMaterial(row.original)
-                                                            return (
-                                                                <TableRow
-                                                                    key={row.id}
-                                                                    data-state={row.getIsSelected() && "selected"}
-                                                                    className={cn(
-                                                                        "group hover:bg-muted/30 transition-colors h-10 border-b",
-                                                                        !isSelectable && "opacity-50"
-                                                                    )}
-                                                                >
-                                                                    {row.getVisibleCells().map((cell) => (
-                                                                        <TableCell key={cell.id} className="py-2">
-                                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                                        </TableCell>
-                                                                    ))}
-                                                                </TableRow>
-                                                            )
-                                                        })}
-                                                        <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
-                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                    ))}
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                                        <>
+                                                            <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                                <TableCell colSpan={columns.length} className="p-0" />
+                                                            </TableRow>
+                                                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                                const row = rows[virtualRow.index]
+                                                                const isSelectable = itemHasMaterial(row.original)
+                                                                return (
+                                                                    <TableRow
+                                                                        key={row.id}
+                                                                        data-state={row.getIsSelected() && "selected"}
+                                                                        className={cn(
+                                                                            "group hover:bg-muted/30 transition-colors h-10 border-b",
+                                                                            !isSelectable && "opacity-50"
+                                                                        )}
+                                                                    >
+                                                                        {row.getVisibleCells().map((cell) => (
+                                                                            <TableCell key={cell.id} className="py-2">
+                                                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                                            </TableCell>
+                                                                        ))}
+                                                                    </TableRow>
+                                                                )
+                                                            })}
+                                                            <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                                <TableCell colSpan={columns.length} className="p-0" />
+                                                            </TableRow>
+                                                        </>
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
+                                                                No items found.
+                                                            </TableCell>
                                                         </TableRow>
-                                                    </>
-                                                ) : (
-                                                    <TableRow>
-                                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
-                                                            No items found.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )}
                                 </div>
                             </Card>
                         ) : !isFetching && (
-                            <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60">
+                            <div className="flex flex-col items-center justify-center p-10 sm:p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60 text-center">
                                 <Package className="h-10 w-10 text-muted-foreground/40 mb-3" />
                                 <h3 className="font-medium text-muted-foreground">No Pending Items</h3>
                                 <p className="text-xs text-muted-foreground mt-1">Gunakan fetch di atas untuk menarik data terbaru.</p>
@@ -628,58 +688,109 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                 </CardHeader>
                                 <Separator />
                                 <div className="relative overflow-hidden rounded-b-xl border-t">
-                                    <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
-                                        <Table>
-                                            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
-                                                {table.getHeaderGroups().map((headerGroup) => (
-                                                    <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
-                                                        {headerGroup.headers.map((header) => (
-                                                            <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
-                                                                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                                                            </TableHead>
-                                                        ))}
-                                                    </TableRow>
-                                                ))}
-                                            </TableHeader>
-                                            <TableBody>
-                                                {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                                    <>
-                                                        <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
-                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                    {isMobileLayout ? (
+                                        <div className="max-h-[70vh] overflow-y-auto space-y-2 p-3">
+                                            {table.getRowModel().rows.length > 0 ? (
+                                                table.getRowModel().rows.map((row) => {
+                                                    const item = row.original
+                                                    const warehouseName = item.warehouseId
+                                                        ? (warehouses.find((w) => w.id === item.warehouseId)?.description || `WH-${item.warehouseId}`)
+                                                        : "-"
+                                                    const dateProcessed = item.processedDate ? new Date(item.processedDate).toLocaleDateString() : "-"
+
+                                                    return (
+                                                        <Card key={row.id} className="shadow-none border">
+                                                            <CardContent className="p-3 space-y-2">
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-mono text-xs break-all">{item.ponumb}</p>
+                                                                        <p className="text-[11px] text-muted-foreground">Item: {item.item}</p>
+                                                                    </div>
+                                                                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px]">Processed</Badge>
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground break-words">{item.vendor}</p>
+                                                                <div className="space-y-0.5">
+                                                                    <p className="font-mono text-[11px] break-all">{item.materialnumb || "-"}</p>
+                                                                    <p className="text-xs text-muted-foreground break-words">{item.material || "-"}</p>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">To GR</p>
+                                                                        <p className="font-semibold">{item.togr}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">Warehouse</p>
+                                                                        <p className="font-semibold break-words">{warehouseName}</p>
+                                                                    </div>
+                                                                    <div className="col-span-2">
+                                                                        <p className="text-muted-foreground">Processed Date</p>
+                                                                        <p className="font-semibold">{dateProcessed}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    )
+                                                })
+                                            ) : (
+                                                <div className="h-24 flex items-center justify-center text-sm text-muted-foreground">
+                                                    No history for this period.
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div ref={parentRef} className="h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                            <Table>
+                                                <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
+                                                    {table.getHeaderGroups().map((headerGroup) => (
+                                                        <TableRow key={headerGroup.id} className="hover:bg-transparent border-b">
+                                                            {headerGroup.headers.map((header) => (
+                                                                <TableHead key={header.id} className="h-10 text-xs text-muted-foreground">
+                                                                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                                                                </TableHead>
+                                                            ))}
                                                         </TableRow>
-                                                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                            const row = rows[virtualRow.index]
-                                                            return (
-                                                                <TableRow
-                                                                    key={row.id}
-                                                                    className="group hover:bg-muted/30 transition-colors h-10 border-b"
-                                                                >
-                                                                    {row.getVisibleCells().map((cell) => (
-                                                                        <TableCell key={cell.id} className="py-2">
-                                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                                        </TableCell>
-                                                                    ))}
-                                                                </TableRow>
-                                                            )
-                                                        })}
-                                                        <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
-                                                            <TableCell colSpan={columns.length} className="p-0" />
+                                                    ))}
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {rowVirtualizer.getVirtualItems().length > 0 ? (
+                                                        <>
+                                                            <TableRow style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} className="border-none">
+                                                                <TableCell colSpan={columns.length} className="p-0" />
+                                                            </TableRow>
+                                                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                                                const row = rows[virtualRow.index]
+                                                                return (
+                                                                    <TableRow
+                                                                        key={row.id}
+                                                                        className="group hover:bg-muted/30 transition-colors h-10 border-b"
+                                                                    >
+                                                                        {row.getVisibleCells().map((cell) => (
+                                                                            <TableCell key={cell.id} className="py-2">
+                                                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                                            </TableCell>
+                                                                        ))}
+                                                                    </TableRow>
+                                                                )
+                                                            })}
+                                                            <TableRow style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} className="border-none">
+                                                                <TableCell colSpan={columns.length} className="p-0" />
+                                                            </TableRow>
+                                                        </>
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
+                                                                No history for this period.
+                                                            </TableCell>
                                                         </TableRow>
-                                                    </>
-                                                ) : (
-                                                    <TableRow>
-                                                        <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground bg-muted/5">
-                                                            No history for this period.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )}
                                 </div>
                             </Card>
                         ) : !isFetching && (
-                            <div className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60">
+                            <div className="flex flex-col items-center justify-center p-10 sm:p-16 border-2 border-dashed border-muted rounded-xl bg-muted/10 opacity-60 text-center">
                                 <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mb-3" />
                                 <h3 className="font-medium text-muted-foreground">No History Data</h3>
                                 <p className="text-xs text-muted-foreground mt-1">Data riwayat akan muncul di sini setelah item diproses.</p>

@@ -26,9 +26,9 @@ export default async function CreateGoodReceiveManualPage() {
     }))
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-5 p-4 sm:space-y-6 sm:p-6">
             {/* Back Navigation */}
-            <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground -ml-2 h-8 gap-1.5">
+            <Button asChild variant="ghost" size="sm" className="w-fit text-muted-foreground hover:text-foreground -ml-2 h-8 gap-1.5">
                 <Link href="/dashboard/good-receive-manual">
                     <ArrowLeft className="h-3.5 w-3.5" />
                     Back to Good Receive Manual
@@ -37,11 +37,11 @@ export default async function CreateGoodReceiveManualPage() {
 
             {/* Page Header */}
             <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2.5 mt-0.5">
-                    <ClipboardCheck className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                <div className="rounded-lg bg-indigo-100 dark:bg-indigo-950/50 p-2 mt-0.5 sm:p-2.5">
+                    <ClipboardCheck className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Create Good Receive Manual</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Create Good Receive Manual</h1>
                     <p className="text-muted-foreground text-sm mt-0.5">
                         Record a new manual stock receipt from a supplier.
                     </p>

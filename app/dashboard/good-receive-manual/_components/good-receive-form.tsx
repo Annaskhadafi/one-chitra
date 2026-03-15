@@ -13,6 +13,7 @@ import { getProducts } from "@/app/actions/product"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
     Form,
@@ -277,6 +278,8 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
     const [poComboboxOpen, setPoComboboxOpen] = React.useState(false)
     const [productCatalog, setProductCatalog] = React.useState<ProductOption[]>(productOptions)
     const [isRefreshingProducts, setIsRefreshingProducts] = React.useState(false)
+    const [isMobileLayout, setIsMobileLayout] = React.useState(false)
+    const lastSelectedPoRef = React.useRef("")
 
     const selectedPoNumber = form.watch("poNumber")
     const selectedWarehouseId = form.watch("warehouseId")
@@ -285,6 +288,14 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
     React.useEffect(() => {
         setProductCatalog(productOptions)
     }, [productOptions])
+
+    React.useEffect(() => {
+        const mediaQuery = window.matchMedia("(max-width: 767px)")
+        const updateLayout = () => setIsMobileLayout(mediaQuery.matches)
+        updateLayout()
+        mediaQuery.addEventListener("change", updateLayout)
+        return () => mediaQuery.removeEventListener("change", updateLayout)
+    }, [])
 
     const selectedPoLines = React.useMemo(
         () => poLineOptions.filter((line) => line.poNumber === selectedPoNumber),
@@ -342,18 +353,20 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
         form.setValue("supplier", vendorName, { shouldValidate: true, shouldDirty: false })
 
         if (!selectedPoNumber) {
+            lastSelectedPoRef.current = ""
             replace([createEmptyItem()])
             return
         }
 
-        const existingItems = form.getValues("items")
+        const poChanged = lastSelectedPoRef.current !== selectedPoNumber
+        const existingItems = poChanged ? [] : form.getValues("items")
         const existingByPoItem = new Map(existingItems.map((item) => [item.poItem, item]))
 
         const mappedItems = selectedPoLines.map((line) => {
             const prev = existingByPoItem.get(line.poItem)
             const prevQtyRaw = Number(prev?.quantity ?? 0)
             const prevQty = Number.isFinite(prevQtyRaw) ? prevQtyRaw : 0
-            const quantity = Math.min(Math.max(prevQty, 0), line.openQty)
+            const quantity = poChanged ? 0 : Math.min(Math.max(prevQty, 0), line.openQty)
             const prevProductId = Number(prev?.productId || 0)
             const autoMatchedProductId = line.productId ?? findMatchedProductId(line.materialNumber, productCatalog)
 
@@ -362,13 +375,14 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                 materialNumber: line.materialNumber,
                 materialDescription: line.materialDescription,
                 openQty: line.openQty,
-                productId: prevProductId > 0 ? prevProductId : autoMatchedProductId,
+                productId: (!poChanged && prevProductId > 0) ? prevProductId : autoMatchedProductId,
                 quantity,
-                notes: prev?.notes || "",
+                notes: poChanged ? "" : (prev?.notes || ""),
             }
         })
 
         replace(mappedItems.length ? mappedItems : [createEmptyItem()])
+        lastSelectedPoRef.current = selectedPoNumber
     }, [selectedPoNumber, selectedPoLines, poVendorMap, replace, form, productCatalog])
 
     async function onSubmit(values: FormValues) {
@@ -393,7 +407,7 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 sm:space-y-6">
 
                 <Card className="shadow-sm">
                     <CardHeader className="pb-4">
@@ -627,8 +641,165 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                     </CardHeader>
                     <Separator />
                     <CardContent className="pt-0 px-0 pb-0">
-                        <div className="rounded-b-lg overflow-hidden">
-                            <Table>
+                        {isMobileLayout ? (
+                            selectedPoNumber ? (
+                                <div className="space-y-3 p-3">
+                                    {fields.map((field, index) => {
+                                        const watchedRow = watchedItems?.[index]
+                                        const poItemValue = Number(watchedRow?.poItem ?? field.poItem ?? 0)
+                                        const materialNumberValue = watchedRow?.materialNumber ?? field.materialNumber
+                                        const materialDescriptionValue = watchedRow?.materialDescription ?? field.materialDescription
+                                        const openQtyValue = Number(watchedRow?.openQty ?? field.openQty ?? 0)
+                                        const currentProductId = Number(watchedRow?.productId ?? field.productId ?? 0)
+                                        const selectedInternalProduct = productById.get(currentProductId)
+                                        const isMapped = currentProductId > 0
+
+                                        return (
+                                            <Card
+                                                key={`mobile-${field.id}`}
+                                                className={cn("shadow-none border", !isMapped && "border-amber-300 bg-amber-50/40 dark:bg-amber-950/10")}
+                                            >
+                                                <CardContent className="p-3 space-y-3">
+                                                    <input type="hidden" {...form.register(`items.${index}.poItem`, { valueAsNumber: true })} />
+                                                    <input type="hidden" {...form.register(`items.${index}.materialNumber`)} />
+                                                    <input type="hidden" {...form.register(`items.${index}.materialDescription`)} />
+                                                    <input type="hidden" {...form.register(`items.${index}.openQty`, { valueAsNumber: true })} />
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">Item #{index + 1}</p>
+                                                            <p className="font-mono text-xs">{poItemValue > 0 ? `PO Item ${poItemValue}` : "-"}</p>
+                                                        </div>
+                                                        <Badge variant="outline" className="text-[10px]">
+                                                            Open Qty: {openQtyValue}
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="space-y-0.5">
+                                                        <p className="font-mono text-[11px] break-all">{materialNumberValue || "-"}</p>
+                                                        <p className="text-xs text-muted-foreground">{materialDescriptionValue || "-"}</p>
+                                                        {!isMapped && (
+                                                            <p className="text-[11px] text-amber-700 dark:text-amber-400 inline-flex items-center gap-1">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                Material belum ter-mapping ke produk internal
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.productId`}
+                                                        render={({ field: productField }) => (
+                                                            <FormItem className="space-y-1">
+                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                    Material Internal
+                                                                </FormLabel>
+                                                                <FormControl>
+                                                                    <ProductCombobox
+                                                                        value={Number(productField.value || 0)}
+                                                                        options={sortedProductOptions}
+                                                                        onSelect={(id) => productField.onChange(id)}
+                                                                    />
+                                                                </FormControl>
+                                                                {!isMapped && (
+                                                                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                                                                        <ProductDialog
+                                                                            initialValues={{
+                                                                                category: "Material Consumable",
+                                                                                materialNumber: materialNumberValue || "",
+                                                                                oldMaterialNo: materialNumberValue || "",
+                                                                                materialDescription: materialDescriptionValue || "",
+                                                                                sloc: selectedWarehouse?.sloc || "",
+                                                                                slocDescription: selectedWarehouse?.description || "",
+                                                                            }}
+                                                                            trigger={(
+                                                                                <Button type="button" variant="outline" size="sm" className="h-8 text-[11px]">
+                                                                                    <Plus className="mr-1 h-3 w-3" />
+                                                                                    Tambah Produk
+                                                                                </Button>
+                                                                            )}
+                                                                            onSuccess={refreshProductCatalog}
+                                                                        />
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="h-8 text-[11px]"
+                                                                            onClick={refreshProductCatalog}
+                                                                            disabled={isRefreshingProducts}
+                                                                        >
+                                                                            {isRefreshingProducts ? "Memuat..." : "Refresh List"}
+                                                                        </Button>
+                                                                    </div>
+                                                                )}
+                                                                {selectedInternalProduct && (
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {selectedInternalProduct.materialDescription || "-"}
+                                                                    </p>
+                                                                )}
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.quantity`}
+                                                        render={({ field: qtyField }) => (
+                                                            <FormItem className="space-y-1">
+                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                    Quantity
+                                                                </FormLabel>
+                                                                <FormControl>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        step={1}
+                                                                        inputMode="numeric"
+                                                                        className="h-10 focus-visible:ring-indigo-500"
+                                                                        value={qtyField.value}
+                                                                        disabled={!isMapped}
+                                                                        onChange={(e) => {
+                                                                            const value = Number(e.target.value)
+                                                                            qtyField.onChange(Number.isFinite(value) ? value : 0)
+                                                                        }}
+                                                                        onBlur={(e) => {
+                                                                            const openQty = Number(form.getValues(`items.${index}.openQty`) || 0)
+                                                                            const value = Number(e.target.value)
+                                                                            const normalized = Number.isFinite(value) ? Math.min(Math.max(value, 0), openQty) : 0
+                                                                            qtyField.onChange(normalized)
+                                                                        }}
+                                                                    />
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.notes`}
+                                                        render={({ field: notesField }) => (
+                                                            <FormItem className="space-y-1">
+                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                    Notes
+                                                                </FormLabel>
+                                                                <FormControl>
+                                                                    <Input placeholder="Optional notes..." className="h-10 focus-visible:ring-indigo-500" {...notesField} />
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                </CardContent>
+                                            </Card>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="h-24 flex items-center justify-center text-center text-sm text-muted-foreground px-4">
+                                    Pilih PO Number terlebih dahulu untuk menampilkan item.
+                                </div>
+                            )
+                        ) : (
+                            <div className="rounded-b-lg overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <Table className="min-w-[1180px]">
                                 <TableHeader>
                                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                                         <TableHead className="w-[40px] text-xs font-semibold text-muted-foreground pl-4">#</TableHead>
@@ -651,6 +822,10 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
 
                                     {selectedPoNumber && fields.map((field, index) => {
                                         const watchedRow = watchedItems?.[index]
+                                        const poItemValue = Number(watchedRow?.poItem ?? field.poItem ?? 0)
+                                        const materialNumberValue = watchedRow?.materialNumber ?? field.materialNumber
+                                        const materialDescriptionValue = watchedRow?.materialDescription ?? field.materialDescription
+                                        const openQtyValue = Number(watchedRow?.openQty ?? field.openQty ?? 0)
                                         const currentProductId = Number(watchedRow?.productId ?? field.productId ?? 0)
                                         const selectedInternalProduct = productById.get(currentProductId)
                                         const isMapped = currentProductId > 0
@@ -665,12 +840,12 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                                                     {index + 1}
                                                 </TableCell>
                                                 <TableCell className="font-mono text-xs">
-                                                    {field.poItem > 0 ? `Item ${field.poItem}` : "-"}
+                                                    {poItemValue > 0 ? `Item ${poItemValue}` : "-"}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="space-y-0.5">
-                                                        <p className="font-mono text-[11px]">{field.materialNumber || "-"}</p>
-                                                        <p className="text-xs text-muted-foreground">{field.materialDescription || "-"}</p>
+                                                        <p className="font-mono text-[11px]">{materialNumberValue || "-"}</p>
+                                                        <p className="text-xs text-muted-foreground">{materialDescriptionValue || "-"}</p>
                                                         {!isMapped && (
                                                             <p className="text-[11px] text-amber-700 dark:text-amber-400 inline-flex items-center gap-1">
                                                                 <AlertTriangle className="h-3 w-3" />
@@ -697,9 +872,9 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                                                                         <ProductDialog
                                                                             initialValues={{
                                                                                 category: "Material Consumable",
-                                                                                materialNumber: field.materialNumber || "",
-                                                                                oldMaterialNo: field.materialNumber || "",
-                                                                                materialDescription: field.materialDescription || "",
+                                                                                materialNumber: materialNumberValue || "",
+                                                                                oldMaterialNo: materialNumberValue || "",
+                                                                                materialDescription: materialDescriptionValue || "",
                                                                                 sloc: selectedWarehouse?.sloc || "",
                                                                                 slocDescription: selectedWarehouse?.description || "",
                                                                             }}
@@ -733,7 +908,7 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                                                         )}
                                                     />
                                                 </TableCell>
-                                                <TableCell className="text-sm font-semibold">{field.openQty}</TableCell>
+                                                <TableCell className="text-sm font-semibold">{openQtyValue}</TableCell>
                                                 <TableCell>
                                                     <FormField
                                                         control={form.control}
@@ -784,7 +959,9 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                                     })}
                                 </TableBody>
                             </Table>
-                        </div>
+                                </div>
+                            </div>
+                        )}
 
                         {itemsErrorMessage && (
                             <p className="text-sm font-medium text-destructive px-4 py-3">{itemsErrorMessage}</p>
@@ -792,19 +969,20 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                     </CardContent>
                 </Card>
 
-                <div className="flex items-center justify-end gap-3 pt-2">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2">
                     <Button
                         type="button"
                         variant="ghost"
                         onClick={() => router.back()}
                         disabled={isSubmitting}
+                        className="w-full sm:w-auto"
                     >
                         Cancel
                     </Button>
                     <Button
                         type="submit"
                         disabled={isSubmitting}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[160px]"
+                        className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white sm:min-w-[160px]"
                     >
                         {isSubmitting ? (
                             <>
