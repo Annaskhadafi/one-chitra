@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import type { BillingRecordDisplay } from "@/lib/types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageHeader } from "@/components/page-header"
+import { normalizeCodeValue } from "@/lib/formatters"
 
 interface BillingDetailClientProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,6 +16,8 @@ interface BillingDetailClientProps {
 
 export function BillingDetailClient({ data }: BillingDetailClientProps) {
     const router = useRouter()
+    const normalizedNoInvSap = normalizeCodeValue(data.noInvSap)
+    const normalizedPlant = normalizeCodeValue(data.plant)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = (data.items as any[]) || []
@@ -23,7 +26,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
         <div className="flex flex-1 flex-col">
             <div className="px-4 md:px-8 pt-6">
                 <PageHeader
-                    title={`Billing Document: ${data.noInvSap || data.no || "Pending"}`}
+                    title={`Billing Document: ${normalizedNoInvSap || data.no || "Pending"}`}
                     icon={FileText}
                 />
 
@@ -74,7 +77,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Plant</p>
-                                <p className="font-medium mt-1">{data.plant}</p>
+                                <p className="font-medium mt-1">{normalizedPlant || "-"}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Actual DO</p>

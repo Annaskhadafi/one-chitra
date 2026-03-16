@@ -11,6 +11,7 @@ import {
 import { eq, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
+import { normalizeCodeValue } from "@/lib/formatters";
 
 type BillingRecordUpdate = {
     poNo: string;
@@ -144,7 +145,13 @@ export async function getBillingRecords(poNoFilter?: string) {
             .leftJoin(billingRecords, eq(groupedHistorySubquery.poNo, billingRecords.poNo))
             .orderBy(desc(sql`"groupedHistory"."dateInvoice"`));
 
-        return { success: true, data: records };
+        const normalizedRecords = records.map((record) => ({
+            ...record,
+            plant: normalizeCodeValue(record.plant) ?? "",
+            noInvSap: normalizeCodeValue(record.noInvSap),
+        }));
+
+        return { success: true, data: normalizedRecords };
     } catch (error) {
         console.error("Error fetching billing records:", error);
         return { success: false, error: "Failed to fetch billing records" };
@@ -182,7 +189,9 @@ export async function getInvoiceInfoByPoNo(
             columns: { noInvSap: true, dateInvoice: true, customer: true }
         });
 
-        if (billingRecord?.noInvSap) {
+        const billingNo = normalizeCodeValue(billingRecord?.noInvSap);
+
+        if (billingNo && billingRecord) {
             // If customerName given, validate customer matches (loose ilike match)
             const customerMatch = !customerName ||
                 !billingRecord.customer ||
@@ -193,7 +202,7 @@ export async function getInvoiceInfoByPoNo(
                 return {
                     success: true,
                     data: {
-                        noInvSap: billingRecord.noInvSap,
+                        noInvSap: billingNo,
                         dateInvoice: billingRecord.dateInvoice,
                     }
                 };
@@ -217,11 +226,13 @@ export async function getInvoiceInfoByPoNo(
         const historyResult: any = await db.execute(query);
         const row = historyResult.rows?.[0] || historyResult[0];
 
-        if (row && row.noInvSap) {
+        const historyInvoiceNo = normalizeCodeValue(row?.noInvSap);
+
+        if (historyInvoiceNo) {
             return {
                 success: true,
                 data: {
-                    noInvSap: row.noInvSap as string,
+                    noInvSap: historyInvoiceNo,
                     dateInvoice: row.dateInvoice ? new Date(row.dateInvoice) : null,
                 }
             };
@@ -269,12 +280,14 @@ export async function getInvoiceInfoByDoSap(
         const doSapResult: any = await db.execute(doSapQuery);
         const doSapRow = doSapResult.rows?.[0] || doSapResult[0];
 
-        if (doSapRow?.noInvSap) {
+        const doSapInvoiceNo = normalizeCodeValue(doSapRow?.noInvSap);
+
+        if (doSapInvoiceNo) {
             const invoiceCount = parseInt(doSapRow.invoiceCount || '1', 10);
             return {
                 success: true,
                 data: {
-                    noInvSap: doSapRow.noInvSap as string,
+                    noInvSap: doSapInvoiceNo,
                     dateInvoice: doSapRow.dateInvoice ? new Date(doSapRow.dateInvoice) : null,
                     isMulti: invoiceCount > 1,
                 }
@@ -299,12 +312,14 @@ export async function getInvoiceInfoByDoSap(
             const proximityResult: any = await db.execute(proximityQuery);
             const proximityRow = proximityResult.rows?.[0] || proximityResult[0];
 
-            if (proximityRow?.noInvSap) {
+            const proximityInvoiceNo = normalizeCodeValue(proximityRow?.noInvSap);
+
+            if (proximityInvoiceNo) {
                 const invoiceCount = parseInt(proximityRow.invoiceCount || '1', 10);
                 return {
                     success: true,
                     data: {
-                        noInvSap: proximityRow.noInvSap as string,
+                        noInvSap: proximityInvoiceNo,
                         dateInvoice: proximityRow.dateInvoice ? new Date(proximityRow.dateInvoice) : null,
                         isMulti: invoiceCount > 1,
                     }
@@ -450,6 +465,13 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
         const { poNo, ...updateData } = data;
 
         if (!poNo) throw new Error("PO Number is required");
+
+        if (updateData.noInvSap !== undefined) {
+            updateData.noInvSap = normalizeCodeValue(updateData.noInvSap);
+        }
+        if (updateData.plant !== undefined) {
+            updateData.plant = normalizeCodeValue(updateData.plant);
+        }
 
         // Auto calculate year and month if dateInvoice is passed
         if (updateData.dateInvoice) {

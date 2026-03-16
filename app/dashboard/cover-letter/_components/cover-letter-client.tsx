@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { CoverLetterDialog } from "./cover-letter-dialog";
 import type { PreviewInvoiceItem } from "./cover-letter-preview";
 import { toast } from "sonner";
+import { normalizeCodeValue } from "@/lib/formatters";
 
 interface Props {
     customers: CoverLetterCustomer[];
@@ -250,7 +251,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
 
     const selectedInvoiceData = billingData.filter(d => selectedPoNos.has(d.poNo));
     const previewItems: PreviewInvoiceItem[] = selectedInvoiceData.map(inv => ({
-        poNo: inv.poNo, noInvSap: inv.noInvSap, dateInvoice: inv.dateInvoice, datePo: inv.datePo,
+        poNo: inv.poNo, noInvSap: normalizeCodeValue(inv.noInvSap) ?? "", dateInvoice: inv.dateInvoice, datePo: inv.datePo,
         amountBeforeTax: calcBeforeAmount(inv.totalLocCurr),
         amountIncludeTax: calcAccAmount(inv.totalLocCurr),
     }));
@@ -334,7 +335,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         setSavedPreviewForDialog({
             cust,
             items: letter.items.map(item => ({
-                poNo: item.poNo ?? "", noInvSap: item.noInvSap ?? "",
+                poNo: item.poNo ?? "", noInvSap: normalizeCodeValue(item.noInvSap) ?? "",
                 dateInvoice: item.dateInvoice, datePo: item.datePo,
                 amountBeforeTax: parseFloat(item.amountBeforeTax ?? "0"),
                 amountIncludeTax: parseFloat(item.amountIncludeTax ?? "0"),
@@ -513,7 +514,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                                                     return (
                                                         <TableRow key={inv.poNo} className={cn("cursor-pointer", selectedPoNos.has(inv.poNo) && "bg-primary/5")} onClick={() => toggleInvoice(inv.poNo)}>
                                                             <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedPoNos.has(inv.poNo)} onCheckedChange={() => toggleInvoice(inv.poNo)} /></TableCell>
-                                                            <TableCell className="font-medium">{inv.noInvSap}</TableCell>
+                                                            <TableCell className="font-medium">{normalizeCodeValue(inv.noInvSap) || "-"}</TableCell>
                                                             <TableCell>{formatDate(inv.dateInvoice)}</TableCell>
                                                             <TableCell>{inv.poNo}</TableCell>
                                                             <TableCell>{formatDate(inv.datePo)}</TableCell>

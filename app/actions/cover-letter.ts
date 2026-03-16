@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { billingRecords, salesRevenueSap as historyOrders, customers, coverLetters, coverLetterItems } from "@/db/schema";
 import { eq, isNotNull, ne, and, sql, desc, notInArray, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { normalizeCodeValue } from "@/lib/formatters";
 
 /**
  * Generate nomor referensi surat otomatis.
@@ -152,7 +153,12 @@ export async function getCoverLetterBillingData(
         ? records.filter(r => r.poNo && !usedPoNos.includes(r.poNo))
         : records;
 
-    return filtered as CoverLetterBillingItem[];
+    const normalized = filtered.map((row) => ({
+        ...row,
+        noInvSap: normalizeCodeValue(row.noInvSap) ?? "",
+    }));
+
+    return normalized as CoverLetterBillingItem[];
 }
 
 /** Ambil semua cover letter yang sudah tersimpan (dengan item-nya) */
@@ -162,7 +168,11 @@ export async function getSavedCoverLetters(): Promise<SavedCoverLetter[]> {
     for (const letter of letters) {
         const items = await db.select().from(coverLetterItems)
             .where(eq(coverLetterItems.coverLetterId, letter.id));
-        result.push({ ...letter, items });
+        const normalizedItems = items.map(item => ({
+            ...item,
+            noInvSap: normalizeCodeValue(item.noInvSap),
+        }));
+        result.push({ ...letter, items: normalizedItems });
     }
     return result;
 }
@@ -201,7 +211,7 @@ export async function saveCoverLetter(data: {
                 data.items.map(item => ({
                     coverLetterId: letter.id,
                     poNo: item.poNo,
-                    noInvSap: item.noInvSap,
+                    noInvSap: normalizeCodeValue(item.noInvSap) ?? item.noInvSap,
                     dateInvoice: item.dateInvoice ? new Date(item.dateInvoice) : null,
                     datePo: item.datePo ? new Date(item.datePo) : null,
                     amountBeforeTax: String(item.amountBeforeTax),
@@ -255,7 +265,7 @@ export async function updateCoverLetter(id: number, data: {
                 data.items.map(item => ({
                     coverLetterId: id,
                     poNo: item.poNo,
-                    noInvSap: item.noInvSap,
+                    noInvSap: normalizeCodeValue(item.noInvSap) ?? item.noInvSap,
                     dateInvoice: item.dateInvoice ? new Date(item.dateInvoice) : null,
                     datePo: item.datePo ? new Date(item.datePo) : null,
                     amountBeforeTax: String(item.amountBeforeTax),

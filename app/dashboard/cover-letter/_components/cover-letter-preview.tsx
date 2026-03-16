@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { CoverLetterCustomer } from "@/app/actions/cover-letter";
+import { normalizeCodeValue } from "@/lib/formatters";
 
 export type PreviewInvoiceItem = {
     poNo: string;
@@ -145,7 +146,7 @@ export function CoverLetterPreview({ customer, items, refNumber, letterDate, sig
                         ) : items.map((inv, idx) => (
                             <tr key={inv.poNo}>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 2pt", textAlign: "center" }}>{idx + 1}</td>
-                                <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{inv.noInvSap || "-"}</td>
+                                <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{normalizeCodeValue(inv.noInvSap) || "-"}</td>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{formatDate(inv.dateInvoice)}</td>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{inv.poNo || "-"}</td>
                                 <td style={{ border: "1px solid #ccc", padding: "3pt 4pt", textAlign: "center" }}>{formatDate(inv.datePo)}</td>

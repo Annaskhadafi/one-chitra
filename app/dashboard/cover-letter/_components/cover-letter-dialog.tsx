@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink, ImageIcon, X } from "lucide-react";
 import { CoverLetterPreview, type PreviewInvoiceItem } from "./cover-letter-preview";
 import type { CoverLetterCustomer } from "@/app/actions/cover-letter";
+import { normalizeCodeValue } from "@/lib/formatters";
 
 interface CoverLetterDialogProps {
     open: boolean;
@@ -54,7 +55,7 @@ function buildPrintHTML(
         : items.map((inv, idx) => `
             <tr>
                 <td style="border:1px solid #ccc;padding:3pt 2pt;text-align:center;">${idx + 1}</td>
-                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${inv.noInvSap || "-"}</td>
+                <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${normalizeCodeValue(inv.noInvSap) || "-"}</td>
                 <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${formatDate(inv.dateInvoice)}</td>
                 <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${inv.poNo || "-"}</td>
                 <td style="border:1px solid #ccc;padding:3pt 4pt;text-align:center;">${formatDate(inv.datePo)}</td>

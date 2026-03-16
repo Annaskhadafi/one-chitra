@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { normalizeCodeValue } from "@/lib/formatters"
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ClipboardPaste } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -42,10 +43,14 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
         }
 
         const finalValue = type === "number" ? parseFloat(value as string) : value
+        const normalizedValue =
+            (column === "noInvSap" || column === "plant")
+                ? normalizeCodeValue(finalValue as string | number | null | undefined)
+                : finalValue
 
         // Optimistic UI Update immediately
         if (tableMeta?.updateData) {
-            tableMeta.updateData(poNo, column, finalValue)
+            tableMeta.updateData(poNo, column, normalizedValue)
         }
 
         // Auto-track JNE: jika kolom noResi & modeDelivery row ini JNE
@@ -88,7 +93,7 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
 
         const promise = updateBillingRecord({
             poNo,
-            [column]: finalValue
+            [column]: normalizedValue
         })
 
         toast.promise(promise, {
@@ -138,8 +143,13 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
             } else {
                 // Fallback update individual jika onMassUpdate tidak aktif
                 const finalValue = type === "number" ? parseFloat(values[0]) : values[0]
-                if (tableMeta?.updateData) tableMeta.updateData(row.original.poNo!, column, finalValue)
-                updateBillingRecord({ poNo: row.original.poNo!, [column]: finalValue })
+                const normalizedValue =
+                    (column === "noInvSap" || column === "plant")
+                        ? normalizeCodeValue(finalValue as string | number | null | undefined)
+                        : finalValue
+
+                if (tableMeta?.updateData) tableMeta.updateData(row.original.poNo!, column, normalizedValue)
+                updateBillingRecord({ poNo: row.original.poNo!, [column]: normalizedValue })
                 setValue(values[0])
             }
         } catch (_err) {

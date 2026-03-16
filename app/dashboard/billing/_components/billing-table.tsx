@@ -41,6 +41,7 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { BillingRecordDisplay } from "@/lib/types"
+import { normalizeCodeValue } from "@/lib/formatters"
 
 export function BillingTable({ data: initialData }: { data: BillingRecordDisplay[] }) {
     const queryClient = useQueryClient();
@@ -322,14 +323,18 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                     if (poNo && newValue !== undefined) {
                         const isNumber = false;
                         const finalValue = isNumber ? parseFloat(newValue) : newValue;
+                        const normalizedValue =
+                            (columnId === "noInvSap" || columnId === "plant")
+                                ? normalizeCodeValue(finalValue as string | number | null | undefined)
+                                : finalValue;
 
-                        poNosToUpdate.set(poNo, finalValue);
-                        updates.push({ poNo, columnId, newValue: finalValue });
+                        poNosToUpdate.set(poNo, normalizedValue);
+                        updates.push({ poNo, columnId, newValue: normalizedValue });
 
                         updatePromises.push(
                             updateBillingRecord({
                                 poNo,
-                                [columnId]: finalValue
+                                [columnId]: normalizedValue
                             })
                         );
                     }
