@@ -8,8 +8,13 @@ import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { replaceUserWarehouseAccess, type WarehouseAccessLevel } from "@/lib/warehouse-access"
 import { syncPermissions } from "@/app/actions/permissions"
+import { replaceUserWarehouseAccess, type WarehouseAccessLevel } from "@/lib/warehouse-access"
+
+type SecurityUserWarehouseAccessInput = {
+    warehouseId: number
+    accessLevel?: WarehouseAccessLevel | null
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,7 +84,7 @@ export async function getSecurityUsers() {
                 },
             },
         },
-        orderBy: [desc(user.createdAt)],
+        orderBy: (fields, operators) => [operators.desc(fields.createdAt)],
     })
 }
 
@@ -90,10 +95,7 @@ export async function createSecurityUser(data: {
     role: string
     department?: string
     jobTitle?: string
-    warehouseAccesses?: Array<{
-        warehouseId: number
-        accessLevel?: WarehouseAccessLevel | null
-    }>
+    warehouseAccesses?: SecurityUserWarehouseAccessInput[]
 }) {
     const session = await getAuthenticatedSession("security", "create")
 
@@ -120,7 +122,6 @@ export async function createSecurityUser(data: {
         )
 
         revalidatePath("/dashboard/security/users")
-        revalidatePath("/dashboard/admin/users")
         return { success: true, userId: result.user.id }
     } catch (error) {
         return {
@@ -145,41 +146,47 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
     )
 
     revalidatePath("/dashboard/security/users")
-    revalidatePath("/dashboard/admin/users")
     return { success: true }
 }
 
-export async function updateSecurityUserAccessSettings(targetUserId: string, data: {
-    role: string
-    warehouseAccesses: Array<{
-        warehouseId: number
-        accessLevel?: WarehouseAccessLevel | null
-    }>
-}) {
+export async function updateSecurityUserAccessSettings(
+    targetUserId: string,
+    data: {
+        role: string
+        warehouseAccesses: SecurityUserWarehouseAccessInput[]
+    }
+) {
     const session = await getAuthenticatedSession("security", "edit")
 
     const [targetUser] = await db.select().from(user).where(eq(user.id, targetUserId))
     if (!targetUser) return { success: false, error: "User not found" }
 
-    await db.transaction(async (tx) => {
-        await tx.update(user).set({
-            role: data.role,
-            updatedAt: new Date(),
-        }).where(eq(user.id, targetUserId))
+    try {
+        await db.transaction(async (tx) => {
+            await tx.update(user).set({
+                role: data.role,
+                updatedAt: new Date(),
+            }).where(eq(user.id, targetUserId))
 
-        await replaceUserWarehouseAccess(tx, targetUserId, data.warehouseAccesses || [])
-    })
+            await replaceUserWarehouseAccess(tx, targetUserId, data.warehouseAccesses || [])
+        })
 
-    await writeAuditLog(
-        session.user.id,
-        "user.access_update",
-        `Updated role and warehouse access for ${targetUser.email}`
-    )
+        await writeAuditLog(
+            session.user.id,
+            "user.access_update",
+            `Updated access settings for ${targetUser.email} (role: ${targetUser.role} -> ${data.role})`
+        )
 
-    revalidatePath("/dashboard/security/users")
-    revalidatePath("/dashboard/admin/users")
-    revalidatePath("/dashboard/account")
-    return { success: true }
+        revalidatePath("/dashboard/security/users")
+        revalidatePath("/dashboard/admin/users")
+        revalidatePath("/dashboard/account")
+        return { success: true }
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update user access settings",
+        }
+    }
 }
 
 export async function updateSecurityUserProfile(targetUserId: string, data: {
@@ -211,7 +218,6 @@ export async function updateSecurityUserProfile(targetUserId: string, data: {
     )
 
     revalidatePath("/dashboard/security/users")
-    revalidatePath("/dashboard/admin/users")
     return { success: true }
 }
 
@@ -233,7 +239,6 @@ export async function banSecurityUser(targetUserId: string, reason: string) {
     )
 
     revalidatePath("/dashboard/security/users")
-    revalidatePath("/dashboard/admin/users")
     return { success: true }
 }
 
@@ -279,7 +284,6 @@ export async function deleteSecurityUser(targetUserId: string) {
         )
 
         revalidatePath("/dashboard/security/users")
-        revalidatePath("/dashboard/admin/users")
         return { success: true }
     } catch (error: unknown) {
         const errorCode = typeof error === "object" && error !== null && "code" in error
