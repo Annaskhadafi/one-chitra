@@ -139,6 +139,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [yearFilter, setYearFilter] = useState<string[]>([])
     const [monthFilter, setMonthFilter] = useState<string[]>([])
+    const [createdByFilter, setCreatedByFilter] = useState<string[]>([])
     const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [rowSelection, setRowSelection] = useState({})
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -176,6 +177,10 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
         return Array.from(new Set(data.map(o => monthLabels[new Date(o.salesDate).getMonth()]))) as string[]
     }, [data])
+    const uniqueCreatedBy = useMemo(
+        () => Array.from(new Set(data.map((o) => o.createdByUser?.name).filter(Boolean))) as string[],
+        [data]
+    )
 
     // Stats calculation based on full data
     const totalOrders = data.length
@@ -309,6 +314,20 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 const order = row.original
                 return (
                     <div className="flex justify-start gap-1">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                            title={order.poDocument ? "Lihat Customer PO" : "Customer PO belum tersedia"}
+                            disabled={!order.poDocument}
+                            onClick={() => {
+                                if (!order.poDocument) return
+                                setPoPreviewOrder(order)
+                                setIsPoPreviewOpen(true)
+                            }}
+                        >
+                            <FileText className="h-4 w-4" />
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -598,18 +617,44 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         },
     ], [mounted, canEdit, canView, canDelete, handleDelete, handleUpdateStatus])
 
+    const filteredData = useMemo(() => {
+        const term = globalFilter.trim().toLowerCase()
+        const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+
+        return data.filter((order) => {
+            const orderYear = new Date(order.salesDate).getFullYear().toString()
+            const orderMonth = monthLabels[new Date(order.salesDate).getMonth()]
+
+            const matchesSearch = term.length === 0 || (
+                order.invoiceNumber?.toLowerCase().includes(term) ||
+                order.customerPo?.toLowerCase().includes(term) ||
+                order.customer?.name.toLowerCase().includes(term) ||
+                order.salesPerson?.name?.toLowerCase().includes(term) ||
+                order.createdByUser?.name?.toLowerCase().includes(term) ||
+                order.status.toLowerCase().includes(term)
+            )
+
+            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
+            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
+            const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
+            const matchesYear = yearFilter.length === 0 || yearFilter.includes(orderYear)
+            const matchesMonth = monthFilter.length === 0 || monthFilter.includes(orderMonth)
+            const matchesCreatedBy = createdByFilter.length === 0 || createdByFilter.includes(order.createdByUser?.name || "")
+
+            return matchesSearch && matchesStatus && matchesCustomer && matchesCategory && matchesYear && matchesMonth && matchesCreatedBy
+        })
+    }, [data, globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
+
     const table = useReactTable({
-        data,
+        data: filteredData,
         columns,
         state: {
             sorting,
-            globalFilter,
             rowSelection,
             columnVisibility,
             pagination,
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
         onRowSelectionChange: setRowSelection,
         onColumnVisibilityChange: setColumnVisibility,
         onPaginationChange: setPagination,
@@ -617,28 +662,6 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
-        globalFilterFn: (row, columnId, filterValue) => {
-            const term = filterValue.toLowerCase()
-            const order = row.original
-            const orderYear = new Date(order.salesDate).getFullYear().toString()
-            const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
-            const orderMonth = monthLabels[new Date(order.salesDate).getMonth()]
-
-            const matchesSearch =
-                order.invoiceNumber?.toLowerCase().includes(term) ||
-                order.customerPo?.toLowerCase().includes(term) ||
-                order.customer?.name.toLowerCase().includes(term) ||
-                order.salesPerson?.name?.toLowerCase().includes(term) ||
-                order.createdByUser?.name?.toLowerCase().includes(term) ||
-                order.status.toLowerCase().includes(term)
-
-            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
-            const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
-            const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
-            const matchesYear = yearFilter.length === 0 || yearFilter.includes(orderYear)
-            const matchesMonth = monthFilter.length === 0 || monthFilter.includes(orderMonth)
-            return matchesSearch && matchesStatus && matchesCustomer && matchesCategory && matchesYear && matchesMonth
-        },
     })
 
     const rows = table.getRowModel().rows
@@ -711,17 +734,9 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         link.click()
         document.body.removeChild(link)
     }
-
-
-
-    // Effect to trigger search when faceted filter changes
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, globalFilter, table])
-
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-    }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter])
+    }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
 
     return (
         <div className="space-y-6">
@@ -958,6 +973,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 onFilterChange={setMonthFilter}
                             />
                         )}
+                        {uniqueCreatedBy.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Created By"
+                                options={uniqueCreatedBy}
+                                selectedValues={createdByFilter}
+                                onFilterChange={setCreatedByFilter}
+                            />
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm" className="h-[36px] whitespace-nowrap">
@@ -1049,6 +1072,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 options={uniqueMonths}
                                 selectedValues={monthFilter}
                                 onFilterChange={setMonthFilter}
+                            />
+                        )}
+                        {uniqueCreatedBy.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Created By"
+                                options={uniqueCreatedBy}
+                                selectedValues={createdByFilter}
+                                onFilterChange={setCreatedByFilter}
                             />
                         )}
                         <Button variant="outline" size="icon" onClick={() => refetch()}>
