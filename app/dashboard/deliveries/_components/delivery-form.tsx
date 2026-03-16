@@ -751,8 +751,12 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
                 }
                 toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
-                router.refresh()
-                router.push("/dashboard/deliveries")
+                const listUrl = `/dashboard/deliveries?refresh=${Date.now()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.replace(listUrl)
             } else {
                 const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
                 const serverDetailErrors: string[] = []

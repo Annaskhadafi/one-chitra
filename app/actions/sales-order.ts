@@ -3,7 +3,7 @@
 import { db } from "@/db"
 import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers, user } from "@/db/schema"
 import { eq, desc, inArray, sql, and, isNotNull, like } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
@@ -86,6 +86,7 @@ async function hasSalesPersonColumn() {
 }
 
 export async function getSalesOrders() {
+    noStore()
     const hasPicColumn = await hasSalesPersonColumn()
 
     // Fetch orders with customer and createdByUser first
@@ -138,6 +139,7 @@ export async function getSalesOrderCategories() {
 
 
 export async function getSalesOrder(id: number) {
+    noStore()
     const hasPicColumn = await hasSalesPersonColumn()
 
     // Fetch order with customer first
@@ -319,6 +321,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
@@ -511,6 +514,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -527,6 +531,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
 }
 
 export async function getSalesOrderPicUsers() {
+    noStore()
     await getAuthenticatedSession()
     return await db
         .select({ id: user.id, name: user.name, email: user.email })

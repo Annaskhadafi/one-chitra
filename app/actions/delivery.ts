@@ -3,7 +3,7 @@
 import { db } from "@/db"
 import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
 import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
 import { saveCustomerAddress } from "./customer"
 import { deliverySchema } from "@/lib/schemas"
@@ -48,6 +48,7 @@ const isSameDeliveryItemComposition = (
 }
 
 export async function getDeliveries() {
+    noStore()
     return await db.query.deliveries.findMany({
         with: {
             salesOrder: {
@@ -70,6 +71,7 @@ export async function getDeliveries() {
 }
 
 export async function getDeliveryItemsFlat() {
+    noStore()
     const allDeliveries = await db.query.deliveries.findMany({
         with: {
             salesOrder: {
@@ -148,6 +150,7 @@ export async function getDelivery(id: number) {
 }
 
 export async function getSalesOrdersForDelivery() {
+    noStore()
     // Get confirmed sales orders with their items and already-delivered quantities
     const orders = await db.query.salesOrders.findMany({
         where: eq(salesOrders.status, "confirmed"),
@@ -485,6 +488,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/deliveries/create")
             } catch (_e) { }
 
             console.log("[CREATE DELIVERY] Transaction completed successfully")
@@ -742,6 +746,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/deliveries/create")
             } catch (_e) { }
             return { success: true }
         })

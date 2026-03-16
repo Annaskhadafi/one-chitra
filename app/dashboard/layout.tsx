@@ -154,6 +154,12 @@ export default async function DashboardLayout({
     if (url === "/dashboard/approvals") {
       return true
     }
+    if (url === "/dashboard/stock-opname-aktual") {
+      return (
+        permissions.includes("stock-opname-aktual:view")
+        || permissions.includes("stock-opname:view")
+      )
+    }
     if (!resource) {
       return true
     }
@@ -232,7 +238,7 @@ export default async function DashboardLayout({
           id: "inventory-control-stock-opname-aktual",
           title: "Stock Opname Aktual",
           url: "/dashboard/stock-opname-aktual",
-          resource: "stock-opname",
+          resource: "stock-opname-aktual",
         }
 
         if (stockOpnameIndex >= 0) {

@@ -459,8 +459,12 @@ export function SalesOrderForm({
 
             if (result.success) {
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
-                router.refresh()
-                router.push("/dashboard/sales-orders")
+                const listUrl = `/dashboard/sales-orders?refresh=${Date.now()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.replace(listUrl)
             } else {
                 const serverDetailErrors: string[] = []
                 const fieldErrors =

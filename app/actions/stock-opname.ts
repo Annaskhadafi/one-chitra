@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements, products, warehouses } from "@/db/schema"
-import { eq, and, asc, desc, inArray, sql } from "drizzle-orm"
+import { eq, and, desc, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
@@ -64,9 +64,31 @@ const normalizeSloc = (value: string | null | undefined) => {
 const normalizeMaterialNumber = (value: string | null | undefined) =>
     (value || "").trim().toUpperCase()
 
+export type OpnameSourceType = "sap" | "actual"
+type PermissionAction = "view" | "create" | "edit" | "delete"
+
+const isPermissionDeniedError = (error: unknown) =>
+    error instanceof Error && error.message.toLowerCase().includes("permission denied")
+
+const getOpnameAuthSession = async (sourceType: OpnameSourceType, action: PermissionAction) => {
+    if (sourceType === "actual") {
+        try {
+            return await getAuthenticatedSession("stock-opname-aktual", action)
+        } catch (error) {
+            if (isPermissionDeniedError(error)) {
+                // Backward compatibility: old roles may still have stock-opname permission only.
+                return await getAuthenticatedSession("stock-opname", action)
+            }
+            throw error
+        }
+    }
+    return await getAuthenticatedSession("stock-opname", action)
+}
+
 // ─── Queries ───────────────────────────────────────────────────────────────
 
 export async function getStockOpnameSessions(sourceType: OpnameSourceType = "sap") {
+    await getOpnameAuthSession(sourceType, "view")
     return await db.query.stockOpnameSessions.findMany({
         where: eq(stockOpnameSessions.sourceType, sourceType),
         with: {
@@ -81,8 +103,6 @@ export async function getStockOpnameSessions(sourceType: OpnameSourceType = "sap
     })
 }
 
-export type OpnameSourceType = "sap" | "actual"
-
 const normalizeStringArray = (value: unknown): string[] => {
     if (!Array.isArray(value)) return []
     return value
@@ -91,6 +111,8 @@ const normalizeStringArray = (value: unknown): string[] => {
 }
 
 export async function getStockOpnameSession(sessionId: number, sourceType: OpnameSourceType = "sap") {
+    await getOpnameAuthSession(sourceType, "view")
+
     const session = await db.query.stockOpnameSessions.findFirst({
         where: and(
             eq(stockOpnameSessions.id, sessionId),
@@ -285,9 +307,6 @@ export async function updateOpnameItemCount(
     data: z.infer<typeof updateOpnameCountSchema>
 ) {
     try {
-        const session = await getAuthenticatedSession("stock-opname", "edit")
-        const userId = session.user.id
-
         // Fetch item to verify it exists and session is still open
         const item = await db.query.stockOpnameItems.findFirst({
             where: eq(stockOpnameItems.id, data.itemId),
@@ -297,6 +316,9 @@ export async function updateOpnameItemCount(
         if (!item) return { success: false, error: "Item tidak ditemukan" }
         if (item.session?.status !== "open")
             return { success: false, error: "Sesi sudah ditutup, tidak bisa diubah" }
+
+        const authSession = await getOpnameAuthSession(item.session?.sourceType ?? "sap", "edit")
+        const userId = authSession.user.id
 
         const variance = data.countedQty - item.systemQty
 
@@ -334,17 +356,17 @@ export async function updateStockOpnameDocument(
     }
 ) {
     try {
-        const session = await getAuthenticatedSession("stock-opname", "edit")
-        const userId = session.user.id
-
         const opnameSession = await db.query.stockOpnameSessions.findFirst({
             where: eq(stockOpnameSessions.id, sessionId),
-            columns: { id: true, name: true },
+            columns: { id: true, name: true, sourceType: true },
         })
 
         if (!opnameSession) {
             return { success: false, error: "Sesi tidak ditemukan" }
         }
+
+        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const userId = authSession.user.id
 
         const trimmedUrl = data.url?.trim()
         if (!trimmedUrl) {
@@ -398,7 +420,7 @@ const createStockOpnameActualSessionSchema = createOpnameSessionSchema.extend({
 export type CreateStockOpnameActualSessionInput = z.infer<typeof createStockOpnameActualSessionSchema>
 
 export async function getStockOpnameActualSetupData() {
-    await getAuthenticatedSession("stock-opname", "create")
+    await getOpnameAuthSession("actual", "create")
 
     const [categoryRows, users] = await Promise.all([
         db
@@ -466,7 +488,7 @@ export async function createStockOpnameActualSession(
         }
 
         const validatedData = validation.data
-        const session = await getAuthenticatedSession("stock-opname", "create")
+        const session = await getOpnameAuthSession("actual", "create")
         const userId = session.user.id
 
         const selectedCategoriesRaw = normalizeStringArray(validatedData.selectedCategories)
@@ -798,9 +820,6 @@ export async function closeStockOpnameSession(
     expectedSourceType?: OpnameSourceType
 ) {
     try {
-        const authSession = await getAuthenticatedSession("stock-opname", "edit")
-        const userId = authSession.user.id
-
         const opnameSession = await db.query.stockOpnameSessions.findFirst({
             where: eq(stockOpnameSessions.id, sessionId),
             with: {
@@ -813,6 +832,9 @@ export async function closeStockOpnameSession(
             return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
         }
         if (opnameSession.status !== "open") return { success: false, error: "Sesi sudah ditutup" }
+
+        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const userId = authSession.user.id
 
         await db.transaction(async (tx) => {
             if (applyAdjustments) {
@@ -888,8 +910,6 @@ export async function closeStockOpnameSession(
 
 export async function cancelStockOpnameSession(sessionId: number, expectedSourceType?: OpnameSourceType) {
     try {
-        await getAuthenticatedSession("stock-opname", "edit")
-
         const opnameSession = await db.query.stockOpnameSessions.findFirst({
             where: eq(stockOpnameSessions.id, sessionId),
         })
@@ -900,6 +920,8 @@ export async function cancelStockOpnameSession(sessionId: number, expectedSource
         }
         if (opnameSession.status === "closed")
             return { success: false, error: "Sesi sudah ditutup, tidak bisa dibatalkan" }
+
+        await getOpnameAuthSession(opnameSession.sourceType, "edit")
 
         await db
             .update(stockOpnameSessions)
@@ -919,8 +941,6 @@ export async function cancelStockOpnameSession(sessionId: number, expectedSource
 
 export async function deleteStockOpnameSession(sessionId: number, expectedSourceType?: OpnameSourceType) {
     try {
-        await getAuthenticatedSession("stock-opname", "delete")
-
         const opnameSession = await db.query.stockOpnameSessions.findFirst({
             where: eq(stockOpnameSessions.id, sessionId),
         })
@@ -929,6 +949,8 @@ export async function deleteStockOpnameSession(sessionId: number, expectedSource
         if (expectedSourceType && opnameSession.sourceType !== expectedSourceType) {
             return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
         }
+
+        await getOpnameAuthSession(opnameSession.sourceType, "delete")
 
         await db.transaction(async (tx) => {
             // Delete related items and signatures (cascade should handle this, but explicit is safer)
@@ -952,7 +974,7 @@ export async function deleteStockOpnameSession(sessionId: number, expectedSource
 
 export async function bulkDeleteStockOpnameSessions(sessionIds: number[], expectedSourceType?: OpnameSourceType) {
     try {
-        await getAuthenticatedSession("stock-opname", "delete")
+        await getOpnameAuthSession(expectedSourceType ?? "sap", "delete")
 
         if (!sessionIds || sessionIds.length === 0) {
             return { success: false, error: "Tidak ada sesi yang dipilih" }
@@ -995,9 +1017,6 @@ export async function bulkUpdateOpnameCounts(
     counts: Array<{ productId: number; countedQty: number; notes?: string }>
 ) {
     try {
-        const authSession = await getAuthenticatedSession("stock-opname", "edit")
-        const userId = authSession.user.id
-
         const opnameSession = await db.query.stockOpnameSessions.findFirst({
             where: eq(stockOpnameSessions.id, sessionId),
             with: { items: true },
@@ -1005,6 +1024,9 @@ export async function bulkUpdateOpnameCounts(
 
         if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
         if (opnameSession.status !== "open") return { success: false, error: "Sesi sudah ditutup" }
+
+        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const userId = authSession.user.id
 
         const itemMap = new Map(opnameSession.items.map((i) => [i.productId, i]))
 
@@ -1049,7 +1071,7 @@ export async function getOpnamePdfReportData(
     sourceType: OpnameSourceType = "sap"
 ): Promise<{ success: boolean; data?: OpnamePdfReportData; error?: string }> {
     try {
-        await getAuthenticatedSession("stock-opname", "view")
+        await getOpnameAuthSession(sourceType, "view")
 
         // Fetch session with all required relations
         const session = await db.query.stockOpnameSessions.findFirst({

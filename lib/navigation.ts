@@ -159,7 +159,7 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Stock Opname Aktual",
                         url: "/dashboard/stock-opname-aktual",
-                        resource: "stock-opname",
+                        resource: "stock-opname-aktual",
                     },
                     {
                         title: "Stock Movement Log",

@@ -62,6 +62,7 @@ export async function syncPermissions() {
         // Ensure newly introduced settlement permission is always present even on older navbar configs.
         resources.add("cost-settlements")
         resources.add("evhs")
+        resources.add("stock-opname-aktual")
 
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav

@@ -7,6 +7,8 @@ import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
+export const dynamic = "force-dynamic"
+
 export default async function SalesOrdersPage() {
     const orders = await getSalesOrders()
 
