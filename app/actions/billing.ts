@@ -473,6 +473,40 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
             updateData.plant = normalizeCodeValue(updateData.plant);
         }
 
+        const dateFields: Array<keyof BillingRecordUpdate> = [
+            'datePo',
+            'dateInvoice',
+            'tglDoFaktur',
+            'dateSendInvoice',
+            'receiverDate',
+            'recvDateApproved'
+        ];
+
+        for (const field of dateFields) {
+            const rawValue = updateData[field];
+            if (rawValue === undefined) continue;
+
+            if (rawValue === null || rawValue === '') {
+                updateData[field] = null;
+                continue;
+            }
+
+            if (rawValue instanceof Date) {
+                if (Number.isNaN(rawValue.getTime())) {
+                    updateData[field] = null;
+                }
+                continue;
+            }
+
+            if (typeof rawValue === 'string') {
+                const parsedDate = new Date(rawValue);
+                updateData[field] = Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+                continue;
+            }
+
+            updateData[field] = null;
+        }
+
         // Auto calculate year and month if dateInvoice is passed
         if (updateData.dateInvoice) {
             const d = new Date(updateData.dateInvoice);
