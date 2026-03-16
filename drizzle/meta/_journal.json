@@ -239,6 +239,13 @@
       "when": 1773458326166,
       "tag": "0033_huge_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1773600000000,
+      "tag": "0034_stock_opname_actual_notifications",
+      "breakpoints": true
     }
   ]
 }

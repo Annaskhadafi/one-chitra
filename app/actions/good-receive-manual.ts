@@ -1,11 +1,12 @@
 "use server"
 
 import { db } from "@/db"
-import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products } from "@/db/schema"
+import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses } from "@/db/schema"
 import { revalidatePath } from "next/cache"
-import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
+import { eq, and, or, asc, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { sendEmail } from "@/lib/email"
 
 export type ManualGoodReceivePoOption = {
     poNumber: string
@@ -47,6 +48,148 @@ function buildLatestPoItemMap(rows: Me2lRow[]) {
 function sanitizeOpenQty(orderQty: number | null, deliveredQty: number | null) {
     const openQty = Number(orderQty || 0) - Number(deliveredQty || 0)
     return openQty > 0 ? openQty : 0
+}
+
+const normalizeStringArray = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return []
+    return value
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean)
+}
+
+const escapeHtml = (value: string) =>
+    value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+
+async function getNotificationRecipientEmails(roleNames: string[], userIds: string[]) {
+    const normalizedRoleSet = new Set(
+        roleNames
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean)
+    )
+    const userIdSet = new Set(userIds.map((entry) => entry.trim()).filter(Boolean))
+
+    const users = await db.query.user.findMany({
+        columns: {
+            id: true,
+            email: true,
+            role: true,
+        },
+    })
+
+    const recipients = users
+        .filter((entry) => {
+            const role = (entry.role ?? "").trim().toLowerCase()
+            return userIdSet.has(entry.id) || normalizedRoleSet.has(role)
+        })
+        .map((entry) => entry.email?.trim() ?? "")
+        .filter(Boolean)
+
+    return Array.from(new Set(recipients))
+}
+
+function buildGoodReceiveManualNotificationHtml(params: {
+    poNumber: string
+    supplier: string
+    receiveDate: string
+    deliveryType: "Partial" | "Complete"
+    warehouseLabel: string
+    referenceDocument?: string | null
+    detailUrl: string
+    items: Array<{
+        poItem: number
+        materialNumber: string
+        materialDescription: string
+        quantity: number
+    }>
+}) {
+    const rowsHtml = params.items.length > 0
+        ? params.items
+            .map((item, index) => `
+                <tr>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${index + 1}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${item.poItem}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(item.materialNumber)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(item.materialDescription)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${item.quantity.toLocaleString("id-ID")}</td>
+                </tr>
+            `)
+            .join("")
+        : `
+            <tr>
+                <td colspan="5" style="padding:10px;border:1px solid #e5e7eb;text-align:center;color:#6b7280;">
+                    Tidak ada item quantity > 0.
+                </td>
+            </tr>
+        `
+
+    return `
+        <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:20px;">
+            <div style="max-width:900px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+                <div style="padding:20px;background:#1d4ed8;color:#ffffff;">
+                    <h2 style="margin:0 0 6px 0;">Notifikasi Good Receive Manual</h2>
+                    <p style="margin:0;font-size:13px;opacity:.95;">
+                        Barang sudah datang dan sudah diinput ke sistem stock manual.
+                    </p>
+                </div>
+                <div style="padding:20px;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
+                        <tr>
+                            <td style="padding:6px 0;width:170px;color:#6b7280;">PO Number</td>
+                            <td style="padding:6px 0;">: <strong>${escapeHtml(params.poNumber)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Supplier</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.supplier)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Tanggal Receive</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.receiveDate)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Delivery Type</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.deliveryType)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Warehouse</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.warehouseLabel)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Ref. Document</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.referenceDocument?.trim() || "-")}</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="margin:0 0 10px 0;font-size:14px;color:#111827;">Detail Item Diterima</h3>
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead>
+                            <tr style="background:#f1f5f9;">
+                                <th style="padding:8px;border:1px solid #e5e7eb;">No</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">PO Item</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Material</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Deskripsi</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Diterima</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+
+                    <p style="margin:16px 0 0 0;padding:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:12px;">
+                        Mohon untuk tim <strong>Procurement</strong> segera melakukan proses <strong>GR SAP</strong>.
+                    </p>
+                    <p style="margin:10px 0 0 0;font-size:12px;color:#374151;">
+                        Buka modul: <a href="${escapeHtml(params.detailUrl)}" style="color:#1d4ed8;">${escapeHtml(params.detailUrl)}</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    `
 }
 
 export async function getManualGoodReceivePoOptions() {
@@ -199,12 +342,46 @@ export async function getManualGoodReceivePoOptions() {
     }
 }
 
+export async function getGoodReceiveManualNotificationTargets() {
+    await getAuthenticatedSession("good-receive-manual", "create")
+
+    const users = await db.query.user.findMany({
+        columns: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+        },
+        orderBy: (fields, { asc }) => [asc(fields.name), asc(fields.email)],
+    })
+
+    const roles = Array.from(
+        new Set(
+            users
+                .map((entry) => entry.role?.trim() ?? "")
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b))
+
+    return {
+        roles,
+        users: users.map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            email: entry.email,
+            role: entry.role,
+        })),
+    }
+}
+
 export type CreateGoodReceiveManualInput = {
     poNumber: string
     warehouseId: number
     receiveDate: Date
     deliveryType: "Partial" | "Complete"
     referenceDocument?: string
+    notifyRoles?: string[]
+    notifyUserIds?: string[]
     items: {
         poItem: number
         materialNumber: string
@@ -215,12 +392,29 @@ export type CreateGoodReceiveManualInput = {
     }[]
 }
 
+type ManualGoodReceiveNotificationPayload = {
+    poNumber: string
+    supplier: string
+    receiveDate: string
+    deliveryType: "Partial" | "Complete"
+    referenceDocument: string | null | undefined
+    warehouseId: number
+    items: Array<{
+        poItem: number
+        materialNumber: string
+        materialDescription: string
+        quantity: number
+    }>
+}
+
 export async function createGoodReceiveManual(input: CreateGoodReceiveManualInput) {
     try {
         const session = await getAuthenticatedSession('good-receive-manual', 'create')
         const userId = session.user.id
+        const notifyRoles = normalizeStringArray(input.notifyRoles)
+        const notifyUserIds = normalizeStringArray(input.notifyUserIds)
 
-        await db.transaction(async (tx) => {
+        const notificationPayload = await db.transaction<ManualGoodReceiveNotificationPayload>(async (tx) => {
             const poNumber = input.poNumber.trim()
             if (!poNumber) throw new Error("PO Number is required")
             if (!input.warehouseId || input.warehouseId <= 0) {
@@ -290,6 +484,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     ...item,
                     poItem: item.poItem,
                     vendorName: sapLine.vendorName?.trim() || "Unknown Vendor",
+                    materialDescription: sapLine.shortText?.trim() || "-",
                 }
             })
 
@@ -307,6 +502,23 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 deliveryType: input.deliveryType,
                 referenceDocument: input.referenceDocument,
             }).returning()
+
+            const payload: ManualGoodReceiveNotificationPayload = {
+                poNumber,
+                supplier: vendorName,
+                receiveDate: input.receiveDate.toISOString(),
+                deliveryType: input.deliveryType,
+                referenceDocument: input.referenceDocument,
+                warehouseId: input.warehouseId,
+                items: resolvedItems
+                    .filter((item) => item.quantity > 0)
+                    .map((item) => ({
+                        poItem: item.poItem,
+                        materialNumber: item.materialNumber,
+                        materialDescription: item.materialDescription,
+                        quantity: item.quantity,
+                    })),
+            }
 
             // 2. Create Items and Update Stock
             for (const item of resolvedItems) {
@@ -376,13 +588,75 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         eq(me2lPurchDocsSap.item, item.poItem)
                     ))
             }
+
+            return payload
         })
 
         revalidatePath("/dashboard/good-receive-manual")
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/stock-movements")
 
-        return { success: true }
+        let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
+        if (notifyRoles.length > 0 || notifyUserIds.length > 0) {
+            try {
+                const payload = notificationPayload
+                const [recipients, warehouse] = await Promise.all([
+                    getNotificationRecipientEmails(notifyRoles, notifyUserIds),
+                    db.query.warehouses.findFirst({
+                        where: eq(warehouses.id, payload.warehouseId),
+                        columns: {
+                            sloc: true,
+                            description: true,
+                        },
+                    }),
+                ])
+
+                if (recipients.length > 0) {
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
+                    const detailPath = "/dashboard/good-receive-manual"
+                    const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
+                    const receiveDateText = new Date(payload.receiveDate).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                    })
+                    const warehouseLabel = warehouse?.sloc
+                        ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
+                        : "-"
+
+                    const html = buildGoodReceiveManualNotificationHtml({
+                        poNumber: payload.poNumber,
+                        supplier: payload.supplier,
+                        receiveDate: receiveDateText,
+                        deliveryType: payload.deliveryType,
+                        warehouseLabel,
+                        referenceDocument: payload.referenceDocument,
+                        detailUrl,
+                        items: payload.items,
+                    })
+
+                    const emailResult = await sendEmail({
+                        to: recipients,
+                        subject: `[GR Manual] Barang datang untuk PO ${payload.poNumber}`,
+                        html,
+                    })
+
+                    if (!emailResult.success) {
+                        console.error("Failed to send GR manual notification:", emailResult.error)
+                        notificationResult = { sent: false, reason: emailResult.error || "Gagal mengirim email", recipientCount: recipients.length }
+                    } else {
+                        notificationResult = { sent: true, recipientCount: recipients.length }
+                    }
+                } else {
+                    notificationResult = { sent: false, reason: "Tidak ada penerima notifikasi yang cocok", recipientCount: 0 }
+                }
+            } catch (notificationError) {
+                console.error("GR manual notification error:", notificationError)
+                notificationResult = { sent: false, reason: "Terjadi error saat mengirim notifikasi email" }
+            }
+        }
+
+        return { success: true, notification: notificationResult }
     } catch (error) {
         console.error("Error creating manual good receive:", error)
         return { success: false, error: "Failed to create good receive record" }

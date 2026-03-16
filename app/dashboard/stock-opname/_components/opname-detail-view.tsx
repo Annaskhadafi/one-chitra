@@ -40,15 +40,22 @@ import {
     closeStockOpnameSession,
     cancelStockOpnameSession,
     updateStockOpnameDocument,
+    type OpnameSourceType,
 } from "@/app/actions/stock-opname"
 import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
 
 interface OpnameDetailViewProps {
     session: StockOpnameSession
+    basePath?: string
+    sourceType?: OpnameSourceType
 }
 
-export function OpnameDetailView({ session }: OpnameDetailViewProps) {
+export function OpnameDetailView({
+    session,
+    basePath = "/dashboard/stock-opname",
+    sourceType = "sap",
+}: OpnameDetailViewProps) {
     const router = useRouter()
     const isOpen = session.status === "open"
 
@@ -82,7 +89,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         }
 
         // Open PDF in new window
-        window.open(`/dashboard/stock-opname/${session.id}/pdf?mode=${mode}`, '_blank')
+        window.open(`${basePath}/${session.id}/pdf?mode=${mode}`, '_blank')
     }
 
     async function handleUploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
@@ -173,11 +180,17 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
 
     async function handleClose() {
         setClosing(true)
-        const result = await closeStockOpnameSession(session.id, applyAdjustments)
+        const result = await closeStockOpnameSession(session.id, applyAdjustments, sourceType)
         setClosing(false)
         if (result.success) {
             toast.success("Sesi opname berhasil ditutup")
-            router.push("/dashboard/stock-opname")
+            if (sourceType === "actual" && result.notification && !result.notification.sent) {
+                toast.warning(`Email notifikasi belum terkirim: ${result.notification.reason || "cek konfigurasi SMTP / penerima"}`)
+            }
+            if (sourceType === "actual" && result.notification?.sent) {
+                toast.success(`Email notifikasi terkirim ke ${result.notification.recipientCount ?? 0} penerima`)
+            }
+            router.push(basePath)
             router.refresh()
         } else {
             toast.error(result.error ?? "Gagal menutup sesi")
@@ -185,10 +198,10 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     }
 
     async function handleCancel() {
-        const result = await cancelStockOpnameSession(session.id)
+        const result = await cancelStockOpnameSession(session.id, sourceType)
         if (result.success) {
             toast.success("Sesi dibatalkan")
-            router.push("/dashboard/stock-opname")
+            router.push(basePath)
             router.refresh()
         } else {
             toast.error(result.error ?? "Gagal membatalkan")
@@ -275,7 +288,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                         <Button 
                             variant="outline" 
                             size="sm" 
-                            onClick={() => window.open(`/dashboard/stock-opname/${session.id}/print-checklist`, '_blank')}
+                            onClick={() => window.open(`${basePath}/${session.id}/print-checklist`, '_blank')}
                         >
                             <FileText className="h-4 w-4 mr-1" />
                             Cetak Checklist
@@ -444,7 +457,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                             <TableHead>Material No.</TableHead>
                             <TableHead>Deskripsi</TableHead>
                             <TableHead>Kategori</TableHead>
-                            <TableHead className="text-right">Qty SAP</TableHead>
+                            <TableHead className="text-right">{sourceType === "actual" ? "Qty Aktual Sistem" : "Qty SAP"}</TableHead>
                             <TableHead className="text-right">Qty Fisik</TableHead>
                             <TableHead className="text-right">Selisih</TableHead>
                             <TableHead>Catatan</TableHead>

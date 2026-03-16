@@ -2,12 +2,13 @@
 
 import { db } from "@/db"
 import { stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, stockLevels, stockMovements, products, warehouses } from "@/db/schema"
-import { eq, and, desc, inArray, sql } from "drizzle-orm"
+import { eq, and, asc, desc, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
 import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
 import type { OpnamePdfReportData } from "@/lib/types"
+import { sendEmail } from "@/lib/email"
 
 type SapStockRow = {
     material_no: string | null
@@ -65,8 +66,9 @@ const normalizeMaterialNumber = (value: string | null | undefined) =>
 
 // ─── Queries ───────────────────────────────────────────────────────────────
 
-export async function getStockOpnameSessions() {
+export async function getStockOpnameSessions(sourceType: OpnameSourceType = "sap") {
     return await db.query.stockOpnameSessions.findMany({
+        where: eq(stockOpnameSessions.sourceType, sourceType),
         with: {
             warehouse: true,
             createdBy: true,
@@ -79,9 +81,21 @@ export async function getStockOpnameSessions() {
     })
 }
 
-export async function getStockOpnameSession(sessionId: number) {
+export type OpnameSourceType = "sap" | "actual"
+
+const normalizeStringArray = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return []
+    return value
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean)
+}
+
+export async function getStockOpnameSession(sessionId: number, sourceType: OpnameSourceType = "sap") {
     const session = await db.query.stockOpnameSessions.findFirst({
-        where: eq(stockOpnameSessions.id, sessionId),
+        where: and(
+            eq(stockOpnameSessions.id, sessionId),
+            eq(stockOpnameSessions.sourceType, sourceType)
+        ),
         with: {
             warehouse: true,
             createdBy: true,
@@ -138,6 +152,10 @@ export async function createStockOpnameSession(
                     name: validatedData.name,
                     warehouseId: validatedData.warehouseId,
                     notes: validatedData.notes,
+                    sourceType: "sap",
+                    selectedCategories: [],
+                    notifyRoles: [],
+                    notifyUserIds: [],
                     opnameDate: validatedData.opnameDate,
                     opnameTime: validatedData.opnameTime,
                     location: validatedData.location,
@@ -295,6 +313,7 @@ export async function updateOpnameItemCount(
             .where(eq(stockOpnameItems.id, data.itemId))
 
         revalidatePath(`/dashboard/stock-opname/${item.sessionId}`)
+        revalidatePath(`/dashboard/stock-opname-aktual/${item.sessionId}`)
         return { success: true }
     } catch (error) {
         console.error("Update opname item error:", error)
@@ -358,8 +377,11 @@ export async function updateStockOpnameDocument(
             .where(eq(stockOpnameSessions.id, sessionId))
 
         revalidatePath("/dashboard/stock-opname")
+        revalidatePath("/dashboard/stock-opname-aktual")
         revalidatePath(`/dashboard/stock-opname/${sessionId}`)
+        revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}`)
         revalidatePath(`/dashboard/stock-opname/${sessionId}/print-checklist`)
+        revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}/print-checklist`)
         return { success: true }
     } catch (error) {
         console.error("Update opname document error:", error)
@@ -367,11 +389,413 @@ export async function updateStockOpnameDocument(
     }
 }
 
+const createStockOpnameActualSessionSchema = createOpnameSessionSchema.extend({
+    selectedCategories: z.array(z.string().min(1, "Kategori tidak valid")).min(1, "Pilih minimal 1 kategori produk"),
+    notifyRoles: z.array(z.string()).optional().default([]),
+    notifyUserIds: z.array(z.string()).optional().default([]),
+})
+
+export type CreateStockOpnameActualSessionInput = z.infer<typeof createStockOpnameActualSessionSchema>
+
+export async function getStockOpnameActualSetupData() {
+    await getAuthenticatedSession("stock-opname", "create")
+
+    const [categoryRows, users] = await Promise.all([
+        db
+            .selectDistinct({ category: products.category })
+            .from(products)
+            .orderBy(products.category),
+        db.query.user.findMany({
+            columns: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+            },
+            orderBy: (fields, { asc }) => [asc(fields.name), asc(fields.email)],
+        }),
+    ])
+
+    const categories = categoryRows
+        .map((row) => row.category?.trim() ?? "")
+        .filter(Boolean)
+
+    const categoryMap = new Map<string, string>()
+    for (const category of categories) {
+        const normalized = category.toLowerCase()
+        if (!categoryMap.has(normalized)) {
+            categoryMap.set(normalized, category)
+        }
+    }
+
+    const normalizedCategories = Array.from(categoryMap.values()).sort((a, b) => a.localeCompare(b))
+
+    const roleOptions = Array.from(
+        new Set(
+            users
+                .map((entry) => entry.role?.trim() ?? "")
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b))
+
+    return {
+        categories: normalizedCategories,
+        roles: roleOptions,
+        users: users.map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            email: entry.email,
+            role: entry.role,
+        })),
+    }
+}
+
+/**
+ * Create Stock Opname Aktual session with system qty from stock_levels
+ * (not SAP snapshot), filtered by selected product categories.
+ */
+export async function createStockOpnameActualSession(
+    data: CreateStockOpnameActualSessionInput
+) {
+    try {
+        const validation = createStockOpnameActualSessionSchema.safeParse(data)
+
+        if (!validation.success) {
+            const firstError = validation.error.issues?.[0]
+            return { success: false, error: firstError?.message || "Validation failed" }
+        }
+
+        const validatedData = validation.data
+        const session = await getAuthenticatedSession("stock-opname", "create")
+        const userId = session.user.id
+
+        const selectedCategoriesRaw = normalizeStringArray(validatedData.selectedCategories)
+        const selectedCategoryMap = new Map<string, string>()
+        for (const category of selectedCategoriesRaw) {
+            const normalized = category.trim().toLowerCase()
+            if (!normalized || selectedCategoryMap.has(normalized)) continue
+            selectedCategoryMap.set(normalized, category.trim())
+        }
+        const selectedCategorySet = new Set(selectedCategoryMap.keys())
+        const selectedCategories = Array.from(selectedCategoryMap.values())
+        const notifyRoles = normalizeStringArray(validatedData.notifyRoles)
+        const notifyUserIds = normalizeStringArray(validatedData.notifyUserIds)
+
+        const result = await db.transaction(async (tx) => {
+            const [newSession] = await tx
+                .insert(stockOpnameSessions)
+                .values({
+                    name: validatedData.name,
+                    warehouseId: validatedData.warehouseId,
+                    notes: validatedData.notes,
+                    sourceType: "actual",
+                    selectedCategories,
+                    notifyRoles,
+                    notifyUserIds,
+                    opnameDate: validatedData.opnameDate,
+                    opnameTime: validatedData.opnameTime,
+                    location: validatedData.location,
+                    createdById: userId,
+                    status: "open",
+                })
+                .returning()
+
+            if (validatedData.signatures.length > 0) {
+                await tx.insert(stockOpnameSignatures).values(
+                    validatedData.signatures.map((sig, index) => ({
+                        sessionId: newSession.id,
+                        name: sig.name,
+                        position: sig.position,
+                        order: index,
+                    }))
+                )
+            }
+
+            const stockRows = await tx.query.stockLevels.findMany({
+                where: and(
+                    eq(stockLevels.warehouseId, validatedData.warehouseId),
+                    sql`${stockLevels.totalStock} > 0`
+                ),
+                columns: {
+                    productId: true,
+                    totalStock: true,
+                },
+                with: {
+                    product: {
+                        columns: {
+                            category: true,
+                        },
+                    },
+                },
+            })
+
+            const filteredRows = stockRows.filter((row) => {
+                const category = (row.product?.category ?? "").trim().toLowerCase()
+                return selectedCategorySet.has(category)
+            })
+
+            if (filteredRows.length > 0) {
+                await tx.insert(stockOpnameItems).values(
+                    filteredRows.map((row) => ({
+                        sessionId: newSession.id,
+                        productId: row.productId,
+                        systemQty: Math.max(0, Math.round(Number(row.totalStock ?? 0))),
+                        countedQty: null,
+                        variance: null,
+                    }))
+                )
+            }
+
+            return newSession
+        })
+
+        revalidatePath("/dashboard/stock-opname-aktual")
+        return { success: true, sessionId: result.id }
+    } catch (error) {
+        console.error("Create stock opname aktual session error:", error)
+        return { success: false, error: "Gagal membuat sesi stock opname aktual" }
+    }
+}
+
+const escapeHtml = (value: string) =>
+    value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+
+const formatNumber = (value: number | null | undefined) => {
+    const safe = Number(value ?? 0)
+    if (!Number.isFinite(safe)) return "0"
+    return safe.toLocaleString("id-ID")
+}
+
+const buildStockOpnameActualEmailHtml = (params: {
+    sessionName: string
+    warehouseLabel: string
+    opnameDate: string
+    opnameTime: string
+    location: string
+    totalItems: number
+    countedItems: number
+    varianceItems: number
+    detailUrl: string
+    topVarianceRows: Array<{
+        materialNumber: string
+        materialDescription: string
+        systemQty: number
+        countedQty: number | null
+        variance: number | null
+        category: string
+    }>
+}) => {
+    const varianceRowsHtml = params.topVarianceRows.length > 0
+        ? params.topVarianceRows
+            .map((row, index) => `
+                <tr>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${index + 1}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.materialNumber)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.materialDescription)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.category)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatNumber(row.systemQty)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatNumber(row.countedQty ?? 0)}</td>
+                    <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;font-weight:600;color:${(row.variance ?? 0) < 0 ? "#dc2626" : "#059669"};">
+                        ${(row.variance ?? 0) > 0 ? "+" : ""}${formatNumber(row.variance ?? 0)}
+                    </td>
+                </tr>
+            `)
+            .join("")
+        : `
+            <tr>
+                <td colspan="7" style="padding:10px;border:1px solid #e5e7eb;text-align:center;color:#6b7280;">
+                    Tidak ada item selisih.
+                </td>
+            </tr>
+        `
+
+    return `
+        <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:20px;">
+            <div style="max-width:900px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+                <div style="padding:20px;background:#0f766e;color:#ffffff;">
+                    <h2 style="margin:0 0 6px 0;">Hasil Stock Opname Aktual</h2>
+                    <p style="margin:0;font-size:13px;opacity:.95;">Sesi <strong>${escapeHtml(params.sessionName)}</strong> telah ditutup.</p>
+                </div>
+                <div style="padding:20px;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
+                        <tr>
+                            <td style="padding:6px 0;width:180px;color:#6b7280;">Warehouse</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.warehouseLabel)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Tanggal / Waktu</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.opnameDate)} ${escapeHtml(params.opnameTime)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 0;color:#6b7280;">Lokasi</td>
+                            <td style="padding:6px 0;">: ${escapeHtml(params.location)}</td>
+                        </tr>
+                    </table>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
+                            <div style="font-size:11px;color:#6b7280;">Total Item</div>
+                            <div style="font-size:22px;font-weight:700;color:#111827;">${formatNumber(params.totalItems)}</div>
+                        </div>
+                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
+                            <div style="font-size:11px;color:#6b7280;">Sudah Dihitung</div>
+                            <div style="font-size:22px;font-weight:700;color:#0f766e;">${formatNumber(params.countedItems)}</div>
+                        </div>
+                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
+                            <div style="font-size:11px;color:#6b7280;">Item Selisih</div>
+                            <div style="font-size:22px;font-weight:700;color:#d97706;">${formatNumber(params.varianceItems)}</div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin:0 0 10px 0;font-size:14px;color:#111827;">Detail Selisih (Top 25)</h3>
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead>
+                            <tr style="background:#f1f5f9;">
+                                <th style="padding:8px;border:1px solid #e5e7eb;">No</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Material</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Deskripsi</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Kategori</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Aktual Sistem</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Fisik</th>
+                                <th style="padding:8px;border:1px solid #e5e7eb;">Selisih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${varianceRowsHtml}
+                        </tbody>
+                    </table>
+
+                    <p style="margin:16px 0 0 0;font-size:12px;color:#374151;">
+                        Buka detail sesi: <a href="${escapeHtml(params.detailUrl)}" style="color:#0f766e;">${escapeHtml(params.detailUrl)}</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    `
+}
+
+async function getNotificationRecipientEmails(roleNames: string[], userIds: string[]) {
+    const normalizedRoleSet = new Set(
+        roleNames
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean)
+    )
+    const userIdSet = new Set(userIds.map((entry) => entry.trim()).filter(Boolean))
+
+    const allUsers = await db.query.user.findMany({
+        columns: {
+            id: true,
+            email: true,
+            role: true,
+        },
+    })
+
+    const recipients = allUsers
+        .filter((entry) => {
+            const role = (entry.role ?? "").trim().toLowerCase()
+            return userIdSet.has(entry.id) || normalizedRoleSet.has(role)
+        })
+        .map((entry) => entry.email?.trim() ?? "")
+        .filter(Boolean)
+
+    return Array.from(new Set(recipients))
+}
+
+async function sendStockOpnameActualCompletionNotification(sessionId: number): Promise<{
+    sent: boolean
+    reason?: string
+    recipientCount?: number
+}> {
+    const opnameSession = await db.query.stockOpnameSessions.findFirst({
+        where: eq(stockOpnameSessions.id, sessionId),
+        with: {
+            warehouse: true,
+            items: {
+                with: {
+                    product: true,
+                },
+            },
+        },
+    })
+
+    if (!opnameSession || opnameSession.sourceType !== "actual") {
+        return { sent: false, reason: "Session is not stock opname aktual" }
+    }
+
+    const notifyRoles = normalizeStringArray(opnameSession.notifyRoles)
+    const notifyUserIds = normalizeStringArray(opnameSession.notifyUserIds)
+    const recipients = await getNotificationRecipientEmails(notifyRoles, notifyUserIds)
+
+    if (recipients.length === 0) {
+        return { sent: false, reason: "Tidak ada penerima notifikasi yang cocok", recipientCount: 0 }
+    }
+
+    const countedItems = (opnameSession.items ?? []).filter((item) => item.countedQty !== null)
+    const varianceItems = countedItems.filter((item) => item.variance !== null && item.variance !== 0)
+    const topVarianceRows = varianceItems
+        .sort((a, b) => Math.abs(b.variance ?? 0) - Math.abs(a.variance ?? 0))
+        .slice(0, 25)
+        .map((item) => ({
+            materialNumber: item.product?.materialNumber ?? "-",
+            materialDescription: item.product?.materialDescription ?? "-",
+            category: item.product?.category ?? "-",
+            systemQty: item.systemQty,
+            countedQty: item.countedQty,
+            variance: item.variance,
+        }))
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
+    const detailPath = `/dashboard/stock-opname-aktual/${opnameSession.id}`
+    const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
+    const warehouseLabel = opnameSession.warehouse?.sloc
+        ? `${opnameSession.warehouse.sloc}${opnameSession.warehouse.description ? ` - ${opnameSession.warehouse.description}` : ""}`
+        : "-"
+    const opnameDate = opnameSession.opnameDate
+        ? new Date(opnameSession.opnameDate).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        })
+        : "-"
+
+    const html = buildStockOpnameActualEmailHtml({
+        sessionName: opnameSession.name,
+        warehouseLabel,
+        opnameDate,
+        opnameTime: opnameSession.opnameTime ?? "-",
+        location: opnameSession.location ?? "-",
+        totalItems: opnameSession.items?.length ?? 0,
+        countedItems: countedItems.length,
+        varianceItems: varianceItems.length,
+        detailUrl,
+        topVarianceRows,
+    })
+
+    const emailResult = await sendEmail({
+        to: recipients,
+        subject: `[Stock Opname Aktual] Hasil Sesi ${opnameSession.name}`,
+        html,
+    })
+
+    if (!emailResult.success) {
+        console.error("Failed to send stock opname aktual notification:", emailResult.error)
+        return { sent: false, reason: emailResult.error || "Gagal mengirim email", recipientCount: recipients.length }
+    }
+
+    return { sent: true, recipientCount: recipients.length }
+}
+
 // ─── Close Session (with optional stock adjustment) ────────────────────────
 
 export async function closeStockOpnameSession(
     sessionId: number,
-    applyAdjustments: boolean = false
+    applyAdjustments: boolean = false,
+    expectedSourceType?: OpnameSourceType
 ) {
     try {
         const authSession = await getAuthenticatedSession("stock-opname", "edit")
@@ -385,6 +809,9 @@ export async function closeStockOpnameSession(
         })
 
         if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
+        if (expectedSourceType && opnameSession.sourceType !== expectedSourceType) {
+            return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
+        }
         if (opnameSession.status !== "open") return { success: false, error: "Sesi sudah ditutup" }
 
         await db.transaction(async (tx) => {
@@ -436,8 +863,21 @@ export async function closeStockOpnameSession(
         })
 
         revalidatePath("/dashboard/stock-opname")
+        revalidatePath("/dashboard/stock-opname-aktual")
         revalidatePath(`/dashboard/stock-opname/${sessionId}`)
-        return { success: true }
+        revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}`)
+
+        let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
+        if (opnameSession.sourceType === "actual") {
+            try {
+                notificationResult = await sendStockOpnameActualCompletionNotification(sessionId)
+            } catch (notificationError) {
+                console.error("Stock opname aktual notification error:", notificationError)
+                notificationResult = { sent: false, reason: "Terjadi error saat mengirim notifikasi email" }
+            }
+        }
+
+        return { success: true, notification: notificationResult }
     } catch (error) {
         console.error("Close opname session error:", error)
         return { success: false, error: "Gagal menutup sesi" }
@@ -446,7 +886,7 @@ export async function closeStockOpnameSession(
 
 // ─── Cancel Session ─────────────────────────────────────────────────────────
 
-export async function cancelStockOpnameSession(sessionId: number) {
+export async function cancelStockOpnameSession(sessionId: number, expectedSourceType?: OpnameSourceType) {
     try {
         await getAuthenticatedSession("stock-opname", "edit")
 
@@ -455,6 +895,9 @@ export async function cancelStockOpnameSession(sessionId: number) {
         })
 
         if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
+        if (expectedSourceType && opnameSession.sourceType !== expectedSourceType) {
+            return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
+        }
         if (opnameSession.status === "closed")
             return { success: false, error: "Sesi sudah ditutup, tidak bisa dibatalkan" }
 
@@ -464,6 +907,7 @@ export async function cancelStockOpnameSession(sessionId: number) {
             .where(eq(stockOpnameSessions.id, sessionId))
 
         revalidatePath("/dashboard/stock-opname")
+        revalidatePath("/dashboard/stock-opname-aktual")
         return { success: true }
     } catch (error) {
         console.error("Cancel opname session error:", error)
@@ -473,7 +917,7 @@ export async function cancelStockOpnameSession(sessionId: number) {
 
 // ─── Delete Session ─────────────────────────────────────────────────────────
 
-export async function deleteStockOpnameSession(sessionId: number) {
+export async function deleteStockOpnameSession(sessionId: number, expectedSourceType?: OpnameSourceType) {
     try {
         await getAuthenticatedSession("stock-opname", "delete")
 
@@ -482,6 +926,9 @@ export async function deleteStockOpnameSession(sessionId: number) {
         })
 
         if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
+        if (expectedSourceType && opnameSession.sourceType !== expectedSourceType) {
+            return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
+        }
 
         await db.transaction(async (tx) => {
             // Delete related items and signatures (cascade should handle this, but explicit is safer)
@@ -493,6 +940,7 @@ export async function deleteStockOpnameSession(sessionId: number) {
         })
 
         revalidatePath("/dashboard/stock-opname")
+        revalidatePath("/dashboard/stock-opname-aktual")
         return { success: true }
     } catch (error) {
         console.error("Delete opname session error:", error)
@@ -502,7 +950,7 @@ export async function deleteStockOpnameSession(sessionId: number) {
 
 // ─── Bulk Delete Sessions ─────────────────────────────────────────────────
 
-export async function bulkDeleteStockOpnameSessions(sessionIds: number[]) {
+export async function bulkDeleteStockOpnameSessions(sessionIds: number[], expectedSourceType?: OpnameSourceType) {
     try {
         await getAuthenticatedSession("stock-opname", "delete")
 
@@ -513,6 +961,17 @@ export async function bulkDeleteStockOpnameSessions(sessionIds: number[]) {
         let deletedCount = 0
         await db.transaction(async (tx) => {
             for (const sessionId of sessionIds) {
+                if (expectedSourceType) {
+                    const existingSession = await tx.query.stockOpnameSessions.findFirst({
+                        where: eq(stockOpnameSessions.id, sessionId),
+                        columns: {
+                            sourceType: true,
+                        },
+                    })
+                    if (!existingSession || existingSession.sourceType !== expectedSourceType) {
+                        continue
+                    }
+                }
                 await tx.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, sessionId))
                 await tx.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, sessionId))
                 await tx.delete(stockOpnameSessions).where(eq(stockOpnameSessions.id, sessionId))
@@ -521,6 +980,7 @@ export async function bulkDeleteStockOpnameSessions(sessionIds: number[]) {
         })
 
         revalidatePath("/dashboard/stock-opname")
+        revalidatePath("/dashboard/stock-opname-aktual")
         return { success: true, deletedCount }
     } catch (error) {
         console.error("Bulk delete opname sessions error:", error)
@@ -568,6 +1028,7 @@ export async function bulkUpdateOpnameCounts(
         })
 
         revalidatePath(`/dashboard/stock-opname/${sessionId}`)
+        revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}`)
         return { success: true }
     } catch (error) {
         console.error("Bulk update opname error:", error)
@@ -584,14 +1045,18 @@ export async function bulkUpdateOpnameCounts(
  * Requirements: 5.1, 5.2, 5.3, 5.4
  */
 export async function getOpnamePdfReportData(
-    sessionId: number
+    sessionId: number,
+    sourceType: OpnameSourceType = "sap"
 ): Promise<{ success: boolean; data?: OpnamePdfReportData; error?: string }> {
     try {
         await getAuthenticatedSession("stock-opname", "view")
 
         // Fetch session with all required relations
         const session = await db.query.stockOpnameSessions.findFirst({
-            where: eq(stockOpnameSessions.id, sessionId),
+            where: and(
+                eq(stockOpnameSessions.id, sessionId),
+                eq(stockOpnameSessions.sourceType, sourceType)
+            ),
             with: {
                 warehouse: true,
                 createdBy: true,

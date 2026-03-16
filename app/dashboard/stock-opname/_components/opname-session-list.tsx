@@ -28,9 +28,12 @@ import { toast } from "sonner"
 import { deleteStockOpnameSession, bulkDeleteStockOpnameSessions } from "@/app/actions/stock-opname"
 import { StockOpnameDocumentPreview } from "./stock-opname-document-preview"
 import type { StockOpnameSession } from "@/lib/types"
+import type { OpnameSourceType } from "@/app/actions/stock-opname"
 
 interface OpnameSessionListProps {
     sessions: StockOpnameSession[]
+    basePath?: string
+    sourceType?: OpnameSourceType
 }
 
 const statusConfig = {
@@ -51,7 +54,11 @@ const statusConfig = {
     },
 }
 
-export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
+export function OpnameSessionList({
+    sessions,
+    basePath = "/dashboard/stock-opname",
+    sourceType,
+}: OpnameSessionListProps) {
     const [search, setSearch] = useState("")
     const [filterStatus, setFilterStatus] = useState("all")
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -83,7 +90,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
         
         setIsDeleting(true)
         try {
-            const result = await deleteStockOpnameSession(sessionToDelete)
+            const result = await deleteStockOpnameSession(sessionToDelete, sourceType)
             if (result.success) {
                 toast.success("Sesi stock opname berhasil dihapus")
                 setDeleteDialogOpen(false)
@@ -111,7 +118,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
         
         setIsDeleting(true)
         try {
-            const result = await bulkDeleteStockOpnameSessions(Array.from(selectedSessions))
+            const result = await bulkDeleteStockOpnameSessions(Array.from(selectedSessions), sourceType)
             if (result.success) {
                 toast.success(`${result.deletedCount} sesi berhasil dihapus`)
                 setBulkDeleteDialogOpen(false)
@@ -233,7 +240,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                     className="flex-none"
                                 />
                                 <Link
-                                    href={`/dashboard/stock-opname/${session.id}`}
+                                    href={`${basePath}/${session.id}`}
                                     className="flex items-center gap-4 flex-1 min-w-0"
                                 >
                                     <div className="flex-none w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
@@ -295,7 +302,7 @@ export function OpnameSessionList({ sessions }: OpnameSessionListProps) {
                                     <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                                 </Link>
                                 <Button variant="ghost" size="icon" className="flex-none" asChild title="Lihat detail sesi">
-                                    <Link href={`/dashboard/stock-opname/${session.id}`}>
+                                    <Link href={`${basePath}/${session.id}`}>
                                         <Eye className="h-4 w-4" />
                                     </Link>
                                 </Button>

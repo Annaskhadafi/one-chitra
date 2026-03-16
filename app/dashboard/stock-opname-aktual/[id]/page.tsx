@@ -1,19 +1,19 @@
 import { notFound } from "next/navigation"
 import { getStockOpnameSession } from "@/app/actions/stock-opname"
-import { OpnameDetailView } from "../_components/opname-detail-view"
+import { OpnameDetailView } from "@/app/dashboard/stock-opname/_components/opname-detail-view"
 import Link from "next/link"
 
 interface Props {
     params: Promise<{ id: string }>
 }
 
-export default async function StockOpnameDetailPage({ params }: Props) {
+export default async function StockOpnameAktualDetailPage({ params }: Props) {
     const { id } = await params
     const sessionId = parseInt(id)
 
     if (isNaN(sessionId)) notFound()
 
-    const session = await getStockOpnameSession(sessionId, "sap")
+    const session = await getStockOpnameSession(sessionId, "actual")
     if (!session) notFound()
 
     const totalItems = session.items?.length ?? 0
@@ -25,7 +25,7 @@ export default async function StockOpnameDetailPage({ params }: Props) {
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Link href="/dashboard/stock-opname" className="hover:underline">Stock Opname</Link>
+                    <Link href="/dashboard/stock-opname-aktual" className="hover:underline">Stock Opname Aktual</Link>
                     <span>/</span>
                     <span className="text-foreground font-medium">{session.name}</span>
                 </div>
@@ -37,7 +37,6 @@ export default async function StockOpnameDetailPage({ params }: Props) {
                 </p>
             </div>
 
-            {/* Progress */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div className="rounded-xl border bg-card p-4 flex flex-col gap-1">
                     <p className="text-xs text-muted-foreground">Total Produk</p>
@@ -63,7 +62,11 @@ export default async function StockOpnameDetailPage({ params }: Props) {
                 </div>
             </div>
 
-            <OpnameDetailView session={session} sourceType="sap" />
+            <OpnameDetailView
+                session={session}
+                basePath="/dashboard/stock-opname-aktual"
+                sourceType="actual"
+            />
         </div>
     )
 }

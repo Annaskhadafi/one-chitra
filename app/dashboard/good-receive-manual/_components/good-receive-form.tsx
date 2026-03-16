@@ -72,6 +72,8 @@ const formSchema = z.object({
     receiveDate: z.date(),
     deliveryType: z.enum(["Partial", "Complete"]),
     referenceDocument: z.string().optional(),
+    notifyRoles: z.array(z.string()).default([]),
+    notifyUserIds: z.array(z.string()).default([]),
     items: z.array(itemSchema).min(1, "No open PO items available"),
 }).superRefine((data, ctx) => {
     const selectedItems = new Set<number>()
@@ -138,6 +140,13 @@ type GoodReceiveFormProps = {
     poOptions: ManualGoodReceivePoOption[]
     poLineOptions: ManualGoodReceivePoLineOption[]
     productOptions: ProductOption[]
+    notificationRoles: string[]
+    notificationUsers: Array<{
+        id: string
+        name: string | null
+        email: string
+        role: string | null
+    }>
 }
 
 function normalizeCode(value: string | null | undefined) {
@@ -242,7 +251,115 @@ function ProductCombobox({ value, options, onSelect }: ProductComboboxProps) {
     )
 }
 
-export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productOptions }: GoodReceiveFormProps) {
+type MultiSelectOption = {
+    value: string
+    label: string
+    description?: string | null
+}
+
+function MultiSelectPopover({
+    value,
+    options,
+    placeholder,
+    onChange,
+}: {
+    value: string[]
+    options: MultiSelectOption[]
+    placeholder: string
+    onChange: (nextValue: string[]) => void
+}) {
+    const [open, setOpen] = useState(false)
+    const selectedSet = useMemo(() => new Set(value), [value])
+    const selectedLabels = options
+        .filter((option) => selectedSet.has(option.value))
+        .map((option) => option.label)
+
+    const summary = selectedLabels.length === 0
+        ? placeholder
+        : selectedLabels.length <= 2
+            ? selectedLabels.join(", ")
+            : `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2}`
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className={cn("w-full justify-between font-normal", selectedLabels.length === 0 && "text-muted-foreground")}
+                >
+                    <span className="truncate text-left">{summary}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[420px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Cari..." />
+                    <div className="flex items-center justify-between border-b px-2 py-1.5">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => onChange(options.map((option) => option.value))}
+                        >
+                            Pilih Semua
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => onChange([])}
+                        >
+                            Kosongkan
+                        </Button>
+                    </div>
+                    <CommandList>
+                        <CommandEmpty>Tidak ada data.</CommandEmpty>
+                        <CommandGroup>
+                            {options.map((option) => {
+                                const isSelected = selectedSet.has(option.value)
+                                return (
+                                    <CommandItem
+                                        key={option.value}
+                                        value={`${option.label} ${option.description ?? ""}`}
+                                        onSelect={() => {
+                                            const next = new Set(value)
+                                            if (next.has(option.value)) {
+                                                next.delete(option.value)
+                                            } else {
+                                                next.add(option.value)
+                                            }
+                                            onChange(Array.from(next))
+                                        }}
+                                    >
+                                        <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                                        <div className="min-w-0">
+                                            <p className="text-sm truncate">{option.label}</p>
+                                            {option.description && (
+                                                <p className="text-xs text-muted-foreground truncate">{option.description}</p>
+                                            )}
+                                        </div>
+                                    </CommandItem>
+                                )
+                            })}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+export function GoodReceiveForm({
+    warehouses,
+    poOptions,
+    poLineOptions,
+    productOptions,
+    notificationRoles,
+    notificationUsers,
+}: GoodReceiveFormProps) {
     const router = useRouter()
     const [poComboboxOpen, setPoComboboxOpen] = useState(false)
     const [productCatalog, setProductCatalog] = useState<ProductOption[]>(productOptions)
@@ -258,6 +375,8 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
             receiveDate: new Date(),
             deliveryType: "Complete",
             referenceDocument: "",
+            notifyRoles: [],
+            notifyUserIds: [],
             items: [],
         },
     })
@@ -302,6 +421,21 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
     const productById = useMemo(
         () => new Map(sortedProductOptions.map((product) => [product.id, product])),
         [sortedProductOptions]
+    )
+
+    const notificationRoleOptions = useMemo<MultiSelectOption[]>(
+        () => notificationRoles.map((role) => ({ value: role, label: role })),
+        [notificationRoles]
+    )
+
+    const notificationUserOptions = useMemo<MultiSelectOption[]>(
+        () =>
+            notificationUsers.map((entry) => ({
+                value: entry.id,
+                label: entry.name?.trim() || entry.email,
+                description: `${entry.email}${entry.role ? ` - ${entry.role}` : ""}`,
+            })),
+        [notificationUsers]
     )
 
     const refreshProductCatalog = async () => {
@@ -364,6 +498,12 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
             const result = await createGoodReceiveManual(values)
             if (result.success) {
                 toast.success("Good receive created successfully")
+                if (result.notification && !result.notification.sent) {
+                    toast.warning(`Email notifikasi belum terkirim: ${result.notification.reason || "cek konfigurasi SMTP / penerima"}`)
+                }
+                if (result.notification?.sent) {
+                    toast.success(`Email notifikasi terkirim ke ${result.notification.recipientCount ?? 0} penerima`)
+                }
                 router.refresh()
                 router.push("/dashboard/good-receive-manual")
             } else {
@@ -561,6 +701,58 @@ export function GoodReceiveForm({ warehouses, poOptions, poLineOptions, productO
                                 )}
                             />
                         </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="shadow-sm border-blue-200/60">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Notifikasi GR Manual</CardTitle>
+                        <CardDescription className="text-xs">
+                            Pilih role dan/atau user yang akan menerima email notifikasi bahwa barang sudah datang dan mohon tim Procurement melakukan GR SAP.
+                        </CardDescription>
+                    </CardHeader>
+                    <Separator />
+                    <CardContent className="pt-4 space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="notifyRoles"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Notifikasi ke Role</FormLabel>
+                                    <FormControl>
+                                        <MultiSelectPopover
+                                            placeholder="Pilih role..."
+                                            options={notificationRoleOptions}
+                                            value={field.value}
+                                            onChange={field.onChange}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="notifyUserIds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Notifikasi ke User</FormLabel>
+                                    <FormControl>
+                                        <MultiSelectPopover
+                                            placeholder="Pilih user..."
+                                            options={notificationUserOptions}
+                                            value={field.value}
+                                            onChange={field.onChange}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            Jika role/user dikosongkan, notifikasi email GR Manual tidak akan dikirim.
+                        </p>
                     </CardContent>
                 </Card>
 

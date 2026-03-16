@@ -11,7 +11,7 @@ export default async function PrintChecklistPage({ params }: Props) {
 
     if (isNaN(sessionId)) notFound()
 
-    const session = await getStockOpnameSession(sessionId, "sap")
+    const session = await getStockOpnameSession(sessionId, "actual")
     
     if (!session) {
         notFound()
@@ -210,12 +210,12 @@ export default async function PrintChecklistPage({ params }: Props) {
                 <div className="page-header">
                     <div>
                         <div className="company-name">PT. CHITRA PARATAMA</div>
-                        <div style={{ fontSize: '9pt' }}>Stock Opname Checklist</div>
+                        <div style={{ fontSize: '9pt' }}>Stock Opname Aktual Checklist</div>
                     </div>
                 </div>
 
                 <div className="document-title">
-                    CHECKLIST STOCK OPNAME
+                    CHECKLIST STOCK OPNAME AKTUAL
                 </div>
 
                 <div className="info-grid">
@@ -264,7 +264,7 @@ export default async function PrintChecklistPage({ params }: Props) {
                             <th className="col-material">Material No.</th>
                             <th className="col-desc">Deskripsi Material</th>
                             <th className="col-category">Kategori</th>
-                            <th className="col-qty">Qty SAP</th>
+                            <th className="col-qty">Qty Aktual Sistem</th>
                             <th className="col-counted">Qty Fisik</th>
                             <th className="col-notes">Catatan</th>
                         </tr>

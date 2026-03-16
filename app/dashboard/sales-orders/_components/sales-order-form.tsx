@@ -368,6 +368,19 @@ export function SalesOrderForm({
         return subTotal - discount + shipping
     }, [subTotal, discount, shipping])
 
+    const showSaveBlockedToast = useCallback((title: string, errors: string[]) => {
+        const uniqueErrors = Array.from(new Set(errors))
+        toast.error(title, {
+            description: (
+                <ul className="list-disc pl-4">
+                    {uniqueErrors.map((error, index) => (
+                        <li key={`${error}-${index}`}>{error}</li>
+                    ))}
+                </ul>
+            )
+        })
+    }, [])
+
     const handleSubmit = async () => {
         console.log("🔍 SO Submit clicked")
         console.log("customerId:", customerId)
@@ -403,15 +416,7 @@ export function SalesOrderForm({
 
         if (errors.length > 0) {
             console.log("❌ Validation failed", errors)
-            toast.error("Validasi Gagal", {
-                description: (
-                    <ul className="list-disc pl-4">
-                        {errors.map((err, i) => (
-                            <li key={i}>{err}</li>
-                        ))}
-                    </ul>
-                )
-            })
+            showSaveBlockedToast("Sales Order belum bisa disimpan", errors)
             return
         }
 
@@ -457,13 +462,32 @@ export function SalesOrderForm({
                 router.refresh()
                 router.push("/dashboard/sales-orders")
             } else {
+                const serverDetailErrors: string[] = []
+                const fieldErrors =
+                    "fieldErrors" in result && result.fieldErrors
+                        ? result.fieldErrors
+                        : null
+
+                if (fieldErrors && typeof fieldErrors === "object") {
+                    for (const value of Object.values(fieldErrors as Record<string, unknown>)) {
+                        if (typeof value === "string" && value.trim()) {
+                            serverDetailErrors.push(value)
+                        } else if (Array.isArray(value)) {
+                            for (const message of value) {
+                                if (typeof message === "string" && message.trim()) {
+                                    serverDetailErrors.push(message)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 const customerPoFieldError =
-                    "fieldErrors" in result &&
-                        result.fieldErrors &&
-                        typeof result.fieldErrors === "object" &&
-                        "customerPo" in result.fieldErrors &&
-                        typeof result.fieldErrors.customerPo === "string"
-                        ? result.fieldErrors.customerPo
+                    fieldErrors &&
+                        typeof fieldErrors === "object" &&
+                        "customerPo" in fieldErrors &&
+                        typeof (fieldErrors as Record<string, unknown>).customerPo === "string"
+                        ? (fieldErrors as Record<string, string>).customerPo
                         : null
 
                 if (customerPoFieldError) {
@@ -473,9 +497,17 @@ export function SalesOrderForm({
 
                 // Check if result has error property (type guard)
                 if ('error' in result && result.error) {
-                     toast.error(result.error)
+                    if (serverDetailErrors.length > 0) {
+                        showSaveBlockedToast(result.error, serverDetailErrors)
+                    } else {
+                        toast.error(result.error)
+                    }
                 } else {
-                     toast.error("Terjadi kesalahan yang tidak diketahui")
+                    if (serverDetailErrors.length > 0) {
+                        showSaveBlockedToast("Sales Order belum bisa disimpan", serverDetailErrors)
+                    } else {
+                        toast.error("Terjadi kesalahan yang tidak diketahui")
+                    }
                 }
             }
         } catch (err) {

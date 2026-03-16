@@ -623,6 +623,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         return result
     }, [stockResults])
 
+    const showSaveBlockedToast = useCallback((errors: string[]) => {
+        toast.error("Delivery belum bisa disimpan", {
+            description: (
+                <ul className="list-disc pl-4">
+                    {errors.map((error, index) => (
+                        <li key={`${error}-${index}`}>{error}</li>
+                    ))}
+                </ul>
+            ),
+        })
+    }, [])
+
     // Submit
     const handleSubmit = useCallback(async () => {
         console.log("🔍 Starting validation...")
@@ -631,50 +643,49 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         console.log("items:", items)
         console.log("selectedSO:", selectedSO)
 
+        const validationErrors: string[] = []
         if (!salesOrderId) {
-            console.log("❌ Validation failed: No Sales Order")
-            toast.error("Please select a Sales Order")
-            return
+            validationErrors.push("Sales Order belum dipilih")
         }
         if (!warehouseId) {
-            console.log("❌ Validation failed: No Warehouse")
-            toast.error("Please select a Warehouse")
-            return
+            validationErrors.push("Origin Warehouse belum dipilih")
         }
         if (items.length === 0) {
-            console.log("❌ Validation failed: No items")
-            toast.error("No items to deliver")
-            return
+            validationErrors.push("Belum ada item untuk dikirim")
         }
-
         if (selectedSO?.categoryPo === "VHS/Consignment" && (!warehouseToId || warehouseToId === 0)) {
-            console.log("❌ Validation failed: VHS/Consignment needs destination warehouse")
-            toast.error("Please select a Destination Warehouse for VHS/Consignment orders")
-            return
+            validationErrors.push("Destination Warehouse wajib dipilih untuk PO kategori VHS/Consignment")
+        }
+        if (isExternal && !vendorName.trim()) {
+            validationErrors.push("Vendor Name wajib diisi untuk pengiriman external")
         }
 
-        if (isExternal && !vendorName) {
-            console.log("❌ Validation failed: External delivery needs vendor name")
-            toast.error("Vendor Name is required for external delivery")
-            return
-        }
-
-        // Validate Serial Numbers
         for (const item of items) {
+            const productLabel = item.productName || `Produk #${item.productId}`
+
+            if (item.deliveredQuantity <= 0) {
+                validationErrors.push(`Qty kirim untuk ${productLabel} harus lebih dari 0`)
+            }
+
             if (item.productCategory === "TYRE") {
-                if (item.serialNumbers.some(sn => !sn.trim())) {
-                    console.log("❌ Validation failed: Missing serial numbers for", item.productName)
-                    toast.error(`Please enter all serial numbers for ${item.productName}`)
-                    return
+                const filledSerials = item.serialNumbers.filter(sn => sn.trim())
+                if (filledSerials.length !== item.serialNumbers.length) {
+                    validationErrors.push(`Serial number ${productLabel} masih ada yang kosong`)
                 }
-                // Check for duplicates within the same item
-                const uniqueSNs = new Set(item.serialNumbers)
-                if (uniqueSNs.size !== item.serialNumbers.length) {
-                    console.log("❌ Validation failed: Duplicate serial numbers for", item.productName)
-                    toast.error(`Duplicate serial numbers found for ${item.productName}`)
-                    return
+                if (filledSerials.length !== item.deliveredQuantity) {
+                    validationErrors.push(`Jumlah serial number ${productLabel} harus sama dengan qty kirim (${item.deliveredQuantity})`)
+                }
+                const uniqueSNs = new Set(filledSerials.map(sn => sn.trim().toUpperCase()))
+                if (uniqueSNs.size !== filledSerials.length) {
+                    validationErrors.push(`Serial number duplikat ditemukan pada ${productLabel}`)
                 }
             }
+        }
+
+        if (validationErrors.length > 0) {
+            console.log("❌ Validation failed:", validationErrors)
+            showSaveBlockedToast(Array.from(new Set(validationErrors)))
+            return
         }
 
         console.log("✅ All validations passed!")
@@ -744,8 +755,35 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 router.push("/dashboard/deliveries")
             } else {
                 const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
+                const serverDetailErrors: string[] = []
+                if ("fieldErrors" in result && result.fieldErrors && typeof result.fieldErrors === "object") {
+                    for (const value of Object.values(result.fieldErrors as Record<string, unknown>)) {
+                        if (typeof value === "string" && value.trim()) {
+                            serverDetailErrors.push(value)
+                        } else if (Array.isArray(value)) {
+                            for (const message of value) {
+                                if (typeof message === "string" && message.trim()) {
+                                    serverDetailErrors.push(message)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 console.error("❌ Delivery Error:", errorMsg, result)
-                toast.error(errorMsg)
+                if (serverDetailErrors.length > 0) {
+                    toast.error(errorMsg, {
+                        description: (
+                            <ul className="list-disc pl-4">
+                                {Array.from(new Set(serverDetailErrors)).map((message, index) => (
+                                    <li key={`${message}-${index}`}>{message}</li>
+                                ))}
+                            </ul>
+                        ),
+                    })
+                } else {
+                    toast.error(errorMsg)
+                }
             }
         } catch (error) {
             console.error("❌ Delivery Exception:", error)
@@ -761,7 +799,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost, showSaveBlockedToast])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -837,7 +875,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             console.log("Button state:", { saving, salesOrderId, warehouseId, itemsCount: items.length })
                             handleSubmit()
                         }}
-                        disabled={saving || !salesOrderId || !warehouseId || items.length === 0}
+                        disabled={saving}
                         className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
                         title={
                             !salesOrderId ? "Please select a Sales Order" :

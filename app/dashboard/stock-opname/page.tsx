@@ -5,7 +5,7 @@ import { CreateSessionDialog } from "./_components/create-session-dialog"
 
 export default async function StockOpnamePage() {
     const [sessions, warehouses] = await Promise.all([
-        getStockOpnameSessions(),
+        getStockOpnameSessions("sap"),
         getWarehouses(),
     ])
 

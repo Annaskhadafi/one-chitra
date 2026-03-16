@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, varchar, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, varchar, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { warehouses } from "./warehouses";
 import { products } from "./products";
@@ -11,7 +11,11 @@ export const stockOpnameSessions = pgTable("stock_opname_sessions", {
     name: varchar("name", { length: 200 }).notNull(),
     warehouseId: integer("warehouse_id").references(() => warehouses.id).notNull(),
     status: stockOpnameStatusEnum("status").default("open").notNull(),
+    sourceType: varchar("source_type", { length: 20 }).default("sap").notNull(), // sap | actual
     notes: text("notes"),
+    selectedCategories: jsonb("selected_categories").$type<string[]>().default([]).notNull(),
+    notifyRoles: jsonb("notify_roles").$type<string[]>().default([]).notNull(),
+    notifyUserIds: jsonb("notify_user_ids").$type<string[]>().default([]).notNull(),
     
     // Pre-count documentation fields
     opnameDate: timestamp("opname_date").notNull(),
