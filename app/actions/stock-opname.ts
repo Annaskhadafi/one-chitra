@@ -8,7 +8,8 @@ import { getAuthenticatedSession } from "@/lib/rbac"
 import { z } from "zod"
 import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
 import type { OpnamePdfReportData } from "@/lib/types"
-import { sendEmail } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 type SapStockRow = {
@@ -58,6 +59,9 @@ const normalizeMaterialNumber = (value: string | null | undefined) =>
 
 export type OpnameSourceType = "sap" | "actual"
 type PermissionAction = "view" | "create" | "edit" | "delete"
+
+const normalizeOpnameSourceType = (value: string | null | undefined): OpnameSourceType =>
+    value === "actual" ? "actual" : "sap"
 
 const isPermissionDeniedError = (error: unknown) =>
     error instanceof Error && error.message.toLowerCase().includes("permission denied")
@@ -311,7 +315,7 @@ export async function updateOpnameItemCount(
         if (item.session?.status !== "open")
             return { success: false, error: "Sesi sudah ditutup, tidak bisa diubah" }
 
-        const authSession = await getOpnameAuthSession(item.session?.sourceType ?? "sap", "edit")
+        const authSession = await getOpnameAuthSession(normalizeOpnameSourceType(item.session?.sourceType), "edit")
         const userId = authSession.user.id
 
         const variance = data.countedQty - item.systemQty
@@ -359,7 +363,7 @@ export async function updateStockOpnameDocument(
             return { success: false, error: "Sesi tidak ditemukan" }
         }
 
-        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const authSession = await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "edit")
         const userId = authSession.user.id
 
         const trimmedUrl = data.url?.trim()
@@ -587,7 +591,7 @@ const formatNumber = (value: number | null | undefined) => {
     return safe.toLocaleString("id-ID")
 }
 
-const buildStockOpnameActualEmailHtml = (params: {
+const buildStockOpnameActualEmailContent = (params: {
     sessionName: string
     warehouseLabel: string
     opnameDate: string
@@ -606,7 +610,7 @@ const buildStockOpnameActualEmailHtml = (params: {
         category: string
     }>
 }) => {
-    const varianceRowsHtml = params.topVarianceRows.length > 0
+    const varianceTableRows = params.topVarianceRows.length > 0
         ? params.topVarianceRows
             .map((row, index) => `
                 <tr>
@@ -629,70 +633,16 @@ const buildStockOpnameActualEmailHtml = (params: {
                 </td>
             </tr>
         `
+    const varianceTextRows = params.topVarianceRows.length > 0
+        ? params.topVarianceRows
+            .map((row, index) => `${index + 1}. ${row.materialNumber} - ${row.materialDescription} | ${row.category} | Qty Sistem: ${formatNumber(row.systemQty)} | Qty Fisik: ${formatNumber(row.countedQty ?? 0)} | Selisih: ${(row.variance ?? 0) > 0 ? "+" : ""}${formatNumber(row.variance ?? 0)}`)
+            .join("\n")
+        : "Tidak ada item selisih."
 
-    return `
-        <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:20px;">
-            <div style="max-width:900px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-                <div style="padding:20px;background:#0f766e;color:#ffffff;">
-                    <h2 style="margin:0 0 6px 0;">Hasil Stock Opname Aktual</h2>
-                    <p style="margin:0;font-size:13px;opacity:.95;">Sesi <strong>${escapeHtml(params.sessionName)}</strong> telah ditutup.</p>
-                </div>
-                <div style="padding:20px;">
-                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
-                        <tr>
-                            <td style="padding:6px 0;width:180px;color:#6b7280;">Warehouse</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.warehouseLabel)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Tanggal / Waktu</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.opnameDate)} ${escapeHtml(params.opnameTime)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Lokasi</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.location)}</td>
-                        </tr>
-                    </table>
-
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
-                            <div style="font-size:11px;color:#6b7280;">Total Item</div>
-                            <div style="font-size:22px;font-weight:700;color:#111827;">${formatNumber(params.totalItems)}</div>
-                        </div>
-                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
-                            <div style="font-size:11px;color:#6b7280;">Sudah Dihitung</div>
-                            <div style="font-size:22px;font-weight:700;color:#0f766e;">${formatNumber(params.countedItems)}</div>
-                        </div>
-                        <div style="flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;">
-                            <div style="font-size:11px;color:#6b7280;">Item Selisih</div>
-                            <div style="font-size:22px;font-weight:700;color:#d97706;">${formatNumber(params.varianceItems)}</div>
-                        </div>
-                    </div>
-
-                    <h3 style="margin:0 0 10px 0;font-size:14px;color:#111827;">Detail Selisih (Top 25)</h3>
-                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                        <thead>
-                            <tr style="background:#f1f5f9;">
-                                <th style="padding:8px;border:1px solid #e5e7eb;">No</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Material</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Deskripsi</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Kategori</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Aktual Sistem</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Fisik</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Selisih</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${varianceRowsHtml}
-                        </tbody>
-                    </table>
-
-                    <p style="margin:16px 0 0 0;font-size:12px;color:#374151;">
-                        Buka detail sesi: <a href="${escapeHtml(params.detailUrl)}" style="color:#0f766e;">${escapeHtml(params.detailUrl)}</a>
-                    </p>
-                </div>
-            </div>
-        </div>
-    `
+    return {
+        varianceTableRows,
+        varianceTextRows,
+    }
 }
 
 async function getNotificationRecipientEmails(roleNames: string[], userIds: string[]) {
@@ -777,7 +727,7 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
         })
         : "-"
 
-    const html = buildStockOpnameActualEmailHtml({
+    const { varianceTableRows, varianceTextRows } = buildStockOpnameActualEmailContent({
         sessionName: opnameSession.name,
         warehouseLabel,
         opnameDate,
@@ -790,10 +740,22 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
         topVarianceRows,
     })
 
-    const emailResult = await sendEmail({
+    const emailResult = await sendSystemTemplatedEmailByCode({
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.stockOpnameActualCompletion,
         to: recipients,
-        subject: `[Stock Opname Aktual] Hasil Sesi ${opnameSession.name}`,
-        html,
+        data: {
+            sessionName: opnameSession.name,
+            warehouseLabel,
+            opnameDate,
+            opnameTime: opnameSession.opnameTime ?? "-",
+            location: opnameSession.location ?? "-",
+            totalItems: formatNumber(opnameSession.items?.length ?? 0),
+            countedItems: formatNumber(countedItems.length),
+            varianceItems: formatNumber(varianceItems.length),
+            detailUrl,
+            varianceTableRows,
+            varianceTextRows,
+        },
     })
 
     if (!emailResult.success) {
@@ -825,7 +787,7 @@ export async function closeStockOpnameSession(
         }
         if (opnameSession.status !== "open") return { success: false, error: "Sesi sudah ditutup" }
 
-        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const authSession = await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "edit")
         const userId = authSession.user.id
 
         await db.transaction(async (tx) => {
@@ -913,7 +875,7 @@ export async function cancelStockOpnameSession(sessionId: number, expectedSource
         if (opnameSession.status === "closed")
             return { success: false, error: "Sesi sudah ditutup, tidak bisa dibatalkan" }
 
-        await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "edit")
 
         await db
             .update(stockOpnameSessions)
@@ -942,7 +904,7 @@ export async function deleteStockOpnameSession(sessionId: number, expectedSource
             return { success: false, error: "Sesi tidak sesuai dengan menu yang dipilih" }
         }
 
-        await getOpnameAuthSession(opnameSession.sourceType, "delete")
+        await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "delete")
 
         await db.transaction(async (tx) => {
             // Delete related items and signatures (cascade should handle this, but explicit is safer)
@@ -1017,7 +979,7 @@ export async function bulkUpdateOpnameCounts(
         if (!opnameSession) return { success: false, error: "Sesi tidak ditemukan" }
         if (opnameSession.status !== "open") return { success: false, error: "Sesi sudah ditutup" }
 
-        const authSession = await getOpnameAuthSession(opnameSession.sourceType, "edit")
+        const authSession = await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "edit")
         const userId = authSession.user.id
 
         const itemMap = new Map(opnameSession.items.map((i) => [i.productId, i]))

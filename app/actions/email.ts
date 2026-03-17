@@ -2,14 +2,17 @@
 
 import { db } from "@/db"
 import { smtpSettings, emailTemplates, emailLogs } from "@/db/schema/email"
-import { eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { sendEmail, createTransporter } from "@/lib/email"
 import type { SmtpConfig } from "@/lib/email"
+import { ensureSystemEmailTemplates } from "@/lib/email-template-registry"
+import { ensureEmailManagementSchema } from "@/lib/email-schema"
 
 // ─── SMTP ─────────────────────────────────────────────────────────────────────
 
 export async function getSmtpSettings() {
+    await ensureEmailManagementSchema()
     const rows = await db.select().from(smtpSettings).limit(1)
     return rows[0] ?? null
 }
@@ -25,6 +28,7 @@ export async function saveSmtpSettings(data: {
     isActive: boolean
 }) {
     try {
+        await ensureEmailManagementSchema()
         const existing = await db.select().from(smtpSettings).limit(1)
 
         if (existing.length > 0) {
@@ -57,6 +61,7 @@ export async function testSmtpConnection(data: {
     testTo: string
 }) {
     try {
+        await ensureEmailManagementSchema()
         const config: SmtpConfig = {
             host: data.host,
             port: parseInt(data.port),
@@ -98,6 +103,8 @@ export async function testSmtpConnection(data: {
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
 export async function getEmailTemplates() {
+    await ensureEmailManagementSchema()
+    await ensureSystemEmailTemplates()
     return await db
         .select()
         .from(emailTemplates)
@@ -105,6 +112,7 @@ export async function getEmailTemplates() {
 }
 
 export async function getEmailTemplate(id: string) {
+    await ensureEmailManagementSchema()
     const rows = await db
         .select()
         .from(emailTemplates)
@@ -115,15 +123,19 @@ export async function getEmailTemplate(id: string) {
 
 export async function createEmailTemplate(data: {
     name: string
+    code?: string | null
     type: "magic_link" | "notification" | "welcome" | "password_reset" | "order_confirmation" | "delivery_update" | "custom"
     subject: string
     htmlContent: string
     textContent?: string
     variables?: string[]
     recipientRoles?: string[]
+    recipientUserIds?: string[]
+    ccEmails?: string[]
     isActive: boolean
 }) {
     try {
+        await ensureEmailManagementSchema()
         const [created] = await db
             .insert(emailTemplates)
             .values(data)
@@ -143,16 +155,20 @@ export async function updateEmailTemplate(
     id: string,
     data: {
         name?: string
+        code?: string | null
         type?: "magic_link" | "notification" | "welcome" | "password_reset" | "order_confirmation" | "delivery_update" | "custom"
         subject?: string
         htmlContent?: string
         textContent?: string
         variables?: string[]
         recipientRoles?: string[]
+        recipientUserIds?: string[]
+        ccEmails?: string[]
         isActive?: boolean
     }
 ) {
     try {
+        await ensureEmailManagementSchema()
         await db
             .update(emailTemplates)
             .set({ ...data, updatedAt: new Date() })
@@ -170,6 +186,7 @@ export async function updateEmailTemplate(
 
 export async function deleteEmailTemplate(id: string) {
     try {
+        await ensureEmailManagementSchema()
         await db.delete(emailTemplates).where(eq(emailTemplates.id, id))
         revalidatePath("/dashboard/settings/email")
         return { success: true }
@@ -183,6 +200,7 @@ export async function deleteEmailTemplate(id: string) {
 
 export async function toggleEmailTemplate(id: string, isActive: boolean) {
     try {
+        await ensureEmailManagementSchema()
         await db
             .update(emailTemplates)
             .set({ isActive, updatedAt: new Date() })
@@ -201,9 +219,10 @@ export async function toggleEmailTemplate(id: string, isActive: boolean) {
 // ─── EMAIL LOGS ───────────────────────────────────────────────────────────────
 
 export async function getEmailLogs(limit = 50) {
+    await ensureEmailManagementSchema()
     return await db
         .select()
         .from(emailLogs)
-        .orderBy(emailLogs.createdAt)
+        .orderBy(desc(emailLogs.createdAt))
         .limit(limit)
 }

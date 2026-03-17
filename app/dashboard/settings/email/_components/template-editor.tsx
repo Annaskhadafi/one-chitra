@@ -14,11 +14,17 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { X, Plus } from "lucide-react"
+import { Check, ChevronsUpDown, X, Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { emailTemplates } from "@/db/schema/email"
 
 type Template = typeof emailTemplates.$inferSelect
@@ -32,8 +38,6 @@ const TEMPLATE_TYPES = [
     { value: "delivery_update", label: "Delivery Update" },
     { value: "custom", label: "Custom" },
 ] as const
-
-const RECIPIENT_ROLES = ["admin", "manager", "staff", "customer", "all"]
 
 const STARTER_TEMPLATES: Record<string, { subject: string; htmlContent: string; variables: string[] }> = {
     magic_link: {
@@ -205,6 +209,7 @@ const STARTER_TEMPLATES: Record<string, { subject: string; htmlContent: string; 
 
 const formSchema = z.object({
     name: z.string().min(1, "Name is required"),
+    code: z.string().max(120, "Code is too long").optional().or(z.literal("")),
     type: z.enum(["magic_link", "notification", "welcome", "password_reset", "order_confirmation", "delivery_update", "custom"]),
     subject: z.string().min(1, "Subject is required"),
     htmlContent: z.string().min(1, "HTML content is required"),
@@ -219,18 +224,30 @@ interface Props {
     onOpenChange: (v: boolean) => void
     template: Template | null
     onSave: (data: Partial<Template> & { id?: string }) => void
+    recipientUsers: Array<{
+        id: string
+        name: string
+        email: string
+        role: string
+    }>
+    recipientRoles: string[]
 }
 
-export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: Props) {
+export function TemplateEditorDialog({ open, onOpenChange, template, onSave, recipientUsers, recipientRoles: availableRecipientRoles }: Props) {
     const [variables, setVariables] = useState<string[]>([])
-    const [recipientRoles, setRecipientRoles] = useState<string[]>([])
+    const [selectedRecipientRoles, setSelectedRecipientRoles] = useState<string[]>([])
+    const [recipientUserIds, setRecipientUserIds] = useState<string[]>([])
+    const [ccEmails, setCcEmails] = useState<string[]>([])
     const [newVar, setNewVar] = useState("")
+    const [newCcEmail, setNewCcEmail] = useState("")
     const [preview, setPreview] = useState(false)
+    const [userPickerOpen, setUserPickerOpen] = useState(false)
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
+            code: "",
             type: "notification",
             subject: "",
             htmlContent: "",
@@ -244,6 +261,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
         if (template) {
             form.reset({
                 name: template.name,
+                code: template.code ?? "",
                 type: template.type,
                 subject: template.subject,
                 htmlContent: template.htmlContent,
@@ -251,10 +269,13 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                 isActive: template.isActive,
             })
             setVariables((template.variables as string[]) ?? [])
-            setRecipientRoles((template.recipientRoles as string[]) ?? [])
+            setSelectedRecipientRoles((template.recipientRoles as string[]) ?? [])
+            setRecipientUserIds((template.recipientUserIds as string[]) ?? [])
+            setCcEmails((template.ccEmails as string[]) ?? [])
         } else {
             form.reset({
                 name: "",
+                code: "",
                 type: "notification",
                 subject: STARTER_TEMPLATES.notification.subject,
                 htmlContent: STARTER_TEMPLATES.notification.htmlContent,
@@ -262,7 +283,9 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                 isActive: true,
             })
             setVariables(STARTER_TEMPLATES.notification.variables)
-            setRecipientRoles([])
+            setSelectedRecipientRoles([])
+            setRecipientUserIds([])
+            setCcEmails([])
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [template, open])
@@ -286,13 +309,32 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
         setNewVar("")
     }
 
+    function addCcEmail() {
+        const email = newCcEmail.trim().toLowerCase()
+        const isValid = z.string().email().safeParse(email).success
+        if (email && isValid && !ccEmails.includes(email)) {
+            setCcEmails((prev) => [...prev, email])
+        }
+        setNewCcEmail("")
+    }
+
     function removeVariable(v: string) {
         setVariables((prev) => prev.filter((x) => x !== v))
     }
 
+    function removeCcEmail(email: string) {
+        setCcEmails((prev) => prev.filter((entry) => entry !== email))
+    }
+
     function toggleRole(role: string) {
-        setRecipientRoles((prev) =>
+        setSelectedRecipientRoles((prev) =>
             prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+        )
+    }
+
+    function toggleRecipientUser(userId: string) {
+        setRecipientUserIds((prev) =>
+            prev.includes(userId) ? prev.filter((entry) => entry !== userId) : [...prev, userId]
         )
     }
 
@@ -300,8 +342,11 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
         onSave({
             ...(template?.id ? { id: template.id } : {}),
             ...values,
+            code: values.code?.trim() || null,
             variables,
-            recipientRoles,
+            recipientRoles: selectedRecipientRoles,
+            recipientUserIds,
+            ccEmails,
         } as Partial<Template> & { id?: string })
     }
 
@@ -309,7 +354,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+            <DialogContent className="!flex h-[94vh] w-[calc(100vw-1rem)] !max-w-none !flex-col overflow-hidden p-0 sm:h-[92vh] sm:w-[calc(100vw-2.5rem)] sm:max-w-[calc(100vw-2.5rem)] 2xl:max-w-[1600px]">
                 <DialogHeader className="px-6 pt-6 pb-0">
                     <DialogTitle>{template ? "Edit Template" : "New Email Template"}</DialogTitle>
                     <DialogDescription>
@@ -319,11 +364,11 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
-                        <ScrollArea className="flex-1 px-6 py-4">
-                            <div className="space-y-5">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+                            <div className="space-y-5 px-6 py-4">
                                 {/* Name + Type */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                                     <FormField
                                         control={form.control}
                                         name="name"
@@ -333,6 +378,28 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                                                 <FormControl>
                                                     <Input placeholder="E.g. welcome email" {...field} />
                                                 </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="code"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Template Code</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        placeholder="opsional-untuk-custom-template"
+                                                        {...field}
+                                                        readOnly={Boolean(template?.code)}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription className="text-xs">
+                                                    {template?.code
+                                                        ? "Code template sistem dikunci agar alur notifikasi tetap aman."
+                                                        : "Gunakan jika template ini akan dipanggil oleh workflow tertentu."}
+                                                </FormDescription>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -386,25 +453,133 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
 
                                 {/* Recipient Roles */}
                                 <div>
-                                    <p className="text-sm font-medium mb-2">Recipient Roles</p>
+                                    <p className="text-sm font-medium mb-2">Recipient Email</p>
                                     <p className="text-xs text-muted-foreground mb-2">
-                                        Tag which roles this template is intended for (informational only).
+                                        Pilih role atau beberapa user untuk email utama. Daftar ini akan digabung dengan recipient dinamis seperti Sales PIC bila ada.
                                     </p>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {RECIPIENT_ROLES.map((role) => (
-                                            <button
-                                                key={role}
-                                                type="button"
-                                                onClick={() => toggleRole(role)}
-                                                className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                                                    recipientRoles.includes(role)
-                                                        ? "bg-primary text-primary-foreground border-primary"
-                                                        : "bg-background text-muted-foreground border-input hover:bg-accent"
-                                                }`}
+                                    <div className="space-y-3">
+                                        <div>
+                                            <p className="text-xs font-medium text-muted-foreground mb-2">By Role</p>
+                                            <div className="flex gap-2 flex-wrap">
+                                                {availableRecipientRoles.map((role) => (
+                                                    <button
+                                                        key={role}
+                                                        type="button"
+                                                        onClick={() => toggleRole(role)}
+                                                        className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                                                            selectedRecipientRoles.includes(role)
+                                                                ? "bg-primary text-primary-foreground border-primary"
+                                                                : "bg-background text-muted-foreground border-input hover:bg-accent"
+                                                        }`}
+                                                    >
+                                                        {role}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs font-medium text-muted-foreground mb-2">By User</p>
+                                            <div className="flex gap-2 flex-wrap mb-2">
+                                                {recipientUserIds.length > 0 ? recipientUserIds.map((userId) => {
+                                                    const selectedUser = recipientUsers.find((user) => user.id === userId)
+                                                    if (!selectedUser) return null
+                                                    return (
+                                                        <span
+                                                            key={userId}
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
+                                                        >
+                                                            {selectedUser.name}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleRecipientUser(userId)}
+                                                                className="hover:text-destructive"
+                                                            >
+                                                                <X className="h-3 w-3" />
+                                                            </button>
+                                                        </span>
+                                                    )
+                                                }) : (
+                                                    <span className="text-xs text-muted-foreground">Belum ada user dipilih.</span>
+                                                )}
+                                            </div>
+                                            <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="outline" role="combobox" className="w-full justify-between sm:w-[420px]">
+                                                        Pilih beberapa user
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Cari nama atau email..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>User tidak ditemukan.</CommandEmpty>
+                                                            <CommandGroup heading="Users">
+                                                                {recipientUsers.map((user) => (
+                                                                    <CommandItem
+                                                                        key={user.id}
+                                                                        value={`${user.name} ${user.email} ${user.role}`}
+                                                                        onSelect={() => toggleRecipientUser(user.id)}
+                                                                        className="items-start"
+                                                                    >
+                                                                        <Checkbox checked={recipientUserIds.includes(user.id)} className="mt-0.5" />
+                                                                        <div className="flex flex-col gap-0.5">
+                                                                            <span>{user.name}</span>
+                                                                            <span className="text-xs text-muted-foreground">{user.email} • {user.role}</span>
+                                                                        </div>
+                                                                        <Check
+                                                                            className={cn(
+                                                                                "ml-auto h-4 w-4",
+                                                                                recipientUserIds.includes(user.id) ? "opacity-100" : "opacity-0",
+                                                                            )}
+                                                                        />
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-sm font-medium mb-2">CC Emails</p>
+                                    <p className="text-xs text-muted-foreground mb-2">
+                                        Email di sini akan selalu di-CC setiap template ini dipakai.
+                                    </p>
+                                    <div className="flex gap-2 flex-wrap mb-2">
+                                        {ccEmails.map((email) => (
+                                            <span
+                                                key={email}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
                                             >
-                                                {role}
-                                            </button>
+                                                {email}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeCcEmail(email)}
+                                                    className="hover:text-destructive"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
                                         ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="email"
+                                            placeholder="cc@example.com"
+                                            value={newCcEmail}
+                                            onChange={(e) => setNewCcEmail(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCcEmail() } }}
+                                            className="h-8 text-sm"
+                                        />
+                                        <Button type="button" size="sm" variant="outline" onClick={addCcEmail} className="h-8 gap-1">
+                                            <Plus className="h-3 w-3" />
+                                            Add CC
+                                        </Button>
                                     </div>
                                 </div>
 
@@ -481,7 +656,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                                                 <div className="border rounded-md overflow-hidden">
                                                     <iframe
                                                         srcDoc={htmlValue}
-                                                        className="w-full h-64"
+                                                        className="h-[420px] w-full"
                                                         title="Email preview"
                                                         sandbox="allow-same-origin"
                                                     />
@@ -490,7 +665,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                                                 <FormControl>
                                                     <Textarea
                                                         {...field}
-                                                        className="font-mono text-xs h-64 resize-none"
+                                                        className="min-h-[420px] resize-none font-mono text-xs"
                                                         placeholder="<html>…</html>"
                                                     />
                                                 </FormControl>
@@ -513,7 +688,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave }: P
                                             <FormControl>
                                                 <Textarea
                                                     {...field}
-                                                    className="text-sm h-24 resize-none"
+                                                    className="min-h-32 resize-none text-sm"
                                                     placeholder="Plain text version for email clients that don't support HTML"
                                                 />
                                             </FormControl>

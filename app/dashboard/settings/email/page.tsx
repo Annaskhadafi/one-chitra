@@ -1,4 +1,7 @@
 import { getSmtpSettings, getEmailTemplates, getEmailLogs } from "@/app/actions/email"
+import { db } from "@/db"
+import { roles } from "@/db/schema"
+import { asc } from "drizzle-orm"
 import { Mail } from "lucide-react"
 import { EmailSettingsClient } from "./_components/email-settings-client"
 
@@ -7,11 +10,30 @@ export const metadata = {
 }
 
 export default async function EmailSettingsPage() {
-    const [smtpData, templates, logs] = await Promise.all([
+    const [smtpData, templates, logs, users, roleRows] = await Promise.all([
         getSmtpSettings(),
         getEmailTemplates(),
         getEmailLogs(100),
+        db.query.user.findMany({
+            columns: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+            },
+            orderBy: (fields, { asc }) => [asc(fields.name)],
+        }),
+        db.select({ name: roles.name }).from(roles).orderBy(asc(roles.name)),
     ])
+
+    const recipientUsers = users.filter(
+        (user): user is typeof users[number] & { email: string } => Boolean(user.email?.trim()),
+    )
+
+    const recipientRoles = Array.from(new Set([
+        ...roleRows.map((role) => role.name?.trim()).filter(Boolean),
+        ...recipientUsers.map((user) => user.role?.trim()).filter(Boolean),
+    ])).sort((left, right) => left.localeCompare(right))
 
     return (
         <div className="p-6 space-y-6">
@@ -27,7 +49,13 @@ export default async function EmailSettingsPage() {
                 </div>
             </div>
 
-            <EmailSettingsClient smtpData={smtpData} templates={templates} logs={logs} />
+            <EmailSettingsClient
+                smtpData={smtpData}
+                templates={templates}
+                logs={logs}
+                recipientUsers={recipientUsers}
+                recipientRoles={recipientRoles}
+            />
         </div>
     )
 }

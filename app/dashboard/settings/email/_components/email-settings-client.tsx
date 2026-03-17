@@ -11,14 +11,22 @@ import type { smtpSettings, emailTemplates, emailLogs } from "@/db/schema/email"
 type SmtpRow = typeof smtpSettings.$inferSelect
 type Template = typeof emailTemplates.$inferSelect
 type Log = typeof emailLogs.$inferSelect
+type RecipientUser = {
+    id: string
+    name: string
+    email: string
+    role: string
+}
 
 type Props = {
     smtpData: SmtpRow | null
     templates: Template[]
     logs: Log[]
+    recipientUsers: RecipientUser[]
+    recipientRoles: string[]
 }
 
-export function EmailSettingsClient({ smtpData, templates, logs }: Props) {
+export function EmailSettingsClient({ smtpData, templates, logs, recipientUsers, recipientRoles }: Props) {
     return (
         <Tabs defaultValue="smtp" className="space-y-4">
             <TabsList>
@@ -49,7 +57,11 @@ export function EmailSettingsClient({ smtpData, templates, logs }: Props) {
 
             <TabsContent value="templates">
                 <Suspense fallback={<div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>}>
-                    <TemplateList initialTemplates={templates} />
+                    <TemplateList
+                        initialTemplates={templates}
+                        recipientUsers={recipientUsers}
+                        recipientRoles={recipientRoles}
+                    />
                 </Suspense>
             </TabsContent>
 

@@ -10,6 +10,7 @@ import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
+import { sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
 import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 
@@ -51,6 +52,19 @@ const isSameDeliveryItemComposition = (
 
 function normalizeDeliveryOutput<T>(value: T): T {
     return normalizeSapDocumentFields(normalizeSlocFields(value))
+}
+
+async function notifyDeliveredDeliveries(deliveryIds: number[]) {
+    for (const deliveryId of deliveryIds) {
+        try {
+            const result = await sendDeliveryDeliveredNotification(deliveryId)
+            if (!result.success && !result.skipped) {
+                console.error(`[DELIVERY EMAIL] Failed to send notification for delivery ${deliveryId}:`, result.error)
+            }
+        } catch (error) {
+            console.error(`[DELIVERY EMAIL] Unexpected error for delivery ${deliveryId}:`, error)
+        }
+    }
 }
 
 export async function getDeliveries() {
@@ -341,7 +355,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
         console.log("[CREATE DELIVERY] Delivery Number:", deliveryNumber)
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             console.log("[CREATE DELIVERY] Starting transaction...")
 
             const [newDelivery] = await tx.insert(deliveries)
@@ -502,8 +516,18 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             } catch (_e) { }
 
             console.log("[CREATE DELIVERY] Transaction completed successfully")
-            return { success: true, id: newDelivery.id }
+            return {
+                success: true as const,
+                id: newDelivery.id,
+                deliveredNotificationIds: data.status === "delivered" ? [newDelivery.id] : [],
+            }
         })
+
+        if (result.success && result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true, id: result.id }
     } catch (error) {
         console.error("[CREATE DELIVERY] Error:", error)
         return { success: false, error: "Failed to create delivery: " + (error instanceof Error ? error.message : "Unknown error") }
@@ -515,7 +539,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
         const session = await getAuthenticatedSession('deliveries', 'edit')
         const userId = session.user.id
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const originalDelivery = await tx.query.deliveries.findFirst({
                 where: eq(deliveries.id, id),
                 with: { items: true },
@@ -523,7 +547,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
             if (!originalDelivery) {
                 console.error("[UPDATE DELIVERY] Delivery not found:", id)
-                return { success: false, error: "Delivery not found" }
+                return { success: false as const, error: "Delivery not found" }
             }
             console.log("[UPDATE DELIVERY] Found original delivery:", id)
 
@@ -758,8 +782,21 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/deliveries/create")
             } catch (_e) { }
-            return { success: true }
+            return {
+                success: true as const,
+                deliveredNotificationIds: originalDelivery.status !== "delivered" && data.status === "delivered" ? [id] : [],
+            }
         })
+
+        if (!result.success) {
+            return result
+        }
+
+        if (result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true }
     } catch (error) {
         console.error("Failed to update delivery (GLOBAL CATCH):", error)
         return { success: false, error: error instanceof Error ? error.message : "Failed to update delivery" }
@@ -919,9 +956,10 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     try {
         await checkPermission('deliveries', 'edit')
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const session = await getAuthenticatedSession('deliveries', 'edit')
             const userId = session.user.id
+            const deliveredNotificationIds: number[] = []
 
             for (const id of ids) {
                 const delivery = await tx.query.deliveries.findFirst({
@@ -1026,6 +1064,9 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
 
                 if (status === "delivered") {
                     await checkAndCompleteSalesOrder(tx, delivery.salesOrderId)
+                    if (delivery.status !== "delivered") {
+                        deliveredNotificationIds.push(id)
+                    }
                 }
             }
 
@@ -1033,8 +1074,14 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
             } catch (_e) { }
-            return { success: true }
+            return { success: true as const, deliveredNotificationIds }
         })
+
+        if (result.success && result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true }
     } catch (_error) {
         console.error("Bulk update delivery status error:", _error)
         return { success: false, error: "Failed to update delivery status" }

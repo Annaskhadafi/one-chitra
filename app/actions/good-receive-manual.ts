@@ -3,10 +3,11 @@
 import { db } from "@/db"
 import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses } from "@/db/schema"
 import { revalidatePath } from "next/cache"
-import { eq, and, or, asc, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
+import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { sendEmail } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 
 export type ManualGoodReceivePoOption = {
     poNumber: string
@@ -92,7 +93,7 @@ async function getNotificationRecipientEmails(roleNames: string[], userIds: stri
     return Array.from(new Set(recipients))
 }
 
-function buildGoodReceiveManualNotificationHtml(params: {
+function buildGoodReceiveManualNotificationContent(params: {
     poNumber: string
     supplier: string
     receiveDate: string
@@ -107,7 +108,7 @@ function buildGoodReceiveManualNotificationHtml(params: {
         quantity: number
     }>
 }) {
-    const rowsHtml = params.items.length > 0
+    const itemsTableRows = params.items.length > 0
         ? params.items
             .map((item, index) => `
                 <tr>
@@ -126,70 +127,16 @@ function buildGoodReceiveManualNotificationHtml(params: {
                 </td>
             </tr>
         `
+    const itemsTextRows = params.items.length > 0
+        ? params.items
+            .map((item, index) => `${index + 1}. PO Item ${item.poItem} | ${item.materialNumber} - ${item.materialDescription} | Qty: ${item.quantity.toLocaleString("id-ID")}`)
+            .join("\n")
+        : "Tidak ada item quantity > 0."
 
-    return `
-        <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:20px;">
-            <div style="max-width:900px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-                <div style="padding:20px;background:#1d4ed8;color:#ffffff;">
-                    <h2 style="margin:0 0 6px 0;">Notifikasi Good Receive Manual</h2>
-                    <p style="margin:0;font-size:13px;opacity:.95;">
-                        Barang sudah datang dan sudah diinput ke sistem stock manual.
-                    </p>
-                </div>
-                <div style="padding:20px;">
-                    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
-                        <tr>
-                            <td style="padding:6px 0;width:170px;color:#6b7280;">PO Number</td>
-                            <td style="padding:6px 0;">: <strong>${escapeHtml(params.poNumber)}</strong></td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Supplier</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.supplier)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Tanggal Receive</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.receiveDate)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Delivery Type</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.deliveryType)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Warehouse</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.warehouseLabel)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:6px 0;color:#6b7280;">Ref. Document</td>
-                            <td style="padding:6px 0;">: ${escapeHtml(params.referenceDocument?.trim() || "-")}</td>
-                        </tr>
-                    </table>
-
-                    <h3 style="margin:0 0 10px 0;font-size:14px;color:#111827;">Detail Item Diterima</h3>
-                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                        <thead>
-                            <tr style="background:#f1f5f9;">
-                                <th style="padding:8px;border:1px solid #e5e7eb;">No</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">PO Item</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Material</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Deskripsi</th>
-                                <th style="padding:8px;border:1px solid #e5e7eb;">Qty Diterima</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHtml}
-                        </tbody>
-                    </table>
-
-                    <p style="margin:16px 0 0 0;padding:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:12px;">
-                        Mohon untuk tim <strong>Procurement</strong> segera melakukan proses <strong>GR SAP</strong>.
-                    </p>
-                    <p style="margin:10px 0 0 0;font-size:12px;color:#374151;">
-                        Buka modul: <a href="${escapeHtml(params.detailUrl)}" style="color:#1d4ed8;">${escapeHtml(params.detailUrl)}</a>
-                    </p>
-                </div>
-            </div>
-        </div>
-    `
+    return {
+        itemsTableRows,
+        itemsTextRows,
+    }
 }
 
 export async function getManualGoodReceivePoOptions() {
@@ -624,7 +571,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
                         : "-"
 
-                    const html = buildGoodReceiveManualNotificationHtml({
+                    const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
                         poNumber: payload.poNumber,
                         supplier: payload.supplier,
                         receiveDate: receiveDateText,
@@ -635,10 +582,20 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         items: payload.items,
                     })
 
-                    const emailResult = await sendEmail({
+                    const emailResult = await sendSystemTemplatedEmailByCode({
+                        code: SYSTEM_EMAIL_TEMPLATE_CODES.goodReceiveManualNotification,
                         to: recipients,
-                        subject: `[GR Manual] Barang datang untuk PO ${payload.poNumber}`,
-                        html,
+                        data: {
+                            poNumber: payload.poNumber,
+                            supplier: payload.supplier,
+                            receiveDate: receiveDateText,
+                            deliveryType: payload.deliveryType,
+                            warehouseLabel,
+                            referenceDocument: payload.referenceDocument?.trim() || "-",
+                            detailUrl,
+                            itemsTableRows,
+                            itemsTextRows,
+                        },
                     })
 
                     if (!emailResult.success) {
