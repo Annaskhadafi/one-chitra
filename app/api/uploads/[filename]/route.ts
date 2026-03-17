@@ -1,21 +1,8 @@
 import { NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import { findExistingUploadFilePath, getUploadReadDirs } from "@/lib/upload-storage";
 import { extractUploadFilename } from "@/lib/upload-url";
+import { getUploadReadDirs, readManagedUpload } from "@/lib/upload-storage";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
-
-function getContentType(filename: string) {
-    const ext = filename.split(".").pop()?.toLowerCase();
-
-    if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-    if (ext === "png") return "image/png";
-    if (ext === "gif") return "image/gif";
-    if (ext === "webp") return "image/webp";
-    if (ext === "pdf") return "application/pdf";
-
-    return "application/octet-stream";
-}
 
 function normalizeOrigin(value: string | null | undefined) {
     const raw = value?.trim();
@@ -88,7 +75,7 @@ async function fetchRemoteUpload(filename: string, request: Request) {
 
             return {
                 buffer: await response.arrayBuffer(),
-                contentType: response.headers.get("content-type") || getContentType(filename),
+                contentType: response.headers.get("content-type") || "application/octet-stream",
             };
         } catch (error) {
             console.warn("[ServeFile] Remote upload fallback error:", remoteUrl, error);
@@ -104,13 +91,24 @@ export async function GET(
 ) {
     const { filename: rawFilename } = await params;
     const filename = extractUploadFilename(rawFilename);
-    const resolvedFile = findExistingUploadFilePath(filename);
 
     if (!filename) {
         return new NextResponse("File not found", { status: 404 });
     }
 
-    if (!resolvedFile) {
+    try {
+        const managedFile = await readManagedUpload(filename);
+
+        if (managedFile) {
+            return new NextResponse(new Uint8Array(managedFile.buffer), {
+                headers: {
+                    "Content-Type": managedFile.contentType,
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "X-Upload-Source": managedFile.source,
+                },
+            });
+        }
+
         const remoteFile = await fetchRemoteUpload(filename, request);
 
         if (!remoteFile) {
@@ -126,18 +124,6 @@ export async function GET(
                 "Content-Type": remoteFile.contentType,
                 "Cache-Control": "public, max-age=31536000, immutable",
                 "X-Upload-Source": "remote-fallback",
-            },
-        });
-    }
-
-    try {
-        const fileBuffer = await readFile(resolvedFile.filePath);
-
-        return new NextResponse(new Uint8Array(fileBuffer), {
-            headers: {
-                "Content-Type": getContentType(filename),
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "X-Upload-Source": "local",
             },
         });
     } catch (error) {

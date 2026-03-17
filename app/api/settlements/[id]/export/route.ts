@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSettlementById } from "@/app/actions/cost-settlement"
-import { findExistingUploadFilePath } from "@/lib/upload-storage"
+import { readManagedUpload } from "@/lib/upload-storage"
+import { extractUploadFilename } from "@/lib/upload-url"
 import JSZip from "jszip"
 import * as xlsx from "xlsx"
-import { readFile } from "fs/promises"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
 const GL_MAPPING: Record<string, string> = {
@@ -70,21 +70,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
             for (let i = 0; i < item.receipts.length; i++) {
                 const receipt = item.receipts[i]
-                const filename = receipt.fileUrl.split('/').pop()
+                const filename = extractUploadFilename(receipt.fileUrl)
                 if (filename) {
                     try {
-                        const resolvedFile = findExistingUploadFilePath(filename)
-                        if (!resolvedFile) {
+                        const storedFile = await readManagedUpload(filename)
+                        if (!storedFile) {
                             console.warn(`[Settlement Export] Receipt file not found: ${filename}`)
                             continue
                         }
 
-                        const fileBuffer = await readFile(resolvedFile.filePath)
-
                         const ext = filename.split('.').pop() || "jpg"
                         const newFilename = `${glCode}_${cleanVehicleNumber}_${dateStr}_${i + 1}.${ext}`
 
-                        notaFolder?.file(newFilename, fileBuffer)
+                        notaFolder?.file(newFilename, storedFile.buffer)
                         renamedFiles.push(newFilename)
                     } catch (error) {
                         console.error(`Failed to read file ${filename}:`, error)

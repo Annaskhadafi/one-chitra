@@ -1,6 +1,39 @@
 # Deployment Guide - One Chitra
 
-## Persistent File Storage Setup (Dokploy)
+## Recommended: S3-Compatible Object Storage
+
+Mulai sekarang, deployment yang direkomendasikan adalah memakai Object Storage S3-compatible agar file upload tidak bergantung pada filesystem container saat redeploy.
+
+### Environment Variable
+
+Di Dokploy dashboard → Application Settings → Environment Variables:
+
+```env
+UPLOAD_DRIVER=s3
+OBJECT_STORAGE_ENDPOINT=https://is3.cloudhost.id
+OBJECT_STORAGE_BUCKET=your-bucket-name
+OBJECT_STORAGE_PREFIX=upload
+OBJECT_STORAGE_REGION=us-east-1
+OBJECT_STORAGE_FORCE_PATH_STYLE=true
+OBJECT_STORAGE_ACCESS_KEY_ID=your-access-key-id
+OBJECT_STORAGE_SECRET_ACCESS_KEY=your-secret-access-key
+```
+
+### Migrasi File Lama
+
+Jika sebelumnya file masih tersimpan di `public/uploads` atau volume server, jalankan:
+
+```bash
+npm run storage:migrate
+```
+
+Preview tanpa upload:
+
+```bash
+npm run storage:migrate -- --dry-run
+```
+
+## Legacy: Persistent File Storage Setup (Dokploy Volume)
 
 Untuk memastikan file upload (PO documents, DO scans, dll) tidak hilang setelah redeploy, ikuti langkah berikut:
 

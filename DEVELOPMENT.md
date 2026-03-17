@@ -2,17 +2,18 @@
 
 ## 📁 File Upload Rule (Standardized)
 
-To ensure uploaded files are persistent across deployments on Dokploy, all file uploads MUST follow this unified rule:
+To ensure uploaded files are persistent across deployments, all file uploads MUST follow this unified rule:
 
 ### 1. Storage Location
-Files are stored in the `public/uploads` directory.
+Preferred production storage is S3-compatible object storage via `UPLOAD_DRIVER=s3`.
 
-| Environment | Actual Path | Notes |
+| Environment | Storage | Notes |
 |---|---|---|
-| **Development** | `<project-root>/public/uploads` | `process.cwd()` = project root |
-| **Production (Nixpacks)** | `/app/uploads` | Mounted volume path used by Dokploy |
+| **Production (Recommended)** | S3-compatible object storage | Use `UPLOAD_DRIVER=s3` and `OBJECT_STORAGE_*` env vars |
+| **Development / Legacy Local** | `<project-root>/public/uploads` | Used when `UPLOAD_DRIVER=local` or not set |
+| **Production (Legacy Dokploy Volume)** | `/app/uploads` | Local bind mount fallback if object storage is not used |
 
-On production (Dokploy), the container path `/app/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
+If using legacy local storage on production (Dokploy), the container path `/app/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
 
 Mount Type
 BIND
