@@ -29,8 +29,12 @@ export function getUploadWriteDir() {
 export function getUploadReadDirs() {
     return uniquePaths([
         getUploadWriteDir(),
+        resolve(process.cwd(), "uploads"),
+        resolve(process.cwd(), "..", "uploads"),
         resolve(process.cwd(), "public", "uploads"),
         resolve(process.cwd(), ".next", "standalone", "public", "uploads"),
+        "/mnt/data/one-chitra/uploads",
+        "/app/uploads",
         "/app/public/uploads",
         "/app/.next/standalone/public/uploads",
     ])
