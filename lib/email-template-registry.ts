@@ -297,13 +297,60 @@ const revenueReportTemplate = createEmailShell({
       </div>
 
       <div style="margin-bottom: 24px;">
-        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Inventory Status</h3>
-        ${createSummaryTable([
-          { label: "Jasum", value: "{{inventoryJasum}}" },
-          { label: "Kal-Ei", value: "{{inventoryKalEi}}" },
-          { label: "Singapore", value: "{{inventorySingapore}}" },
-          { label: "Total Inventory", value: "{{inventoryTotal}}" },
-        ])}
+        <div style="display:flex;gap:20px;">
+          <div style="flex:1;">
+            <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Customer Performance</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
+              <thead style="background:#f1f5f9;">
+                <tr>
+                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:left;">Customer</th>
+                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
+                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:center;">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding:8px;border:1px solid #cbd5e1;">CK</td>
+                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{ckRevenue}}</td>
+                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">{{ckPct}}%</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px;border:1px solid #cbd5e1;">SIS</td>
+                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{sisRevenue}}</td>
+                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">{{sisPct}}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1;">
+            <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Inventory Status</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
+              <tbody>
+                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Jasum</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventoryJasum}}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Kal-Ei</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventoryKalEi}}</td></tr>
+                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Singapore</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventorySingapore}}</td></tr>
+                <tr style="background:#f1f5f9;"><td style="padding:8px;border:1px solid #cbd5e1;"><strong>Total</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;"><strong>{{inventoryTotal}}</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Salesman Performance</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;line-height:1.5;">
+          <thead style="background:#f1f5f9;">
+            <tr>
+              <th style="padding:10px;border:1px solid #cbd5e1;text-align:left;">Salesman</th>
+              <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
+              <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Forecast</th>
+              <th style="padding:10px;border:1px solid #cbd5e1;text-align:center;">Achievement</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{salesmanTableRows}}
+          </tbody>
+        </table>
       </div>
 
       <div style="margin-bottom: 24px;">
@@ -865,7 +912,9 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplateDefinition[] = [
             "primeProductRevenue", "primeProductForecast", "primeProductPct",
             "serviceRevenue", "serviceForecast", "servicePct",
             "paRevenue", "paForecast", "paPct",
+            "ckRevenue", "ckPct", "sisRevenue", "sisPct",
             "inventoryJasum", "inventoryKalEi", "inventorySingapore", "inventoryTotal",
+            "salesmanTableRows",
             "materialsTableRows", "materialsTextRows",
             "actionUrl"
         ],

@@ -82,9 +82,30 @@ export async function sendManualRevenueReport(period: string) {
         const rev = revenueRes.data!
         const inv = inventoryRes.data!
 
+        // 4. Format achievement percentages
         const getPct = (actual: number, target: number) => 
             target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
 
+        // 5. Generate Salesman Table Rows
+        const salesmanData = [
+            { name: "MA OC", rev: rev.targets.ma_oc.revenue, target: rev.targets.ma_oc.forecast },
+            { name: "MA WS", rev: rev.targets.ma_ws.revenue, target: rev.targets.ma_ws.forecast },
+            { name: "MA FQ", rev: rev.targets.ma_fq.revenue, target: rev.targets.ma_fq.forecast },
+            { name: "MA BR", rev: rev.targets.ma_br.revenue, target: rev.targets.ma_br.forecast },
+            { name: "MA AG", rev: rev.targets.ma_ag.revenue, target: rev.targets.ma_ag.forecast },
+            { name: "MA MC", rev: rev.targets.ma_mc.revenue, target: rev.targets.ma_mc.forecast },
+        ]
+
+        const salesmanTableRows = salesmanData.map(s => `
+            <tr>
+              <td style="padding:10px;border:1px solid #cbd5e1;">${s.name}</td>
+              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.rev)}</td>
+              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.target)}</td>
+              <td style="padding:10px;border:1px solid #cbd5e1;text-align:center;">${getPct(s.rev, s.target)}%</td>
+            </tr>
+        `).join("")
+
+        // 6. Generate Materials Table Rows (Top 10)
         const materialsTableRows = rev.materials.slice(0, 10).map((m, i) => `
             <tr>
               <td style="padding:10px;border:1px solid #cbd5e1;">${m.desc}</td>
@@ -117,11 +138,17 @@ export async function sendManualRevenueReport(period: string) {
                 paForecast: formatCurrency(rev.targets.pa.forecast),
                 paPct: getPct(rev.targets.pa.revenue, rev.targets.pa.forecast),
 
+                ckRevenue: formatCurrency(rev.targets.ck.revenue),
+                ckPct: getPct(rev.targets.ck.revenue, rev.targets.ck.forecast),
+                sisRevenue: formatCurrency(rev.targets.sis.revenue),
+                sisPct: getPct(rev.targets.sis.revenue, rev.targets.sis.forecast),
+
                 inventoryJasum: formatCurrency(inv.jasum),
                 inventoryKalEi: formatCurrency(inv.kalEi),
                 inventorySingapore: formatCurrency(inv.singapore),
                 inventoryTotal: formatCurrency(inv.total),
 
+                salesmanTableRows,
                 materialsTableRows,
                 materialsTextRows,
                 actionUrl: "/dashboard/revenue-forecast"
