@@ -5,9 +5,11 @@ import { smtpSettings, emailLogs, emailTemplates } from "@/db/schema/email"
 import {
     ensureSystemEmailTemplates,
     getSystemEmailTemplateDefinition,
+    SYSTEM_EMAIL_TEMPLATE_CODES,
     type SystemEmailTemplateCode,
 } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
+import { toCanonicalAppUrl } from "@/lib/app-url"
 
 export type SmtpConfig = {
     host: string
@@ -196,6 +198,26 @@ export async function getEmailTemplate(type: TemplateType) {
     return templates[0] || null
 }
 
+function normalizeSystemTemplateData(data: TemplateData) {
+    return Object.fromEntries(
+        Object.entries(data).map(([key, value]) => {
+            if (typeof value !== "string") {
+                return [key, value]
+            }
+
+            const isUrlLikeKey =
+                key.toLowerCase().endsWith("url") ||
+                key.toLowerCase().endsWith("link")
+
+            if (!isUrlLikeKey) {
+                return [key, value]
+            }
+
+            return [key, toCanonicalAppUrl(value)]
+        }),
+    ) as TemplateData
+}
+
 export async function getEmailTemplateByCode(code: string, includeInactive = false) {
     await ensureEmailManagementSchema()
     await ensureSystemEmailTemplates()
@@ -378,6 +400,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
     }
 
     const template = activeTemplate ?? starterTemplate
+    const normalizedData = normalizeSystemTemplateData(args.data)
     const subjectSource = args.customSubject ?? template.subject
     const htmlSource = template.htmlContent
     const textSource = template.textContent ?? undefined
@@ -390,9 +413,9 @@ export async function sendSystemTemplatedEmailByCode(args: {
     return sendEmail({
         to: [...normalizeEmailList(args.to), ...templateRecipients],
         cc: [...ccEmails, ...normalizeEmailList(args.cc)],
-        subject: replaceTemplateVariables(subjectSource, args.data),
-        html: replaceTemplateVariables(htmlSource, args.data),
-        text: textSource ? replaceTemplateVariables(textSource, args.data) : undefined,
+        subject: replaceTemplateVariables(subjectSource, normalizedData),
+        html: replaceTemplateVariables(htmlSource, normalizedData),
+        text: textSource ? replaceTemplateVariables(textSource, normalizedData) : undefined,
         logMeta: {
             templateId: "id" in template ? template.id : null,
             templateCode: "code" in template ? template.code : args.code,
@@ -406,11 +429,32 @@ export async function sendMagicLinkEmail(
     magicLink: string,
     userName?: string,
 ) {
-    return sendTemplatedEmail(email, "magic_link", {
-        magicLink,
-        userName: userName || "User",
-        appName: "One Chitra",
-        expiresIn: "15 minutes",
+    return sendSystemTemplatedEmailByCode({
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.authMagicLink,
+        to: email,
+        data: {
+            magicLink,
+            userName: userName || "User",
+            appName: "One Chitra",
+            expiresIn: "15 minutes",
+        },
+    })
+}
+
+export async function sendPasswordResetEmail(
+    email: string,
+    resetUrl: string,
+    userName?: string,
+) {
+    return sendSystemTemplatedEmailByCode({
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.authPasswordReset,
+        to: email,
+        data: {
+            resetUrl,
+            userName: userName || "User",
+            appName: "One Chitra",
+            expiresIn: "1 hour",
+        },
     })
 }
 

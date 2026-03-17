@@ -21,7 +21,8 @@ import {
     user,
 } from "@/db/schema"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
-import { sendNotificationEmail } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 
 type DecisionType = "approve" | "reject"
 
@@ -689,12 +690,16 @@ async function createAssignmentsForStep(requestId: string, stepId: number, stepO
 
     const recipientEmails = recipients.map((entry) => entry.email).filter(Boolean)
     if (recipientEmails.length > 0) {
-        await sendNotificationEmail(
-            recipientEmails,
-            "New Approval Assignment",
-            `You have a new approval task (Request ID: ${requestId}, Step ${stepOrder}).`,
-            `/dashboard/approvals/${requestId}`
-        )
+        await sendSystemTemplatedEmailByCode({
+            code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalAssignment,
+            to: recipientEmails,
+            data: {
+                requestId,
+                stepOrder,
+                actionUrl: `/dashboard/approvals/${requestId}`,
+                appName: "One Chitra",
+            },
+        })
     }
 }
 
@@ -1377,12 +1382,16 @@ export async function submitApprovalDecision(formData: FormData) {
                 })
 
                 if (requester?.email) {
-                    await sendNotificationEmail(
-                        requester.email,
-                        "Approval Request Rejected",
-                        `Your approval request ${request.id} has been rejected at step ${updatedAssignment.step_order}.`,
-                        `/dashboard/approvals/${request.id}`
-                    )
+                    await sendSystemTemplatedEmailByCode({
+                        code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalRejected,
+                        to: requester.email,
+                        data: {
+                            requestId: request.id,
+                            stepOrder: updatedAssignment.step_order,
+                            actionUrl: `/dashboard/approvals/${request.id}`,
+                            appName: "One Chitra",
+                        },
+                    })
                 }
 
                 return
@@ -1470,12 +1479,15 @@ export async function submitApprovalDecision(formData: FormData) {
                 })
 
                 if (requester?.email) {
-                    await sendNotificationEmail(
-                        requester.email,
-                        "Approval Request Approved",
-                        `Your approval request ${request.id} has been fully approved.`,
-                        `/dashboard/approvals/${request.id}`
-                    )
+                    await sendSystemTemplatedEmailByCode({
+                        code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalApproved,
+                        to: requester.email,
+                        data: {
+                            requestId: request.id,
+                            actionUrl: `/dashboard/approvals/${request.id}`,
+                            appName: "One Chitra",
+                        },
+                    })
                 }
             }
 
@@ -1743,12 +1755,16 @@ export async function runApprovalSlaEscalationJob() {
         const shouldSendReminder = !lastReminderAt || Number.isNaN(lastReminderAt.getTime()) || (now.getTime() - lastReminderAt.getTime()) >= dayInMs
 
         if (shouldSendReminder && reminderRecipients.length > 0) {
-            await sendNotificationEmail(
-                reminderRecipients,
-                "Approval SLA Reminder",
-                `Approval request ${request.requestId} is overdue and needs your action on step ${request.currentStepOrder}.`,
-                `/dashboard/approvals/${request.requestId}`
-            )
+            await sendSystemTemplatedEmailByCode({
+                code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalSlaReminder,
+                to: reminderRecipients,
+                data: {
+                    requestId: request.requestId,
+                    stepOrder: request.currentStepOrder,
+                    actionUrl: `/dashboard/approvals/${request.requestId}`,
+                    appName: "One Chitra",
+                },
+            })
             slaMeta.lastReminderAt = now.toISOString()
             reminded += 1
         }
@@ -1792,12 +1808,16 @@ export async function runApprovalSlaEscalationJob() {
                         .filter(Boolean)
 
                     if (escalationEmails.length > 0) {
-                        await sendNotificationEmail(
-                            escalationEmails,
-                            "Approval SLA Escalation",
-                            `Approval request ${request.requestId} was escalated because it is overdue on step ${request.currentStepOrder}.`,
-                            `/dashboard/approvals/${request.requestId}`
-                        )
+                        await sendSystemTemplatedEmailByCode({
+                            code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalSlaEscalation,
+                            to: escalationEmails,
+                            data: {
+                                requestId: request.requestId,
+                                stepOrder: request.currentStepOrder,
+                                actionUrl: `/dashboard/approvals/${request.requestId}`,
+                                appName: "One Chitra",
+                            },
+                        })
                     }
 
                     await db.insert(approvalAuditLogs).values({

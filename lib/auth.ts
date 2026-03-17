@@ -1,9 +1,10 @@
-                                                                                                                                                  import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, magicLink } from "better-auth/plugins";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
-import { sendMagicLinkEmail, sendTemplatedEmail } from "@/lib/email";
+import { sendMagicLinkEmail, sendPasswordResetEmail } from "@/lib/email";
+import { getCanonicalAppUrl } from "@/lib/app-url";
 import bcrypt from "bcryptjs";
 
 const MIN_AUTH_SECRET_LENGTH = 32;
@@ -38,7 +39,7 @@ function validateBetterAuthSecret(): void {
 
 // Ensure URL has protocol prefix
 function normalizeUrl(url?: string): string {
-    if (!url) return "http://localhost:3000";
+    if (!url) return getCanonicalAppUrl();
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
     return `https://${url}`;
 }
@@ -88,12 +89,7 @@ export const auth = betterAuth({
             },
         },
         sendResetPassword: async ({ user: u, url }) => {
-            await sendTemplatedEmail(u.email, "password_reset", {
-                resetUrl: url,
-                userName: u.name ?? u.email,
-                appName: "One Chitra",
-                expiresIn: "1 hour",
-            });
+            await sendPasswordResetEmail(u.email, url, u.name ?? u.email);
         },
     },
     plugins: [
@@ -101,6 +97,8 @@ export const auth = betterAuth({
             defaultRole: "staff",
         }),
         magicLink({
+            expiresIn: 60 * 15,
+            disableSignUp: true,
             sendMagicLink: async ({ email, url }) => {
                 // Try to get user name from DB for personalisation
                 const dbUser = await db.query.user.findFirst({
@@ -117,6 +115,7 @@ export const auth = betterAuth({
         "http://localhost:3003",
         "http://localhost:3004",
         "http://localhost:3005",
+        getCanonicalAppUrl(),
         "https://satu.chitraparatama.com",
         baseURL,
         process.env.NEXT_PUBLIC_BETTER_AUTH_URL,

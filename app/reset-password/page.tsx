@@ -1,11 +1,11 @@
 import { Suspense } from "react"
-import { AuthEntryScreen } from "@/components/auth/auth-entry-screen"
 import { AuthScreenFallback } from "@/components/auth/auth-screen-fallback"
+import { ResetPasswordScreen } from "@/components/auth/reset-password-screen"
 
-export default function Home() {
+export default function ResetPasswordPage() {
     return (
         <Suspense fallback={<AuthScreenFallback />}>
-            <AuthEntryScreen />
+            <ResetPasswordScreen />
         </Suspense>
     )
 }

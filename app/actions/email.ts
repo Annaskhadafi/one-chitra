@@ -226,3 +226,24 @@ export async function getEmailLogs(limit = 50) {
         .orderBy(desc(emailLogs.createdAt))
         .limit(limit)
 }
+
+export async function clearEmailLogs() {
+    try {
+        await ensureEmailManagementSchema()
+        const deletedRows = await db
+            .delete(emailLogs)
+            .returning({ id: emailLogs.id })
+
+        revalidatePath("/dashboard/settings/email")
+        return {
+            success: true,
+            deletedCount: deletedRows.length,
+        }
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to clear email logs",
+            deletedCount: 0,
+        }
+    }
+}

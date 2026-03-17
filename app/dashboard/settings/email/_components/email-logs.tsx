@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 import {
     Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card"
@@ -18,7 +19,8 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { CheckCircle2, Clock, Eye, Search, XCircle } from "lucide-react"
+import { clearEmailLogs } from "@/app/actions/email"
+import { CheckCircle2, Clock, Eye, Loader2, Search, Trash2, XCircle } from "lucide-react"
 import type { emailLogs } from "@/db/schema/email"
 
 type Log = typeof emailLogs.$inferSelect
@@ -57,11 +59,13 @@ function formatDateTime(value: Date | null) {
 }
 
 export function EmailLogsTable({ logs }: Props) {
+    const [localLogs, setLocalLogs] = useState(logs)
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [selectedLog, setSelectedLog] = useState<Log | null>(null)
+    const [isClearing, setIsClearing] = useState(false)
 
-    const filtered = useMemo(() => logs
+    const filtered = useMemo(() => localLogs
         .filter((log) => {
             const keyword = search.toLowerCase().trim()
             const haystack = [
@@ -76,12 +80,38 @@ export function EmailLogsTable({ logs }: Props) {
             const matchesSearch = !keyword || haystack.includes(keyword)
             const matchesStatus = statusFilter === "all" || log.status === statusFilter
             return matchesSearch && matchesStatus
-        }), [logs, search, statusFilter])
+        }), [localLogs, search, statusFilter])
 
     const totals = {
-        sent: logs.filter((log) => log.status === "sent").length,
-        failed: logs.filter((log) => log.status === "failed").length,
-        pending: logs.filter((log) => log.status === "pending").length,
+        sent: localLogs.filter((log) => log.status === "sent").length,
+        failed: localLogs.filter((log) => log.status === "failed").length,
+        pending: localLogs.filter((log) => log.status === "pending").length,
+    }
+
+    async function handleClearLogs() {
+        if (localLogs.length === 0) {
+            return
+        }
+
+        if (!confirm("Clear all email logs? This action cannot be undone.")) {
+            return
+        }
+
+        setIsClearing(true)
+        try {
+            const result = await clearEmailLogs()
+            if (result.success) {
+                setLocalLogs([])
+                setSelectedLog(null)
+                toast.success(`${result.deletedCount} email log berhasil dihapus`)
+            } else {
+                toast.error(result.error || "Gagal menghapus email log")
+            }
+        } catch (_error) {
+            toast.error("Terjadi kendala saat menghapus email log")
+        } finally {
+            setIsClearing(false)
+        }
     }
 
     return (
@@ -111,11 +141,31 @@ export function EmailLogsTable({ logs }: Props) {
             </div>
 
             <Card>
-                <CardHeader>
-                    <CardTitle>Email Delivery Logs</CardTitle>
-                    <CardDescription>
-                        Audit trail untuk semua email keluar. Klik preview untuk melihat penerima, template, dan isi email.
-                    </CardDescription>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <CardTitle>Email Delivery Logs</CardTitle>
+                        <CardDescription>
+                            Audit trail untuk semua email keluar. Klik preview untuk melihat penerima, template, dan isi email.
+                        </CardDescription>
+                    </div>
+                    <Button
+                        variant="outline"
+                        className="gap-2 self-start border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                        onClick={handleClearLogs}
+                        disabled={isClearing || localLogs.length === 0}
+                    >
+                        {isClearing ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Clearing...
+                            </>
+                        ) : (
+                            <>
+                                <Trash2 className="h-4 w-4" />
+                                Clear Log Email
+                            </>
+                        )}
+                    </Button>
                 </CardHeader>
                 <CardContent>
                     <div className="flex gap-3 mb-4">
@@ -207,66 +257,68 @@ export function EmailLogsTable({ logs }: Props) {
             </Card>
 
             <Dialog open={Boolean(selectedLog)} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-                <DialogContent className="max-w-5xl h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="h-[94vh] w-[99vw] max-w-[2400px] overflow-hidden p-4 sm:p-6 flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Preview Email Log</DialogTitle>
                         <DialogDescription>
-                            Detail penerima dan isi email yang tersimpan di log.
+                            Detail penerima dan isi email yang tersimpan di log, dengan area preview yang lebih lebar.
                         </DialogDescription>
                     </DialogHeader>
 
                     {selectedLog && (
-                        <div className="flex flex-col gap-4 min-h-0 flex-1">
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">To</div>
-                                    <div className="font-mono break-all">{selectedLog.toEmail}</div>
-                                </div>
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">CC</div>
-                                    <div className="font-mono break-all">{selectedLog.ccEmail || "—"}</div>
-                                </div>
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">From</div>
-                                    <div className="font-mono break-all">{selectedLog.fromEmail || "—"}</div>
-                                </div>
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">Sent At</div>
-                                    <div>{formatDateTime(selectedLog.sentAt)}</div>
-                                </div>
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">Template</div>
-                                    <div className="font-medium">{selectedLog.templateName || "Direct Email"}</div>
-                                    <div className="font-mono text-xs text-muted-foreground mt-1">{selectedLog.templateCode || "—"}</div>
-                                </div>
-                                <div className="rounded-md border p-3">
-                                    <div className="text-xs text-muted-foreground mb-1">Status</div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant={selectedLog.status === "sent" ? "success" : selectedLog.status === "failed" ? "destructive" : "secondary"}>
-                                            {selectedLog.status}
-                                        </Badge>
-                                        {selectedLog.errorMessage && (
-                                            <span className="text-xs text-red-600 truncate">{selectedLog.errorMessage}</span>
-                                        )}
+                        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
+                            <ScrollArea className="rounded-md border xl:h-full">
+                                <div className="grid gap-3 p-4 text-sm">
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">To</div>
+                                        <div className="font-mono break-all">{selectedLog.toEmail}</div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">CC</div>
+                                        <div className="font-mono break-all">{selectedLog.ccEmail || "—"}</div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">From</div>
+                                        <div className="font-mono break-all">{selectedLog.fromEmail || "—"}</div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">Sent At</div>
+                                        <div>{formatDateTime(selectedLog.sentAt)}</div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">Template</div>
+                                        <div className="font-medium">{selectedLog.templateName || "Direct Email"}</div>
+                                        <div className="font-mono text-xs text-muted-foreground mt-1 break-all">{selectedLog.templateCode || "—"}</div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">Status</div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Badge variant={selectedLog.status === "sent" ? "success" : selectedLog.status === "failed" ? "destructive" : "secondary"}>
+                                                {selectedLog.status}
+                                            </Badge>
+                                            {selectedLog.errorMessage && (
+                                                <span className="text-xs text-red-600 break-words">{selectedLog.errorMessage}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground mb-1">Subject</div>
+                                        <div className="break-words">{selectedLog.subject}</div>
                                     </div>
                                 </div>
-                                <div className="rounded-md border p-3 col-span-2">
-                                    <div className="text-xs text-muted-foreground mb-1">Subject</div>
-                                    <div>{selectedLog.subject}</div>
-                                </div>
-                            </div>
+                            </ScrollArea>
 
-                            <Tabs defaultValue={selectedLog.htmlContent ? "html" : "text"} className="min-h-0 flex-1 flex flex-col">
-                                <TabsList>
+                            <Tabs defaultValue={selectedLog.htmlContent ? "html" : "text"} className="min-h-0 flex flex-1 flex-col">
+                                <TabsList className="self-start">
                                     <TabsTrigger value="html">HTML Preview</TabsTrigger>
                                     <TabsTrigger value="text">Text</TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="html" className="min-h-0 flex-1">
-                                    <div className="rounded-md border h-full overflow-hidden">
+                                    <div className="rounded-md border h-full overflow-hidden bg-white">
                                         {selectedLog.htmlContent ? (
                                             <iframe
                                                 srcDoc={selectedLog.htmlContent}
-                                                className="w-full h-full bg-white"
+                                                className="h-full w-full bg-white"
                                                 title="Email HTML Preview"
                                                 sandbox="allow-same-origin"
                                             />

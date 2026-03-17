@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
@@ -17,6 +18,7 @@ import {
 import {
   CalendarCheck2,
   ClipboardList,
+  ChevronDown,
   Package,
   Users,
 } from "lucide-react"
@@ -44,6 +46,17 @@ type TopCustomerLocCurrPoint = {
 }
 
 const PIE_COLORS = ["#f97316", "#3b82f6", "#22c55e"]
+const RANGE_OPTIONS = [
+  { value: "this-week", label: "This Week" },
+  { value: "this-month", label: "This Month" },
+  { value: "this-quarter", label: "This Quarter" },
+] as const
+
+const formatInteger = (value: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(value)
+}
 
 const formatCompactCurrency = (value: number) => {
   if (value >= 1_000_000_000) return `Rp ${(value / 1_000_000_000).toFixed(1)}B`
@@ -105,12 +118,20 @@ export function DashboardModernOverview({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const handleRangeChange = (value: "this-week" | "this-month" | "this-quarter") => {
     const params = new URLSearchParams(searchParams?.toString() ?? "")
     params.set("range", value)
     router.replace(`${pathname}?${params.toString()}`)
   }
+
+  const selectedRangeLabel =
+    RANGE_OPTIONS.find((option) => option.value === selectedRange)?.label ?? "This Month"
 
   const statCards = [
     {
@@ -181,16 +202,25 @@ export function DashboardModernOverview({
       <div className="mb-4 flex flex-col gap-3 rounded-2xl border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-          <Select value={selectedRange} onValueChange={handleRangeChange}>
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue placeholder="Period" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="this-week">This Week</SelectItem>
-              <SelectItem value="this-month">This Month</SelectItem>
-              <SelectItem value="this-quarter">This Quarter</SelectItem>
-            </SelectContent>
-          </Select>
+          {isMounted ? (
+            <Select value={selectedRange} onValueChange={handleRangeChange}>
+              <SelectTrigger className="h-8 w-[120px] text-xs">
+                <SelectValue placeholder="Period" />
+              </SelectTrigger>
+              <SelectContent>
+                {RANGE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="border-input text-muted-foreground flex h-8 w-[120px] items-center justify-between rounded-md border bg-transparent px-3 text-xs shadow-xs">
+              <span>{selectedRangeLabel}</span>
+              <ChevronDown className="size-4 opacity-50" />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline">SCM</Badge>
@@ -207,7 +237,7 @@ export function DashboardModernOverview({
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">{item.title}</p>
-                    <p className="text-3xl font-bold leading-tight">{item.value.toLocaleString()}</p>
+                    <p className="text-3xl font-bold leading-tight">{formatInteger(item.value)}</p>
                     <p className="text-[11px] text-muted-foreground">{item.subtitle}</p>
                   </div>
                   <div className={`rounded-xl p-2 ${item.bg}`}>
