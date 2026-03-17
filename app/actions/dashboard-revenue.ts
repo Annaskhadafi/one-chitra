@@ -63,7 +63,8 @@ export async function getDashboardInventory() {
     }
 }
 
-import { sendSystemTemplatedEmailByCode, SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatCurrency } from "@/lib/utils"
 
 export async function sendManualRevenueReport(period: string) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { fetchDashboardRevenueForecast, fetchDashboardInventory } from "@/app/actions/dashboard-revenue-logic"
-import { sendSystemTemplatedEmailByCode, SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatCurrency } from "@/lib/utils"
 import { toCanonicalAppUrl } from "@/lib/app-url"
 
