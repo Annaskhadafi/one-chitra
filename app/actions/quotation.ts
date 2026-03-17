@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { quotations, quotationItems, salesOrders, salesOrderItems } from "@/db/schema"
-import { eq, desc, inArray } from "drizzle-orm"
+import { and, eq, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { quotationSchema } from "@/lib/schemas"
@@ -31,6 +31,14 @@ function toValidQuotationId(value: number | string) {
         return null
     }
     return parsed
+}
+
+async function getAuthenticatedUserId() {
+    const session = await auth.api.getSession({
+        headers: await headers(),
+    })
+
+    return session?.user?.id ?? null
 }
 
 export async function getQuotation(id: number | string) {
@@ -208,7 +216,36 @@ export async function updateQuotation(id: number, data: z.infer<typeof quotation
 
 export async function deleteQuotation(id: number) {
     try {
-        await db.delete(quotations).where(eq(quotations.id, id))
+        const userId = await getAuthenticatedUserId()
+        if (!userId) {
+            return { success: false, error: "Unauthorized" }
+        }
+
+        const safeId = toValidQuotationId(id)
+        if (safeId === null) {
+            return { success: false, error: "Invalid quotation id" }
+        }
+
+        const quotation = await db.query.quotations.findFirst({
+            where: eq(quotations.id, safeId),
+            columns: {
+                id: true,
+                createdBy: true,
+            },
+        })
+
+        if (!quotation) {
+            return { success: false, error: "Quotation not found" }
+        }
+
+        if (quotation.createdBy !== userId) {
+            return { success: false, error: "You can only delete quotations you created" }
+        }
+
+        await db.delete(quotations).where(and(
+            eq(quotations.id, safeId),
+            eq(quotations.createdBy, userId),
+        ))
         revalidatePath("/dashboard/quotations")
         return { success: true }
     } catch (_error) {
@@ -218,7 +255,37 @@ export async function deleteQuotation(id: number) {
 
 export async function bulkDeleteQuotations(ids: number[]) {
     try {
-        await db.delete(quotations).where(inArray(quotations.id, ids))
+        const userId = await getAuthenticatedUserId()
+        if (!userId) {
+            return { success: false, error: "Unauthorized" }
+        }
+
+        const safeIds = Array.from(
+            new Set(ids.map((id) => toValidQuotationId(id)).filter((id): id is number => id !== null))
+        )
+
+        if (safeIds.length === 0) {
+            return { success: false, error: "No valid quotations selected" }
+        }
+
+        const ownedQuotations = await db.query.quotations.findMany({
+            where: and(
+                inArray(quotations.id, safeIds),
+                eq(quotations.createdBy, userId),
+            ),
+            columns: {
+                id: true,
+            },
+        })
+
+        if (ownedQuotations.length !== safeIds.length) {
+            return { success: false, error: "You can only delete quotations you created" }
+        }
+
+        await db.delete(quotations).where(and(
+            inArray(quotations.id, safeIds),
+            eq(quotations.createdBy, userId),
+        ))
         revalidatePath("/dashboard/quotations")
         return { success: true }
     } catch (_error) {
