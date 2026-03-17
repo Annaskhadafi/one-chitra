@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { DashboardStats } from "@/app/actions/dashboard"
+import { DashboardQuickAccess } from "@/components/dashboard/dashboard-quick-access"
 
 type RevenueVsForecastPoint = {
   name: string
@@ -94,14 +95,6 @@ const MONTH_NAMES: Record<string, string> = {
   "10": "Oct",
   "11": "Nov",
   "12": "Dec",
-}
-
-const formatDate = (value: Date) => {
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value))
 }
 
 export function DashboardModernOverview({
@@ -374,31 +367,9 @@ export function DashboardModernOverview({
           </div>
         </div>
 
-        <Card className="border-none bg-white shadow-sm xl:col-span-3">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-xl">Upcoming Activities</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-4">
-            {stats.recentOrders.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No activities available</div>
-            ) : (
-              stats.recentOrders.map((order) => (
-                <div key={order.id} className="rounded-xl bg-slate-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="truncate text-sm font-semibold">{order.customerName}</p>
-                    <span className="text-xs font-semibold text-primary">{formatCompactCurrency(order.totalValue)}</span>
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {order.invoiceNumber ?? `SO-${order.id}`} · {formatDate(order.salesDate)}
-                  </p>
-                  <div className="mt-1">
-                    <Badge variant="outline" className="text-[10px] capitalize">{order.status}</Badge>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <div className="xl:col-span-3">
+          <DashboardQuickAccess variant="sidebar" />
+        </div>
       </div>
     </div>
   )
