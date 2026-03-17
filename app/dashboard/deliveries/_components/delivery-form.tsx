@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
 import { getCustomerAddresses } from "@/app/actions/customer"
@@ -52,7 +53,7 @@ import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCi
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
-import { resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface SOItemWithRemaining {
     id: number
@@ -498,6 +499,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const selectedSO = useMemo(() =>
         salesOrders.find(so => so.id === salesOrderId),
         [salesOrders, salesOrderId]
+    )
+    const selectedSoDocumentUrl = useMemo(
+        () => resolveUploadDocumentUrl(selectedSO?.poDocument || null),
+        [selectedSO?.poDocument]
+    )
+    const selectedSoDocumentIsImage = useMemo(
+        () => isUploadImageFile(selectedSO?.poDocument || null),
+        [selectedSO?.poDocument]
     )
 
     // Load saved addresses when customer changes
@@ -1017,7 +1026,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                         {salesOrders.map(so => (
                                                             <CommandItem
                                                                 key={so.id}
-                                                                value={`${so.invoiceNumber} ${so.customer.name}`}
+                                                                value={`${so.invoiceNumber} ${so.customer.name} ${so.customerPo || ""}`}
                                                                 onSelect={() => {
                                                                     handleSOChange(so.id)
                                                                     setSoOpen(false)
@@ -1042,6 +1051,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                     <span className="text-sm text-muted-foreground mt-1">
                                                                         {so.customer.name} • {so.items.length} items
                                                                     </span>
+                                                                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                                        <Badge variant={so.customerPo ? "secondary" : "outline"} className="text-[11px]">
+                                                                            {so.customerPo ? `PO: ${so.customerPo}` : "No PO Number"}
+                                                                        </Badge>
+                                                                        <Badge variant={so.poDocument ? "secondary" : "outline"} className="text-[11px]">
+                                                                            {so.poDocument ? "PO File Ready" : "No PO File"}
+                                                                        </Badge>
+                                                                    </div>
                                                                 </div>
                                                             </CommandItem>
                                                         ))}
@@ -1292,17 +1309,30 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     <Plus className="h-4 w-4 rotate-45 text-amber-500" />
                                     Customer PO Preview
                                 </CardTitle>
-                                <CardDescription>Verify items against the original Customer PO document.</CardDescription>
-                            </CardHeader>
-                            <CardContent className={cn("p-0", !selectedSO?.poDocument && "p-8")}>
-                                {selectedSO?.poDocument ? (
-                                    <div className="aspect-[1/1.4] w-full">
-                                        <iframe
-                                            src={resolveUploadDocumentUrl(selectedSO.poDocument) || ""}
-                                            className="w-full h-full border-0"
-                                            title="Customer PO Preview"
-                                        />
-                                    </div>
+                            <CardDescription>Verify items against the original Customer PO document.</CardDescription>
+                        </CardHeader>
+                        <CardContent className={cn("p-0", !selectedSO?.poDocument && "p-8")}>
+                                {selectedSO?.poDocument && selectedSoDocumentUrl ? (
+                                    selectedSoDocumentIsImage ? (
+                                        <div className="flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+                                            <Image
+                                                src={selectedSoDocumentUrl}
+                                                alt="Customer PO Preview"
+                                                width={1200}
+                                                height={1600}
+                                                unoptimized
+                                                className="max-h-[720px] w-auto max-w-full rounded-md border bg-white shadow-sm"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="aspect-[1/1.4] w-full">
+                                            <iframe
+                                                src={selectedSoDocumentUrl}
+                                                className="w-full h-full border-0"
+                                                title="Customer PO Preview"
+                                            />
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="flex flex-col items-center justify-center text-center py-4 text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg border border-dashed">
                                         <AlertTriangle className="h-8 w-8 mb-2 opacity-20" />

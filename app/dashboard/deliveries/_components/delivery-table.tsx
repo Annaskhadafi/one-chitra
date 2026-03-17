@@ -125,6 +125,7 @@ interface DeliveryTableProps {
 }
 
 const EMPTY_DELIVERIES: DeliveryWithRelations[] = []
+const DELIVERY_COLUMN_VISIBILITY_VERSION = 2
 
 function toDateKey(dateInput: Date | string | null | undefined): string | null {
     if (!dateInput) return null
@@ -210,7 +211,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
-    const columnVisibilityStorageKey = `deliveries:column-visibility:${currentUserId}`
+    const columnVisibilityStorageKey = `deliveries:column-visibility:v${DELIVERY_COLUMN_VISIBILITY_VERSION}:${currentUserId}`
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
     const canDelete = hasResourcePermission('deliveries', 'delete')
@@ -258,6 +259,11 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
+
+    React.useEffect(() => {
+        queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], initialData)
+    }, [initialData, queryClient])
+
     const refreshToken = searchParams.get("refresh")
     const focusId = useMemo(() => {
         const rawId = searchParams.get("focusId")
@@ -2328,7 +2334,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     <div
                         className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-accent"
                     >
-                        <Table>
+                        <Table className="min-w-max">
                             <TableHeader className="bg-background shadow-sm">
                                 {table.getHeaderGroups().map((headerGroup) => (
                                     <TableRow key={headerGroup.id}>

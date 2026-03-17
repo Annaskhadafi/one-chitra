@@ -129,6 +129,11 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
+
+    useEffect(() => {
+        queryClient.setQueryData<SalesOrderListItem[]>(["sales-orders"], initialData)
+    }, [initialData, queryClient])
+
     const data = queryData ?? initialData
     const refreshToken = searchParams.get("refresh")
     const focusId = useMemo(() => {

@@ -514,6 +514,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
             revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
@@ -646,6 +647,7 @@ export async function deleteSalesOrder(id: number) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -740,6 +742,7 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -798,6 +801,8 @@ export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) 
             }
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -850,6 +855,8 @@ export async function releaseExpiredDraftBookings() {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/inventory")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true, released: expiredDrafts.length }
         })
     } catch (error) {
