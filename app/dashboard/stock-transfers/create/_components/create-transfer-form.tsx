@@ -345,6 +345,7 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                     </div>
 
                     <div className="rounded-md border">
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
@@ -435,6 +436,7 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">

@@ -115,6 +115,7 @@ export function DeliveryCostRequestClient({ savedRequests: initialRequests, flee
                             Belum ada riwayat permintaan biaya.
                         </div>
                     ) : (
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/50">
@@ -197,6 +198,7 @@ export function DeliveryCostRequestClient({ savedRequests: initialRequests, flee
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     )}
                 </CardContent>
             </Card>

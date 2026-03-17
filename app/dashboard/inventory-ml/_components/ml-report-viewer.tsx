@@ -206,6 +206,7 @@ export function MLReportViewer({ rationale }: { rationale: string }) {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="px-0 max-h-[250px] overflow-y-auto scrollbar-thin">
+                            <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 font-bold text-muted-foreground">
                                     <tr>
@@ -222,6 +223,7 @@ export function MLReportViewer({ rationale }: { rationale: string }) {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         </CardContent>
                     </Card>
                 )}

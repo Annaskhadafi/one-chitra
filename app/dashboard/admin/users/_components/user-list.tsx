@@ -35,6 +35,7 @@ import {
     SortingState,
     useReactTable,
 } from "@tanstack/react-table"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 type UserWarehouseAccessRow = {
     warehouseId: number
@@ -352,46 +353,84 @@ export function UserList({ users: initialUsers, roles, warehouses }: UserListPro
             )}
 
             <div className="border rounded-md">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => (
-                                    <TableHead key={header.id}>
-                                        {header.isPlaceholder
-                                            ? null
-                                            : flexRender(
-                                                header.column.columnDef.header,
-                                                header.getContext()
-                                            )}
-                                    </TableHead>
+                <ResponsiveTableWrapper
+                    className="rounded-none"
+                    mobileView={
+                        <div className="space-y-3 p-3">
+                            {data.length === 0 ? (
+                                <div className="text-sm text-muted-foreground text-center py-6">No results.</div>
+                            ) : (
+                                data.map((u) => (
+                                    <div key={u.id} className="rounded-md border p-3 bg-card">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="h-8 w-8">
+                                                    <AvatarImage src={u.image || ""} />
+                                                    <AvatarFallback>{u.name?.charAt(0)}</AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <div className="font-medium">{u.name}</div>
+                                                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                                                </div>
+                                            </div>
+                                            <Badge variant="outline">{u.role}</Badge>
+                                        </div>
+                                        {u.warehouseAccesses && u.warehouseAccesses.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {getWarehouseAccessSummary(u.warehouseAccesses).slice(0, 3).map((w) => (
+                                                    <Badge key={w.label} variant={w.tone} className="text-[10px]">{w.label}</Badge>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    }
+                >
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <TableRow key={headerGroup.id}>
+                                        {headerGroup.headers.map((header) => (
+                                            <TableHead key={header.id}>
+                                                {header.isPlaceholder
+                                                    ? null
+                                                    : flexRender(
+                                                        header.column.columnDef.header,
+                                                        header.getContext()
+                                                    )}
+                                            </TableHead>
+                                        ))}
+                                    </TableRow>
                                 ))}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={row.getIsSelected() && "selected"}
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableHeader>
+                            <TableBody>
+                                {table.getRowModel().rows?.length ? (
+                                    table.getRowModel().rows.map((row) => (
+                                        <TableRow
+                                            key={row.id}
+                                            data-state={row.getIsSelected() && "selected"}
+                                        >
+                                            {row.getVisibleCells().map((cell) => (
+                                                <TableCell key={cell.id}>
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                                            No results.
                                         </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={columns.length} className="h-24 text-center">
-                                    No results.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </ResponsiveTableWrapper>
             </div>
 
             {table.getSelectedRowModel().flatRows.length > 0 && (canEdit || canDelete) && (

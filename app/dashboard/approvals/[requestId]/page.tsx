@@ -146,28 +146,30 @@ export default async function ApprovalRequestDetailPage({
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Step</TableHead>
-                                <TableHead>Assignee</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Acted At</TableHead>
-                                <TableHead>Comment</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {detail.assignments.map((assignment) => (
-                                <TableRow key={assignment.id}>
-                                    <TableCell>{assignment.stepOrder}. {assignment.step?.stepName}</TableCell>
-                                    <TableCell>{assignment.assignee?.name ?? assignment.assigneeUserId}</TableCell>
-                                    <TableCell><Badge variant="outline">{assignment.status}</Badge></TableCell>
-                                    <TableCell>{assignment.actedAt ? new Date(assignment.actedAt).toLocaleString("id-ID") : "-"}</TableCell>
-                                    <TableCell>{assignment.comment ?? "-"}</TableCell>
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Step</TableHead>
+                                    <TableHead>Assignee</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Acted At</TableHead>
+                                    <TableHead>Comment</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {detail.assignments.map((assignment) => (
+                                    <TableRow key={assignment.id}>
+                                        <TableCell>{assignment.stepOrder}. {assignment.step?.stepName}</TableCell>
+                                        <TableCell>{assignment.assignee?.name ?? assignment.assigneeUserId}</TableCell>
+                                        <TableCell><Badge variant="outline">{assignment.status}</Badge></TableCell>
+                                        <TableCell>{assignment.actedAt ? new Date(assignment.actedAt).toLocaleString("id-ID") : "-"}</TableCell>
+                                        <TableCell>{assignment.comment ?? "-"}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
 

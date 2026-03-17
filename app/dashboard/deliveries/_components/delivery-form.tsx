@@ -1098,173 +1098,175 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-transparent hover:bg-transparent">
-                                            <TableHead className="w-[40%] pl-6">Product Details</TableHead>
-                                            <TableHead className="w-[15%] text-center">Ordered</TableHead>
-                                            <TableHead className="w-[20%]">Deliver Qty</TableHead>
-                                            <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, idx) => {
-                                            const stock = getStockStatus(item.productId)
-                                            const isTyre = item.productCategory === "TYRE"
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-transparent hover:bg-transparent">
+                                                <TableHead className="w-[40%] pl-6">Product Details</TableHead>
+                                                <TableHead className="w-[15%] text-center">Ordered</TableHead>
+                                                <TableHead className="w-[20%]">Deliver Qty</TableHead>
+                                                <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {items.map((item, idx) => {
+                                                const stock = getStockStatus(item.productId)
+                                                const isTyre = item.productCategory === "TYRE"
 
-                                            return (
-                                                <TableRow key={idx} className="group">
-                                                    <TableCell className="pl-6 align-top py-4">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="font-medium text-base text-gray-900 dark:text-gray-100">
-                                                                {item.productName}
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                                                                    {item.productCategory}
-                                                                </Badge>
-                                                                {isTyre && (
-                                                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
-                                                                        Serial No. Required
+                                                return (
+                                                    <TableRow key={idx} className="group">
+                                                        <TableCell className="pl-6 align-top py-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className="font-medium text-base text-gray-900 dark:text-gray-100">
+                                                                    {item.productName}
+                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                                                                        {item.productCategory}
                                                                     </Badge>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Serial Number Input Section for TYRE */}
-                                                        {isTyre && item.deliveredQuantity > 0 && (
-                                                            <div className="mt-4 space-y-3">
-                                                                {/* Info Alert */}
-                                                                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-900">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                                                        <div className="flex-1 text-xs text-blue-800 dark:text-blue-200">
-                                                                            <p className="font-semibold mb-1">Serial Number Wajib Diisi</p>
-                                                                            <p className="mb-2">Setiap ban harus memiliki serial number yang UNIK dan BERBEDA.</p>
-                                                                            <div className="bg-white dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800 font-mono text-[11px]">
-                                                                                <p className="text-blue-600 dark:text-blue-400 font-semibold mb-1">Contoh Format:</p>
-                                                                                <p>SN-001</p>
-                                                                                <p>SN-002</p>
-                                                                                <p>SN-003</p>
-                                                                                <p className="text-blue-500 mt-1">... dan seterusnya</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Serial Number Inputs */}
-                                                                <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
-                                                                    <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
-                                                                        Enter {item.deliveredQuantity} Serial Number(s)
-                                                                    </Label>
-                                                                    <div className="grid grid-cols-1 gap-2">
-                                                                        {item.serialNumbers.map((sn, snIdx) => (
-                                                                            <Input
-                                                                                key={snIdx}
-                                                                                placeholder={`Contoh: SN-${String(snIdx + 1).padStart(3, '0')}`}
-                                                                                value={sn}
-                                                                                onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                                className={cn(
-                                                                                    "h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500",
-                                                                                    !sn.trim() && "border-red-300 bg-red-50 dark:bg-red-950/20"
-                                                                                )}
-                                                                            />
-                                                                        ))}
-                                                                    </div>
-                                                                    {item.serialNumbers.some(sn => !sn.trim()) && (
-                                                                        <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
-                                                                            <XCircle className="h-3 w-3" />
-                                                                            Semua serial number harus diisi!
-                                                                        </p>
+                                                                    {isTyre && (
+                                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
+                                                                            Serial No. Required
+                                                                        </Badge>
                                                                     )}
                                                                 </div>
                                                             </div>
-                                                        )}
-                                                    </TableCell>
 
-                                                    <TableCell className="text-center align-top py-4">
-                                                        <div className="text-sm">
-                                                            <span className="font-semibold">{item.orderedQuantity}</span>
-                                                            <span className="text-muted-foreground text-xs block">Order</span>
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground mt-1">
-                                                            (Rem: {item.remainingQuantity})
-                                                        </div>
-                                                    </TableCell>
-
-                                                    <TableCell className="align-top py-4">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            max={item.remainingQuantity}
-                                                            value={item.deliveredQuantity}
-                                                            onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                            className="w-24 font-mono text-center"
-                                                        />
-                                                    </TableCell>
-
-                                                    <TableCell className="text-right pr-6 align-top py-4">
-                                                        {warehouseId ? (
-                                                            stock ? (
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <div className={cn(
-                                                                        "flex items-center gap-1.5 font-medium text-sm",
-                                                                        stock.sufficient ? "text-green-600" : "text-red-600"
-                                                                    )}>
-                                                                        {stock.sufficient ? (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                                    <span>Available</span>
+                                                            {/* Serial Number Input Section for TYRE */}
+                                                            {isTyre && item.deliveredQuantity > 0 && (
+                                                                <div className="mt-4 space-y-3">
+                                                                    {/* Info Alert */}
+                                                                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-900">
+                                                                        <div className="flex items-start gap-2">
+                                                                            <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                                                            <div className="flex-1 text-xs text-blue-800 dark:text-blue-200">
+                                                                                <p className="font-semibold mb-1">Serial Number Wajib Diisi</p>
+                                                                                <p className="mb-2">Setiap ban harus memiliki serial number yang UNIK dan BERBEDA.</p>
+                                                                                <div className="bg-white dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800 font-mono text-[11px]">
+                                                                                    <p className="text-blue-600 dark:text-blue-400 font-semibold mb-1">Contoh Format:</p>
+                                                                                    <p>SN-001</p>
+                                                                                    <p>SN-002</p>
+                                                                                    <p>SN-003</p>
+                                                                                    <p className="text-blue-500 mt-1">... dan seterusnya</p>
                                                                                 </div>
                                                                             </div>
-                                                                        ) : (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <XCircle className="h-4 w-4" />
-                                                                                    <span>Insufficient</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="flex flex-col items-end gap-1 mt-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-                                                                            {stock.available} in Origin Warehouse
-                                                                        </span>
 
-                                                                        {stock.alternativeIds && stock.alternativeIds.length > 0 && (
-                                                                            <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                                                                                <AlertTriangle className="h-3 w-3" />
-                                                                                <span>Alternative record: {stock.alternativeIds[0].stock}</span>
-                                                                            </div>
-                                                                        )}
-
-                                                                        {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
-                                                                            <div className="mt-1 flex flex-col items-end gap-1">
-                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
-                                                                                {stock.otherWarehouses.map((ow, owIdx) => (
-                                                                                    <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
-                                                                                        {ow.warehouseName}: <strong>{ow.stock}</strong>
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
+                                                                    {/* Serial Number Inputs */}
+                                                                    <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
+                                                                        <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
+                                                                            Enter {item.deliveredQuantity} Serial Number(s)
+                                                                        </Label>
+                                                                        <div className="grid grid-cols-1 gap-2">
+                                                                            {item.serialNumbers.map((sn, snIdx) => (
+                                                                                <Input
+                                                                                    key={snIdx}
+                                                                                    placeholder={`Contoh: SN-${String(snIdx + 1).padStart(3, '0')}`}
+                                                                                    value={sn}
+                                                                                    onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                                    className={cn(
+                                                                                        "h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500",
+                                                                                        !sn.trim() && "border-red-300 bg-red-50 dark:bg-red-950/20"
+                                                                                    )}
+                                                                                />
+                                                                            ))}
+                                                                        </div>
+                                                                        {item.serialNumbers.some(sn => !sn.trim()) && (
+                                                                            <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+                                                                                <XCircle className="h-3 w-3" />
+                                                                                Semua serial number harus diisi!
+                                                                            </p>
                                                                         )}
                                                                     </div>
                                                                 </div>
+                                                            )}
+                                                        </TableCell>
+
+                                                        <TableCell className="text-center align-top py-4">
+                                                            <div className="text-sm">
+                                                                <span className="font-semibold">{item.orderedQuantity}</span>
+                                                                <span className="text-muted-foreground text-xs block">Order</span>
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground mt-1">
+                                                                (Rem: {item.remainingQuantity})
+                                                            </div>
+                                                        </TableCell>
+
+                                                        <TableCell className="align-top py-4">
+                                                            <Input
+                                                                type="number"
+                                                                min={0}
+                                                                max={item.remainingQuantity}
+                                                                value={item.deliveredQuantity}
+                                                                onChange={e => updateItemQty(idx, Number(e.target.value))}
+                                                                className="w-24 font-mono text-center"
+                                                            />
+                                                        </TableCell>
+
+                                                        <TableCell className="text-right pr-6 align-top py-4">
+                                                            {warehouseId ? (
+                                                                stock ? (
+                                                                    <div className="flex flex-col items-end gap-1">
+                                                                        <div className={cn(
+                                                                            "flex items-center gap-1.5 font-medium text-sm",
+                                                                            stock.sufficient ? "text-green-600" : "text-red-600"
+                                                                        )}>
+                                                                            {stock.sufficient ? (
+                                                                                <div className="flex flex-col items-end">
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        <CheckCircle2 className="h-4 w-4" />
+                                                                                        <span>Available</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex flex-col items-end">
+                                                                                    <div className="flex items-center gap-1">
+                                                                                        <XCircle className="h-4 w-4" />
+                                                                                        <span>Insufficient</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-1 mt-1">
+                                                                            <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+                                                                                {stock.available} in Origin Warehouse
+                                                                            </span>
+
+                                                                            {stock.alternativeIds && stock.alternativeIds.length > 0 && (
+                                                                                <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                                                                                    <AlertTriangle className="h-3 w-3" />
+                                                                                    <span>Alternative record: {stock.alternativeIds[0].stock}</span>
+                                                                                </div>
+                                                                            )}
+
+                                                                            {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
+                                                                                <div className="mt-1 flex flex-col items-end gap-1">
+                                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
+                                                                                    {stock.otherWarehouses.map((ow, owIdx) => (
+                                                                                        <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                                                                                            {ow.warehouseName}: <strong>{ow.stock}</strong>
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-muted-foreground italic">
+                                                                        Check stock to see availability
+                                                                    </span>
+                                                                )
                                                             ) : (
-                                                                <span className="text-xs text-muted-foreground italic">
-                                                                    Check stock to see availability
-                                                                </span>
-                                                            )
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">Select warehouse first</span>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        })}
-                                    </TableBody>
-                                </Table>
+                                                                <span className="text-xs text-muted-foreground">Select warehouse first</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </CardContent>
                             <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
                                 <div className="text-muted-foreground">

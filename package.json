@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest --run",
+    "test:mobile": "vitest --run lib/__tests__/mobile-tables-audit.test.ts",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:approval": "npx tsx scripts/test-approval-e2e.ts && npx tsx scripts/test-approval-reject-email.ts",

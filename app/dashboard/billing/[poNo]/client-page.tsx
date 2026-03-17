@@ -139,36 +139,38 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                 </CardHeader>
                 <CardContent className="pt-6">
                     <div className="rounded-md border overflow-hidden shadow-sm">
-                        <Table>
-                            <TableHeader className="bg-muted/30">
-                                <TableRow>
-                                    <TableHead className="w-[150px]">Material No</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead className="text-right">Qty</TableHead>
-                                    <TableHead>UOM</TableHead>
-                                    <TableHead className="text-right">Price</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {items.length > 0 ? items.map((item, idx) => (
-                                    <TableRow key={idx}>
-                                        <TableCell className="font-medium">{item.materialNumber}</TableCell>
-                                        <TableCell>{item.materialDescription}</TableCell>
-                                        <TableCell className="text-right">{item.qty}</TableCell>
-                                        <TableCell>{item.uom}</TableCell>
-                                        <TableCell className="text-right">{Number(item.price).toLocaleString('id-ID')}</TableCell>
-                                        <TableCell className="text-right font-medium">{Number(item.totalPrice).toLocaleString('id-ID')}</TableCell>
-                                    </TableRow>
-                                )) : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader className="bg-muted/30">
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                            No product items found for this PO.
-                                        </TableCell>
+                                        <TableHead className="w-[150px]">Material No</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead className="text-right">Qty</TableHead>
+                                        <TableHead>UOM</TableHead>
+                                        <TableHead className="text-right">Price</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
                                     </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {items.length > 0 ? items.map((item, idx) => (
+                                        <TableRow key={idx}>
+                                            <TableCell className="font-medium">{item.materialNumber}</TableCell>
+                                            <TableCell>{item.materialDescription}</TableCell>
+                                            <TableCell className="text-right">{item.qty}</TableCell>
+                                            <TableCell>{item.uom}</TableCell>
+                                            <TableCell className="text-right">{Number(item.price).toLocaleString('id-ID')}</TableCell>
+                                            <TableCell className="text-right font-medium">{Number(item.totalPrice).toLocaleString('id-ID')}</TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                                No product items found for this PO.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

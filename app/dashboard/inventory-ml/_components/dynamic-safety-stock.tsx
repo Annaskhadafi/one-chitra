@@ -1332,6 +1332,7 @@ export function DynamicSafetyStock() {
                             <CardContent>
                                 <div className="overflow-hidden rounded-2xl border">
                                     <div className={cn(isPreparingPdf ? "overflow-visible" : "max-h-[360px] overflow-y-auto")}>
+                                        <div className="overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead className="sticky top-0 bg-slate-100 text-slate-600">
                                                 <tr>
@@ -1350,6 +1351,7 @@ export function DynamicSafetyStock() {
                                                 ))}
                                             </tbody>
                                         </table>
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>

@@ -456,6 +456,7 @@ export function OpnameDetailView({
 
             {/* Table */}
             <div className="rounded-xl border overflow-hidden">
+                <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/40">
@@ -591,6 +592,7 @@ export function OpnameDetailView({
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
             <p className="text-xs text-muted-foreground">
                 Menampilkan {filtered.length} dari {items.length} item ·{" "}

@@ -244,6 +244,7 @@ export function LostSaleTab({ initialData = [] }: { initialData?: LostSale[] }) 
             <Card className="border-none shadow-sm bg-card/50 backdrop-blur-sm">
                 <CardContent className="p-0">
                     <div className="rounded-md border overflow-hidden">
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/50">
@@ -300,6 +301,7 @@ export function LostSaleTab({ initialData = [] }: { initialData?: LostSale[] }) 
                                 )}
                             </TableBody>
                         </Table>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

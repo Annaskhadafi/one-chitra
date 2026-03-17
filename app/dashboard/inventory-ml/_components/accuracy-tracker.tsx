@@ -227,6 +227,7 @@ export function AccuracyTracker() {
                         </div>
                     ) : (
                         <div className="rounded-md border">
+                            <div className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -290,6 +291,7 @@ export function AccuracyTracker() {
                                     })}
                                 </TableBody>
                             </Table>
+                            </div>
                         </div>
                     )}
                 </CardContent>

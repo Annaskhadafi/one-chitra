@@ -1,34 +1,18 @@
 "use server"
 
 import { db } from "@/db"
-import { stockLevels, products, warehouses } from "@/db/schema"
+import { stockLevels } from "@/db/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import {
-    assertCurrentUserHasWarehouseAccess,
-    assertCurrentUserHasWarehouseAccessForAll,
-    getAllowedWarehouseIdsForCurrentUser,
-} from "@/lib/warehouse-access"
 
 import { stockSchema } from "@/lib/schemas"
-import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 export async function getStocks() {
-    await getAuthenticatedSession("stocks", "view")
-    const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("view")
-
-    if (allowedWarehouseIds && allowedWarehouseIds.length === 0) {
-        return []
-    }
-
     // Optimized query - hanya ambil kolom yang diperlukan
-    const rows = await db.query.stockLevels.findMany({
-        where: allowedWarehouseIds
-            ? (stockLevel, { inArray }) => inArray(stockLevel.warehouseId, allowedWarehouseIds)
-            : undefined,
+    return await db.query.stockLevels.findMany({
         columns: {
             id: true,
             productId: true,
@@ -44,7 +28,6 @@ export async function getStocks() {
                     materialDescription: true,
                     plant: true,
                     category: true,
-                    brand: true,
                     oldMaterialNo: true,
                     costSap: true,
                 }
@@ -58,15 +41,12 @@ export async function getStocks() {
             },
         },
     })
-
-    return normalizeSlocFields(rows)
 }
 
 export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number) {
     try {
         const session = await getAuthenticatedSession('stocks', id ? 'edit' : 'create')
         const userId = session.user.id
-        await assertCurrentUserHasWarehouseAccess(data.warehouseId, "edit")
 
         await db.transaction(async (tx) => {
             let oldStock = 0
@@ -139,8 +119,6 @@ export async function deleteStock(id: number) {
             })
 
             if (existing) {
-                await assertCurrentUserHasWarehouseAccess(existing.warehouseId, "edit")
-
                 // Record Movement (Adjustment/Removal)
                 await recordStockMovement(tx, {
                     productId: existing.productId,
@@ -165,15 +143,6 @@ export async function deleteStock(id: number) {
 
 export async function bulkDeleteStocks(ids: number[]) {
     try {
-        await getAuthenticatedSession("stocks", "delete")
-        const rows = await db.query.stockLevels.findMany({
-            where: inArray(stockLevels.id, ids),
-            columns: {
-                warehouseId: true,
-            },
-        })
-
-        await assertCurrentUserHasWarehouseAccessForAll(rows.map((row) => row.warehouseId), "edit")
         await db.delete(stockLevels).where(inArray(stockLevels.id, ids))
         revalidatePath("/dashboard/stocks")
         return { success: true }
@@ -184,15 +153,6 @@ export async function bulkDeleteStocks(ids: number[]) {
 
 export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
     try {
-        await getAuthenticatedSession("stocks", "edit")
-        const rows = await db.query.stockLevels.findMany({
-            where: inArray(stockLevels.id, ids),
-            columns: {
-                warehouseId: true,
-            },
-        })
-
-        await assertCurrentUserHasWarehouseAccessForAll(rows.map((row) => row.warehouseId), "edit")
         await db.update(stockLevels)
             .set({ minStock, updatedAt: new Date() })
             .where(inArray(stockLevels.id, ids))
@@ -205,14 +165,6 @@ export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
 
 export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
     try {
-        await getAuthenticatedSession("stocks", "create")
-        await assertCurrentUserHasWarehouseAccessForAll(
-            data
-                .map((item) => item.warehouseId)
-                .filter((warehouseId): warehouseId is number => typeof warehouseId === "number"),
-            "edit"
-        )
-
         for (const item of data) {
             if (!item.productId || !item.warehouseId) continue
 
@@ -235,131 +187,12 @@ export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
     }
 }
 
-export type StockImportItem = {
-    materialNumber: string
-    sloc: string
-    totalStock: number
-    valuationValue: string
-    minStock: number
-}
-
-export type ImportChunkResult = {
-    success: boolean
-    processed: number
-    succeeded: number
-    failed: number
-    errors: string[]
-}
-
-export async function importStockChunk(chunk: StockImportItem[]): Promise<ImportChunkResult> {
-    try {
-        await getAuthenticatedSession("stocks", "create")
-        const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("edit")
-        const normalizedChunk = chunk.map((item) => ({
-            ...item,
-            sloc: normalizeSloc(item.sloc),
-        }))
-        const materialNumbers = normalizedChunk.map(i => i.materialNumber).filter(Boolean)
-        const slocs = normalizedChunk.map(i => i.sloc).filter(Boolean)
-
-        if (materialNumbers.length === 0 || slocs.length === 0) {
-            return { success: true, processed: 0, succeeded: 0, failed: 0, errors: [] }
-        }
-
-        // Batch lookup
-        const foundProducts = await db.select({ id: products.id, materialNumber: products.materialNumber })
-            .from(products)
-            .where(inArray(products.materialNumber, materialNumbers))
-
-        const foundWarehouses = await db.select({ id: warehouses.id, sloc: warehouses.sloc })
-            .from(warehouses)
-
-        const productMap = new Map(foundProducts.map(p => [p.materialNumber, p.id]))
-        const warehouseMap = new Map(foundWarehouses.map(w => [normalizeSloc(w.sloc), w.id]))
-
-        let succeeded = 0
-        let failed = 0
-        const errors: string[] = []
-
-        for (const item of normalizedChunk) {
-            const productId = productMap.get(item.materialNumber)
-            const warehouseId = warehouseMap.get(item.sloc)
-
-            if (!productId) {
-                failed++
-                errors.push(`Material not found: ${item.materialNumber}`)
-                continue
-            }
-            if (!warehouseId) {
-                failed++
-                errors.push(`Sloc not found: ${item.sloc}`)
-                continue
-            }
-            if (allowedWarehouseIds && !allowedWarehouseIds.includes(warehouseId)) {
-                failed++
-                errors.push(`Warehouse access denied: ${item.sloc}`)
-                continue
-            }
-
-            try {
-                // Upsert logic
-                const existing = await db.select({ id: stockLevels.id }).from(stockLevels)
-                    .where(and(eq(stockLevels.productId, productId), eq(stockLevels.warehouseId, warehouseId)))
-                    .limit(1)
-
-                if (existing.length > 0) {
-                    await db.update(stockLevels)
-                        .set({
-                            totalStock: item.totalStock,
-                            valuationValue: item.valuationValue,
-                            minStock: item.minStock,
-                            updatedAt: new Date(),
-                        })
-                        .where(eq(stockLevels.id, existing[0].id))
-                } else {
-                    await db.insert(stockLevels)
-                        .values({
-                            productId,
-                            warehouseId,
-                            totalStock: item.totalStock,
-                            valuationValue: item.valuationValue,
-                            minStock: item.minStock,
-                            updatedAt: new Date(),
-                        })
-                }
-                
-                succeeded++
-            } catch (err) {
-                failed++
-                errors.push(`DB Error for ${item.materialNumber}/${item.sloc}: ${err instanceof Error ? err.message : String(err)}`)
-            }
-        }
-
-        return {
-            success: true,
-            processed: chunk.length,
-            succeeded,
-            failed,
-            errors
-        }
-    } catch (error) {
-        console.error("Import chunk error:", error)
-        return {
-            success: false,
-            processed: 0,
-            succeeded: 0,
-            failed: chunk.length,
-            errors: ["Critical server error during import"]
-        }
-    }
-}
-
 // ─── Export Inventory Comparison to Excel ──────────────────────────────────────
 export async function exportInventoryComparisonToExcel() {
     "use server"
     
     try {
-        await getAuthenticatedSession("stocks", "view")
+        await getAuthenticatedSession("stocks", "read")
         
         // Import xlsx di server side
         const XLSX = await import("xlsx")

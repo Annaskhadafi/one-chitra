@@ -315,30 +315,32 @@ export function ProductCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 <span>Previewing first 10 of {preview.length} rows. Duplicate Material # + Sloc will be updated.</span>
                             </div>
                             <div className="border rounded-md overflow-hidden">
-                                <table className="w-full text-xs text-left">
-                                    <thead className="bg-muted sticky top-0">
-                                        <tr>
-                                            <th className="p-2 border-b">Plant</th>
-                                            <th className="p-2 border-b">Material #</th>
-                                            <th className="p-2 border-b">Category</th>
-                                            <th className="p-2 border-b">Description</th>
-                                            <th className="p-2 border-b">Sloc</th>
-                                            <th className="p-2 border-b">Cost</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {preview.slice(0, 10).map((item, i) => (
-                                            <tr key={i} className="hover:bg-muted/30">
-                                                <td className="p-2 border-b">{item.plant || "-"}</td>
-                                                <td className="p-2 border-b font-medium">{item.materialNumber}</td>
-                                                <td className="p-2 border-b">{item.category}</td>
-                                                <td className="p-2 border-b truncate max-w-[150px]">{item.materialDescription || "-"}</td>
-                                                <td className="p-2 border-b">{item.sloc}</td>
-                                                <td className="p-2 border-b">{item.costSap || "-"}</td>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted sticky top-0">
+                                            <tr>
+                                                <th className="p-2 border-b">Plant</th>
+                                                <th className="p-2 border-b">Material #</th>
+                                                <th className="p-2 border-b">Category</th>
+                                                <th className="p-2 border-b">Description</th>
+                                                <th className="p-2 border-b">Sloc</th>
+                                                <th className="p-2 border-b">Cost</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {preview.slice(0, 10).map((item, i) => (
+                                                <tr key={i} className="hover:bg-muted/30">
+                                                    <td className="p-2 border-b">{item.plant || "-"}</td>
+                                                    <td className="p-2 border-b font-medium">{item.materialNumber}</td>
+                                                    <td className="p-2 border-b">{item.category}</td>
+                                                    <td className="p-2 border-b truncate max-w-[150px]">{item.materialDescription || "-"}</td>
+                                                    <td className="p-2 border-b">{item.sloc}</td>
+                                                    <td className="p-2 border-b">{item.costSap || "-"}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     )}

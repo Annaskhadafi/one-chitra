@@ -174,6 +174,7 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                     </div>
                 ) : (
                     <div className="rounded-md border">
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -277,6 +278,7 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     </div>
                 )}
             </CardContent>

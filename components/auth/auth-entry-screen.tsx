@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -30,9 +30,14 @@ type AuthActionResult = {
     }
 }
 
+type VantaEffectInstance = {
+    destroy?: () => void
+}
+
 export function AuthEntryScreen() {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const vantaRef = useRef<HTMLDivElement | null>(null)
     const callbackUrl = useMemo(() => getSafeCallbackUrl(searchParams), [searchParams])
     const initialInfoMessage = useMemo(() => {
         if (searchParams?.get("reset") === "success") {
@@ -52,9 +57,60 @@ export function AuthEntryScreen() {
     const [isLoading, setIsLoading] = useState(false)
     const [isMagicLinkLoading, setIsMagicLinkLoading] = useState(false)
     const [isResetPasswordLoading, setIsResetPasswordLoading] = useState(false)
+    const [isVantaReady, setIsVantaReady] = useState(false)
     const [error, setError] = useState("")
     const [infoMessage, setInfoMessage] = useState(initialInfoMessage)
     const { data: session, isPending: isSessionPending } = useSession()
+
+    useEffect(() => {
+        let effect: VantaEffectInstance | null = null
+        let isCancelled = false
+
+        const initVanta = async () => {
+            if (!vantaRef.current) {
+                return
+            }
+
+            try {
+                const THREE = await import("three")
+                const cloudsModule = await import("vanta/dist/vanta.clouds.min")
+                const createClouds = cloudsModule.default
+
+                if (!vantaRef.current || isCancelled) {
+                    return
+                }
+
+                effect = createClouds({
+                    el: vantaRef.current,
+                    THREE,
+                    mouseControls: true,
+                    touchControls: true,
+                    gyroControls: false,
+                    minHeight: 200,
+                    minWidth: 200,
+                    skyColor: 0x93c5fd,
+                    cloudColor: 0xf8fafc,
+                    cloudShadowColor: 0x60a5fa,
+                    sunColor: 0xfef3c7,
+                    sunGlareColor: 0xffffff,
+                    sunlightColor: 0xf59e0b,
+                    speed: 0.6,
+                })
+
+                setIsVantaReady(true)
+            } catch (vantaError) {
+                console.error("[login] Failed to initialize Vanta Clouds", vantaError)
+                setIsVantaReady(false)
+            }
+        }
+
+        initVanta()
+
+        return () => {
+            isCancelled = true
+            effect?.destroy?.()
+        }
+    }, [])
 
     useEffect(() => {
         if (!isSessionPending && session?.user) {
@@ -166,11 +222,19 @@ export function AuthEntryScreen() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-100/80 p-4 font-sans text-gray-900">
-            <div className="absolute right-4 top-4">
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-100 p-4 font-sans text-gray-900">
+            <div
+                ref={vantaRef}
+                className={`absolute inset-0 transition-opacity duration-700 ${isVantaReady ? "opacity-100" : "opacity-0"}`}
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.45),rgba(255,255,255,0.72)_42%,rgba(241,245,249,0.94)_100%)]" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-white/35 to-transparent" />
+
+            <div className="absolute right-4 top-4 z-20">
                 <ThemeToggle />
             </div>
-            <div className="flex min-h-[680px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-gray-100/70 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] md:flex-row">
+
+            <div className="relative z-10 flex min-h-[680px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/70 bg-white/92 shadow-[0_20px_60px_rgba(15,23,42,0.16)] backdrop-blur-md md:flex-row">
                 <div className="relative m-2 flex w-full flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-[#1A4BFF] via-[#5C24FF] to-[#D6B4FF] p-10 text-white md:m-3 md:w-[45%] md:rounded-r-none lg:w-[48%]">
                     <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-400 opacity-30 blur-[100px] mix-blend-screen" />
                     <div className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-fuchsia-300 opacity-30 blur-[100px] mix-blend-screen" />
@@ -193,7 +257,7 @@ export function AuthEntryScreen() {
                     </div>
                 </div>
 
-                <div className="flex w-full flex-col justify-center bg-white px-8 py-10 md:w-[55%] md:px-14 md:py-16 lg:w-[52%] lg:px-20">
+                <div className="flex w-full flex-col justify-center bg-white/90 px-8 py-10 md:w-[55%] md:px-14 md:py-16 lg:w-[52%] lg:px-20">
                     <div className="mb-10 lg:mb-12">
                         <h1 className="mb-6 text-3xl font-extrabold tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
                             One Chitra

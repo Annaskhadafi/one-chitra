@@ -20,22 +20,16 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { format } from "date-fns"
-import { Pencil, Printer, MapPin, Mail, Calendar, FileText } from "lucide-react"
-import type { SalesOrderListItem } from "./types"
 import Link from "next/link"
+import { Pencil, Printer, Download, MapPin, Mail, Phone, Calendar, FileText } from "lucide-react"
+import type { SalesOrderWithRelations } from "@/lib/types"
 
-type SalesOrderDetailOrder = SalesOrderListItem
 
 interface SalesOrderDetailProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    order: SalesOrderDetailOrder | null
+    order: SalesOrderWithRelations | null
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -79,25 +73,24 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
         const totalTax = calculateTotalTax()
         return subtotal - totalDiscount + totalTax + Number(order.shipping)
     }
-    const customer = order.customer
 
     // Combine address parts
     const customerAddress = [
-        customer?.address1,
-        customer?.address2,
-        customer?.address3,
-        customer?.address4,
-        customer?.address5
+        order.customer.address1,
+        order.customer.address2,
+        order.customer.address3,
+        order.customer.address4,
+        order.customer.address5
     ].filter(Boolean).join(", ")
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl w-full h-[90vh] flex flex-col p-0 gap-0 sm:max-w-[90vw]">
-                <DialogHeader className="px-6 py-5 border-b shrink-0 bg-muted/5">
+            <DialogContent className="max-w-7xl w-full h-[90vh] flex flex-col p-0 gap-0 sm:max-w-[90vw]">
+                <DialogHeader className="px-8 py-6 border-b shrink-0 bg-muted/5">
                     <div className="flex items-start justify-between">
                         <div>
-                            <div className="flex items-center gap-4 mb-1.5">
-                                <DialogTitle className="text-2xl font-bold tracking-tight">
+                            <div className="flex items-center gap-4 mb-2">
+                                <DialogTitle className="text-3xl font-bold tracking-tight">
                                     {order.invoiceNumber || "Draft Order"}
                                 </DialogTitle>
                                 <Badge variant={statusVariants[order.status]} className="px-3 py-1 text-sm font-medium">
@@ -114,32 +107,6 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                 <Printer className="h-4 w-4 mr-2" />
                                 Print
                             </Button>
-                            
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button 
-                                        variant="outline" 
-                                        size="icon" 
-                                        className="h-10 w-10 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700"
-                                        onClick={() => {
-                                            // Simpan data ke sessionStorage
-                                            sessionStorage.setItem("proforma_invoice_print_data", JSON.stringify({
-                                                order,
-                                                currentDate: new Date().toISOString()
-                                            }));
-                                            // Buka halaman print di tab baru
-                                            window.open(`/print/proforma/${order.id}`, "_blank");
-                                        }}
-                                    >
-                                        <FileText className="h-4 w-4" />
-                                        <span className="sr-only">Cetak Proforma Invoice</span>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Cetak Proforma Invoice</p>
-                                </TooltipContent>
-                            </Tooltip>
-
                             <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
                                 <Button className="h-10 px-6">
                                     <Pencil className="h-4 w-4 mr-2" />
@@ -151,32 +118,31 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                 </DialogHeader>
 
                 <ScrollArea className="flex-1">
-                    <div className="p-6 space-y-6">
+                    <div className="p-8 space-y-10">
                         {/* Information Cards */}
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="bg-card rounded-xl border shadow-sm p-5 space-y-4 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/50 dark:bg-blue-900/10 rounded-bl-full -z-10" />
+                        <div className="grid md:grid-cols-2 gap-8">
+                            <div className="bg-card rounded-xl border shadow-sm p-6 space-y-5">
                                 <div className="flex items-center gap-2 pb-2 border-b">
-                                    <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-md">
-                                        <UserIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                                        <UserIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                     </div>
-                                    <h3 className="font-semibold text-base">Customer Information</h3>
+                                    <h3 className="font-semibold text-lg">Customer Information</h3>
                                 </div>
 
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     <div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Customer Name</div>
-                                        <div className="font-medium text-lg leading-tight">{customer?.name || "-"}</div>
-                                        <div className="text-xs font-mono text-muted-foreground mt-0.5">{customer?.customerCode || "-"}</div>
+                                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Customer Name</div>
+                                        <div className="font-medium text-xl">{order.customer.name}</div>
+                                        <div className="text-sm font-mono text-muted-foreground mt-1">{order.customer.customerCode}</div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {customer?.email && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {order.customer.email && (
                                             <div>
-                                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Email</div>
-                                                <div className="flex items-center gap-1.5 text-sm">
-                                                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    <span className="truncate">{customer.email}</span>
+                                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Email</div>
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <Mail className="h-4 w-4 text-muted-foreground" />
+                                                    <span>{order.customer.email}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -195,35 +161,34 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
 
                                     {customerAddress && (
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Address</div>
-                                            <div className="flex items-start gap-1.5 text-xs bg-muted/40 p-2.5 rounded-md border border-border/50">
-                                                <MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                                                <span className="leading-relaxed text-muted-foreground">{customerAddress}</span>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Address</div>
+                                            <div className="flex items-start gap-2 text-sm bg-muted/30 p-3 rounded-md">
+                                                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                                <span className="leading-relaxed">{customerAddress}</span>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            <div className="bg-card rounded-xl border shadow-sm p-5 space-y-4 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50/50 dark:bg-amber-900/10 rounded-bl-full -z-10" />
+                            <div className="bg-card rounded-xl border shadow-sm p-6 space-y-5">
                                 <div className="flex items-center gap-2 pb-2 border-b">
-                                    <div className="p-1.5 bg-amber-100 dark:bg-amber-900/30 rounded-md">
-                                        <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                                        <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                                     </div>
-                                    <h3 className="font-semibold text-base">Order Details</h3>
+                                    <h3 className="font-semibold text-lg">Order Details</h3>
                                 </div>
 
                                 <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-6">
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">PO Number</div>
-                                            <div className="font-medium text-base font-mono">{order.customerPo || "-"}</div>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PO Number</div>
+                                            <div className="font-medium text-lg">{order.customerPo || "-"}</div>
                                         </div>
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Created By</div>
-                                            <div className="font-medium text-sm flex items-center gap-1.5 mt-0.5">
-                                                <div className="h-5 w-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created By</div>
+                                            <div className="font-medium text-lg flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
                                                     {order.createdByUser?.name?.charAt(0) || "?"}
                                                 </div>
                                                 {order.createdByUser?.name || "-"}
@@ -231,33 +196,28 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">PIC Sales</div>
-                                        <div className="font-medium text-sm">{order.salesPerson?.name || "-"}</div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-6">
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Category PO</div>
-                                            <Badge variant="outline" className="font-medium text-xs rounded-sm py-0">{order.categoryPo || "Normal"}</Badge>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category PO</div>
+                                            <Badge variant="outline" className="font-medium">{order.categoryPo || "Normal"}</Badge>
                                         </div>
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Category Product</div>
-                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium text-xs rounded-sm py-0">
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category Product</div>
+                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
                                                 {order.categoryProduct || "-"}
                                             </Badge>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Payment Terms</div>
-                                        <div className="text-sm text-muted-foreground leading-snug">{order.termsConditions || "-"}</div>
+                                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Payment Terms</div>
+                                        <div className="font-medium">{order.termsConditions || "-"}</div>
                                     </div>
 
                                     {order.notes && (
                                         <div>
-                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Internal Notes</div>
-                                            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-2.5 rounded-md text-xs text-amber-900 dark:text-amber-100">
+                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Internal Notes</div>
+                                            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-3 rounded-md text-sm text-amber-900 dark:text-amber-100">
                                                 {order.notes}
                                             </div>
                                         </div>
@@ -267,55 +227,56 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                         </div>
 
                         {/* Items Section */}
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between px-1">
-                                <h3 className="font-bold text-lg">Order Items</h3>
-                                <Badge variant="outline" className="text-xs px-2.5 py-0.5 bg-background shadow-sm rounded-md">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-bold text-xl">Order Items</h3>
+                                <Badge variant="outline" className="text-base px-3 py-1">
                                     {order.items.length} Items
                                 </Badge>
                             </div>
 
                             <div className="rounded-xl border shadow-sm overflow-hidden bg-card">
+                                <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader className="bg-muted/40">
                                         <TableRow className="hover:bg-transparent">
-                                            <TableHead className="w-[45%] pl-4 py-3 h-auto text-xs font-semibold">Product</TableHead>
-                                            <TableHead className="text-right py-3 h-auto text-xs font-semibold">Quantity</TableHead>
-                                            <TableHead className="text-right py-3 h-auto text-xs font-semibold">Unit Price</TableHead>
-                                            <TableHead className="text-right py-3 h-auto text-xs font-semibold">Discount</TableHead>
-                                            <TableHead className="text-right pr-4 py-3 h-auto text-xs font-semibold">Total</TableHead>
+                                            <TableHead className="w-[45%] pl-6 py-4 h-auto">Product</TableHead>
+                                            <TableHead className="text-right py-4 h-auto">Quantity</TableHead>
+                                            <TableHead className="text-right py-4 h-auto">Unit Price</TableHead>
+                                            <TableHead className="text-right py-4 h-auto">Discount</TableHead>
+                                            <TableHead className="text-right pr-6 py-4 h-auto">Total</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {order.items.map((item) => (
-                                            <TableRow key={item.id} className="group hover:bg-muted/20">
-                                                <TableCell className="pl-4 py-3 align-top">
+                                            <TableRow key={item.id} className="group">
+                                                <TableCell className="pl-6 py-4">
                                                     <div className="flex flex-col gap-1">
-                                                        <span className="font-medium text-sm text-foreground group-hover:text-blue-600 transition-colors leading-snug">
+                                                        <span className="font-semibold text-base text-foreground group-hover:text-blue-600 transition-colors">
                                                             {item.product?.materialDescription || "Unknown Product"}
                                                         </span>
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <Badge variant="secondary" className="text-[9px] h-4 rounded-sm px-1.5 font-mono text-muted-foreground/80 bg-muted border-border/50">
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="secondary" className="text-[10px] h-5 rounded-sm px-1.5 font-mono text-muted-foreground">
                                                                 {item.product?.materialNumber || "NO-CODE"}
                                                             </Badge>
                                                             {item.product?.oldMaterialNo && (
-                                                                <span className="text-[10px] text-muted-foreground">
-                                                                    (Old: {item.product.oldMaterialNo})
+                                                                <span className="text-xs text-muted-foreground border-l pl-2 ml-1">
+                                                                    Old: {item.product.oldMaterialNo}
                                                                 </span>
                                                             )}
                                                         </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-sm py-3 align-top">
+                                                <TableCell className="text-right font-mono text-base py-4">
                                                     {item.quantity}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-xs py-3 text-muted-foreground align-top">
+                                                <TableCell className="text-right font-mono text-base py-4 text-muted-foreground">
                                                     {formatCurrency(Number(item.unitPrice))}
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono text-xs py-3 text-red-600 align-top">
+                                                <TableCell className="text-right font-mono text-base py-4 text-red-600">
                                                     {Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "-"}
                                                 </TableCell>
-                                                <TableCell className="text-right pr-4 py-3 font-mono text-sm font-semibold align-top">
+                                                <TableCell className="text-right pr-6 py-4 font-mono text-base font-bold">
                                                     {formatCurrency(
                                                         (Number(item.quantity) * Number(item.unitPrice)) - Number(item.discount)
                                                     )}
@@ -324,39 +285,40 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                                         ))}
                                     </TableBody>
                                 </Table>
+                                </div>
                             </div>
                         </div>
 
                         {/* Totals Section */}
                         <div className="flex justify-end pt-2">
-                            <div className="w-full max-w-sm bg-card rounded-xl border shadow-sm p-5 space-y-3">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-sm">
+                            <div className="w-full max-w-sm bg-card rounded-xl border shadow-sm p-6 space-y-4">
+                                <div className="space-y-3">
+                                    <div className="flex justify-between text-base">
                                         <span className="text-muted-foreground">Subtotal</span>
                                         <span className="font-medium font-mono">{formatCurrency(calculateSubtotal())}</span>
                                     </div>
                                     {calculateTotalDiscount() > 0 && (
-                                        <div className="flex justify-between text-sm text-red-600">
+                                        <div className="flex justify-between text-base text-red-600">
                                             <span>Total Discount</span>
                                             <span className="font-mono">-{formatCurrency(calculateTotalDiscount())}</span>
                                         </div>
                                     )}
                                     {calculateTotalTax() > 0 && (
-                                        <div className="flex justify-between text-sm">
+                                        <div className="flex justify-between text-base">
                                             <span>Tax (VAT)</span>
                                             <span className="font-medium font-mono">{formatCurrency(calculateTotalTax())}</span>
                                         </div>
                                     )}
-                                    <div className="flex justify-between text-sm">
+                                    <div className="flex justify-between text-base">
                                         <span>Shipping</span>
                                         <span className="font-medium font-mono">{formatCurrency(Number(order.shipping))}</span>
                                     </div>
                                 </div>
                                 <Separator />
-                                <div className="pt-1">
+                                <div className="pt-2">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-base font-bold">Grand Total</span>
-                                        <span className="text-xl font-bold text-primary font-mono">{formatCurrency(calculateGrandTotal())}</span>
+                                        <span className="text-lg font-bold">Grand Total</span>
+                                        <span className="text-2xl font-bold text-primary font-mono">{formatCurrency(calculateGrandTotal())}</span>
                                     </div>
                                 </div>
                             </div>

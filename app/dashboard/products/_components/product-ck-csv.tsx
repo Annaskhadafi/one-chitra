@@ -254,6 +254,7 @@ export function ProductCkCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 <span>Previewing first 10 of {preview.length} mappings.</span>
                             </div>
                             <div className="border rounded-md overflow-hidden">
+                                <div className="overflow-x-auto">
                                 <table className="w-full text-xs text-left">
                                     <thead className="bg-muted sticky top-0">
                                         <tr>
@@ -270,6 +271,7 @@ export function ProductCkCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                         ))}
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </div>
                     )}

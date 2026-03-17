@@ -43,6 +43,7 @@ import {
 import { ScoreCard } from "@/components/score-card"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 interface QuotationAnalysisClientProps {
     initialData: any
@@ -245,6 +246,54 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                    <ResponsiveTableWrapper
+                        className="rounded-none"
+                        mobileView={
+                            filteredLostAnalysis.length === 0 ? (
+                                <div className="text-sm text-muted-foreground text-center py-6">Tidak ada data yang ditemukan.</div>
+                            ) : (
+                                <div className="space-y-3 p-3">
+                                    {filteredLostAnalysis.map((item: any, idx: number) => (
+                                        <div key={`${item.quotationId}-${idx}`} className="rounded-md border p-3 bg-card">
+                                            <div className="flex items-start justify-between">
+                                                <div className="text-sm">
+                                                    <div className="font-semibold">{item.customerName}</div>
+                                                    <Link href={`/dashboard/quotations/${item.quotationId}`} className="text-xs font-mono text-muted-foreground">
+                                                        {item.quotationNumber}
+                                                    </Link>
+                                                </div>
+                                                <Badge variant="outline" className="text-[10px] uppercase">{item.status}</Badge>
+                                            </div>
+                                            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                                                <div>
+                                                    <div className="text-muted-foreground">Lost Product</div>
+                                                    <div className="font-medium">{item.productName}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-muted-foreground">Qty</div>
+                                                    <div className="font-mono">{item.quantity}</div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-2">
+                                                {item.recommendations.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {item.recommendations.slice(0, 2).map((rec: any) => (
+                                                            <div key={rec.id} className="px-2 py-1 rounded border text-[10px]">
+                                                                {rec.materialDescription}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground italic">Tidak ada rekomendasi stok serupa.</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        }
+                    >
+                    <div className="overflow-x-auto">
                     <Table>
                         <TableHeader className="bg-muted/50">
                             <TableRow>
@@ -327,6 +376,8 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                             )}
                         </TableBody>
                     </Table>
+                    </div>
+                    </ResponsiveTableWrapper>
                 </CardContent>
             </Card>
         </div>

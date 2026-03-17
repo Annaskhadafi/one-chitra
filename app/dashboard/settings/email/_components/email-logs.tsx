@@ -199,58 +199,60 @@ export function EmailLogsTable({ logs }: Props) {
                         </div>
                     ) : (
                         <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>To</TableHead>
-                                        <TableHead>CC</TableHead>
-                                        <TableHead>Template</TableHead>
-                                        <TableHead>Subject</TableHead>
-                                        <TableHead>Sent At</TableHead>
-                                        <TableHead className="w-[110px]">Preview</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filtered.map((log) => {
-                                        const config = STATUS_CONFIG[log.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending
-                                        return (
-                                            <TableRow key={log.id}>
-                                                <TableCell>
-                                                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.className}`}>
-                                                        {config.icon}
-                                                        {config.label}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="max-w-[220px] truncate font-mono text-xs">
-                                                    {log.toEmail}
-                                                </TableCell>
-                                                <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">
-                                                    {log.ccEmail || "—"}
-                                                </TableCell>
-                                                <TableCell className="max-w-[180px]">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-sm font-medium">{log.templateName || "Direct Email"}</span>
-                                                        <span className="font-mono text-[11px] text-muted-foreground">{log.templateCode || "—"}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
-                                                    {log.subject}
-                                                </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                                                    {formatDateTime(log.sentAt)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button variant="outline" size="sm" className="gap-2" onClick={() => setSelectedLog(log)}>
-                                                        <Eye className="h-4 w-4" />
-                                                        Preview
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>To</TableHead>
+                                            <TableHead>CC</TableHead>
+                                            <TableHead>Template</TableHead>
+                                            <TableHead>Subject</TableHead>
+                                            <TableHead>Sent At</TableHead>
+                                            <TableHead className="w-[110px]">Preview</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filtered.map((log) => {
+                                            const config = STATUS_CONFIG[log.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending
+                                            return (
+                                                <TableRow key={log.id}>
+                                                    <TableCell>
+                                                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.className}`}>
+                                                            {config.icon}
+                                                            {config.label}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[220px] truncate font-mono text-xs">
+                                                        {log.toEmail}
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">
+                                                        {log.ccEmail || "—"}
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[180px]">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-sm font-medium">{log.templateName || "Direct Email"}</span>
+                                                            <span className="font-mono text-[11px] text-muted-foreground">{log.templateCode || "—"}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
+                                                        {log.subject}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                                                        {formatDateTime(log.sentAt)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Button variant="outline" size="sm" className="gap-2" onClick={() => setSelectedLog(log)}>
+                                                            <Eye className="h-4 w-4" />
+                                                            Preview
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     )}
                 </CardContent>
