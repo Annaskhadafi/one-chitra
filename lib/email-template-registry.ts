@@ -28,6 +28,7 @@ export const SYSTEM_EMAIL_TEMPLATE_CODES = {
     costSettlementRejected: "cost_settlement_rejected",
     sapSyncFailure: "sap_sync_failure",
     systemSmtpAlert: "system_smtp_alert",
+    revenueReport: "revenue_report",
 } as const
 
 export type SystemEmailTemplateCode =
@@ -244,6 +245,85 @@ const stockOpnameTemplate = createEmailShell({
         <tbody>{{varianceTableRows}}</tbody>
       </table>
       </div>
+    `,
+})
+
+const revenueReportTemplate = createEmailShell({
+    title: "Daily Revenue vs SAP Report",
+    subtitle: "Status laporan pendapatan per {{period}}.",
+    accentColor: "#0f172a",
+    bodyHtml: `
+      <p style="margin:0 0 16px;">Halo Team,</p>
+      <p style="margin:0 0 20px;">Berikut adalah rangkuman laporan <strong>Revenue VS SAP</strong> untuk periode <strong>{{period}}</strong>.</p>
+
+      <div style="margin-bottom: 24px;">
+        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Revenue Performance</h3>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#f8fafc;font-size:14px;line-height:1.5;">
+          <thead style="background:#f1f5f9;">
+            <tr>
+              <th style="padding:10px;border:1px solid #dbe2ea;text-align:left;">Category</th>
+              <th style="padding:10px;border:1px solid #dbe2ea;text-align:right;">Actual Revenue</th>
+              <th style="padding:10px;border:1px solid #dbe2ea;text-align:right;">Target Forecast</th>
+              <th style="padding:10px;border:1px solid #dbe2ea;text-align:center;">Achievement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:10px;border:1px solid #dbe2ea;"><strong>Consolidate</strong></td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{consolidateRevenue}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{consolidateForecast}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;"><strong>{{consolidatePct}}%</strong></td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #dbe2ea;">Prime Product</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{primeProductRevenue}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{primeProductForecast}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{primeProductPct}}%</td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #dbe2ea;">Service</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{serviceRevenue}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{serviceForecast}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{servicePct}}%</td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #dbe2ea;">Product Accessories</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{paRevenue}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{paForecast}}</td>
+              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{paPct}}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Inventory Status</h3>
+        ${createSummaryTable([
+          { label: "Jasum", value: "{{inventoryJasum}}" },
+          { label: "Kal-Ei", value: "{{inventoryKalEi}}" },
+          { label: "Singapore", value: "{{inventorySingapore}}" },
+          { label: "Total Inventory", value: "{{inventoryTotal}}" },
+        ])}
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Top 10 Materials (Trading)</h3>
+        <div style="width:100%;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;line-height:1.5;">
+            <thead style="background:#f1f5f9;">
+              <tr>
+                <th style="padding:10px;border:1px solid #cbd5e1;text-align:left;">Material Description</th>
+                <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Qty</th>
+                <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>{{materialsTableRows}}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <p style="margin:24px 0 12px;font-size:14px;color:#475569;">Untuk melihat laporan interaktif dan grafik lengkap, silahkan akses dashboard di One Chitra.</p>
+      ${createActionButton("Buka Dashboard Revenue", "{{actionUrl}}", "#0f172a")}
     `,
 })
 
@@ -773,6 +853,44 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplateDefinition[] = [
             bodyHtml: `<p style="margin:0 0 16px;line-height:1.6;color:#475569;">{{alertMessage}}</p>${createActionButton("Buka Pengaturan", "{{actionUrl}}", "#475569")}`,
         }),
         textContent: createTextBlock("System Alert", ["Judul: {{alertTitle}}", "Pesan: {{alertMessage}}", "Buka: {{actionUrl}}"]),
+    },
+    {
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.revenueReport,
+        name: "Revenue Report Automation",
+        type: "notification",
+        subject: "[Report] Sales Revenue vs SAP - {{period}}",
+        variables: [
+            "period",
+            "consolidateRevenue", "consolidateForecast", "consolidatePct",
+            "primeProductRevenue", "primeProductForecast", "primeProductPct",
+            "serviceRevenue", "serviceForecast", "servicePct",
+            "paRevenue", "paForecast", "paPct",
+            "inventoryJasum", "inventoryKalEi", "inventorySingapore", "inventoryTotal",
+            "materialsTableRows", "materialsTextRows",
+            "actionUrl"
+        ],
+        recipientRoles: ["admin", "manager"],
+        recipientUserIds: [],
+        ccEmails: [],
+        defaultActive: true,
+        htmlContent: revenueReportTemplate,
+        textContent: createTextBlock("Sales Revenue vs SAP", [
+            "Periode: {{period}}",
+            "",
+            "Revenue Performance:",
+            "- Consolidate: {{consolidateRevenue}} / {{consolidateForecast}} ({{consolidatePct}}%)",
+            "- Prime Product: {{primeProductRevenue}} / {{primeProductForecast}} ({{primeProductPct}}%)",
+            "- Service: {{serviceRevenue}} / {{serviceForecast}} ({{servicePct}}%)",
+            "- Product Accessories: {{paRevenue}} / {{paForecast}} ({{paPct}}%)",
+            "",
+            "Inventory Status:",
+            "- Jasum: {{inventoryJasum}}",
+            "- Kal-Ei: {{inventoryKalEi}}",
+            "- Singapore: {{inventorySingapore}}",
+            "- Total: {{inventoryTotal}}",
+            "",
+            "Buka Dashboard: {{actionUrl}}"
+        ]),
     },
 ]
 

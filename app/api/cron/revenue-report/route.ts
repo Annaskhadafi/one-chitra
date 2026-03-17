@@ -1,90 +1,51 @@
-import { db } from "@/db"
-import { salesRevenueSap } from "@/db/schema/sap"
-import { getAuthenticatedSession } from "@/lib/rbac"
-import { 
-    fetchDashboardRevenueForecast, 
-    fetchDashboardInventory,
-    DashboardRevenueFilters 
-} from "./dashboard-revenue-logic"
-
-export type { DashboardRevenueFilters }
-
-export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
-    try {
-        await getAuthenticatedSession("revenue-forecast", "view")
-        const periodStr = filters.period || "02.2026";
-        const isYearlyView = !periodStr.includes('.');
-
-        // Date filter
-        const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
-        const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
-
-        // Fetch all data
-        const allData = await db.select().from(salesRevenueSap).where(dateFilter);
-
-        // Calculate total revenue_in_loc_curr
-        const totalResult = await db.select({
-            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(dateFilter);
-
-        const totalRevenue = Number(totalResult[0]?.total || 0);
-
-        return {
-            success: true,
-            data: allData,
-            total: totalRevenue,
-            count: allData.length
-        };
-    } catch (error) {
-        console.error("Failed to fetch all sales revenue data:", error);
-        return { success: false, error: "Failed to fetch sales revenue data" };
-    }
-}
-
-import { sql } from "drizzle-orm"
-
-export async function getDashboardRevenueForecast(filters: DashboardRevenueFilters) {
-    try {
-        await getAuthenticatedSession("revenue-forecast", "view")
-        return await fetchDashboardRevenueForecast(filters)
-    } catch (error) {
-        console.error("Failed to fetch dashboard revenue forecast:", error);
-        return { success: false, error: "Failed to fetch dashboard data" };
-    }
-}
-
-export async function getDashboardInventory() {
-    try {
-        await getAuthenticatedSession("revenue-forecast", "view")
-        return await fetchDashboardInventory()
-    } catch (error) {
-        console.error("Failed to fetch dashboard inventory:", error);
-        return { success: false, error: "Failed to fetch dashboard inventory" };
-    }
-}
-
+import { NextResponse } from "next/server"
+import { fetchDashboardRevenueForecast, fetchDashboardInventory } from "@/app/actions/dashboard-revenue-logic"
 import { sendSystemTemplatedEmailByCode, SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email"
 import { formatCurrency } from "@/lib/utils"
+import { toCanonicalAppUrl } from "@/lib/app-url"
 
-export async function sendManualRevenueReport(period: string) {
+/**
+ * GET /api/cron/revenue-report
+ * 
+ * Daily report automation triggered by Vercel Cron or similar.
+ */
+export async function GET(request: Request) {
+    // 1. Security check - verify CRON_SECRET
+    const cronSecret = process.env.CRON_SECRET
+    if (cronSecret) {
+        const authHeader = request.headers.get("authorization")
+        if (authHeader !== `Bearer ${cronSecret}`) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+    }
+
     try {
-        await getAuthenticatedSession("revenue-forecast", "view")
+        console.log("[CRON] Starting Revenue Report automation at", new Date().toISOString())
 
+        // 2. Prepare periods (Current month)
+        const now = new Date()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const year = now.getFullYear()
+        const period = `${month}.${year}`
+
+        // 3. Fetch Data
         const [revenueRes, inventoryRes] = await Promise.all([
             fetchDashboardRevenueForecast({ period }),
             fetchDashboardInventory()
         ])
 
         if (!revenueRes.success || !inventoryRes.success) {
-            throw new Error("Failed to fetch data for report")
+            throw new Error("Failed to fetch dashboard data")
         }
 
         const rev = revenueRes.data!
         const inv = inventoryRes.data!
 
+        // 4. Format achievement percentages
         const getPct = (actual: number, target: number) => 
             target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
 
+        // 5. Generate Materials Table Rows (Top 10)
         const materialsTableRows = rev.materials.slice(0, 10).map((m, i) => `
             <tr>
               <td style="padding:10px;border:1px solid #cbd5e1;">${m.desc}</td>
@@ -97,7 +58,8 @@ export async function sendManualRevenueReport(period: string) {
             .map(m => `- ${m.desc}: ${m.qty} pcs (${formatCurrency(m.revenue)})`)
             .join("\n")
 
-        return await sendSystemTemplatedEmailByCode({
+        // 6. Send Email
+        const emailResult = await sendSystemTemplatedEmailByCode({
             code: SYSTEM_EMAIL_TEMPLATE_CODES.revenueReport,
             data: {
                 period,
@@ -127,8 +89,20 @@ export async function sendManualRevenueReport(period: string) {
                 actionUrl: "/dashboard/revenue-forecast"
             }
         })
+
+        if (emailResult.success) {
+            console.log("[CRON] Revenue report email sent successfully")
+            return NextResponse.json({ success: true, message: "Report sent" })
+        } else {
+            console.error("[CRON] Failed to send email:", emailResult.error)
+            return NextResponse.json({ success: false, error: emailResult.error }, { status: 500 })
+        }
+
     } catch (error) {
-        console.error("Failed to send manual revenue report:", error)
-        return { success: false, error: error instanceof Error ? error.message : "Failed to send report" }
+        console.error("[CRON] Unexpected error in revenue report:", error)
+        return NextResponse.json({ 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error" 
+        }, { status: 500 })
     }
 }

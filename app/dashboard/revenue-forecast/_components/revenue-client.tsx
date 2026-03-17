@@ -329,11 +329,32 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
     )
 }
 
+import { toast } from "sonner"
+import { Mail } from "lucide-react"
+import { sendManualRevenueReport } from "@/app/actions/dashboard-revenue"
+
 export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
     const router = useRouter()
     const dashboardRef = useRef<HTMLDivElement>(null)
     const [isExportingJpg, setIsExportingJpg] = useState(false)
+    const [isSendingEmail, setIsSendingEmail] = useState(false)
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
+
+    const handleEmailReport = async () => {
+        try {
+            setIsSendingEmail(true)
+            const result = await sendManualRevenueReport(selectedPeriod)
+            if (result.success) {
+                toast.success("Revenue report has been sent to administrators.")
+            } else {
+                toast.error(result.error || "Failed to send report.")
+            }
+        } catch (error) {
+            toast.error("An unexpected error occurred.")
+        } finally {
+            setIsSendingEmail(false)
+        }
+    }
 
     const handleExportJPG = async () => {
         if (!dashboardRef.current) return
@@ -346,7 +367,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
             const dataUrl = await toJpeg(dashboardRef.current, {
                 backgroundColor: "#ffffff",
                 quality: 0.95,
-                pixelRatio: 2,
+                pixelRatio: 1.5,
                 filter: (node) => {
                     const exclusionClasses = ['export-button-hide']
                     return !exclusionClasses.some(className => 
@@ -359,8 +380,10 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
             link.download = `revenue-forecast-${selectedPeriod}.jpg`
             link.href = dataUrl
             link.click()
+            toast.success("Dashboard exported as JPG.")
         } catch (error) {
             console.error("Export failed:", error)
+            toast.error("Export failed.")
         } finally {
             setIsExportingJpg(false)
         }
@@ -403,11 +426,22 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     <Button 
                         variant="outline" 
                         size="sm" 
+                        disabled={isSendingEmail}
+                        className="h-8 text-xs font-bold gap-2 border-primary/20 hover:bg-primary/5 text-primary export-button-hide"
+                        onClick={handleEmailReport}
+                    >
+                        <Mail className="w-3.5 h-3.5" />
+                        {isSendingEmail ? "Sending..." : "Email Report"}
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        disabled={isExportingJpg}
                         className="h-8 text-xs font-bold gap-2 border-blue-200 hover:bg-blue-50 text-blue-700 export-button-hide"
                         onClick={handleExportJPG}
                     >
                         <Download className="w-3.5 h-3.5" />
-                        Export JPG
+                        {isExportingJpg ? "Exporting..." : "Export JPG"}
                     </Button>
                     <div className="flex items-center gap-2 export-button-hide">
                         <span className="text-xs font-bold">Period:</span>

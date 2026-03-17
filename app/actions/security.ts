@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { user, session as sessionTable } from "@/db/schema/auth"
 import { roles, permissions, rolePermissions } from "@/db/schema"
 import { auditLogs } from "@/db/schema/audit-logs"
+import { userWarehouseAccess } from "@/db/schema/user-warehouse-access"
 import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
@@ -130,6 +131,55 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
     revalidatePath("/dashboard/security/users")
     return { success: true }
 }
+
+export async function updateSecurityUserAccessSettings(
+    targetUserId: string,
+    data: { role: string; warehouseAccesses: Array<{ warehouseId: number; accessLevel: "view" | "edit" }> }
+) {
+    const session = await getAuthenticatedSession("security", "edit")
+
+    try {
+        await db.transaction(async (tx) => {
+            // 1. Update role
+            await tx
+                .update(user)
+                .set({ role: data.role, updatedAt: new Date() })
+                .where(eq(user.id, targetUserId))
+
+            // 2. Clear existing warehouse access
+            await tx
+                .delete(userWarehouseAccess)
+                .where(eq(userWarehouseAccess.userId, targetUserId))
+
+            // 3. Insert new warehouse access if any
+            if (data.warehouseAccesses.length > 0) {
+                await tx.insert(userWarehouseAccess).values(
+                    data.warehouseAccesses.map((wa) => ({
+                        userId: targetUserId,
+                        warehouseId: wa.warehouseId,
+                        accessLevel: wa.accessLevel,
+                    }))
+                )
+            }
+        })
+
+        await writeAuditLog(
+            session.user.id,
+            "user.access_update",
+            `Updated role and warehouse access for user ${targetUserId}`
+        )
+
+        revalidatePath("/dashboard/security/users")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update user access settings:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update access settings",
+        }
+    }
+}
+
 
 export async function updateSecurityUserProfile(targetUserId: string, data: {
     name?: string
