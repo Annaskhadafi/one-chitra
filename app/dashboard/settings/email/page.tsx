@@ -1,4 +1,4 @@
-import { getSmtpSettings, getEmailTemplates, getEmailLogs } from "@/app/actions/email"
+import { getSmtpSettings, getEmailTemplates, getEmailLogs, getEmailNotificationRules } from "@/app/actions/email"
 import { db } from "@/db"
 import { roles } from "@/db/schema"
 import { asc } from "drizzle-orm"
@@ -10,10 +10,11 @@ export const metadata = {
 }
 
 export default async function EmailSettingsPage() {
-    const [smtpData, templates, logs, users, roleRows] = await Promise.all([
+    const [smtpData, templates, logs, rules, users, roleRows] = await Promise.all([
         getSmtpSettings(),
         getEmailTemplates(),
         getEmailLogs(100),
+        getEmailNotificationRules(),
         db.query.user.findMany({
             columns: {
                 id: true,
@@ -53,6 +54,7 @@ export default async function EmailSettingsPage() {
                 smtpData={smtpData}
                 templates={templates}
                 logs={logs}
+                rules={rules}
                 recipientUsers={recipientUsers}
                 recipientRoles={recipientRoles}
             />

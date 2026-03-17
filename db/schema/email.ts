@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, boolean, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, timestamp, boolean, jsonb, pgEnum, index, unique } from "drizzle-orm/pg-core";
 
 export const emailTemplateTypeEnum = pgEnum("email_template_type", [
     "magic_link",
@@ -63,5 +63,70 @@ export const emailLogs = pgTable("email_logs", {
     status: varchar("status", { length: 50 }).notNull().default("pending"),
     errorMessage: text("error_message"),
     sentAt: timestamp("sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const emailNotificationRules = pgTable("email_notification_rules", {
+    id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+    name: varchar("name", { length: 255 }).notNull(),
+    formKey: varchar("form_key", { length: 100 }).notNull(),
+    combinator: varchar("combinator", { length: 3 }).notNull().default("AND"),
+    conditions: jsonb("conditions").$type<Array<{
+        id: string
+        fieldKey: string
+        operator: string
+        value?: string | null
+        dataType?: "string" | "number" | "date" | "boolean" | "array"
+    }>>().default([]),
+    toEmails: jsonb("to_emails").$type<string[]>().default([]),
+    ccEmails: jsonb("cc_emails").$type<string[]>().default([]),
+    options: jsonb("options").$type<{
+        priority?: "low" | "normal" | "high" | "urgent"
+        scheduleType?: "immediate" | "daily" | "weekly" | "custom_cron"
+        scheduleValue?: string | null
+        includeAttachments?: boolean
+        attachmentMode?: "none" | "all" | "filtered"
+        allowedFileTypes?: string[]
+        maxAttachmentMb?: number
+        replyTo?: string | null
+        subjectPrefix?: string | null
+    }>().default({}),
+    templateId: varchar("template_id", { length: 36 }).notNull().references(() => emailTemplates.id),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+    index("email_notification_rules_form_key_idx").on(t.formKey),
+    index("email_notification_rules_active_idx").on(t.isActive),
+]);
+
+export const emailNotificationRuleStates = pgTable("email_notification_rule_states", {
+    id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+    ruleId: varchar("rule_id", { length: 36 }).notNull().references(() => emailNotificationRules.id, { onDelete: "cascade" }),
+    entityId: varchar("entity_id", { length: 100 }).notNull(),
+    lastMatched: boolean("last_matched").notNull().default(false),
+    lastEvaluatedAt: timestamp("last_evaluated_at"),
+    lastSentAt: timestamp("last_sent_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+    unique("email_notification_rule_states_unique").on(t.ruleId, t.entityId),
+    index("email_notification_rule_states_rule_id_idx").on(t.ruleId),
+]);
+
+export const emailNotificationRuleLogs = pgTable("email_notification_rule_logs", {
+    id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+    ruleId: varchar("rule_id", { length: 36 }).notNull().references(() => emailNotificationRules.id, { onDelete: "cascade" }),
+    formKey: varchar("form_key", { length: 100 }).notNull(),
+    entityId: varchar("entity_id", { length: 100 }).notNull(),
+    matched: boolean("matched").notNull().default(false),
+    sent: boolean("sent").notNull().default(false),
+    toEmail: text("to_email"),
+    ccEmail: text("cc_email"),
+    subject: varchar("subject", { length: 500 }),
+    htmlContent: text("html_content"),
+    textContent: text("text_content"),
+    status: varchar("status", { length: 50 }).notNull().default("skipped"),
+    errorMessage: text("error_message"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });

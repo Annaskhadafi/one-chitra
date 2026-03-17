@@ -1,16 +1,19 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Settings, FileText, Activity } from "lucide-react"
+import { Settings, FileText, Activity, Bell } from "lucide-react"
 import { SmtpSettingsForm } from "./smtp-settings-form"
 import { TemplateList } from "./template-list"
 import { EmailLogsTable } from "./email-logs"
+import { NotificationRules } from "./notification-rules"
 import type { smtpSettings, emailTemplates, emailLogs } from "@/db/schema/email"
+import type { emailNotificationRules } from "@/db/schema/email"
 
 type SmtpRow = typeof smtpSettings.$inferSelect
 type Template = typeof emailTemplates.$inferSelect
 type Log = typeof emailLogs.$inferSelect
+type Rule = typeof emailNotificationRules.$inferSelect
 type RecipientUser = {
     id: string
     name: string
@@ -22,11 +25,22 @@ type Props = {
     smtpData: SmtpRow | null
     templates: Template[]
     logs: Log[]
+    rules: Rule[]
     recipientUsers: RecipientUser[]
     recipientRoles: string[]
 }
 
-export function EmailSettingsClient({ smtpData, templates, logs, recipientUsers, recipientRoles }: Props) {
+export function EmailSettingsClient({ smtpData, templates, logs, rules, recipientUsers, recipientRoles }: Props) {
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) {
+        return <div className="h-64 rounded-md border bg-muted/20" />
+    }
+
     return (
         <Tabs defaultValue="smtp" className="space-y-4">
             <TabsList>
@@ -40,6 +54,15 @@ export function EmailSettingsClient({ smtpData, templates, logs, recipientUsers,
                     {templates.length > 0 && (
                         <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                             {templates.length}
+                        </span>
+                    )}
+                </TabsTrigger>
+                <TabsTrigger value="rules" className="gap-2">
+                    <Bell className="h-4 w-4" />
+                    Rules
+                    {rules.length > 0 && (
+                        <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                            {rules.length}
                         </span>
                     )}
                 </TabsTrigger>
@@ -59,6 +82,17 @@ export function EmailSettingsClient({ smtpData, templates, logs, recipientUsers,
                 <Suspense fallback={<div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>}>
                     <TemplateList
                         initialTemplates={templates}
+                        recipientUsers={recipientUsers}
+                        recipientRoles={recipientRoles}
+                    />
+                </Suspense>
+            </TabsContent>
+
+            <TabsContent value="rules">
+                <Suspense fallback={<div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>}>
+                    <NotificationRules
+                        initialRules={rules}
+                        templates={templates}
                         recipientUsers={recipientUsers}
                         recipientRoles={recipientRoles}
                     />

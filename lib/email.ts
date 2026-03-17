@@ -75,7 +75,7 @@ function serializeEmailList(value?: string | string[] | null) {
     return normalized.length > 0 ? normalized.join(", ") : null
 }
 
-async function resolveUserEmailsFromRolesAndIds(roleNames: string[], userIds: string[]) {
+export async function resolveUserEmailsFromRolesAndIds(roleNames: string[], userIds: string[]) {
     const normalizedRoles = new Set(roleNames.map((entry) => entry.trim().toLowerCase()).filter(Boolean))
     const normalizedUserIds = new Set(userIds.map((entry) => entry.trim()).filter(Boolean))
     const includeAllUsers = normalizedRoles.has("all")

@@ -52,7 +52,7 @@ export { salesDocuments } from "./sales-documents";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
-export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum } from "./email";
+export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum, emailNotificationRules, emailNotificationRuleStates, emailNotificationRuleLogs } from "./email";
 export { calendarEvents, calendarEventTypeEnum } from "./calendar-events";
 export {
     stockOpnameSessions,

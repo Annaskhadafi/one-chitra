@@ -168,6 +168,80 @@ async function syncEmailManagementSchema() {
         ALTER TABLE IF EXISTS email_logs
         ADD COLUMN IF NOT EXISTS text_content TEXT;
     `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS email_notification_rules (
+            id           VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::text,
+            name         VARCHAR(255) NOT NULL,
+            form_key     VARCHAR(100) NOT NULL,
+            combinator   VARCHAR(3)   NOT NULL DEFAULT 'AND',
+            conditions   JSONB        DEFAULT '[]'::jsonb,
+            to_emails    JSONB        DEFAULT '[]'::jsonb,
+            cc_emails    JSONB        DEFAULT '[]'::jsonb,
+            options      JSONB        DEFAULT '{}'::jsonb,
+            template_id  VARCHAR(36)  NOT NULL REFERENCES email_templates(id),
+            is_active    BOOLEAN      NOT NULL DEFAULT true,
+            created_at   TIMESTAMP    NOT NULL DEFAULT now(),
+            updated_at   TIMESTAMP    NOT NULL DEFAULT now()
+        );
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS email_notification_rules
+        ADD COLUMN IF NOT EXISTS options JSONB DEFAULT '{}'::jsonb;
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS email_notification_rules_form_key_idx
+        ON email_notification_rules(form_key);
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS email_notification_rules_active_idx
+        ON email_notification_rules(is_active);
+    `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS email_notification_rule_states (
+            id                 VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+            rule_id            VARCHAR(36) NOT NULL REFERENCES email_notification_rules(id) ON DELETE CASCADE,
+            entity_id          VARCHAR(100) NOT NULL,
+            last_matched       BOOLEAN NOT NULL DEFAULT false,
+            last_evaluated_at  TIMESTAMP,
+            last_sent_at       TIMESTAMP,
+            created_at         TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at         TIMESTAMP NOT NULL DEFAULT now()
+        );
+    `)
+
+    await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS email_notification_rule_states_unique
+        ON email_notification_rule_states(rule_id, entity_id);
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS email_notification_rule_states_rule_id_idx
+        ON email_notification_rule_states(rule_id);
+    `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS email_notification_rule_logs (
+            id            VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+            rule_id       VARCHAR(36) NOT NULL REFERENCES email_notification_rules(id) ON DELETE CASCADE,
+            form_key      VARCHAR(100) NOT NULL,
+            entity_id     VARCHAR(100) NOT NULL,
+            matched       BOOLEAN NOT NULL DEFAULT false,
+            sent          BOOLEAN NOT NULL DEFAULT false,
+            to_email      TEXT,
+            cc_email      TEXT,
+            subject       VARCHAR(500),
+            html_content  TEXT,
+            text_content  TEXT,
+            status        VARCHAR(50) NOT NULL DEFAULT 'skipped',
+            error_message TEXT,
+            created_at    TIMESTAMP NOT NULL DEFAULT now()
+        );
+    `)
 }
 
 export async function ensureEmailManagementSchema() {

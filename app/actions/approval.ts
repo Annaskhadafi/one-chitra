@@ -23,6 +23,7 @@ import {
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
+import { processEmailNotificationRulesForSnapshot } from "@/lib/email-notification-rules"
 
 type DecisionType = "approve" | "reject"
 
@@ -894,26 +895,11 @@ export async function getWebsiteFormOptions() {
     return Array.from(uniqueByRoute.values()).sort((a, b) => a.formName.localeCompare(b.formName))
 }
 
-export async function getApprovalFormFieldOptions(formKey: string) {
-    await getAuthenticatedSession("approvals-settings", "view")
-
-    const safeFormKey = String(formKey ?? "").trim()
-    if (!safeFormKey) {
-        return { success: false, error: "Form key is required", fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
-    }
-
-    const form = await db.query.approvalFormRegistry.findFirst({
-        where: eq(approvalFormRegistry.formKey, safeFormKey),
-    })
-
-    if (!form?.modulePath) {
-        return { success: true, fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
-    }
-
-    const moduleDir = resolveSafeDashboardModuleDir(form.modulePath)
+async function scanFormFieldOptionsByModulePath(modulePath: string) {
+    const moduleDir = resolveSafeDashboardModuleDir(modulePath)
     if (!moduleDir) {
         return {
-            success: false,
+            success: false as const,
             error: "Unsafe module path. Module path must stay inside /app/dashboard",
             fields: [] as string[],
             fieldMeta: [] as ApprovalFormFieldOption[],
@@ -937,13 +923,43 @@ export async function getApprovalFormFieldOptions(formKey: string) {
             .sort((a, b) => a.key.localeCompare(b.key))
 
         return {
-            success: true,
+            success: true as const,
             fields: mergedFieldMeta.map((field) => field.key),
             fieldMeta: mergedFieldMeta,
         }
     } catch {
+        return { success: true as const, fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+}
+
+export async function getWebsiteFormFieldOptions(modulePath: string) {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const safeModulePath = String(modulePath ?? "").trim()
+    if (!safeModulePath) {
+        return { success: false, error: "Module path is required", fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+
+    return scanFormFieldOptionsByModulePath(safeModulePath)
+}
+
+export async function getApprovalFormFieldOptions(formKey: string) {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const safeFormKey = String(formKey ?? "").trim()
+    if (!safeFormKey) {
+        return { success: false, error: "Form key is required", fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+
+    const form = await db.query.approvalFormRegistry.findFirst({
+        where: eq(approvalFormRegistry.formKey, safeFormKey),
+    })
+
+    if (!form?.modulePath) {
         return { success: true, fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
     }
+
+    return scanFormFieldOptionsByModulePath(form.modulePath)
 }
 
 export async function registerApprovalForm(formData: FormData) {
@@ -1226,6 +1242,20 @@ async function createApprovalRequestCore(input: {
             stepOrder: actionableFirstStep?.stepOrder ?? firstStep.stepOrder,
         },
     })
+
+    try {
+        await processEmailNotificationRulesForSnapshot({
+            formKey: input.formKey,
+            entityId: input.entityId,
+            snapshot: conditionSnapshot,
+            context: {
+                approvalRequestId: created.id,
+                approvalUrl: `/dashboard/approvals/${created.id}`,
+            },
+        })
+    } catch (error) {
+        console.error("[EMAIL NOTIFICATION RULE] Failed to process rules:", error)
+    }
 
     return { success: true as const, id: created.id }
 }
