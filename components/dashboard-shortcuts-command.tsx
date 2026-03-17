@@ -58,6 +58,7 @@ export function DashboardShortcutsCommand({
   const shortcutsBySection = React.useMemo(() => {
     const sectionMap = new Map<string, ShortcutItem[]>()
     const seen = new Set<string>()
+    const shortcutByUrl = new Map<string, ShortcutItem>()
 
     const addItem = (item: ShortcutItem) => {
       const dedupeKey = `${item.title}-${item.url}-${item.sectionTitle}`
@@ -72,6 +73,10 @@ export function DashboardShortcutsCommand({
       }
 
       sectionMap.get(item.sectionTitle)?.push(item)
+
+      if (!shortcutByUrl.has(item.url)) {
+        shortcutByUrl.set(item.url, item)
+      }
     }
 
     navigationSections.forEach((section) => {
@@ -102,6 +107,39 @@ export function DashboardShortcutsCommand({
         })
       })
     })
+
+    const addCreateShortcut = (
+      id: string,
+      title: string,
+      createUrl: string,
+      sourceUrl: string,
+    ) => {
+      const sourceItem = shortcutByUrl.get(sourceUrl)
+      if (!sourceItem) {
+        return
+      }
+
+      addItem({
+        id,
+        title,
+        url: createUrl,
+        sectionTitle: sourceItem.sectionTitle,
+        parentTitle: sourceItem.parentTitle ?? sourceItem.title,
+      })
+    }
+
+    addCreateShortcut(
+      "shortcut-create-sales-order",
+      "Create Sales Order",
+      "/dashboard/sales-orders/create",
+      "/dashboard/sales-orders",
+    )
+    addCreateShortcut(
+      "shortcut-create-deliveries",
+      "Create Deliveries",
+      "/dashboard/deliveries/create",
+      "/dashboard/deliveries",
+    )
 
     return Array.from(sectionMap.entries())
   }, [navigationSections])

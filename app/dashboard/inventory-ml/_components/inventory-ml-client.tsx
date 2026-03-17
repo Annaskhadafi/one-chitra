@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, UserSearch, Target, Loader2, Sparkles, History, Box, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, LineChart } from "lucide-react"
-import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings, getPredictionHistoricalInsights } from "@/app/actions/inventory-ml"
+import { Trash2, UserSearch, Target, Loader2, Sparkles, BrainCircuit, History, Box, ShieldCheck, ShieldAlert, Search, LayoutDashboard, Settings, ChevronLeft, ChevronRight, Eye, X } from "lucide-react"
+import { generateMLPrediction, getRecentPredictions, deleteMLPrediction, generateMLCustomerRecommendation, getMLSettings } from "@/app/actions/inventory-ml"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -17,25 +17,6 @@ import { DashboardTab } from "./dashboard-tab"
 import { useMaterialSearch, useCustomerSearch } from "../_hooks/use-sap-data"
 import { MLSettingsClient } from "../settings/_components/ml-settings-client"
 import { MLReportViewer } from "./ml-report-viewer"
-import { DynamicSafetyStock } from "./dynamic-safety-stock"
-
-type RecentPredictionsResult = Awaited<ReturnType<typeof getRecentPredictions>>
-type PredictionHistoryItem = NonNullable<Extract<RecentPredictionsResult, { success: true }>["data"]>[number]
-type PredictionHistoricalInsights = NonNullable<Extract<Awaited<ReturnType<typeof getPredictionHistoricalInsights>>, { success: true }>["data"]>
-type HistoricalTopProduct = PredictionHistoricalInsights["topProducts"][number]
-type MLSettingsData = Awaited<ReturnType<typeof getMLSettings>>
-
-interface CustomerSearchItem {
-    customerCode: string
-    customerName: string
-}
-
-const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : "Terjadi kesalahan"
-const detailDialogContentClassName = "max-h-[94vh] overflow-y-auto p-4 sm:p-6 lg:p-8"
-const detailDialogStyle = {
-    width: "min(98vw, 1800px)",
-    maxWidth: "min(98vw, 1800px)",
-}
 
 function CustomerSearch({ value, onChange }: { value: string; onChange: (val: string, name?: string) => void }) {
     const [search, setSearch] = useState("")
@@ -43,7 +24,7 @@ function CustomerSearch({ value, onChange }: { value: string; onChange: (val: st
 
     // Use React Query hook with 1-hour cache (Requirements: 10.3)
     const { data: searchResult, isLoading: isSearching } = useCustomerSearch(search)
-    const results = (searchResult?.data || []) as CustomerSearchItem[]
+    const results = searchResult?.data || []
 
     return (
         <div className="relative">
@@ -72,7 +53,7 @@ function CustomerSearch({ value, onChange }: { value: string; onChange: (val: st
                     ) : results.length === 0 ? (
                         <div className="p-3 text-sm text-muted-foreground">Tidak ditemukan.</div>
                     ) : (
-                        results.map((cust) => (
+                        results.map((cust: any) => (
                             <button
                                 key={cust.customerCode}
                                 type="button"
@@ -151,101 +132,24 @@ function MaterialSearch({ value, onChange }: { value: string; onChange: (val: st
     )
 }
 
-
-function HistoricalInsightsPanel({ predictionType }: { predictionType: "REPLENISHMENT" | "SAFETY_STOCK" | "CUSTOMER_RECOMMENDATION" }) {
-    const [insights, setInsights] = useState<PredictionHistoricalInsights | null>(null)
-    const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        const loadInsights = async () => {
-            setLoading(true)
-            const res = await getPredictionHistoricalInsights({ predictionType, days: 90 })
-            if (res.success && res.data) {
-                setInsights(res.data)
-            } else {
-                setInsights(null)
-            }
-            setLoading(false)
-        }
-
-        loadInsights()
-    }, [predictionType])
-
-    return (
-        <Card className="md:col-span-2 border-primary/20 bg-primary/5">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                    <LineChart className="h-4 w-4 text-primary" />
-                    Historical Insights
-                </CardTitle>
-                <CardDescription>Ringkasan pola dari history prediksi 90 hari terakhir.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {loading ? (
-                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Memuat insight historis...
-                    </div>
-                ) : !insights ? (
-                    <p className="text-sm text-muted-foreground">Belum ada insight historis untuk filter ini.</p>
-                ) : (
-                    <>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="rounded-lg border bg-background/80 p-3">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Prediksi</p>
-                                <p className="text-xl font-bold">{insights.totalPredictions}</p>
-                            </div>
-                            <div className="rounded-lg border bg-background/80 p-3">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Avg. Akurasi</p>
-                                <p className="text-xl font-bold">{insights.avgAccuracy}%</p>
-                            </div>
-                            <div className="rounded-lg border bg-background/80 p-3">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Tren Rekomendasi</p>
-                                <p className="text-xl font-bold">{insights.recommendationTrend}%</p>
-                            </div>
-                        </div>
-                        <ul className="list-disc list-inside text-sm space-y-1">
-                            {insights.insightBullets?.map((item: string, idx: number) => (
-                                <li key={idx}>{item}</li>
-                            ))}
-                        </ul>
-                        {insights.topProducts?.length > 0 && (
-                            <div>
-                                <p className="text-xs font-bold text-muted-foreground mb-2">Top Recurring Products</p>
-                                <div className="space-y-1 text-sm">
-                                    {insights.topProducts.slice(0, 3).map((item: HistoricalTopProduct) => (
-                                        <div key={item.code} className="flex justify-between rounded border bg-background/80 px-3 py-1.5">
-                                            <span className="truncate">{item.name}</span>
-                                            <span className="font-semibold">{item.count}x</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </>
-                )}
-            </CardContent>
-        </Card>
-    )
-}
-
 function ReplenishmentTab() {
     const [productCode, setProductCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
+    const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
+    const [history, setHistory] = useState<any[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
-    const [selectedDetail, setSelectedDetail] = useState<PredictionHistoryItem | null>(null)
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions({ predictionType: "REPLENISHMENT", page: currentPage, pageSize })
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
         if (res.success && res.data) {
-            setHistory(res.data)
+            setHistory(res.data.filter((d: any) => d.predictionType === 'REPLENISHMENT'))
             setTotalPages(res.totalPages || 1)
             setTotalCount(res.totalCount || 0)
         }
@@ -271,8 +175,8 @@ function ReplenishmentTab() {
         setResult(null)
         setError(null)
         try {
-            const res = await generateMLPrediction(productCode.trim(), 'REPLENISHMENT', { forceRefresh: true })
-            if (res.success && res.data) {
+            const res = await generateMLPrediction(productCode.trim(), 'REPLENISHMENT')
+            if (res.success) {
                 setResult(res.data)
                 toast.success(res.cached ? "Dari cache (24 jam)" : "Prediksi ML berhasil!")
                 loadHistory()
@@ -280,10 +184,9 @@ function ReplenishmentTab() {
                 setError(res.error || "Gagal membuat prediksi")
                 toast.error(res.error || "Gagal membuat prediksi")
             }
-        } catch (err: unknown) {
-            const message = getErrorMessage(err)
-            setError(message)
-            toast.error(message)
+        } catch (err: any) {
+            setError(err.message)
+            toast.error(err.message || "Terjadi kesalahan")
         } finally {
             setIsLoading(false)
         }
@@ -291,7 +194,6 @@ function ReplenishmentTab() {
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
-            <HistoricalInsightsPanel predictionType="REPLENISHMENT" />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -368,15 +270,7 @@ function ReplenishmentTab() {
                                     <AccordionItem value="report" className="border-none">
                                         <AccordionTrigger className="py-2 hover:no-underline">
                                             <div className="flex justify-between items-center font-medium w-full pr-4">
-                                                <div className="min-w-0 text-left">
-                                                    <span className="flex items-center gap-1.5 font-bold">
-                                                        <Box className="w-4 h-4 shrink-0" />
-                                                        <span className="truncate">{item.productCode}</span>
-                                                    </span>
-                                                    <p className="pl-5 text-xs font-normal text-muted-foreground truncate">
-                                                        {item.productName || "Nama produk tidak tersedia"}
-                                                    </p>
-                                                </div>
+                                                <span className="flex items-center gap-1.5 font-bold"><Box className="w-4 h-4" /> {item.productCode}</span>
                                                 <span className="text-primary font-bold">{item.recommendedStock} Pcs</span>
                                             </div>
                                         </AccordionTrigger>
@@ -423,21 +317,18 @@ function ReplenishmentTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
-                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
+                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
-                            <span className="flex min-w-0 items-start gap-2">
-                                <Box className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                                <span className="min-w-0 break-words">Detail Analisis: {selectedDetail?.productName || selectedDetail?.productCode}</span>
-                            </span>
-                            <span className="text-sm font-normal text-muted-foreground">
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <Box className="w-5 h-5 text-primary" />
+                            Detail Analisis: {selectedDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
                                 {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
                             </span>
                         </DialogTitle>
                     </DialogHeader>
                     {selectedDetail && (
                         <div className="mt-2 text-left">
-                            <div className="text-sm text-muted-foreground mb-4 px-1">Material Number: {selectedDetail.productCode}</div>
                             <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-muted/50 border">
                                 <span className="text-sm font-medium text-muted-foreground">Stok Rekomendasi ML</span>
                                 <span className="text-2xl font-bold text-primary">{selectedDetail.recommendedStock} Pcs</span>
@@ -452,28 +343,236 @@ function ReplenishmentTab() {
 }
 
 function SafetyStockTab() {
-    return <DynamicSafetyStock />
+    const [productCode, setProductCode] = useState("")
+    const [isLoading, setIsLoading] = useState(false)
+    const [result, setResult] = useState<any>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [history, setHistory] = useState<any[]>([])
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null)
+    const pageSize = 20
+
+    useEffect(() => { loadHistory() }, [currentPage])
+
+    const loadHistory = async () => {
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
+        if (res.success && res.data) {
+            setHistory(res.data.filter((d: any) => d.predictionType === 'SAFETY_STOCK'))
+            setTotalPages(res.totalPages || 1)
+            setTotalCount(res.totalCount || 0)
+        }
+    }
+
+    const handleDelete = async (id: number) => {
+        if (!confirm("Hapus history ini?")) return
+        const res = await deleteMLPrediction(id)
+        if (res.success) {
+            toast.success("Riwayat dihapus")
+            loadHistory()
+        } else {
+            toast.error(res.error || "Gagal menghapus")
+        }
+    }
+
+    const handleGenerate = async () => {
+        if (!productCode.trim()) {
+            toast.error("Silakan masukkan Material Number")
+            return
+        }
+        setIsLoading(true)
+        setResult(null)
+        setError(null)
+        try {
+            const res = await generateMLPrediction(productCode.trim(), 'SAFETY_STOCK')
+            if (res.success) {
+                setResult(res.data)
+                toast.success(res.cached ? "Dari cache (24 jam)" : "Safety Stock berhasil dihitung!")
+                loadHistory()
+            } else {
+                setError(res.error || "Gagal membuat perhitungan")
+                toast.error(res.error || "Gagal membuat perhitungan")
+            }
+        } catch (err: any) {
+            setError(err.message)
+            toast.error(err.message || "Terjadi kesalahan")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    return (
+        <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <BrainCircuit className="w-5 h-5 text-indigo-500" />
+                        Hitung Safety Stock Pintar
+                    </CardTitle>
+                    <CardDescription>
+                        Gunakan ML untuk menentukan buffer inventory optimal.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Material Number</Label>
+                        <MaterialSearch value={productCode} onChange={setProductCode} />
+                    </div>
+                    <Button onClick={handleGenerate} disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
+                        {isLoading ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> ML Computing...</>
+                        ) : "Kalkulasi Safety Stock"}
+                    </Button>
+
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription className="text-xs break-all">{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {result && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 pt-4">
+                            <MLReportViewer rationale={result.rationale} />
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                        <ShieldAlert className="w-5 h-5" /> History Perhitungan
+                    </CardTitle>
+                    <CardDescription>
+                        {totalCount > 0 && `Menampilkan ${history.length} dari ${totalCount} riwayat`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                        {history.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-8">Belum ada history.</p>
+                        ) : history.map((item) => (
+                            <div key={item.id} className="p-3 rounded-lg border bg-card shadow-sm space-y-1 text-sm group relative">
+                                {/* Action buttons */}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-indigo-500 hover:bg-indigo-500/10"
+                                        title="Lihat Detail"
+                                        onClick={() => setSelectedDetail(item)}
+                                    >
+                                        <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        title="Hapus"
+                                        onClick={() => handleDelete(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <Accordion type="single" collapsible className="w-full">
+                                    <AccordionItem value="report" className="border-none">
+                                        <AccordionTrigger className="py-2 hover:no-underline">
+                                            <div className="flex justify-between items-center font-medium w-full pr-4">
+                                                <span className="font-bold">{item.productCode}</span>
+                                                <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded text-xs font-bold">
+                                                    {item.recommendedStock} Pcs
+                                                </span>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="border-t pt-4 mt-2">
+                                                <MLReportViewer rationale={item.rationale} />
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
+                                <div className="text-[10px] text-muted-foreground text-right">
+                                    {new Date(item.createdAt).toLocaleString('id-ID')}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Detail Popup Full-Width */}
+            <Dialog open={!!selectedDetail} onOpenChange={(open) => !open && setSelectedDetail(null)}>
+                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                            Detail Safety Stock: {selectedDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
+                                {selectedDetail && new Date(selectedDetail.createdAt).toLocaleString('id-ID')}
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedDetail && (
+                        <div className="mt-2 text-left">
+                            <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/20 dark:border-indigo-900/30">
+                                <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Safety Stock Optimal</span>
+                                <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedDetail.recommendedStock} Pcs</span>
+                            </div>
+                            <MLReportViewer rationale={selectedDetail.rationale} />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+        </div>
+    )
 }
 
 function CustomerRecommendationTab() {
     const [customerCode, setCustomerCode] = useState("")
     const [customerName, setCustomerName] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [result, setResult] = useState<PredictionHistoryItem | null>(null)
+    const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
-    const [history, setHistory] = useState<PredictionHistoryItem[]>([])
+    const [history, setHistory] = useState<any[]>([])
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [totalCount, setTotalCount] = useState(0)
-    const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<PredictionHistoryItem | null>(null)
+    const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<any | null>(null)
     const pageSize = 20
 
     useEffect(() => { loadHistory() }, [currentPage])
 
     const loadHistory = async () => {
-        const res = await getRecentPredictions({ predictionType: "CUSTOMER_RECOMMENDATION", page: currentPage, pageSize })
+        const res = await getRecentPredictions({ page: currentPage, pageSize })
         if (res.success && res.data) {
-            setHistory(res.data)
+            setHistory(res.data.filter((d: any) => d.predictionType === 'CUSTOMER_RECOMMENDATION'))
             setTotalPages(res.totalPages || 1)
             setTotalCount(res.totalCount || 0)
         }
@@ -500,7 +599,7 @@ function CustomerRecommendationTab() {
         setError(null)
         try {
             const res = await generateMLCustomerRecommendation(customerCode.trim())
-            if (res.success && res.data) {
+            if (res.success) {
                 setResult(res.data)
                 toast.success(res.cached ? "Dari cache (24 jam)" : "Rekomendasi berhasil dibuat!")
                 loadHistory()
@@ -508,10 +607,9 @@ function CustomerRecommendationTab() {
                 setError(res.error || "Gagal membuat rekomendasi")
                 toast.error(res.error || "Gagal membuat rekomendasi")
             }
-        } catch (err: unknown) {
-            const message = getErrorMessage(err)
-            setError(message)
-            toast.error(message)
+        } catch (err: any) {
+            setError(err.message)
+            toast.error(err.message || "Terjadi kesalahan")
         } finally {
             setIsLoading(false)
         }
@@ -519,7 +617,6 @@ function CustomerRecommendationTab() {
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
-            <HistoricalInsightsPanel predictionType="CUSTOMER_RECOMMENDATION" />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -646,14 +743,12 @@ function CustomerRecommendationTab() {
 
             {/* Detail Popup Full-Width */}
             <Dialog open={!!selectedCustomerDetail} onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}>
-                <DialogContent className={detailDialogContentClassName} style={detailDialogStyle}>
+                <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="flex flex-col gap-2 pr-8 text-left leading-snug lg:flex-row lg:items-start lg:justify-between">
-                            <span className="flex min-w-0 items-start gap-2">
-                                <Target className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
-                                <span className="min-w-0 break-words">Detail Rekomendasi: {selectedCustomerDetail?.productName || selectedCustomerDetail?.productCode}</span>
-                            </span>
-                            <span className="text-sm font-normal text-muted-foreground">
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <Target className="w-5 h-5 text-rose-500" />
+                            Detail Rekomendasi: {selectedCustomerDetail?.productName || selectedCustomerDetail?.productCode}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground mr-4">
                                 {selectedCustomerDetail && new Date(selectedCustomerDetail.createdAt).toLocaleString('id-ID')}
                             </span>
                         </DialogTitle>
@@ -673,7 +768,7 @@ function CustomerRecommendationTab() {
 export function InventoryMLClient() {
     const [activeTab, setActiveTab] = useState("dashboard")
     const { data: session } = useSession()
-    const [mlSettings, setMLSettings] = useState<MLSettingsData | null>(null)
+    const [mlSettings, setMLSettings] = useState<any>(null)
     const [isLoadingSettings, setIsLoadingSettings] = useState(false)
     const [hasSettingsAccess, setHasSettingsAccess] = useState(false)
 
@@ -695,7 +790,7 @@ export function InventoryMLClient() {
         if (activeTab === "settings" && hasSettingsAccess && !mlSettings) {
             loadMLSettings()
         }
-    }, [activeTab, hasSettingsAccess, mlSettings])
+    }, [activeTab, hasSettingsAccess])
 
     const loadMLSettings = async () => {
         setIsLoadingSettings(true)
@@ -712,23 +807,21 @@ export function InventoryMLClient() {
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <div className="-mx-1 w-[calc(100%+0.5rem)] overflow-x-auto pb-2 pl-1 sm:mx-0 sm:w-full sm:pl-0 [scrollbar-width:thin]">
-                <TabsList className="inline-flex h-auto min-w-max justify-start gap-1 whitespace-nowrap">
-                    <TabsTrigger value="dashboard" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">
-                        <LayoutDashboard className="h-4 w-4 mr-1.5 sm:mr-2" />
-                        Dashboard
+            <TabsList>
+                <TabsTrigger value="dashboard">
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Dashboard
+                </TabsTrigger>
+                <TabsTrigger value="replenishment">Predictive Replenishment</TabsTrigger>
+                <TabsTrigger value="safetystock">Dynamic Safety Stock</TabsTrigger>
+                <TabsTrigger value="recommendation">Customer Recommendation</TabsTrigger>
+                {hasSettingsAccess && (
+                    <TabsTrigger value="settings">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Settings
                     </TabsTrigger>
-                    <TabsTrigger value="replenishment" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Predictive Replenishment</TabsTrigger>
-                    <TabsTrigger value="safetystock" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Dynamic Safety Stock</TabsTrigger>
-                    <TabsTrigger value="recommendation" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">Customer Recommendation</TabsTrigger>
-                    {hasSettingsAccess && (
-                        <TabsTrigger value="settings" className="shrink-0 whitespace-nowrap px-3 text-xs sm:text-sm">
-                            <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
-                            Settings
-                        </TabsTrigger>
-                    )}
-                </TabsList>
-            </div>
+                )}
+            </TabsList>
             <TabsContent value="dashboard">
                 <DashboardTab onNavigate={setActiveTab} />
             </TabsContent>
