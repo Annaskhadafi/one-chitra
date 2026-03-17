@@ -9,6 +9,7 @@ import {
 import { AlertTriangle, Pencil, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface PoPreviewDialogProps {
     open: boolean
@@ -18,19 +19,6 @@ interface PoPreviewDialogProps {
     editUrl?: string
 }
 
-// Helper function to ensure the URL has the correct format
-function getFileUrl(poDocument: string | null): string | null {
-    if (!poDocument) return null
-
-    // If it already starts with /api/uploads/, use it as is
-    if (poDocument.startsWith('/api/uploads/')) {
-        return poDocument
-    }
-
-    // If it's just a filename, prepend /api/uploads/
-    return `/api/uploads/${poDocument}`
-}
-
 export function PoPreviewDialog({
     open,
     onOpenChange,
@@ -38,7 +26,7 @@ export function PoPreviewDialog({
     title = "Customer PO Preview",
     editUrl
 }: PoPreviewDialogProps) {
-    const fileUrl = getFileUrl(poDocument)
+    const fileUrl = resolveUploadDocumentUrl(poDocument)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,7 +56,7 @@ export function PoPreviewDialog({
                 </DialogHeader>
                 <div className="flex-1 bg-muted/10 relative overflow-auto">
                     {fileUrl ? (
-                        fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) ? (
+                        isUploadImageFile(fileUrl) ? (
                             <div className="flex items-center justify-center min-h-full p-4">
                                 <img
                                     src={fileUrl}

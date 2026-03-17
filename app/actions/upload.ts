@@ -1,19 +1,13 @@
 "use server"
 
 import { writeFile, mkdir, unlink } from "fs/promises"
-import { join, resolve } from "path"
+import { join } from "path"
 import { v4 as uuidv4 } from "uuid"
-
-// Resolve the upload directory:
-// - In production (Dokploy), set UPLOAD_DIR=/app/uploads and mount volume at /app/uploads
-// - In development (no UPLOAD_DIR set), falls back to <project>/public/uploads
-function getUploadDir(): string {
-    if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR
-    return resolve(process.cwd(), "public", "uploads")
-}
+import { getUploadReadDirs, getUploadWriteDir } from "@/lib/upload-storage"
+import { extractUploadFilename } from "@/lib/upload-url"
 
 export async function uploadFile(formData: FormData) {
-    const uploadDir = getUploadDir()
+    const uploadDir = getUploadWriteDir()
 
     try {
         const file = formData.get("file") as File
@@ -77,18 +71,30 @@ export async function uploadFile(formData: FormData) {
 export async function deleteFile(url: string) {
     if (!url) return { success: false, error: "No URL provided" }
 
-    // Expecting URL like /api/uploads/filename.ext
-    const filename = url.split('/').pop()
+    const filename = extractUploadFilename(url)
     if (!filename) return { success: false, error: "Invalid file URL" }
 
-    const filepath = join(getUploadDir(), filename)
-
     try {
-        await unlink(filepath).catch(() => { /* ignore if already gone */ })
-        console.log(`[Upload] Permanently deleted file: ${filepath}`)
+        const candidatePaths = getUploadReadDirs().map((directory) => join(directory, filename))
+        let deletedCount = 0
+
+        for (const filePath of candidatePaths) {
+            try {
+                await unlink(filePath)
+                deletedCount++
+                console.log(`[Upload] Permanently deleted file: ${filePath}`)
+            } catch {
+                // Ignore missing files across legacy directories.
+            }
+        }
+
+        if (deletedCount === 0) {
+            console.log(`[Upload] File already missing, nothing deleted for: ${filename}`)
+        }
+
         return { success: true }
     } catch (error) {
-        console.error(`[Upload] Failed to delete file: ${filepath}`, error)
+        console.error(`[Upload] Failed to delete file: ${filename}`, error)
         return { success: false, error: "File deletion failed" }
     }
 }

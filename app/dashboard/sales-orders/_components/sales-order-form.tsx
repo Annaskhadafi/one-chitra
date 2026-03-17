@@ -46,6 +46,7 @@ import { findCkDefaultMasterPriceSuggestion, getCkMasterPriceLabel, isCkCustomer
 import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import { QuickAddProductDialog } from "./quick-add-product-dialog"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface OrderItem {
     id?: number
@@ -795,7 +796,9 @@ export function SalesOrderForm({
                                         size="icon"
                                         onClick={(e) => {
                                             e.preventDefault()
-                                            window.open(poDocument, "_blank")
+                                            const previewUrl = resolveUploadDocumentUrl(poDocument)
+                                            if (!previewUrl) return
+                                            window.open(previewUrl, "_blank")
                                         }}
                                         title="Preview PDF"
                                     >

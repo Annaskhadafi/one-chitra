@@ -1,28 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
+import { findExistingUploadFilePath } from "@/lib/upload-storage";
+import { extractUploadFilename } from "@/lib/upload-url";
 
 export async function GET(
-    request: NextRequest,
+    _request: Request,
     { params }: { params: Promise<{ filename: string }> }
 ) {
-    const { filename } = await params;
-    // Resolve upload dir: 
-    // - In production (Dokploy Next.js standalone), use the mapped volume path
-    // - In development, falls back to <project>/public/uploads
-    let uploadDir = join(process.cwd(), "public", "uploads");
-    if (process.env.NODE_ENV === "production") {
-        uploadDir = "/app/.next/standalone/public/uploads";
-    }
-    const filePath = join(uploadDir, filename);
+    const { filename: rawFilename } = await params;
+    const filename = extractUploadFilename(rawFilename);
+    const resolvedFile = findExistingUploadFilePath(filename);
 
-    if (!existsSync(filePath)) {
+    if (!filename || !resolvedFile) {
         return new NextResponse("File not found", { status: 404 });
     }
 
     try {
-        const fileBuffer = await readFile(filePath);
+        const fileBuffer = await readFile(resolvedFile.filePath);
 
         // Determine Content-Type based on extension
         const ext = filename.split('.').pop()?.toLowerCase();

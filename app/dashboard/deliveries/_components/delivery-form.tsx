@@ -52,6 +52,7 @@ import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCi
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface SOItemWithRemaining {
     id: number
@@ -835,17 +836,6 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const totalQty = items.reduce((sum, item) => sum + item.deliveredQuantity, 0)
     const totalItems = items.length
 
-    // Helper function to ensure the URL has the correct format
-    const getFileUrl = (poDocument: string | null): string | null => {
-        if (!poDocument) return null
-        // If it already starts with /api/uploads/, use it as is
-        if (poDocument.startsWith('/api/uploads/')) {
-            return poDocument
-        }
-        // If it's just a filename, prepend /api/uploads/
-        return `/api/uploads/${poDocument}`
-    }
-
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
             {/* Header */}
@@ -1292,7 +1282,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 {selectedSO?.poDocument ? (
                                     <div className="aspect-[1/1.4] w-full">
                                         <iframe
-                                            src={getFileUrl(selectedSO.poDocument) || ''}
+                                            src={resolveUploadDocumentUrl(selectedSO.poDocument) || ""}
                                             className="w-full h-full border-0"
                                             title="Customer PO Preview"
                                         />

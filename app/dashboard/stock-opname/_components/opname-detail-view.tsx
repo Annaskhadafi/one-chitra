@@ -44,6 +44,7 @@ import {
 } from "@/app/actions/stock-opname"
 import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
+import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface OpnameDetailViewProps {
     session: StockOpnameSession
@@ -73,6 +74,11 @@ export function OpnameDetailView({
         () => [...(session.signatures ?? [])].sort((a, b) => a.order - b.order),
         [session.signatures]
     )
+    const documentUrl = resolveUploadDocumentUrl(session.documentUrl)
+    const documentFileName =
+        session.documentFileName?.trim() ||
+        extractUploadFilename(session.documentUrl) ||
+        "document"
 
     const formattedOpnameDate = session.opnameDate
         ? new Date(session.opnameDate).toLocaleDateString("id-ID", {
@@ -400,12 +406,12 @@ export function OpnameDetailView({
                 </CardHeader>
                 <CardContent className="py-3">
                     <div className="flex items-center gap-4">
-                        {session.documentUrl ? (
+                        {documentUrl ? (
                             <div className="flex items-center gap-2 bg-green-50 text-green-700 p-2 rounded-md border border-green-200 flex-1">
                                 <Paperclip className="h-4 w-4" />
-                                <span className="text-xs truncate flex-1">{session.documentUrl.split('/').pop()}</span>
+                                <span className="text-xs truncate flex-1">{documentFileName}</span>
                                 <Button variant="ghost" size="sm" className="h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-100" asChild>
-                                    <a href={session.documentUrl} target="_blank" rel="noopener noreferrer">
+                                    <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                         <Download className="h-3 w-3 mr-1" />
                                         Lihat
                                     </a>
