@@ -3,6 +3,8 @@ import { join, resolve } from "path"
 
 import { extractUploadFilename } from "@/lib/upload-url"
 
+const DEFAULT_PRODUCTION_UPLOAD_DIR = "/app/uploads"
+
 function uniquePaths(paths: Array<string | null | undefined>) {
     const seen = new Set<string>()
     const result: string[] = []
@@ -23,6 +25,10 @@ export function getUploadWriteDir() {
         return process.env.UPLOAD_DIR.trim()
     }
 
+    if (process.env.NODE_ENV === "production") {
+        return DEFAULT_PRODUCTION_UPLOAD_DIR
+    }
+
     return resolve(process.cwd(), "public", "uploads")
 }
 
@@ -34,7 +40,7 @@ export function getUploadReadDirs() {
         resolve(process.cwd(), "public", "uploads"),
         resolve(process.cwd(), ".next", "standalone", "public", "uploads"),
         "/mnt/data/one-chitra/uploads",
-        "/app/uploads",
+        DEFAULT_PRODUCTION_UPLOAD_DIR,
         "/app/public/uploads",
         "/app/.next/standalone/public/uploads",
     ])

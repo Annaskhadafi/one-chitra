@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
-import { findExistingUploadFilePath } from "@/lib/upload-storage";
+import { findExistingUploadFilePath, getUploadReadDirs } from "@/lib/upload-storage";
 import { extractUploadFilename } from "@/lib/upload-url";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -114,6 +114,10 @@ export async function GET(
         const remoteFile = await fetchRemoteUpload(filename, request);
 
         if (!remoteFile) {
+            console.warn("[ServeFile] File not found in any upload directory:", {
+                filename,
+                checkedDirectories: getUploadReadDirs(),
+            });
             return new NextResponse("File not found", { status: 404 });
         }
 

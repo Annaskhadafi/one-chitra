@@ -10,21 +10,21 @@ Files are stored in the `public/uploads` directory.
 | Environment | Actual Path | Notes |
 |---|---|---|
 | **Development** | `<project-root>/public/uploads` | `process.cwd()` = project root |
-| **Production (Nixpacks)** | `/app/.next/standalone/public/uploads` | `process.cwd()` = `/app/.next/standalone` in standalone mode |
+| **Production (Nixpacks)** | `/app/uploads` | Mounted volume path used by Dokploy |
 
-On production (Dokploy), the container path `/app/.next/standalone/public/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
+On production (Dokploy), the container path `/app/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
 
 Mount Type
 BIND
 Host Path
 /mnt/data/one-chitra/uploads
 Mount Path
-/app/.next/standalone/public/uploads
+/app/uploads
 
-> ⚠️ **PENTING: Jangan gunakan `process.cwd()` secara langsung di enviroment Production (Dokploy)**
-> Aplikasi Next.js under Dokploy Docker sering me-run CWD di `/app` (bukan di dalam `.next/standalone`), sehingga jika menggunakan `process.cwd()` file akan meleset ke `/app/public/uploads` (temporary) dan tidak masuk ke Bind Mount.
+> ⚠️ **PENTING: Jangan gunakan `process.cwd()` secara langsung di environment Production (Dokploy)**
+> Aplikasi Next.js under Dokploy Docker sering me-run CWD di `/app`, sehingga jika menggunakan `process.cwd()` file bisa meleset ke `/app/public/uploads` yang tidak persisten.
 > **Selalu gunakan deteksi environment:**
-> - Production: Hardcode path absolute ke `/app/.next/standalone/public/uploads`
+> - Production: gunakan path absolute `/app/uploads` (atau `UPLOAD_DIR` yang mengarah ke sana)
 > - Development: `resolve(process.cwd(), "public", "uploads")`
 
 ### 2. Upload Action

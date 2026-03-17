@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSettlementById } from "@/app/actions/cost-settlement"
-import { getUploadDir } from "@/lib/upload-dir"
+import { findExistingUploadFilePath } from "@/lib/upload-storage"
 import JSZip from "jszip"
 import * as xlsx from "xlsx"
 import { readFile } from "fs/promises"
-import { join } from "path"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
 const GL_MAPPING: Record<string, string> = {
@@ -19,6 +18,20 @@ const GL_MAPPING: Record<string, string> = {
     portal: "PORTAL",
     washing: "CUCI",
     escort: "PENGAWALAN",
+}
+
+type SettlementExportRow = {
+    "No Settlement": string
+    Tanggal: string
+    Tipe: string
+    Driver: string
+    Kendaraan: string
+    "Kategori Cost": string
+    "GL Code": string
+    Deskripsi: string
+    Vendor: string
+    Nominal: number
+    "File Nota": string
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -42,8 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const zip = new JSZip()
     const notaFolder = zip.folder("Nota")
 
-    const uploadDir = getUploadDir()
-    const excelData: any[] = []
+    const excelData: SettlementExportRow[] = []
 
     const cleanVehicleNumber = (settlement.vehicleNumber || "Unknown").replace(/[^a-zA-Z0-9]/g, "")
     const dateStr = settlement.settlementDate.replace(/-/g, "")
@@ -61,8 +73,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 const filename = receipt.fileUrl.split('/').pop()
                 if (filename) {
                     try {
-                        const filepath = join(uploadDir, filename)
-                        const fileBuffer = await readFile(filepath)
+                        const resolvedFile = findExistingUploadFilePath(filename)
+                        if (!resolvedFile) {
+                            console.warn(`[Settlement Export] Receipt file not found: ${filename}`)
+                            continue
+                        }
+
+                        const fileBuffer = await readFile(resolvedFile.filePath)
 
                         const ext = filename.split('.').pop() || "jpg"
                         const newFilename = `${glCode}_${cleanVehicleNumber}_${dateStr}_${i + 1}.${ext}`

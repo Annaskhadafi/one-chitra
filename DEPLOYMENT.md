@@ -9,7 +9,7 @@ Untuk memastikan file upload (PO documents, DO scans, dll) tidak hilang setelah 
 #### A. Tambahkan Environment Variable
 Di Dokploy dashboard → Application Settings → Environment Variables:
 ```
-UPLOAD_DIR=/app/.next/standalone/public/uploads
+UPLOAD_DIR=/app/uploads
 ```
 
 #### B. Mount Volume untuk Persistent Storage
@@ -18,10 +18,10 @@ Di Dokploy dashboard → Application Settings → Volumes:
 **Konfigurasi Volume yang Sudah Ada:**
 - **Mount Type**: `BIND`
 - **Host Path**: `/mnt/data/one-chitra/uploads`
-- **Mount Path (Container)**: `/app/.next/standalone/public/uploads`
+- **Mount Path (Container)**: `/app/uploads`
 - **Mode**: `rw` (read-write)
 
-> **Catatan**: Path ini sudah sesuai dengan Next.js standalone build output. File akan disimpan di `/mnt/data/one-chitra/uploads` di server host dan di-mount ke container di path `/app/.next/standalone/public/uploads`.
+> **Catatan**: File akan disimpan di `/mnt/data/one-chitra/uploads` di server host dan di-mount ke container di path `/app/uploads`, sehingga tetap aman saat redeploy.
 
 ### 2. Verifikasi Setup
 
@@ -38,13 +38,13 @@ docker inspect <container-id> | grep -A 10 Mounts
 ls -la /mnt/data/one-chitra/uploads/
 
 # Cek dari dalam container
-docker exec -it <container-id> ls -la /app/.next/standalone/public/uploads/
+docker exec -it <container-id> ls -la /app/uploads/
 ```
 
 ### 3. Cara Kerja
 
 - **Development**: File disimpan di `public/uploads` (tidak persistent)
-- **Production**: File disimpan di `/app/.next/standalone/public/uploads` yang di-mount ke `/mnt/data/one-chitra/uploads`
+- **Production**: File disimpan di `/app/uploads` yang di-mount ke `/mnt/data/one-chitra/uploads`
 - Saat redeploy, container baru akan menggunakan volume yang sama
 - File tidak akan hilang karena disimpan di host server (`/mnt/data/one-chitra/uploads`), bukan di container
 
@@ -83,7 +83,7 @@ tar -xzf uploads-backup-20240224.tar.gz -C /mnt/data/one-chitra/uploads/
 - Cek apakah folder sudah dibuat: `mkdir -p /mnt/data/one-chitra/uploads`
 
 ### File hilang setelah redeploy
-- Pastikan UPLOAD_DIR sudah diset: `UPLOAD_DIR=/app/.next/standalone/public/uploads`
+- Pastikan UPLOAD_DIR sudah diset: `UPLOAD_DIR=/app/uploads`
 - Pastikan volume sudah di-mount dengan benar di Dokploy UI
 - Cek logs: `docker logs <container-id> | grep Upload`
 
@@ -111,7 +111,7 @@ BETTER_AUTH_URL=https://yourdomain.com
 NEXT_PUBLIC_BETTER_AUTH_URL=https://yourdomain.com
 
 # File Upload (PENTING untuk persistent storage)
-UPLOAD_DIR=/app/.next/standalone/public/uploads
+UPLOAD_DIR=/app/uploads
 
 # Server
 PORT=3000
@@ -142,7 +142,7 @@ docker exec -it <container-id> npx tsx scripts/add-movement-columns.ts
 
 ↓ mounted to ↓
 
-/app/.next/standalone/public/uploads/  # Container (ephemeral)
+/app/uploads/  # Container path mounted to persistent host storage
     ├── abc123.pdf
     ├── def456.jpg
     └── ...

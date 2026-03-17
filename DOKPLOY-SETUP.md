@@ -6,13 +6,13 @@
 ```
 Mount Type: BIND
 Host Path: /mnt/data/one-chitra/uploads
-Mount Path: /app/.next/standalone/public/uploads
+Mount Path: /app/uploads
 ```
 
 ### Environment Variable (Add This)
 Di Dokploy UI → Environment Variables, tambahkan:
 ```
-UPLOAD_DIR=/app/.next/standalone/public/uploads
+UPLOAD_DIR=/app/uploads
 ```
 
 ## Checklist Deployment
@@ -66,7 +66,7 @@ docker logs -f <container-id>
 docker inspect <container-id> | grep -A 10 Mounts
 
 # Cek dari dalam container
-docker exec -it <container-id> ls -la /app/.next/standalone/public/uploads/
+docker exec -it <container-id> ls -la /app/uploads/
 ```
 
 ## Migration Database
