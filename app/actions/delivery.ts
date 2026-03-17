@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses } from "@/db/schema"
 import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
@@ -54,7 +54,7 @@ function normalizeDeliveryOutput<T>(value: T): T {
     return normalizeSapDocumentFields(normalizeSlocFields(value))
 }
 
-type StockQueryable = Pick<typeof db, "query">
+type StockQueryable = Pick<typeof db, "query" | "select">
 
 type DeliveryStockCheckInput = {
     productId: number
@@ -73,14 +73,21 @@ type DeliveryStockCheckResult = {
 }
 
 async function getOriginWarehouseStock(queryable: StockQueryable, warehouseId: number, productId: number) {
-    const stockRecord = await queryable.query.stockLevels.findFirst({
-        where: and(
-            eq(stockLevels.warehouseId, warehouseId),
-            eq(stockLevels.productId, productId),
-        ),
+    // Look up the warehouse sloc and product materialNumber
+    // Then find stock by matching sloc + materialNumber (not just IDs)
+    // This handles cases where the same product/warehouse exists under different IDs
+    const result = await queryable.select({
+        totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
     })
+        .from(stockLevels)
+        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+        .innerJoin(products, eq(stockLevels.productId, products.id))
+        .where(and(
+            sql`${warehouses.sloc} = (SELECT sloc FROM warehouses WHERE id = ${warehouseId})`,
+            sql`${products.materialNumber} = (SELECT material_number FROM products WHERE id = ${productId} LIMIT 1)`,
+        ))
 
-    return stockRecord?.totalStock ?? 0
+    return Number(result[0]?.totalStock) || 0
 }
 
 function getProductStockLabel(
@@ -128,21 +135,27 @@ async function buildDeliveryStockCheckResult(
         }
     }
 
-    const otherWarehouseStocks = await queryable.query.stockLevels.findMany({
-        where: and(
-            eq(stockLevels.productId, item.productId),
-            sql`${stockLevels.warehouseId} != ${warehouseId}`,
-            sql`${stockLevels.totalStock} > 0`,
-        ),
-        with: {
-            warehouse: true,
-        },
+    // Find stock in other warehouses (different sloc) for the same materialNumber
+    const otherWarehouseStocks = await queryable.select({
+        warehouseId: stockLevels.warehouseId,
+        totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+        whSloc: warehouses.sloc,
+        whDescription: warehouses.description,
     })
+        .from(stockLevels)
+        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+        .innerJoin(products, eq(stockLevels.productId, products.id))
+        .where(and(
+            sql`${products.materialNumber} = (SELECT material_number FROM products WHERE id = ${item.productId} LIMIT 1)`,
+            sql`${warehouses.sloc} != (SELECT sloc FROM warehouses WHERE id = ${warehouseId})`,
+            sql`${stockLevels.totalStock} > 0`,
+        ))
+        .groupBy(stockLevels.warehouseId, warehouses.sloc, warehouses.description)
 
     const otherWarehouses = otherWarehouseStocks.map((sw) => ({
         warehouseId: sw.warehouseId,
-        warehouseName: formatWarehouseLabel(sw.warehouse, "Unknown"),
-        stock: sw.totalStock,
+        warehouseName: sw.whSloc && sw.whDescription ? `${sw.whSloc} - ${sw.whDescription}` : sw.whSloc || "Unknown",
+        stock: Number(sw.totalStock),
     }))
 
     return {

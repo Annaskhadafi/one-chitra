@@ -9,12 +9,6 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { syncPermissions } from "@/app/actions/permissions"
-import { replaceUserWarehouseAccess, type WarehouseAccessLevel } from "@/lib/warehouse-access"
-
-type SecurityUserWarehouseAccessInput = {
-    warehouseId: number
-    accessLevel?: WarehouseAccessLevel | null
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,16 +70,7 @@ export async function getSecurityStats() {
 
 export async function getSecurityUsers() {
     await getAuthenticatedSession("security", "view")
-    return await db.query.user.findMany({
-        with: {
-            warehouseAccesses: {
-                with: {
-                    warehouse: true,
-                },
-            },
-        },
-        orderBy: (fields, operators) => [operators.desc(fields.createdAt)],
-    })
+    return await db.select().from(user).orderBy(desc(user.createdAt))
 }
 
 export async function createSecurityUser(data: {
@@ -95,7 +80,6 @@ export async function createSecurityUser(data: {
     role: string
     department?: string
     jobTitle?: string
-    warehouseAccesses?: SecurityUserWarehouseAccessInput[]
 }) {
     const session = await getAuthenticatedSession("security", "create")
 
@@ -111,8 +95,6 @@ export async function createSecurityUser(data: {
                 jobTitle: data.jobTitle?.trim() ? data.jobTitle.trim() : null,
                 updatedAt: new Date(),
             }).where(eq(user.id, result.user.id))
-
-            await replaceUserWarehouseAccess(db, result.user.id, data.warehouseAccesses || [])
         }
 
         await writeAuditLog(
@@ -147,46 +129,6 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
 
     revalidatePath("/dashboard/security/users")
     return { success: true }
-}
-
-export async function updateSecurityUserAccessSettings(
-    targetUserId: string,
-    data: {
-        role: string
-        warehouseAccesses: SecurityUserWarehouseAccessInput[]
-    }
-) {
-    const session = await getAuthenticatedSession("security", "edit")
-
-    const [targetUser] = await db.select().from(user).where(eq(user.id, targetUserId))
-    if (!targetUser) return { success: false, error: "User not found" }
-
-    try {
-        await db.transaction(async (tx) => {
-            await tx.update(user).set({
-                role: data.role,
-                updatedAt: new Date(),
-            }).where(eq(user.id, targetUserId))
-
-            await replaceUserWarehouseAccess(tx, targetUserId, data.warehouseAccesses || [])
-        })
-
-        await writeAuditLog(
-            session.user.id,
-            "user.access_update",
-            `Updated access settings for ${targetUser.email} (role: ${targetUser.role} -> ${data.role})`
-        )
-
-        revalidatePath("/dashboard/security/users")
-        revalidatePath("/dashboard/admin/users")
-        revalidatePath("/dashboard/account")
-        return { success: true }
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to update user access settings",
-        }
-    }
 }
 
 export async function updateSecurityUserProfile(targetUserId: string, data: {

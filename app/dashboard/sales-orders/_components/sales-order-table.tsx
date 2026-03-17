@@ -47,7 +47,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal, Printer } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -55,7 +55,8 @@ import { useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
-import type { SalesOrderListItem } from "./types"
+import { ProformaInvoiceDialog } from "./proforma-invoice-dialog"
+import type { SalesOrderListItem, ProformaInvoiceOrder } from "./types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
@@ -174,6 +175,8 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [isViewOpen, setIsViewOpen] = useState(false)
     const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderListItem | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
+    const [proformaOrder, setProformaOrder] = useState<ProformaInvoiceOrder | null>(null)
+    const [isProformaOpen, setIsProformaOpen] = useState(false)
 
     const clearRefreshParams = useCallback(() => {
         if (typeof window === "undefined") {
@@ -451,6 +454,15 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                         Preview Customer PO
                                     </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        setProformaOrder(order)
+                                        setIsProformaOpen(true)
+                                    }}
+                                >
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Cetak Proforma Invoice
+                                </DropdownMenuItem>
                                 {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
                                     <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
                                         <DropdownMenuItem>
@@ -472,9 +484,9 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                             <AlertDialogContent>
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle>Delete Sales Order</AlertDialogTitle>
-                                                    <AlertDialogHeader>
+                                                    <CardDescription>
                                                         Are you sure you want to delete {order.invoiceNumber}? This action cannot be undone.
-                                                    </AlertDialogHeader>
+                                                    </CardDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -1336,6 +1348,13 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 title={`PO Preview: ${poPreviewOrder?.invoiceNumber || "Customer PO"}`}
                 editUrl={poPreviewOrder ? `/dashboard/sales-orders/${poPreviewOrder.id}/edit` : undefined}
             />
+
+            <ProformaInvoiceDialog
+                open={isProformaOpen}
+                onOpenChange={setIsProformaOpen}
+                order={proformaOrder}
+            />
+
             <SuccessAlertDialog
                 open={showSuccessDialog}
                 onOpenChange={setShowSuccessDialog}

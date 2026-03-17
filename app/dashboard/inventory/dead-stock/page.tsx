@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
-import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 type SortField = "productName" | "quantity" | "value" | "daysInactive"
 type SortDirection = "asc" | "desc"
@@ -445,138 +444,84 @@ export default function DeadStockPage() {
                     </div>
 
                     {/* Table */}
-                    <ResponsiveTableWrapper
-                        className="rounded-none"
-                        mobileView={
-                            <div className="space-y-3">
-                                {loading ? (
-                                    <div className="text-sm text-muted-foreground text-center py-6">Loading analysis...</div>
-                                ) : filteredItems.length === 0 ? (
-                                    <div className="text-sm text-muted-foreground text-center py-6">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead
+                                    className="cursor-pointer select-none"
+                                    onClick={() => handleSort("productName")}
+                                >
+                                    Product <SortIcon field="productName" />
+                                </TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Warehouse</TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer select-none"
+                                    onClick={() => handleSort("quantity")}
+                                >
+                                    Qty <SortIcon field="quantity" />
+                                </TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer select-none"
+                                    onClick={() => handleSort("value")}
+                                >
+                                    Est. Value <SortIcon field="value" />
+                                </TableHead>
+                                <TableHead>Last Movement</TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer select-none"
+                                    onClick={() => handleSort("daysInactive")}
+                                >
+                                    Days Inactive <SortIcon field="daysInactive" />
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="h-24 text-center">
+                                        Loading analysis...
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredItems.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                         {items.length === 0
                                             ? "No dead stock found for this period. Great job!"
                                             : "No items match the current filters."}
-                                    </div>
-                                ) : (
-                                    filteredItems.map((item) => {
-                                        const severity = getSeverity(item.daysInactive)
-                                        return (
-                                            <div key={`${item.productId}-${item.warehouseName}`} className="rounded-md border p-3">
-                                                <div className="flex items-start justify-between">
-                                                    <div>
-                                                        <div className="font-medium">{item.productName}</div>
-                                                        <div className="text-xs text-muted-foreground">{item.sku}</div>
-                                                    </div>
-                                                    <Badge variant={severity.variant} className="whitespace-nowrap">
-                                                        {item.daysInactive}d · {severity.label}
-                                                    </Badge>
-                                                </div>
-                                                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                                                    <div>
-                                                        <div className="text-muted-foreground">Warehouse</div>
-                                                        <div className="font-medium">{item.warehouseName}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-muted-foreground">Qty</div>
-                                                        <div className="font-medium">{item.quantity.toLocaleString()}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-muted-foreground">Category</div>
-                                                        <div><Badge variant="outline" className="text-[10px]">{item.category}</Badge></div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-muted-foreground">Est. Value</div>
-                                                        <div className="font-semibold">{formatCurrency(item.value)}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })
-                                )}
-                            </div>
-                        }
-                    >
-                        <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead
-                                        className="cursor-pointer select-none"
-                                        onClick={() => handleSort("productName")}
-                                    >
-                                        Product <SortIcon field="productName" />
-                                    </TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Warehouse</TableHead>
-                                    <TableHead
-                                        className="text-right cursor-pointer select-none"
-                                        onClick={() => handleSort("quantity")}
-                                    >
-                                        Qty <SortIcon field="quantity" />
-                                    </TableHead>
-                                    <TableHead
-                                        className="text-right cursor-pointer select-none"
-                                        onClick={() => handleSort("value")}
-                                    >
-                                        Est. Value <SortIcon field="value" />
-                                    </TableHead>
-                                    <TableHead>Last Movement</TableHead>
-                                    <TableHead
-                                        className="text-right cursor-pointer select-none"
-                                        onClick={() => handleSort("daysInactive")}
-                                    >
-                                        Days Inactive <SortIcon field="daysInactive" />
-                                    </TableHead>
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center">
-                                            Loading analysis...
-                                        </TableCell>
-                                    </TableRow>
-                                ) : filteredItems.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                            {items.length === 0
-                                                ? "No dead stock found for this period. Great job!"
-                                                : "No items match the current filters."}
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredItems.map((item) => {
-                                        const severity = getSeverity(item.daysInactive)
-                                        return (
-                                            <TableRow key={`${item.productId}-${item.warehouseName}`}>
-                                                <TableCell>
-                                                    <div className="font-medium">{item.productName}</div>
-                                                    <div className="text-xs text-muted-foreground">{item.sku}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {item.category}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-sm">{item.warehouseName}</TableCell>
-                                                <TableCell className="text-right tabular-nums">{item.quantity.toLocaleString()}</TableCell>
-                                                <TableCell className="text-right tabular-nums">{formatCurrency(item.value)}</TableCell>
-                                                <TableCell>
-                                                    {item.lastMovementDate ? new Date(item.lastMovementDate).toLocaleDateString() : "Never"}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Badge variant={severity.variant}>
-                                                        {item.daysInactive} days · {severity.label}
-                                                    </Badge>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                        </div>
-                    </ResponsiveTableWrapper>
+                            ) : (
+                                filteredItems.map((item) => {
+                                    const severity = getSeverity(item.daysInactive)
+                                    return (
+                                        <TableRow key={`${item.productId}-${item.warehouseName}`}>
+                                            <TableCell>
+                                                <div className="font-medium">{item.productName}</div>
+                                                <div className="text-xs text-muted-foreground">{item.sku}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-xs">
+                                                    {item.category}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-sm">{item.warehouseName}</TableCell>
+                                            <TableCell className="text-right tabular-nums">{item.quantity.toLocaleString()}</TableCell>
+                                            <TableCell className="text-right tabular-nums">{formatCurrency(item.value)}</TableCell>
+                                            <TableCell>
+                                                {item.lastMovementDate ? new Date(item.lastMovementDate).toLocaleDateString() : "Never"}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Badge variant={severity.variant}>
+                                                    {item.daysInactive} days · {severity.label}
+                                                </Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>

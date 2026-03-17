@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, ExternalLink, X } from "lucide-react"
-import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface ScanDoPreviewProps {
     open: boolean
@@ -18,13 +17,21 @@ interface ScanDoPreviewProps {
     deliveryNumber?: string | null
 }
 
+// Normalize URL — same logic as po-preview-dialog
+function getFileUrl(url: string | null | undefined): string | null {
+    if (!url) return null
+    if (url.startsWith('/api/uploads/')) return url
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    return `/api/uploads/${url}`
+}
+
 export function ScanDoPreview({
     open,
     onOpenChange,
     url,
     deliveryNumber
 }: ScanDoPreviewProps) {
-    const fileUrl = resolveUploadDocumentUrl(url)
+    const fileUrl = getFileUrl(url)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,7 +66,7 @@ export function ScanDoPreview({
                 </DialogHeader>
                 <div className="flex-1 w-full min-h-0 bg-muted/10 relative overflow-auto">
                     {fileUrl ? (
-                        isUploadImageFile(fileUrl) || !fileUrl.toLowerCase().endsWith(".pdf") ? (
+                        fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) || !fileUrl.toLowerCase().endsWith('.pdf') ? (
                             <div className="flex items-center justify-center min-h-full p-4">
                                 <img
                                     src={fileUrl}

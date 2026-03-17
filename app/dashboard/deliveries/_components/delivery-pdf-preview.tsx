@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef } from "react"
+import React, { useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -8,8 +8,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, X } from "lucide-react"
+import { Printer, Download, X, ImageIcon, Loader2 } from "lucide-react"
 import type { Product, Warehouse, Customer } from "@/lib/types"
+import { toPng, toJpeg } from "html-to-image"
+import jsPDF from "jspdf"
 
 interface DeliveryPdfData {
     id: number
@@ -63,6 +65,46 @@ function formatDate(date: Date | null | undefined) {
 
 export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPreviewProps) {
     const printRef = useRef<HTMLDivElement>(null)
+    const [withBackground, setWithBackground] = useState(false)
+    const [isGenerating, setIsGenerating] = useState(false)
+
+    const handleDownloadPdf = async () => {
+        const element = printRef.current
+        if (!element) return
+
+        try {
+            setIsGenerating(true)
+            
+            // Temporary hide box shadows and borders that shouldn't be in PDF
+            const originalShadow = element.style.boxShadow
+            element.style.boxShadow = 'none'
+
+            const dataUrl = await toPng(element, {
+                quality: 1,
+                pixelRatio: 2, // High quality
+                skipFonts: false,
+            })
+
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+            })
+
+            const imgProps = pdf.getImageProperties(dataUrl)
+            const pdfWidth = pdf.internal.pageSize.getWidth()
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
+
+            pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight)
+            pdf.save(`Delivery_Order_${delivery.deliveryNumber || 'Document'}.pdf`)
+            
+            element.style.boxShadow = originalShadow
+        } catch (error) {
+            console.error('Failed to generate PDF:', error)
+        } finally {
+            setIsGenerating(false)
+        }
+    }
 
     const handlePrint = () => {
         const printContent = printRef.current
@@ -77,18 +119,25 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
             <head>
                 <title>Delivery Order ${delivery.deliveryNumber || ""}</title>
                 <style>
-                    @page { size: 220mm 280mm; margin: 0; }
-                    body { margin: 0; padding: 0; background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    @page { size: A4; margin: 0; }
+                    body { margin: 0; padding: 0; background-color: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                     .pdf-wrapper { 
                         font-family: Arial, sans-serif; 
                         font-size: 10pt; 
                         color: #000; 
                         line-height: 1.2;
-                        width: 100%;
+                        width: 210mm;
+                        min-height: 297mm;
                         background-color: white;
+                        margin: 0 auto;
+                        ${withBackground ? `
+                        background-image: url('/ChitraParatama_Stationery_Letterhead_jkt.jpg') !important;
+                        background-size: 100% 100% !important;
+                        background-repeat: no-repeat !important;
+                        background-attachment: fixed !important;` : ""}
                     }
                     .pdf-wrapper * { box-sizing: border-box; }
-                    .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; display: flex; flex-direction: column; min-height: 225mm; box-sizing: border-box; }
+                    .pdf-wrapper .container { padding: 10mm 20mm; padding-top: ${withBackground ? '48mm' : '35mm'}; width: 100%; display: flex; flex-direction: column; min-height: ${withBackground ? '297mm' : 'auto'}; box-sizing: border-box; }
                     .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
                     .pdf-wrapper .ship-to { width: 55%; margin-top: 10mm; }
                     .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
@@ -158,9 +207,28 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     <div className="flex items-center justify-between">
                         <DialogTitle className="text-lg">Delivery Order Preview — {delivery.deliveryNumber}</DialogTitle>
                         <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
-                                <Download className="h-3.5 w-3.5" />
-                                Download PDF
+                            <Button 
+                                variant={withBackground ? "default" : "outline"} 
+                                size="sm" 
+                                onClick={() => setWithBackground(!withBackground)} 
+                                className={`gap-2 ${withBackground ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                            >
+                                <ImageIcon className="h-3.5 w-3.5" />
+                                {withBackground ? "Kop Surat: On" : "Kop Surat: Off"}
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={handleDownloadPdf} 
+                                disabled={isGenerating}
+                                className="gap-2"
+                            >
+                                {isGenerating ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Download className="h-3.5 w-3.5" />
+                                )}
+                                {isGenerating ? 'Generating...' : 'Download PDF'}
                             </Button>
                             <Button size="sm" onClick={handlePrint} className="gap-2">
                                 <Printer className="h-3.5 w-3.5" />
@@ -174,7 +242,15 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                 </DialogHeader>
 
                 <div className="p-4 sm:p-8 bg-zinc-100 dark:bg-zinc-800 text-black flex justify-center w-full min-h-full">
-                    <div className="pdf-wrapper bg-white shadow-xl max-w-[220mm] w-full min-h-[280mm] relative shrink-0" ref={printRef}>
+                    <div 
+                        className={`pdf-wrapper bg-white shadow-xl relative shrink-0 transition-all duration-300 ${withBackground ? 'w-[210mm] min-h-[297mm]' : 'w-[220mm] min-h-[280mm]'}`} 
+                        ref={printRef}
+                        style={withBackground ? {
+                            backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
+                            backgroundSize: "cover",
+                            backgroundRepeat: "no-repeat",
+                        } : {}}
+                    >
                         <style dangerouslySetInnerHTML={{
                             __html: `
                             .pdf-wrapper { 
@@ -186,16 +262,16 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 box-sizing: border-box;
                             }
                             .pdf-wrapper * { box-sizing: border-box; }
-                            .pdf-wrapper .container { padding: 10mm; padding-top: 45mm; width: 100%; max-width: none; background-color: white; margin: 0; display: flex; flex-direction: column; min-height: 225mm; }
+                            .pdf-wrapper .container { padding: 10mm 20mm; padding-top: ${withBackground ? '42mm' : '45mm'}; width: 100%; max-width: none; background-color: transparent; margin: 0; display: flex; flex-direction: column; min-height: ${withBackground ? '245mm' : '225mm'}; }
                             
-                            .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-                            .pdf-wrapper .ship-to { width: 55%; margin-top: 20mm; }
+                            .pdf-wrapper .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
+                            .pdf-wrapper .ship-to { width: 45%; margin-top: 0mm; }
                             .pdf-wrapper .ship-to-label { font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; font-size: 11pt; }
                             .pdf-wrapper .customer-name { font-weight: bold; font-size: 12pt; text-transform: uppercase; margin-bottom: 4px; }
                             .pdf-wrapper .site-info { font-weight: bold; margin-bottom: 5px; white-space: pre-line; font-size: 10pt; line-height: 1.4; }
                             .pdf-wrapper .address-box { margin-bottom: 10px; font-size: 10pt; }
                             .pdf-wrapper .contact-info { font-size: 9pt; }
-                            .pdf-wrapper .do-box { width: 42%; border: 1px solid #000; }
+                            .pdf-wrapper .do-box { width: 50%; border: 1px solid #000; }
                             .pdf-wrapper .do-header { background-color: #d1d5db; border-bottom: 1px solid #000; padding: 6px 10px; font-weight: bold; letter-spacing: 1px; font-size: 11pt; }
                             .pdf-wrapper .do-details { padding: 10px; font-size: 10pt; }
                             .pdf-wrapper .do-row { display: flex; margin-bottom: 4px; }
@@ -226,10 +302,26 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                             .pdf-wrapper .sig-bottom-name { margin-top: 5px; }
 
                             @media print {
-                                @page { size: 220mm 280mm; margin: 0; }
-                                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; background-color: transparent !important; }
-                                .pdf-wrapper { box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: 100vh !important; padding-bottom: 0 !important; }
-                                .pdf-wrapper .container { padding: 10mm !important; min-height: 225mm !important; }
+                                @page { size: A4; margin: 0; }
+                                body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0; padding: 0; background-color: transparent !important; }
+                                .pdf-wrapper { 
+                                    box-shadow: none !important; 
+                                    margin: 0 !important; 
+                                    max-width: none !important; 
+                                    min-height: 100vh !important; 
+                                    padding-bottom: 0 !important;
+                                    ${withBackground ? `
+                                        background-image: url('/ChitraParatama_Stationery_Letterhead_jkt.jpg') !important;
+                                        background-size: cover !important;
+                                        background-repeat: no-repeat !important;
+                                        background-attachment: fixed !important;
+                                    ` : ""}
+                                }
+                                .pdf-wrapper .container { 
+                                    padding: 10mm 20mm !important; 
+                                    padding-top: ${withBackground ? '42mm' : '45mm'} !important; 
+                                    min-height: ${withBackground ? '245mm' : '225mm'} !important; 
+                                }
                                 .no-print { display: none !important; }
                             }
                         ` }} />

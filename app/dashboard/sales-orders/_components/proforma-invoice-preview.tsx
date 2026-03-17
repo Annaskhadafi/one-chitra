@@ -1,135 +1,229 @@
 "use client";
 
+import React from "react";
+import type { SalesOrderWithRelations } from "@/lib/types";
 import type { ProformaInvoiceOrder } from "./types";
 
-function formatDate(value: Date | string | null | undefined) {
-    if (!value) return "-";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
-}
-
-function toNumber(value: unknown) {
-    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-    if (typeof value === "string") {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return 0;
+interface ProformaInvoicePreviewProps {
+    order: ProformaInvoiceOrder;
+    currentDate?: Date;
 }
 
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
+        minimumFractionDigits: 0,
         maximumFractionDigits: 0,
     }).format(value);
 }
 
-type ProformaInvoicePreviewProps = {
-    order: ProformaInvoiceOrder;
-    currentDate: Date;
-};
+function formatDate(date: Date | string | null | undefined): string {
+    if (!date) return "-";
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "-";
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
+}
 
-export function ProformaInvoicePreview({ order, currentDate }: ProformaInvoicePreviewProps) {
-    const subTotal = (order.items ?? []).reduce((total, item) => {
-        const quantity = Number(item.quantity ?? 0);
-        const unitPrice = toNumber(item.unitPrice);
-        return total + (quantity * unitPrice);
-    }, 0);
+export function ProformaInvoicePreview({ order, currentDate = new Date() }: ProformaInvoicePreviewProps) {
+    // Calculations
+    const subTotal = order.items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+    const totalDiscount = order.items.reduce((sum, item) => sum + Number(item.discount), 0) + Number(order.discount);
+    // Fixed TAX 11% based on Subtotal
+    const totalTax = subTotal * 0.11;
+    const grandTotal = subTotal - totalDiscount + totalTax + Number(order.shipping);
 
-    const discount = toNumber(order.discount);
-    const shipping = toNumber(order.shipping);
-    const grandTotal = Math.max(0, subTotal - discount + shipping);
+    // Address
+    const customerAddress = [
+        order.customer?.address1,
+        order.customer?.address2,
+        order.customer?.address3,
+        order.customer?.address4,
+        order.customer?.address5
+    ].filter(Boolean);
 
     return (
-        <div className="pdf-wrapper mx-auto max-w-[900px] bg-white p-8 text-sm text-slate-900 shadow-xl">
-            <div className="mb-6 flex items-start justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">PROFORMA INVOICE</h1>
-                    <p className="text-xs text-slate-500">Tanggal Cetak: {formatDate(currentDate)}</p>
-                </div>
-                <div className="text-right text-xs">
-                    <div className="font-semibold">No. Invoice</div>
-                    <div>{order.invoiceNumber || "-"}</div>
-                </div>
-            </div>
+        <>
+            <style>{`
+                @media print {
+                    @page { size: A4; margin: 0; }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                    }
+                    .no-print { display: none !important; }
+                    .pdf-wrapper { 
+                        box-shadow: none !important; 
+                        margin: 0 !important; 
+                        width: 100% !important; 
+                        height: 100% !important; 
+                    }
+                }
+            `}</style>
+            <div id="proforma-invoice-content" className="pdf-wrapper" style={{
+                fontFamily: "Arial, sans-serif",
+                fontSize: "9pt",
+                color: "#000000",
+                width: "210mm",
+                minHeight: "297mm",
+                margin: "0 auto",
+                boxSizing: "border-box",
+                position: "relative",
+            }}>
+                {/* Background Letterhead as IMG */}
+                <img 
+                    src="/ChitraParatama_Stationery_Letterhead_jkt.jpg" 
+                    alt="Letterhead"
+                    style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        zIndex: 0,
+                    }}
+                />
+                
+                {/* Content wrapper */}
+                <div style={{
+                    position: "relative",
+                    zIndex: 1,
+                    padding: "48mm 15mm 15mm 15mm",
+                    minHeight: "297mm",
+                }}>
+                {/* Header Section */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20pt" }}>
+                    {/* Left: Customer Info (As per OCR layout) */}
+                    <div style={{ width: "55%" }}>
+                         <div style={{ fontWeight: "bold", fontSize: "11pt", marginBottom: "8pt" }}>
+                            {order.customer?.name || "PT. BERKAT ANUGRAH PERKASA"}
+                        </div>
+                        <div style={{ marginBottom: "15pt", fontSize: "9pt", lineHeight: "1.4" }}>
+                            {customerAddress.length > 0 ? (
+                                customerAddress.map((line, i) => (
+                                    <div key={i}>{line}</div>
+                                ))
+                            ) : (
+                                <div>-</div>
+                            )}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "80pt 1fr", gap: "2pt", fontSize: "9pt" }}>
+                            <div>Customer ID</div>
+                            <div>: {order.customer?.customerCode || "-"}</div>
+                            <div>NPWP</div>
+                            <div>: {(order.customer as any)?.npwp || "-"}</div>
+                        </div>
+                    </div>
 
-            <div className="mb-5 grid grid-cols-2 gap-4 text-xs">
-                <div className="rounded border p-3">
-                    <div className="mb-1 font-semibold">Pelanggan</div>
-                    <div className="font-medium">{order.customer?.name || "-"}</div>
-                    <div>{order.customer?.customerCode || "-"}</div>
-                    <div>{order.customer?.address1 || ""}</div>
-                    <div>{order.customer?.address2 || ""}</div>
-                    <div>{order.customer?.address3 || ""}</div>
-                    <div>{order.customer?.address4 || ""}</div>
-                    <div>{order.customer?.address5 || ""}</div>
-                </div>
-                <div className="rounded border p-3">
-                    <div className="mb-1 font-semibold">Informasi Order</div>
-                    <div>Customer PO: {order.customerPo || "-"}</div>
-                    <div>Tanggal SO: {formatDate(order.salesDate)}</div>
-                    <div>Email: {order.customer?.email || "-"}</div>
-                </div>
-            </div>
+                    {/* Right: Proforma Invoice Box */}
+                    <div style={{ width: "40%" }}>
+                        <div style={{ border: "2px solid #000000", boxSizing: "border-box" }}>
+                            <div style={{ backgroundColor: "#d3d3d3", padding: "5pt", fontWeight: "bold", borderBottom: "2px solid #000000", fontSize: "10pt" }}>
+                                Proforma Invoice
+                            </div>
+                            <div style={{ padding: "5pt", display: "grid", gridTemplateColumns: "90pt 10pt 1fr", rowGap: "3pt", fontSize: "9pt", backgroundColor: "#ffffff" }}>
+                                <div>Number</div>
+                                <div>:</div>
+                                <div>{order.invoiceNumber || "-"}</div>
 
-            <table className="w-full border-collapse text-xs">
-                <thead>
-                    <tr className="bg-slate-100">
-                        <th className="border px-2 py-2 text-left">No</th>
-                        <th className="border px-2 py-2 text-left">Material</th>
-                        <th className="border px-2 py-2 text-right">Qty</th>
-                        <th className="border px-2 py-2 text-right">Unit Price</th>
-                        <th className="border px-2 py-2 text-right">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {(order.items ?? []).map((item, index) => {
-                        const quantity = Number(item.quantity ?? 0);
-                        const unitPrice = toNumber(item.unitPrice);
-                        const amount = quantity * unitPrice;
-                        return (
-                            <tr key={`${item.productId}-${index}`}>
-                                <td className="border px-2 py-2">{index + 1}</td>
-                                <td className="border px-2 py-2">
-                                    <div className="font-medium">{item.product?.materialDescription || "-"}</div>
-                                    <div className="text-[11px] text-slate-500">{item.product?.materialNumber || "-"}</div>
-                                </td>
-                                <td className="border px-2 py-2 text-right">{quantity.toLocaleString("id-ID")}</td>
-                                <td className="border px-2 py-2 text-right">{formatCurrency(unitPrice)}</td>
-                                <td className="border px-2 py-2 text-right">{formatCurrency(amount)}</td>
-                            </tr>
-                        );
-                    })}
-                    {(order.items ?? []).length === 0 && (
-                        <tr>
-                            <td className="border px-2 py-6 text-center text-slate-500" colSpan={5}>
-                                Tidak ada item
-                            </td>
+                                <div>Date</div>
+                                <div>:</div>
+                                <div>{formatDate(currentDate)}</div>
+
+                                <div>Customer PO No</div>
+                                <div>:</div>
+                                <div>{order.customerPo || "-"}</div>
+
+                                <div>Customer PO Date</div>
+                                <div>:</div>
+                                <div>{formatDate(order.salesDate)}</div>
+
+                                <div>Invoice Type</div>
+                                <div>:</div>
+                                <div>Trading</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Items Table */}
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "15pt", fontSize: "9pt" }}>
+                    <thead>
+                        <tr style={{ borderTop: "2px solid #000000", borderBottom: "1px solid #000000" }}>
+                            <th style={{ textAlign: "left", padding: "5pt", fontWeight: "bold", width: "30pt" }}>Item</th>
+                            <th style={{ textAlign: "left", padding: "5pt", fontWeight: "bold" }}>Material No / <br/> Description</th>
+                            <th style={{ textAlign: "right", padding: "5pt", fontWeight: "bold", width: "40pt" }}>Qty</th>
+                            <th style={{ textAlign: "center", padding: "5pt", fontWeight: "bold", width: "40pt" }}>UOM</th>
+                            <th style={{ textAlign: "right", padding: "5pt", fontWeight: "bold", width: "80pt" }}>Unit Price</th>
+                            <th style={{ textAlign: "right", padding: "5pt", fontWeight: "bold", width: "80pt" }}>Value</th>
                         </tr>
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {order.items.map((item, index) => (
+                            <tr key={index} style={{ verticalAlign: "top" }}>
+                                <td style={{ padding: "5pt" }}>{String(index + 1).padStart(2, '0')}</td>
+                                <td style={{ padding: "5pt" }}>
+                                    <div style={{ fontWeight: "bold" }}>{item.product?.materialNumber}</div>
+                                    <div>{item.product?.materialDescription || (item as any).productName}</div>
+                                </td>
+                                <td style={{ textAlign: "right", padding: "5pt" }}>{item.quantity}</td>
+                                <td style={{ textAlign: "center", padding: "5pt" }}>PC</td>
+                                <td style={{ textAlign: "right", padding: "5pt" }}>{formatCurrency(Number(item.unitPrice))}</td>
+                                <td style={{ textAlign: "right", padding: "5pt" }}>
+                                    {formatCurrency(Number(item.quantity) * Number(item.unitPrice))}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot style={{ borderTop: "1px solid #000000" }}>
+                         <tr>
+                            <td colSpan={4}></td>
+                            <td style={{ padding: "5pt" }}>Total Amount</td>
+                            <td style={{ textAlign: "right", padding: "5pt" }}>{formatCurrency(subTotal)}</td>
+                         </tr>
+                         <tr>
+                            <td colSpan={4}></td>
+                            <td style={{ padding: "5pt" }}>Add VAT Tax</td>
+                            <td style={{ textAlign: "right", padding: "5pt" }}>{formatCurrency(totalTax)}</td>
+                         </tr>
+                         <tr>
+                            <td colSpan={4}></td>
+                            <td style={{ padding: "5pt", fontWeight: "bold" }}>Total Invoice</td>
+                            <td style={{ textAlign: "right", padding: "5pt", fontWeight: "bold" }}>
+                                <span style={{ marginRight: "20pt", fontWeight: "normal" }}>IDR</span>
+                                {formatCurrency(grandTotal)}
+                            </td>
+                         </tr>
+                    </tfoot>
+                </table>
 
-            <div className="mt-4 ml-auto w-[340px] space-y-1 text-xs">
-                <div className="flex justify-between border-b pb-1">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(subTotal)}</span>
+                {/* Payment Instructions */}
+                <div style={{ marginBottom: "20pt", fontSize: "9pt" }}>
+                    <p style={{ marginBottom: "5pt" }}>Payment should be made through one of our bank belows, related to their original currency.</p>
+                    <div style={{ fontWeight: "bold" }}>PT. Bank Mandiri (Persero) Tbk.</div>
+                    <div style={{ fontWeight: "bold", marginBottom: "5pt" }}>Cabang Jakarta Cibis Nine A.N PT. Chitra Paratama</div>
+                    <div style={{ fontWeight: "bold" }}>IDR : 127-000-00-17416</div>
                 </div>
-                <div className="flex justify-between border-b pb-1">
-                    <span>Diskon</span>
-                    <span>{formatCurrency(discount)}</span>
+
+                {/* Terms */}
+                <div style={{ marginBottom: "20pt", display: "grid", gridTemplateColumns: "120pt 1fr", rowGap: "5pt", fontSize: "9pt" }}>
+                    <div style={{ fontWeight: "bold" }}>Term Of Payment</div>
+                    <div>: CASH BEFORE DELIVERY</div>
+                    <div style={{ fontWeight: "bold" }}>Term Of Delivery</div>
+                    <div>:</div>
                 </div>
-                <div className="flex justify-between border-b pb-1">
-                    <span>Ongkir</span>
-                    <span>{formatCurrency(shipping)}</span>
+
+                <div style={{ fontStyle: "italic", marginBottom: "40pt", fontSize: "8pt" }}>
+                    Please send us through fax/email, a copy of transfer payment when the payment is made.
                 </div>
-                <div className="flex justify-between pt-1 text-sm font-bold">
-                    <span>Total</span>
-                    <span>{formatCurrency(grandTotal)}</span>
+
+                <div style={{ textAlign: "center", fontSize: "8pt", textTransform: "uppercase", fontWeight: "bold" }}>
+                    THIS IS ONLY OFFICIAL DOCUMENT AND ELECTRONICALLY GENERATED, NO SIGNATURE IS REQUIRED
                 </div>
+                </div> {/* Close content wrapper */}
             </div>
-        </div>
+        </>
     );
 }

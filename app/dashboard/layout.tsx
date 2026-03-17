@@ -105,41 +105,9 @@ export default async function DashboardLayout({
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true"
 
   // Fetch session server-side
-  let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null
-  try {
-    session = await auth.api.getSession({
-      headers: await headers(),
-    })
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : typeof error === "string"
-          ? error
-          : "Unknown error"
-
-    const cause = (error as { cause?: unknown } | null)?.cause
-    const causeMessage =
-      cause instanceof Error
-        ? cause.message
-        : typeof cause === "string"
-          ? cause
-          : null
-
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-xl rounded-lg border bg-background p-6">
-          <div className="text-lg font-semibold">Gagal memuat session</div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            Aplikasi tidak bisa mengakses database untuk validasi session. Pastikan koneksi database aktif dan environment DATABASE_URL dapat dijangkau.
-          </div>
-          <div className="mt-4 rounded-md border bg-muted/30 p-3 text-xs font-mono whitespace-pre-wrap break-words">
-            {causeMessage ? `${message}\n\nCause: ${causeMessage}` : message}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
 
   // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
   if (!session?.user?.id) {
@@ -186,12 +154,6 @@ export default async function DashboardLayout({
     if (url === "/dashboard/approvals") {
       return true
     }
-    if (url === "/dashboard/stock-opname-aktual") {
-      return (
-        permissions.includes("stock-opname-aktual:view")
-        || permissions.includes("stock-opname:view")
-      )
-    }
     if (!resource) {
       return true
     }
@@ -220,7 +182,7 @@ export default async function DashboardLayout({
     }))
     .filter((section) => section.items.length > 0)
 
-  const navigationSectionsWithInventoryMenu: RuntimeNavSection[] = navigationSections.map((section) => ({
+  const navigationSectionsWithStockSapNew: RuntimeNavSection[] = navigationSections.map((section) => ({
     ...section,
     items: section.items.map((item) => {
       if (item.resource !== "inventory-control") {
@@ -230,7 +192,6 @@ export default async function DashboardLayout({
       const subItems = item.items ?? []
       const hasStockSapNew = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap-new")
       const hasStockSapOld = subItems.some((subItem) => subItem.url === "/dashboard/stocks-sap")
-      const hasStockOpnameAktual = subItems.some((subItem) => subItem.url === "/dashboard/stock-opname-aktual")
 
       let normalizedSubItems = subItems
 
@@ -264,29 +225,6 @@ export default async function DashboardLayout({
         ]
       }
 
-      if (!hasStockOpnameAktual) {
-        const stockOpnameIndex = normalizedSubItems.findIndex((subItem) => subItem.url === "/dashboard/stock-opname")
-        const opnameAktualItem = {
-          id: "inventory-control-stock-opname-aktual",
-          title: "Stock Opname Aktual",
-          url: "/dashboard/stock-opname-aktual",
-          resource: "stock-opname-aktual",
-        }
-
-        if (stockOpnameIndex >= 0) {
-          normalizedSubItems = [
-            ...normalizedSubItems.slice(0, stockOpnameIndex + 1),
-            opnameAktualItem,
-            ...normalizedSubItems.slice(stockOpnameIndex + 1),
-          ]
-        } else {
-          normalizedSubItems = [
-            ...normalizedSubItems,
-            opnameAktualItem,
-          ]
-        }
-      }
-
       return {
         ...item,
         items: normalizedSubItems,
@@ -310,14 +248,14 @@ export default async function DashboardLayout({
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithInventoryMenu} user={
+        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithStockSapNew} user={
           user ? {
             name: user.name,
             email: user.email,
             avatar: user.image || "",
           } : undefined
         } />
-        <DashboardShortcutsCommand navigationSections={navigationSectionsWithInventoryMenu} />
+        <DashboardShortcutsCommand navigationSections={navigationSectionsWithStockSapNew} />
         <SidebarInset suppressHydrationWarning>
           <SiteHeader />
           <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>

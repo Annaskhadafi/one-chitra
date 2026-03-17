@@ -8,6 +8,7 @@ import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
+import { sendEmail } from "@/lib/email"
 
 let hasSalesPersonColumnCache: boolean | null = null
 type SalesPersonRecord = typeof user.$inferSelect
@@ -862,5 +863,47 @@ export async function releaseExpiredDraftBookings() {
     } catch (error) {
         console.error("Failed to release expired draft bookings:", error)
         return { success: false, error: "Failed to release expired draft bookings" }
+    }
+}
+
+export async function sendProformaInvoiceEmail(recipientEmail: string, pdfBase64: string, invoiceNumber: string) {
+    try {
+        await checkPermission('sales-orders', 'view')
+        
+        // Remove any data URI prefix if present
+        const base64Data = pdfBase64.includes(",") ? pdfBase64.split(",")[1] : pdfBase64
+        const buffer = Buffer.from(base64Data, 'base64')
+
+        const result = await sendEmail({
+            to: recipientEmail,
+            subject: `Proforma Invoice - ${invoiceNumber}`,
+            html: `
+                <div style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #334155;">
+                    <div style="margin-bottom: 20px;">
+                        <img src="https://onechitra.dokploy.annaskhadafi.com/logo.png" alt="One Chitra" style="height: 40px;" />
+                    </div>
+                    <h2 style="color: #0f172a; margin-bottom: 16px;">Proforma Invoice Attachment</h2>
+                    <p>Halo,</p>
+                    <p>Terlampir dokumen Proforma Invoice untuk pesanan <strong>${invoiceNumber}</strong>.</p>
+                    <p>Silakan tinjau lampiran PDF yang tersedia pada email ini.</p>
+                    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">
+                        Pesan ini dikirim secara otomatis melalui sistem One Chitra.<br/>
+                        &copy; ${new Date().getFullYear()} One Chitra. All rights reserved.
+                    </div>
+                </div>
+            `,
+            attachments: [
+                {
+                    filename: `Proforma_Invoice_${invoiceNumber}.pdf`,
+                    content: buffer,
+                    contentType: 'application/pdf'
+                }
+            ]
+        })
+
+        return result
+    } catch (error) {
+        console.error("Failed to send Proforma Invoice email:", error)
+        return { success: false, error: "Gagal mengirim email: " + (error instanceof Error ? error.message : String(error)) }
     }
 }

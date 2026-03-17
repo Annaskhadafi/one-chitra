@@ -9,5 +9,5 @@ type SalesOrderDetailRecord = NonNullable<Awaited<ReturnType<typeof GetSalesOrde
 
 export type ProformaInvoiceOrder = Pick<
     SalesOrderDetailRecord,
-    "invoiceNumber" | "customerPo" | "salesDate" | "discount" | "shipping" | "items" | "customer"
+    "invoiceNumber" | "customerPo" | "salesDate" | "discount" | "shipping" | "items" | "customer" | "salesPerson"
 >
