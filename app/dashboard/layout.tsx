@@ -105,9 +105,41 @@ export default async function DashboardLayout({
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true"
 
   // Fetch session server-side
-  const session = await auth.api.getSession({
-    headers: await headers()
-  })
+  let session: Awaited<ReturnType<typeof auth.api.getSession>> | null = null
+  try {
+    session = await auth.api.getSession({
+      headers: await headers(),
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Unknown error"
+
+    const cause = (error as { cause?: unknown } | null)?.cause
+    const causeMessage =
+      cause instanceof Error
+        ? cause.message
+        : typeof cause === "string"
+          ? cause
+          : null
+
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-xl rounded-lg border bg-background p-6">
+          <div className="text-lg font-semibold">Gagal memuat session</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            Aplikasi tidak bisa mengakses database untuk validasi session. Pastikan koneksi database aktif dan environment DATABASE_URL dapat dijangkau.
+          </div>
+          <div className="mt-4 rounded-md border bg-muted/30 p-3 text-xs font-mono whitespace-pre-wrap break-words">
+            {causeMessage ? `${message}\n\nCause: ${causeMessage}` : message}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
   if (!session?.user?.id) {

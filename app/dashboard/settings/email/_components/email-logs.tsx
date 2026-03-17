@@ -18,7 +18,6 @@ import {
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { clearEmailLogs } from "@/app/actions/email"
 import { CheckCircle2, Clock, Eye, Loader2, Search, Trash2, XCircle } from "lucide-react"
 import type { emailLogs } from "@/db/schema/email"
@@ -259,7 +258,7 @@ export function EmailLogsTable({ logs }: Props) {
             </Card>
 
             <Dialog open={Boolean(selectedLog)} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-                <DialogContent className="h-[94vh] w-[99vw] max-w-[2400px] overflow-hidden p-4 sm:p-6 flex flex-col">
+                <DialogContent className="h-[94vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] overflow-hidden p-4 sm:p-6 flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Preview Email Log</DialogTitle>
                         <DialogDescription>
@@ -268,77 +267,79 @@ export function EmailLogsTable({ logs }: Props) {
                     </DialogHeader>
 
                     {selectedLog && (
-                        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
-                            <ScrollArea className="rounded-md border xl:h-full">
-                                <div className="grid gap-3 p-4 text-sm">
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">To</div>
-                                        <div className="font-mono break-all">{selectedLog.toEmail}</div>
-                                    </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">CC</div>
-                                        <div className="font-mono break-all">{selectedLog.ccEmail || "—"}</div>
-                                    </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">From</div>
-                                        <div className="font-mono break-all">{selectedLog.fromEmail || "—"}</div>
-                                    </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">Sent At</div>
-                                        <div>{formatDateTime(selectedLog.sentAt)}</div>
-                                    </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">Template</div>
-                                        <div className="font-medium">{selectedLog.templateName || "Direct Email"}</div>
-                                        <div className="font-mono text-xs text-muted-foreground mt-1 break-all">{selectedLog.templateCode || "—"}</div>
-                                    </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">Status</div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <Badge variant={selectedLog.status === "sent" ? "success" : selectedLog.status === "failed" ? "destructive" : "secondary"}>
-                                                {selectedLog.status}
-                                            </Badge>
-                                            {selectedLog.errorMessage && (
-                                                <span className="text-xs text-red-600 break-words">{selectedLog.errorMessage}</span>
-                                            )}
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            <div className="grid gap-4 grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-none xl:grid-cols-[420px_minmax(0,1fr)] 2xl:grid-cols-[480px_minmax(0,1fr)]">
+                                <div className="rounded-md border h-[160px] sm:h-[200px] xl:h-full overflow-auto">
+                                    <div className="grid gap-3 p-4 text-sm">
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">To</div>
+                                            <div className="font-mono break-all">{selectedLog.toEmail}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">CC</div>
+                                            <div className="font-mono break-all">{selectedLog.ccEmail || "—"}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">From</div>
+                                            <div className="font-mono break-all">{selectedLog.fromEmail || "—"}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">Sent At</div>
+                                            <div>{formatDateTime(selectedLog.sentAt)}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">Template</div>
+                                            <div className="font-medium">{selectedLog.templateName || "Direct Email"}</div>
+                                            <div className="font-mono text-xs text-muted-foreground mt-1 break-all">{selectedLog.templateCode || "—"}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">Status</div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Badge variant={selectedLog.status === "sent" ? "success" : selectedLog.status === "failed" ? "destructive" : "secondary"}>
+                                                    {selectedLog.status}
+                                                </Badge>
+                                                {selectedLog.errorMessage && (
+                                                    <span className="text-xs text-red-600 break-words">{selectedLog.errorMessage}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">Subject</div>
+                                            <div className="break-words">{selectedLog.subject}</div>
                                         </div>
                                     </div>
-                                    <div className="rounded-md border p-3">
-                                        <div className="text-xs text-muted-foreground mb-1">Subject</div>
-                                        <div className="break-words">{selectedLog.subject}</div>
-                                    </div>
                                 </div>
-                            </ScrollArea>
 
-                            <Tabs defaultValue={selectedLog.htmlContent ? "html" : "text"} className="min-h-0 flex flex-1 flex-col">
-                                <TabsList className="self-start">
-                                    <TabsTrigger value="html">HTML Preview</TabsTrigger>
-                                    <TabsTrigger value="text">Text</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="html" className="min-h-0 flex-1">
-                                    <div className="rounded-md border h-full overflow-hidden bg-white">
-                                        {selectedLog.htmlContent ? (
-                                            <iframe
-                                                srcDoc={selectedLog.htmlContent}
-                                                className="h-full w-full bg-white"
-                                                title="Email HTML Preview"
-                                                sandbox="allow-same-origin"
-                                            />
-                                        ) : (
-                                            <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                                                Preview HTML tidak tersedia.
-                                            </div>
-                                        )}
-                                    </div>
-                                </TabsContent>
-                                <TabsContent value="text" className="min-h-0 flex-1">
-                                    <ScrollArea className="h-full rounded-md border p-4">
-                                        <pre className="whitespace-pre-wrap break-words text-sm font-mono">
-                                            {selectedLog.textContent || "Preview text tidak tersedia."}
-                                        </pre>
-                                    </ScrollArea>
-                                </TabsContent>
-                            </Tabs>
+                                <Tabs defaultValue={selectedLog.htmlContent ? "html" : "text"} className="min-h-0 flex flex-1 flex-col">
+                                    <TabsList className="self-start">
+                                        <TabsTrigger value="html">HTML Preview</TabsTrigger>
+                                        <TabsTrigger value="text">Text</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="html" className="min-h-[420px] flex-1">
+                                        <div className="rounded-md border h-full overflow-hidden bg-white">
+                                            {selectedLog.htmlContent ? (
+                                                <iframe
+                                                    srcDoc={selectedLog.htmlContent}
+                                                    className="block h-full w-full bg-white"
+                                                    title="Email HTML Preview"
+                                                    sandbox="allow-same-origin"
+                                                />
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                                                    Preview HTML tidak tersedia.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="text" className="min-h-[420px] flex-1">
+                                        <div className="h-full rounded-md border p-4 overflow-auto">
+                                            <pre className="whitespace-pre-wrap break-words text-sm font-mono">
+                                                {selectedLog.textContent || "Preview text tidak tersedia."}
+                                            </pre>
+                                        </div>
+                                    </TabsContent>
+                                </Tabs>
+                            </div>
                         </div>
                     )}
                 </DialogContent>

@@ -645,7 +645,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         console.log("selectedSO:", selectedSO)
 
         const validationErrors: string[] = []
-        if (!salesOrderId) {
+        if (typeof salesOrderId !== "number") {
             validationErrors.push("Sales Order belum dipilih")
         }
         if (!warehouseId) {
@@ -686,6 +686,10 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         if (validationErrors.length > 0) {
             console.log("❌ Validation failed:", validationErrors)
             showSaveBlockedToast(Array.from(new Set(validationErrors)))
+            return
+        }
+
+        if (typeof salesOrderId !== "number" || typeof warehouseId !== "number") {
             return
         }
 
