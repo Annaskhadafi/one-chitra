@@ -39,6 +39,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { Warehouse } from "@/lib/types"
 import { format, isAfter, startOfDay, subDays } from "date-fns"
+import { normalizeSloc, normalizeSlocForSearch } from "@/lib/sloc"
 import {
     useReactTable,
     getCoreRowModel,
@@ -111,32 +112,20 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
 
     const CENTRAL_WAREHOUSE_TYPE = "Central Warehouse"
 
-    const formatSloc = (value: string | null | undefined) => {
-        const raw = (value || "").trim()
-        if (!raw) return ""
-        if (/^\d+$/.test(raw)) {
-            return String(parseInt(raw, 10))
-        }
-        return raw.toUpperCase()
-    }
-
-    const normalizeSloc = (value: string | null | undefined) => formatSloc(value).toLowerCase()
-
     const safeNumber = (value: unknown) => {
         const parsed = Number(value)
         return Number.isFinite(parsed) ? parsed : 0
     }
 
     const isCentralWarehouseSloc = (value: string | null | undefined) => {
-        const normalized = normalizeSloc(value)
-        return normalized === "101" || normalized === "1"
+        return normalizeSloc(value) === "101"
     }
 
     const warehouseTypeBySloc = useMemo(() => {
         const mapping = new Map<string, string>()
         for (const warehouse of warehouses) {
             if (warehouse.sloc) {
-                mapping.set(normalizeSloc(warehouse.sloc), warehouse.type || "")
+                mapping.set(normalizeSlocForSearch(warehouse.sloc), warehouse.type || "")
             }
         }
         return mapping
@@ -145,7 +134,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
     const getDerivedWarehouseType = (item: StockSAPNewItem) => {
         if (item.plantCode === "2002") return "REPAIR"
         if (isCentralWarehouseSloc(item.storLoc)) return CENTRAL_WAREHOUSE_TYPE
-        return warehouseTypeBySloc.get(normalizeSloc(item.storLoc)) || ""
+        return warehouseTypeBySloc.get(normalizeSlocForSearch(item.storLoc)) || ""
     }
 
     const { data: responseData, isLoading, error, refetch } = useQuery({
@@ -290,7 +279,7 @@ export function StockSAPNewTable({ defaultRate, warehouses }: StockSAPNewTablePr
                         {column.getIsSorted() === "asc" ? <ChevronUp className="ml-2 h-4 w-4" /> : column.getIsSorted() === "desc" ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                     </Button>
                 ),
-                cell: ({ row }) => <Badge variant="outline">{formatSloc(row.original.storLoc)}</Badge>,
+                cell: ({ row }) => <Badge variant="outline">{normalizeSloc(row.original.storLoc)}</Badge>,
             },
             {
                 accessorKey: "storLocDesc",

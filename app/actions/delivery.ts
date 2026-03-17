@@ -10,6 +10,8 @@ import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
+import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
+import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 
 const isConsignmentCategory = (categoryPo: string | null | undefined) => {
     const normalized = (categoryPo ?? "").trim().toLowerCase()
@@ -47,9 +49,13 @@ const isSameDeliveryItemComposition = (
     return true
 }
 
+function normalizeDeliveryOutput<T>(value: T): T {
+    return normalizeSapDocumentFields(normalizeSlocFields(value))
+}
+
 export async function getDeliveries() {
     noStore()
-    return await db.query.deliveries.findMany({
+    const rows = await db.query.deliveries.findMany({
         with: {
             salesOrder: {
                 with: {
@@ -68,6 +74,8 @@ export async function getDeliveries() {
         },
         orderBy: [desc(deliveries.createdAt)],
     })
+
+    return normalizeDeliveryOutput(rows)
 }
 
 export async function getDeliveryItemsFlat() {
@@ -90,7 +98,7 @@ export async function getDeliveryItemsFlat() {
     })
 
     // Flatten: satu baris per item produk
-    return allDeliveries.flatMap(delivery =>
+    return normalizeDeliveryOutput(allDeliveries.flatMap(delivery =>
         delivery.items.map(item => ({
             itemId: item.id,
             productId: item.productId,
@@ -118,14 +126,14 @@ export async function getDeliveryItemsFlat() {
             customerName: delivery.salesOrder?.customer?.name,
             customerId: delivery.salesOrder?.customer?.id,
             warehouseId: delivery.warehouseId,
-            warehouseName: delivery.warehouse?.description || delivery.warehouse?.sloc,
+            warehouseName: formatWarehouseLabel(delivery.warehouse),
             createdByName: delivery.createdByUser?.name || null,
         }))
-    )
+    ))
 }
 
 export async function getDelivery(id: number) {
-    return await db.query.deliveries.findFirst({
+    const delivery = await db.query.deliveries.findFirst({
         where: eq(deliveries.id, id),
         with: {
             salesOrder: {
@@ -147,6 +155,8 @@ export async function getDelivery(id: number) {
             },
         },
     })
+
+    return normalizeDeliveryOutput(delivery)
 }
 
 export async function getSalesOrdersForDelivery() {
@@ -265,7 +275,7 @@ export async function checkStockAvailability(warehouseId: number, items: { produ
 
         const otherWarehouses = otherWarehouseStocks.map(sw => ({
             warehouseId: sw.warehouseId,
-            warehouseName: sw.warehouse?.description || sw.warehouse?.sloc || "Unknown",
+            warehouseName: formatWarehouseLabel(sw.warehouse, "Unknown"),
             stock: sw.totalStock
         }))
 
@@ -337,7 +347,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             const [newDelivery] = await tx.insert(deliveries)
                 .values({
                     deliveryNumber,
-                    doSap: data.doSap || null,
+                    doSap: normalizeCodeValue(data.doSap),
                     salesOrderId: data.salesOrderId,
                     createdBy: userId,
                     scheduledDate: new Date(data.scheduledDate),
@@ -579,7 +589,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             await tx.update(deliveries)
                 .set({
                     deliveryNumber: data.deliveryNumber || undefined,
-                    doSap: data.doSap || null,
+                    doSap: normalizeCodeValue(data.doSap),
                     salesOrderId: data.salesOrderId,
                     scheduledDate: new Date(data.scheduledDate),
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
@@ -1065,12 +1075,12 @@ export async function updateDoMonitoringFields(id: number, data: {
         }
 
         if (data.returnDoDate !== undefined) updateData.returnDoDate = data.returnDoDate
-        if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber
+        if (data.invoiceNumber !== undefined) updateData.invoiceNumber = normalizeCodeValue(data.invoiceNumber)
         if (data.invoiceDate !== undefined) updateData.invoiceDate = data.invoiceDate
         if (data.doStatus !== undefined) updateData.doStatus = data.doStatus
         if (data.remark !== undefined) updateData.remark = data.remark
         if (data.scanDoDocument !== undefined) updateData.scanDoDocument = data.scanDoDocument
-        if (data.doSap !== undefined) updateData.doSap = data.doSap
+        if (data.doSap !== undefined) updateData.doSap = normalizeCodeValue(data.doSap)
 
         await db.update(deliveries)
             .set(updateData)

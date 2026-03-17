@@ -9,6 +9,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { formatWarehouseLabel } from "@/lib/sloc"
 
 export type WarehouseAccessSelection = {
     warehouseId: number
@@ -31,7 +32,7 @@ type WarehouseAccessFieldsetProps = {
 }
 
 function getWarehouseLabel(warehouse: WarehouseOption) {
-    return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
+    return formatWarehouseLabel(warehouse)
 }
 
 export function WarehouseAccessFieldset({

@@ -14,6 +14,7 @@ import {
 } from "@/lib/warehouse-access"
 
 import { stockSchema } from "@/lib/schemas"
+import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 export async function getStocks() {
     await getAuthenticatedSession("stocks", "view")
@@ -24,7 +25,7 @@ export async function getStocks() {
     }
 
     // Optimized query - hanya ambil kolom yang diperlukan
-    return await db.query.stockLevels.findMany({
+    const rows = await db.query.stockLevels.findMany({
         where: allowedWarehouseIds
             ? (stockLevel, { inArray }) => inArray(stockLevel.warehouseId, allowedWarehouseIds)
             : undefined,
@@ -57,6 +58,8 @@ export async function getStocks() {
             },
         },
     })
+
+    return normalizeSlocFields(rows)
 }
 
 export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number) {
@@ -252,8 +255,12 @@ export async function importStockChunk(chunk: StockImportItem[]): Promise<Import
     try {
         await getAuthenticatedSession("stocks", "create")
         const allowedWarehouseIds = await getAllowedWarehouseIdsForCurrentUser("edit")
-        const materialNumbers = chunk.map(i => i.materialNumber).filter(Boolean)
-        const slocs = chunk.map(i => i.sloc).filter(Boolean)
+        const normalizedChunk = chunk.map((item) => ({
+            ...item,
+            sloc: normalizeSloc(item.sloc),
+        }))
+        const materialNumbers = normalizedChunk.map(i => i.materialNumber).filter(Boolean)
+        const slocs = normalizedChunk.map(i => i.sloc).filter(Boolean)
 
         if (materialNumbers.length === 0 || slocs.length === 0) {
             return { success: true, processed: 0, succeeded: 0, failed: 0, errors: [] }
@@ -266,16 +273,15 @@ export async function importStockChunk(chunk: StockImportItem[]): Promise<Import
 
         const foundWarehouses = await db.select({ id: warehouses.id, sloc: warehouses.sloc })
             .from(warehouses)
-            .where(inArray(warehouses.sloc, slocs))
 
         const productMap = new Map(foundProducts.map(p => [p.materialNumber, p.id]))
-        const warehouseMap = new Map(foundWarehouses.map(w => [w.sloc, w.id]))
+        const warehouseMap = new Map(foundWarehouses.map(w => [normalizeSloc(w.sloc), w.id]))
 
         let succeeded = 0
         let failed = 0
         const errors: string[] = []
 
-        for (const item of chunk) {
+        for (const item of normalizedChunk) {
             const productId = productMap.get(item.materialNumber)
             const warehouseId = warehouseMap.get(item.sloc)
 

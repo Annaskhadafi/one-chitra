@@ -8,10 +8,10 @@ import {
     salesOrders,
     customers
 } from "@/db/schema";
-import { eq, desc, sql, and, isNotNull, ne } from "drizzle-orm";
+import { eq, desc, sql, and, isNotNull, ne, type SQLWrapper } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
-import { normalizeCodeValue } from "@/lib/formatters";
+import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters";
 
 type BillingRecordUpdate = {
     poNo: string;
@@ -49,6 +49,16 @@ type BillingRecordUpdate = {
     statusDelivery?: string | null;
     scanInvUrl?: string | null;
 };
+
+function normalizedSapCodeSql(value: SQLWrapper) {
+    return sql<string>`
+        CASE
+            WHEN ${value} IS NULL THEN ''
+            WHEN BTRIM(CAST(${value} AS text)) ~ '^-?[0-9]+([.,]0+)?$' THEN REGEXP_REPLACE(BTRIM(CAST(${value} AS text)), '[.,]0+$', '')
+            ELSE BTRIM(CAST(${value} AS text))
+        END
+    `
+}
 
 export async function getBillingRecords(poNoFilter?: string) {
     try {
@@ -145,11 +155,10 @@ export async function getBillingRecords(poNoFilter?: string) {
             .leftJoin(billingRecords, eq(groupedHistorySubquery.poNo, billingRecords.poNo))
             .orderBy(desc(sql`"groupedHistory"."dateInvoice"`));
 
-        const normalizedRecords = records.map((record) => ({
+        const normalizedRecords = normalizeSapDocumentFields(records.map((record) => ({
             ...record,
             plant: normalizeCodeValue(record.plant) ?? "",
-            noInvSap: normalizeCodeValue(record.noInvSap),
-        }));
+        })));
 
         return { success: true, data: normalizedRecords };
     } catch (error) {
@@ -262,7 +271,10 @@ export async function getInvoiceInfoByDoSap(
     error?: string;
 }> {
     try {
-        if (!doSap) return { success: false, error: "DO SAP is required" };
+        const normalizedDoSap = normalizeCodeValue(doSap);
+        if (!normalizedDoSap) return { success: false, error: "DO SAP is required" };
+
+        const normalizedDeliveryNo = normalizedSapCodeSql(historyOrders.deliveryNo);
 
         // Priority 1: Cari berdasarkan deliveryNo = doSap
         const doSapQuery = sql`
@@ -271,7 +283,7 @@ export async function getInvoiceInfoByDoSap(
                 MAX(${historyOrders.billingDate}) as "dateInvoice",
                 COUNT(DISTINCT ${historyOrders.billingNo}) as "invoiceCount"
             FROM ${historyOrders}
-            WHERE ${historyOrders.deliveryNo} = ${doSap}
+            WHERE ${normalizedDeliveryNo} = ${normalizedDoSap}
             AND ${historyOrders.billingDate} IS NOT NULL
             AND ${historyOrders.billingNo} IS NOT NULL AND ${historyOrders.billingNo} != ''
             AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
@@ -468,6 +480,9 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
 
         if (updateData.noInvSap !== undefined) {
             updateData.noInvSap = normalizeCodeValue(updateData.noInvSap);
+        }
+        if (updateData.nomorDoSap !== undefined) {
+            updateData.nomorDoSap = normalizeCodeValue(updateData.nomorDoSap);
         }
         if (updateData.plant !== undefined) {
             updateData.plant = normalizeCodeValue(updateData.plant);

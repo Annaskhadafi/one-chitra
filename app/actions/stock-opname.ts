@@ -9,6 +9,7 @@ import { z } from "zod"
 import { createOpnameSessionSchema, updateOpnameCountSchema, type CreateOpnameSessionInput } from "@/lib/schemas"
 import type { OpnamePdfReportData } from "@/lib/types"
 import { sendEmail } from "@/lib/email"
+import { formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 type SapStockRow = {
     material_no: string | null
@@ -52,15 +53,6 @@ const sortOpnameItemsByCategoryAndStock = <T extends SortableOpnameItem>(items: 
     })
 }
 
-const normalizeSloc = (value: string | null | undefined) => {
-    const raw = (value || "").trim()
-    if (!raw) return ""
-    if (/^\d+$/.test(raw)) {
-        return String(parseInt(raw, 10))
-    }
-    return raw.toUpperCase()
-}
-
 const normalizeMaterialNumber = (value: string | null | undefined) =>
     (value || "").trim().toUpperCase()
 
@@ -89,7 +81,7 @@ const getOpnameAuthSession = async (sourceType: OpnameSourceType, action: Permis
 
 export async function getStockOpnameSessions(sourceType: OpnameSourceType = "sap") {
     await getOpnameAuthSession(sourceType, "view")
-    return await db.query.stockOpnameSessions.findMany({
+    const rows = await db.query.stockOpnameSessions.findMany({
         where: eq(stockOpnameSessions.sourceType, sourceType),
         with: {
             warehouse: true,
@@ -101,6 +93,8 @@ export async function getStockOpnameSessions(sourceType: OpnameSourceType = "sap
         },
         orderBy: [desc(stockOpnameSessions.createdAt)],
     })
+
+    return normalizeSlocFields(rows)
 }
 
 const normalizeStringArray = (value: unknown): string[] => {
@@ -137,10 +131,10 @@ export async function getStockOpnameSession(sessionId: number, sourceType: Opnam
         return null
     }
 
-    return {
+    return normalizeSlocFields({
         ...session,
         items: sortOpnameItemsByCategoryAndStock(session.items ?? []),
-    }
+    })
 }
 
 // ─── Create Session & Populate Items ───────────────────────────────────────
@@ -774,9 +768,7 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
     const detailPath = `/dashboard/stock-opname-aktual/${opnameSession.id}`
     const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
-    const warehouseLabel = opnameSession.warehouse?.sloc
-        ? `${opnameSession.warehouse.sloc}${opnameSession.warehouse.description ? ` - ${opnameSession.warehouse.description}` : ""}`
-        : "-"
+    const warehouseLabel = formatWarehouseLabel(opnameSession.warehouse)
     const opnameDate = opnameSession.opnameDate
         ? new Date(opnameSession.opnameDate).toLocaleDateString("id-ID", {
             day: "2-digit",
@@ -1126,7 +1118,7 @@ export async function getOpnamePdfReportData(
             companyLogo: "/logo.png", // Default company logo path
         }
 
-        return { success: true, data: reportData }
+        return { success: true, data: normalizeSlocFields(reportData) }
     } catch (error) {
         console.error("Get opname PDF report data error:", error)
         return { success: false, error: "Gagal mengambil data laporan PDF" }

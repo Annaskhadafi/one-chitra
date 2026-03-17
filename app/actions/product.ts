@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 import { productSchema } from "@/lib/schemas"
+import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 export async function getProducts() {
     const aggregatedStock = db.select({
@@ -40,7 +41,7 @@ export async function getProducts() {
         .leftJoin(aggregatedStock, eq(products.id, aggregatedStock.productId))
         .orderBy(products.materialNumber)
 
-    return results
+    return normalizeSlocFields(results)
 }
 
 export async function createProduct(data: z.infer<typeof productSchema>) {
@@ -53,47 +54,61 @@ export async function updateProduct(id: number, data: z.infer<typeof productSche
 
 export async function upsertProduct(data: z.infer<typeof productSchema>, id?: number) {
     try {
+        const normalizedData = {
+            ...data,
+            materialNumber: data.materialNumber.trim().toUpperCase(),
+            oldMaterialNo: data.oldMaterialNo?.trim() || null,
+            materialDescription: data.materialDescription?.trim() || null,
+            brand: data.brand?.trim() || null,
+            plant: data.plant?.trim().toUpperCase() || null,
+            sloc: normalizeSloc(data.sloc),
+            slocDescription: data.slocDescription?.trim() || null,
+            imageUrl: data.imageUrl?.trim() || null,
+        }
+
         if (id) {
-            const existing = await db.select().from(products)
-                .where(sql`${products.materialNumber} = ${data.materialNumber} AND ${products.sloc} = ${data.sloc || ''}`)
-                .limit(1)
-            if (existing.length > 0 && existing[0].id !== id) {
+            const existingProducts = await db.select({ id: products.id, sloc: products.sloc })
+                .from(products)
+                .where(eq(products.materialNumber, normalizedData.materialNumber))
+            const existing = existingProducts.find((product) => normalizeSloc(product.sloc) === normalizedData.sloc)
+            if (existing && existing.id !== id) {
                 return { success: false, error: "Product with this Material Number and Sloc already exists" }
             }
 
             await db.update(products)
                 .set({
-                    category: data.category,
-                    materialNumber: data.materialNumber,
-                    oldMaterialNo: data.oldMaterialNo,
-                    materialDescription: data.materialDescription,
-                    brand: data.brand,
-                    costSap: data.costSap,
-                    plant: data.plant,
-                    sloc: data.sloc,
-                    slocDescription: data.slocDescription,
-                    imageUrl: data.imageUrl,
+                    category: normalizedData.category,
+                    materialNumber: normalizedData.materialNumber,
+                    oldMaterialNo: normalizedData.oldMaterialNo,
+                    materialDescription: normalizedData.materialDescription,
+                    brand: normalizedData.brand,
+                    costSap: normalizedData.costSap,
+                    plant: normalizedData.plant,
+                    sloc: normalizedData.sloc,
+                    slocDescription: normalizedData.slocDescription,
+                    imageUrl: normalizedData.imageUrl,
                     updatedAt: new Date()
                 })
                 .where(eq(products.id, id))
         } else {
-            const existing = await db.select().from(products)
-                .where(sql`${products.materialNumber} = ${data.materialNumber} AND ${products.sloc} = ${data.sloc || ''}`)
-                .limit(1)
-            if (existing.length > 0) {
+            const existingProducts = await db.select({ id: products.id, sloc: products.sloc })
+                .from(products)
+                .where(eq(products.materialNumber, normalizedData.materialNumber))
+            const existing = existingProducts.find((product) => normalizeSloc(product.sloc) === normalizedData.sloc)
+            if (existing) {
                 return { success: false, error: "Product with this Material Number and Sloc already exists" }
             }
             await db.insert(products).values({
-                category: data.category,
-                materialNumber: data.materialNumber,
-                oldMaterialNo: data.oldMaterialNo,
-                materialDescription: data.materialDescription,
-                brand: data.brand,
-                costSap: data.costSap,
-                plant: data.plant,
-                sloc: data.sloc,
-                slocDescription: data.slocDescription,
-                imageUrl: data.imageUrl,
+                category: normalizedData.category,
+                materialNumber: normalizedData.materialNumber,
+                oldMaterialNo: normalizedData.oldMaterialNo,
+                materialDescription: normalizedData.materialDescription,
+                brand: normalizedData.brand,
+                costSap: normalizedData.costSap,
+                plant: normalizedData.plant,
+                sloc: normalizedData.sloc,
+                slocDescription: normalizedData.slocDescription,
+                imageUrl: normalizedData.imageUrl,
             })
         }
 
@@ -128,7 +143,7 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
         for (const item of data) {
             // Normalize data: Trim and UpperCase to match database consistency rules
             const matNum = (item.materialNumber || "").trim().toUpperCase()
-            const sloc = (item.sloc || "").trim().toUpperCase()
+            const sloc = normalizeSloc(item.sloc)
             const key = `${matNum}|${sloc}`
 
             if (!seen.has(key)) {
@@ -291,13 +306,6 @@ type StockSapCostRow = {
     stor_loc: string | null
     total_stock: string | number | null
     value_stock: string | number | null
-}
-
-const normalizeSloc = (value: string | null | undefined) => {
-    const raw = (value || "").trim()
-    if (!raw) return ""
-    if (/^\d+$/.test(raw)) return String(parseInt(raw, 10))
-    return raw.toUpperCase()
 }
 
 const normalizeMaterial = (value: string | null | undefined) => (value || "").trim().toUpperCase()

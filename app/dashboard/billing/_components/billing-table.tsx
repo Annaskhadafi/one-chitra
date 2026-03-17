@@ -324,7 +324,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                         const isNumber = false;
                         const finalValue = isNumber ? parseFloat(newValue) : newValue;
                         const normalizedValue =
-                            (columnId === "noInvSap" || columnId === "plant")
+                            (columnId === "noInvSap" || columnId === "nomorDoSap" || columnId === "plant")
                                 ? normalizeCodeValue(finalValue as string | number | null | undefined)
                                 : finalValue;
 

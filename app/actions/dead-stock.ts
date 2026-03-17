@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { stockLevels, stockMovements } from "@/db/schema"
 import { eq, and, gt, desc } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { formatWarehouseLabel } from "@/lib/sloc"
 
 export interface DeadStockItem {
     productId: number;
@@ -94,7 +95,7 @@ export async function getDeadStockReport(thresholdDays: number = 90) {
                     productId: stock.productId,
                     productName: stock.product.materialDescription || "Unknown",
                     sku: stock.product.materialNumber || "-",
-                    warehouseName: stock.warehouse.sloc + " - " + stock.warehouse.description,
+                    warehouseName: formatWarehouseLabel(stock.warehouse),
                     category: stock.product.category || "Uncategorized",
                     brand: stock.product.brand || "-",
                     quantity: stock.totalStock,

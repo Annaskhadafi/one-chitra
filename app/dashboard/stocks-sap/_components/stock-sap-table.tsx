@@ -28,6 +28,7 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { normalizeSloc } from "@/lib/sloc"
 
 interface SAPStockItem {
     idInv: string
@@ -75,7 +76,7 @@ export function StockSAPTable() {
                     material: item.material?.toString().trim() ?? "",
                     oldMaterial: item.oldmaterial?.toString().trim() ?? "",
                     description: item.desc?.toString().trim() ?? "",
-                    sloc: item.sloc?.toString().trim() ?? "",
+                    sloc: normalizeSloc(item.sloc?.toString().trim() ?? ""),
                     slocDesc: item.slocdesc || "",
                     qtyStock: Number(item.qtystock) || 0,
                     valueStock: Number(item.valuestock) || 0,

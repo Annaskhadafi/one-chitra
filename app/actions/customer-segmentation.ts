@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { salesRevenueSap as historyOrders } from "@/db/schema/sap"
-import { desc, notIlike, sql, and } from "drizzle-orm"
+import { notIlike, sql, and } from "drizzle-orm"
 
 export interface CustomerRFMAggregate {
     customer_name: string;
@@ -12,18 +12,25 @@ export interface CustomerRFMAggregate {
     global_first_purchase: string;
 }
 
+const EXCLUDED_SEGMENTATION_CUSTOMERS = [
+    "TRANSITYRE B.V",
+]
+
+function getSegmentationCustomerWhereClause() {
+    return and(
+        sql`${historyOrders.customerName} IS NOT NULL`,
+        notIlike(historyOrders.customerName, "%Chitra Paratama Singapore Branch%"),
+        ...EXCLUDED_SEGMENTATION_CUSTOMERS.map((customerName) => sql`UPPER(TRIM(${historyOrders.customerName})) <> ${customerName}`)
+    )
+}
+
 export async function getMaxBillingDate() {
     try {
         const result = await db.select({
             max_date: sql<string>`MAX(${historyOrders.billingDate})`
         })
             .from(historyOrders)
-            .where(
-                and(
-                    sql`${historyOrders.customerName} IS NOT NULL`,
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-                )
-            );
+            .where(getSegmentationCustomerWhereClause());
 
         if (result[0]?.max_date) {
             return { success: true, maxDate: new Date(result[0].max_date).toISOString().split('T')[0] };
@@ -47,12 +54,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
             global_first_purchase: sql<string>`MIN(${historyOrders.billingDate})`.as('global_first_purchase')
         })
             .from(historyOrders)
-            .where(
-                and(
-                    sql`${historyOrders.customerName} IS NOT NULL`,
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-                )
-            )
+            .where(getSegmentationCustomerWhereClause())
             .groupBy(historyOrders.customerName)
             .as('gf');
 
@@ -68,8 +70,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
             .innerJoin(globalFirstPurchaseQuery, sql`${historyOrders.customerName} = ${globalFirstPurchaseQuery.customer_name}`)
             .where(
                 and(
-                    sql`${historyOrders.customerName} IS NOT NULL`,
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
+                    getSegmentationCustomerWhereClause(),
                     sql`${historyOrders.billingDate} BETWEEN ${start} AND ${end}`
                 )
             )

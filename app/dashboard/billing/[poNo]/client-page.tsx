@@ -2,9 +2,8 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, FileText, Download, ReceiptText } from "lucide-react"
+import { ArrowLeft, FileText, Download } from "lucide-react"
 import { useRouter } from "next/navigation"
-import type { BillingRecordDisplay } from "@/lib/types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageHeader } from "@/components/page-header"
 import { normalizeCodeValue } from "@/lib/formatters"
@@ -18,6 +17,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
     const router = useRouter()
     const normalizedNoInvSap = normalizeCodeValue(data.noInvSap)
     const normalizedPlant = normalizeCodeValue(data.plant)
+    const normalizedNomorDoSap = normalizeCodeValue(data.nomorDoSap)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = (data.items as any[]) || []
@@ -85,7 +85,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">DO SAP</p>
-                                <p className="font-medium mt-1">{data.nomorDoSap || "-"}</p>
+                                <p className="font-medium mt-1">{normalizedNomorDoSap || "-"}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Tgl DO Faktur</p>

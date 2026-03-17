@@ -3,6 +3,7 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { stockLevels, user, userWarehouseAccess, warehouses } from "@/db/schema";
 import { getAuthenticatedSession } from "@/lib/rbac";
+import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc";
 
 export type WarehouseAccessLevel = "view" | "edit";
 export type WarehouseAccessAction = "view" | "edit";
@@ -119,7 +120,7 @@ export async function getUserWarehouseAssignments(userId: string): Promise<Wareh
             warehouse: row.warehouse
                 ? {
                     id: row.warehouse.id,
-                    sloc: row.warehouse.sloc,
+                    sloc: normalizeSloc(row.warehouse.sloc),
                     description: row.warehouse.description,
                     type: row.warehouse.type,
                 }
@@ -139,7 +140,7 @@ export async function getUserWarehouseAssignments(userId: string): Promise<Wareh
             warehouse: row.warehouse
                 ? {
                     id: row.warehouse.id,
-                    sloc: row.warehouse.sloc,
+                    sloc: normalizeSloc(row.warehouse.sloc),
                     description: row.warehouse.description,
                     type: row.warehouse.type,
                 }
@@ -303,8 +304,10 @@ export async function getAccessibleWarehousesForCurrentUser(
         return [];
     }
 
-    return db.query.warehouses.findMany({
+    const rows = await db.query.warehouses.findMany({
         where: allowedWarehouseIds ? inArray(warehouses.id, allowedWarehouseIds) : undefined,
         orderBy: [asc(warehouses.description), asc(warehouses.sloc)],
     });
+
+    return normalizeSlocFields(rows);
 }

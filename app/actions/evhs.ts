@@ -27,6 +27,7 @@ import {
 import { findCkMasterPriceSuggestion, type CkMasterPriceReference } from "@/lib/ck-master-price"
 import { recordStockMovement } from "@/app/actions/stock-movement"
 import { syncStockTransferReceipt } from "@/app/actions/stock-transfer"
+import { expandSlocLookupKeys, formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
 // Schema for Receipt Confirmation
 const _confirmReceiptSchema = z.object({
@@ -232,7 +233,7 @@ export async function getEvhsReceipts() {
             orderBy: [desc(evhsReceipts.createdAt)],
         })
 
-        return filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds)
+        return normalizeSlocFields(filterEvhsReceiptRowsByWarehouse(receipts, allowedWarehouseIds))
     } catch (error) {
         console.error("Error fetching E-VHS receipts:", error)
         return []
@@ -288,7 +289,7 @@ export async function getPendingEvhsTransfers() {
             orderBy: [desc(stockTransfers.createdAt)],
         })
 
-        return transfers.filter((transfer) => hasEvhsWarehouseAccess(allowedWarehouseIds, transfer.toWarehouseId))
+        return normalizeSlocFields(transfers.filter((transfer) => hasEvhsWarehouseAccess(allowedWarehouseIds, transfer.toWarehouseId)))
     } catch (error) {
         console.error("Error fetching pending E-VHS transfers:", error)
         return []
@@ -902,7 +903,7 @@ export async function getEvhsVouchers() {
             })
             : []
 
-        return vouchers.map((voucher) => ({
+        return normalizeSlocFields(vouchers.map((voucher) => ({
             ...voucher,
             items: voucher.items.map((item) => {
                 const unitPrice = getEvhsVoucherItemUnitPrice(
@@ -950,7 +951,7 @@ export async function getEvhsVouchers() {
                     voucher.issuedBy === session.user.id
                 )
             ),
-        }))
+        })))
     } catch (error) {
         console.error("Error fetching Vouchers:", error)
         return []
@@ -969,7 +970,7 @@ export async function getGiRecords() {
             return []
         }
 
-        return await db.query.evhsGiRecords.findMany({
+        const rows = await db.query.evhsGiRecords.findMany({
             where: allowedWarehouseIds
                 ? inArray(evhsGiRecords.warehouseId, allowedWarehouseIds)
                 : undefined,
@@ -979,6 +980,7 @@ export async function getGiRecords() {
             },
             orderBy: [desc(evhsGiRecords.createdAt)]
         })
+        return normalizeSlocFields(rows)
     } catch (error) {
         console.error("Error fetching GI records:", error)
         return []
@@ -1219,7 +1221,7 @@ export async function getEvhsMrkoData() {
             where: eq(sql`customer_name`, "PT CIPTA KRIDATAMA")
         })
 
-        return {
+        return normalizeSlocFields({
             vouchers: vouchers.map((voucher) => ({
                 ...voucher,
                 items: voucher.items.map((item) => {
@@ -1264,7 +1266,7 @@ export async function getEvhsMrkoData() {
             })),
             giRecords,
             sapRevenue
-        }
+        })
     } catch (error) {
         console.error("Error fetching MRKO data:", error)
         return { vouchers: [], giRecords: [], sapRevenue: [] }
@@ -1428,7 +1430,7 @@ export async function getEvhsTrackingData() {
             }
         }
 
-        return trackingRows
+        return normalizeSlocFields(trackingRows)
     } catch (error) {
         console.error("Error fetching tracking data:", error)
         return []
@@ -1465,13 +1467,11 @@ function normalizeEvhsMaterialKey(value?: string | null) {
 }
 
 function normalizeEvhsSlocKey(value?: string | null) {
-    return (value || "").trim()
+    return normalizeSloc(value)
 }
 
 function normalizeEvhsSapSlocKey(value?: string | null) {
-    const normalized = normalizeEvhsSlocKey(value)
-    if (!normalized) return ""
-    return /^\d+$/.test(normalized) ? normalized.padStart(4, "0") : normalized
+    return normalizeSloc(value)
 }
 
 function normalizeEvhsWarehouseDescriptionKey(value?: string | null) {
@@ -1482,7 +1482,7 @@ function isCkVhsWarehouse(warehouse?: { sloc?: string | null; description?: stri
     if (!warehouse) return false
 
     const warehouseType = (warehouse.type || "").trim().toUpperCase()
-    const warehouseLabel = `${warehouse.sloc || ""} ${warehouse.description || ""}`.toUpperCase()
+    const warehouseLabel = `${normalizeSloc(warehouse.sloc) || ""} ${warehouse.description || ""}`.toUpperCase()
 
     return warehouseType === "WAREHOUSE VHS" && warehouseLabel.includes("CK")
 }
@@ -1536,7 +1536,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
         )
         const relevantSlocs = Array.from(new Set(
             filteredStocks
-                .map((stockRow) => normalizeEvhsSapSlocKey(stockRow.warehouse?.sloc))
+                .flatMap((stockRow) => expandSlocLookupKeys(stockRow.warehouse?.sloc))
                 .filter(Boolean)
         ))
         const relevantWarehouseDescriptions = Array.from(new Set(
@@ -1673,7 +1673,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
             }
         }
 
-        return filteredStocks
+        return normalizeSlocFields(filteredStocks
             .map((stockRow) => {
                 const warehouseKey = `${stockRow.warehouseId}:${stockRow.productId}`
                 const usedQty = usedQtyByKey.get(warehouseKey) || 0
@@ -1719,7 +1719,7 @@ export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
                 const warehouseCompare = formatEvhsWarehouseLabel(left.warehouse).localeCompare(formatEvhsWarehouseLabel(right.warehouse))
                 if (warehouseCompare !== 0) return warehouseCompare
                 return right.totalStock - left.totalStock
-            })
+            }))
     } catch (error) {
         console.error("Error fetching Stock All VHS data:", error)
         return []
@@ -1758,8 +1758,7 @@ function getAgingBucket(days: number) {
 }
 
 function formatEvhsWarehouseLabel(warehouse?: { sloc: string; description?: string | null } | null) {
-    if (!warehouse) return "-"
-    return warehouse.description ? `${warehouse.sloc} - ${warehouse.description}` : warehouse.sloc
+    return formatWarehouseLabel(warehouse)
 }
 
 export async function getEvhsControlTowerData() {

@@ -6,6 +6,7 @@ import { desc, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getAllowedWarehouseIdsForCurrentUser } from "@/lib/warehouse-access"
+import { normalizeSlocFields } from "@/lib/sloc"
 
 export type StockMovementType =
     | "GR_SAP"
@@ -167,7 +168,7 @@ export async function getStockMovements() {
     }
 
     try {
-        return await db.query.stockMovements.findMany({
+        const rows = await db.query.stockMovements.findMany({
             where: allowedWarehouseIds ? inArray(stockMovements.warehouseId, allowedWarehouseIds) : undefined,
             with: {
                 product: true,
@@ -179,6 +180,7 @@ export async function getStockMovements() {
             },
             orderBy: [desc(stockMovements.createdAt)],
         })
+        return normalizeSlocFields(rows)
     } catch (error) {
         if (!isMissingSourceColumnError(error)) {
             throw error
@@ -186,7 +188,7 @@ export async function getStockMovements() {
 
         await ensureStockMovementSourceColumn()
 
-        return await db.query.stockMovements.findMany({
+        const rows = await db.query.stockMovements.findMany({
             where: allowedWarehouseIds ? inArray(stockMovements.warehouseId, allowedWarehouseIds) : undefined,
             with: {
                 product: true,
@@ -198,6 +200,7 @@ export async function getStockMovements() {
             },
             orderBy: [desc(stockMovements.createdAt)],
         })
+        return normalizeSlocFields(rows)
     }
 }
 

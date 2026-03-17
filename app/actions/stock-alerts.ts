@@ -7,6 +7,7 @@ import { gt, and, lte, desc, eq, inArray } from "drizzle-orm"
 import type { ReorderAlert, ReorderPredictionStock } from "@/lib/types"
 import { getStocks } from "./stock"
 import { generateMLPrediction } from "./inventory-ml"
+import { normalizeSlocFields } from "@/lib/sloc"
 
 /**
  * Returns all stock entries below their minimum stock level.
@@ -35,7 +36,7 @@ export async function getReorderAlerts(): Promise<ReorderAlert[]> {
             urgency: r.totalStock === 0 ? "critical" : "warning",
         })) as ReorderAlert[]
 
-    return alerts
+    return normalizeSlocFields(alerts)
 }
 
 /**
@@ -87,7 +88,7 @@ export async function getReorderPredictionStocks(): Promise<ReorderPredictionSto
         }
     }
 
-    return stocks
+    return normalizeSlocFields(stocks
         .filter((stock) => stock.product && stock.warehouse)
         .map((stock) => {
             const normalizedMaterialNo = stock.product?.materialNumber?.trim() || ""
@@ -101,7 +102,7 @@ export async function getReorderPredictionStocks(): Promise<ReorderPredictionSto
                 mlPredictionId: latestPrediction?.id ?? null,
                 mlPredictedAt: latestPrediction?.createdAt ?? null,
             }
-        }) as ReorderPredictionStock[]
+        }) as ReorderPredictionStock[])
 }
 
 /**

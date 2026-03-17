@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { normalizeSlocFields } from "@/lib/sloc"
 
 type StockTransferTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -29,7 +30,7 @@ const stockTransferSchema = z.object({
 })
 
 export async function getStockTransfers() {
-    return await db.query.stockTransfers.findMany({
+    const rows = await db.query.stockTransfers.findMany({
         with: {
             fromWarehouse: true,
             toWarehouse: true,
@@ -50,6 +51,8 @@ export async function getStockTransfers() {
         },
         orderBy: [desc(stockTransfers.createdAt)],
     })
+
+    return normalizeSlocFields(rows)
 }
 
 export async function createStockTransfer(data: z.infer<typeof stockTransferSchema>) {

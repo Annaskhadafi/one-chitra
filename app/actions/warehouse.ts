@@ -7,8 +7,16 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 import { warehouseSchema } from "@/lib/schemas"
+import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 import { getAllowedWarehouseIdsForCurrentUser } from "@/lib/warehouse-access"
 import { getSetting } from "./settings"
+
+const normalizeWarehouseInput = (data: z.infer<typeof warehouseSchema>) => ({
+    ...data,
+    sloc: normalizeSloc(data.sloc),
+    description: data.description?.trim() || "",
+    type: data.type?.trim() || null,
+})
 
 export async function getWarehouses() {
     const manualRate = await getSetting("manual_usd_rate")
@@ -53,8 +61,10 @@ export async function getWarehouses() {
         }
     })
 
+    const normalizedResult = normalizeSlocFields(result)
+
     // Sort: Type first (alphabetical), then empty/null Type at bottom
-    return result.sort((a, b) => {
+    return normalizedResult.sort((a, b) => {
         const typeA = a.type || ""
         const typeB = b.type || ""
 
@@ -72,12 +82,14 @@ export async function getWarehouses() {
 
 export async function createWarehouse(data: z.infer<typeof warehouseSchema>) {
     try {
-        const existing = await db.select().from(warehouses).where(eq(warehouses.sloc, data.sloc)).limit(1)
-        if (existing.length > 0) {
+        const normalizedData = normalizeWarehouseInput(data)
+        const existingWarehouses = await db.select({ id: warehouses.id, sloc: warehouses.sloc }).from(warehouses)
+        const existing = existingWarehouses.find((warehouse) => normalizeSloc(warehouse.sloc) === normalizedData.sloc)
+        if (existing) {
             return { success: false, error: "Warehouse with this Sloc already exists" }
         }
 
-        await db.insert(warehouses).values(data)
+        await db.insert(warehouses).values(normalizedData)
         revalidatePath("/dashboard/warehouse")
         return { success: true }
     } catch (_error) {
@@ -88,16 +100,18 @@ export async function createWarehouse(data: z.infer<typeof warehouseSchema>) {
 
 export async function updateWarehouse(id: number, data: z.infer<typeof warehouseSchema>) {
     try {
-        const existing = await db.select().from(warehouses).where(eq(warehouses.sloc, data.sloc)).limit(1)
-        if (existing.length > 0 && existing[0].id !== id) {
+        const normalizedData = normalizeWarehouseInput(data)
+        const existingWarehouses = await db.select({ id: warehouses.id, sloc: warehouses.sloc }).from(warehouses)
+        const existing = existingWarehouses.find((warehouse) => normalizeSloc(warehouse.sloc) === normalizedData.sloc)
+        if (existing && existing.id !== id) {
             return { success: false, error: "Sloc already taken by another warehouse" }
         }
 
         await db.update(warehouses)
             .set({
-                sloc: data.sloc,
-                description: data.description,
-                type: data.type,
+                sloc: normalizedData.sloc,
+                description: normalizedData.description,
+                type: normalizedData.type,
                 updatedAt: new Date()
             })
             .where(eq(warehouses.id, id))
@@ -131,12 +145,11 @@ export async function bulkDeleteWarehouses(ids: number[]) {
 
 export async function checkWarehouseImport(slocs: string[]) {
     try {
-        const existingWarehouses = await db.select({ sloc: warehouses.sloc })
-            .from(warehouses)
-            .where(inArray(warehouses.sloc, slocs))
-
-        const existingSlocs = existingWarehouses.map(w => w.sloc)
-        const newSlocs = slocs.filter(sloc => !existingSlocs.includes(sloc))
+        const normalizedSlocs = Array.from(new Set(slocs.map((sloc) => normalizeSloc(sloc)).filter(Boolean)))
+        const existingWarehouses = await db.select({ sloc: warehouses.sloc }).from(warehouses)
+        const existingSlocSet = new Set(existingWarehouses.map((warehouse) => normalizeSloc(warehouse.sloc)))
+        const existingSlocs = normalizedSlocs.filter((sloc) => existingSlocSet.has(sloc))
+        const newSlocs = normalizedSlocs.filter((sloc) => !existingSlocSet.has(sloc))
 
         return {
             success: true,
@@ -157,17 +170,26 @@ export async function importWarehouses(data: (typeof warehouses.$inferInsert)[],
         let successCount = 0
 
         for (const item of data) {
-            if (!item.sloc || !item.description) continue
+            const normalizedSloc = normalizeSloc(item.sloc)
+            const description = item.description?.trim()
+            if (!normalizedSloc || !description) continue
+
+            const normalizedItem = {
+                ...item,
+                sloc: normalizedSloc,
+                description,
+                type: item.type?.trim() || null,
+            }
 
             try {
                 if (mode === 'update') {
                     await db.insert(warehouses)
-                        .values(item)
+                        .values(normalizedItem)
                         .onConflictDoUpdate({
                             target: warehouses.sloc,
                             set: {
-                                description: item.description,
-                                type: item.type,
+                                description: normalizedItem.description,
+                                type: normalizedItem.type,
                                 updatedAt: new Date(),
                             }
                         })
@@ -175,7 +197,7 @@ export async function importWarehouses(data: (typeof warehouses.$inferInsert)[],
                 } else {
                     // Skip existing: Only insert if not exists
                     await db.insert(warehouses)
-                        .values(item)
+                        .values(normalizedItem)
                         .onConflictDoNothing({
                             target: warehouses.sloc,
                         })
@@ -187,7 +209,7 @@ export async function importWarehouses(data: (typeof warehouses.$inferInsert)[],
                     successCount++
                 }
             } catch (err) {
-                console.error(`Failed to import warehouse ${item.sloc}:`, err)
+                console.error(`Failed to import warehouse ${normalizedItem.sloc}:`, err)
             }
         }
 

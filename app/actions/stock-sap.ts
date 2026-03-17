@@ -4,16 +4,17 @@ import { db } from "@/db"
 import { products, warehouses, stockLevels } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
+import { normalizeSloc } from "@/lib/sloc"
 
 export async function syncIndividualStock(data: { materialNumber: string, sloc: string, qty: number, value: number }) {
     try {
+        const normalizedSloc = normalizeSloc(data.sloc)
         const product = await db.query.products.findFirst({
             where: eq(products.materialNumber, data.materialNumber)
         })
 
-        const warehouse = await db.query.warehouses.findFirst({
-            where: eq(warehouses.sloc, data.sloc)
-        })
+        const warehouseRows = await db.select({ id: warehouses.id, sloc: warehouses.sloc }).from(warehouses)
+        const warehouse = warehouseRows.find((row) => normalizeSloc(row.sloc) === normalizedSloc)
 
         if (!product || !warehouse) {
             return {

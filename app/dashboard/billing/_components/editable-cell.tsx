@@ -44,7 +44,7 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
 
         const finalValue = type === "number" ? parseFloat(value as string) : value
         const normalizedValue =
-            (column === "noInvSap" || column === "plant")
+            (column === "noInvSap" || column === "nomorDoSap" || column === "plant")
                 ? normalizeCodeValue(finalValue as string | number | null | undefined)
                 : finalValue
 
@@ -144,7 +144,7 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
                 // Fallback update individual jika onMassUpdate tidak aktif
                 const finalValue = type === "number" ? parseFloat(values[0]) : values[0]
                 const normalizedValue =
-                    (column === "noInvSap" || column === "plant")
+                    (column === "noInvSap" || column === "nomorDoSap" || column === "plant")
                         ? normalizeCodeValue(finalValue as string | number | null | undefined)
                         : finalValue
 

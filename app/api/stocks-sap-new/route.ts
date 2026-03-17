@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "drizzle-orm"
 import { db } from "@/db"
+import { normalizeSloc, normalizedSlocSql } from "@/lib/sloc"
 
 export const dynamic = "force-dynamic"
 
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
         const offset = (page - 1) * pageSize
 
         let whereClause = sql`TRUE`
+        const normalizedStorLoc = normalizedSlocSql(sql`stor_loc`)
 
         if (search) {
             const searchPattern = `%${search.toLowerCase()}%`
@@ -42,7 +44,7 @@ export async function GET(req: NextRequest) {
                 LOWER(material_no) LIKE ${searchPattern} OR 
                 LOWER(material_desc) LIKE ${searchPattern} OR 
                 LOWER(old_material_no) LIKE ${searchPattern} OR
-                LOWER(stor_loc) LIKE ${searchPattern}
+                LOWER(${normalizedStorLoc}) LIKE ${searchPattern}
             )`
         }
 
@@ -103,7 +105,7 @@ export async function GET(req: NextRequest) {
             materialNo: row.material_no ?? "",
             oldMaterialNo: row.old_material_no ?? "",
             materialDesc: row.material_desc ?? "",
-            storLoc: row.stor_loc ?? "",
+            storLoc: normalizeSloc(row.stor_loc),
             storLocDesc: row.stor_loc_desc ?? "",
             totalStock: Number(row.total_stock ?? 0),
             baseUnitOfMeasure: row.base_unit_of_measure ?? "",
