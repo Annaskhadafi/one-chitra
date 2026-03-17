@@ -54,6 +54,142 @@ function normalizeDeliveryOutput<T>(value: T): T {
     return normalizeSapDocumentFields(normalizeSlocFields(value))
 }
 
+type StockQueryable = Pick<typeof db, "query">
+
+type DeliveryStockCheckInput = {
+    productId: number
+    quantity: number
+}
+
+type DeliveryStockCheckResult = {
+    productId: number
+    requested: number
+    available: number
+    remainingAfterDelivery: number
+    shortage: number
+    sufficient: boolean
+    alternativeIds?: { id: number; stock: number; description: string }[]
+    otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
+}
+
+async function getOriginWarehouseStock(queryable: StockQueryable, warehouseId: number, productId: number) {
+    const stockRecord = await queryable.query.stockLevels.findFirst({
+        where: and(
+            eq(stockLevels.warehouseId, warehouseId),
+            eq(stockLevels.productId, productId),
+        ),
+    })
+
+    return stockRecord?.totalStock ?? 0
+}
+
+function getProductStockLabel(
+    product: { materialDescription?: string | null; materialNumber?: string | null } | null | undefined,
+    productId: number,
+) {
+    return product?.materialDescription || product?.materialNumber || `Produk #${productId}`
+}
+
+async function buildDeliveryStockCheckResult(
+    queryable: StockQueryable,
+    warehouseId: number,
+    item: DeliveryStockCheckInput,
+): Promise<DeliveryStockCheckResult> {
+    const requested = Math.max(item.quantity, 0)
+    const directAvailable = await getOriginWarehouseStock(queryable, warehouseId, item.productId)
+    const remainingAfterDelivery = Math.max(directAvailable - requested, 0)
+    const shortage = Math.max(requested - directAvailable, 0)
+    const sufficient = directAvailable >= requested
+
+    const alternatives: { id: number; stock: number; description: string }[] = []
+
+    // Suggestions only: do not affect the Available status for Delivery.
+    const currentProduct = await queryable.query.products.findFirst({
+        where: eq(products.id, item.productId),
+    })
+
+    if (currentProduct?.materialDescription) {
+        const relatedProducts = await queryable.query.products.findMany({
+            where: and(
+                eq(products.materialDescription, currentProduct.materialDescription),
+                sql`${products.id} != ${item.productId}`,
+            ),
+        })
+
+        for (const rel of relatedProducts) {
+            const relStock = await getOriginWarehouseStock(queryable, warehouseId, rel.id)
+            if (relStock > 0) {
+                alternatives.push({
+                    id: rel.id,
+                    stock: relStock,
+                    description: rel.materialDescription || "",
+                })
+            }
+        }
+    }
+
+    const otherWarehouseStocks = await queryable.query.stockLevels.findMany({
+        where: and(
+            eq(stockLevels.productId, item.productId),
+            sql`${stockLevels.warehouseId} != ${warehouseId}`,
+            sql`${stockLevels.totalStock} > 0`,
+        ),
+        with: {
+            warehouse: true,
+        },
+    })
+
+    const otherWarehouses = otherWarehouseStocks.map((sw) => ({
+        warehouseId: sw.warehouseId,
+        warehouseName: formatWarehouseLabel(sw.warehouse, "Unknown"),
+        stock: sw.totalStock,
+    }))
+
+    return {
+        productId: item.productId,
+        requested,
+        available: directAvailable,
+        remainingAfterDelivery,
+        shortage,
+        sufficient,
+        alternativeIds: alternatives.length > 0 ? alternatives : undefined,
+        otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined,
+    }
+}
+
+async function assertOriginWarehouseStock(
+    queryable: StockQueryable,
+    warehouseId: number,
+    items: Array<{ productId: number; deliveredQuantity: number }>,
+) {
+    const insufficientItems: string[] = []
+
+    for (const item of items) {
+        const stock = await buildDeliveryStockCheckResult(queryable, warehouseId, {
+            productId: item.productId,
+            quantity: item.deliveredQuantity,
+        })
+
+        if (!stock.sufficient) {
+            const product = await queryable.query.products.findFirst({
+                where: eq(products.id, item.productId),
+                columns: {
+                    materialDescription: true,
+                    materialNumber: true,
+                },
+            })
+
+            insufficientItems.push(
+                `${getProductStockLabel(product, item.productId)}: stok aktual ${stock.available}, qty kirim ${stock.requested}, kurang ${stock.shortage}`,
+            )
+        }
+    }
+
+    if (insufficientItems.length > 0) {
+        throw new Error(`Stok origin warehouse tidak cukup. ${insufficientItems.join("; ")}`)
+    }
+}
+
 async function notifyDeliveredDeliveries(deliveryIds: number[]) {
     for (const deliveryId of deliveryIds) {
         try {
@@ -217,94 +353,17 @@ export async function getSalesOrdersForDelivery() {
     })).filter(order => order.items.some(item => item.remainingQuantity > 0))
 }
 
-export async function checkStockAvailability(warehouseId: number, items: { productId: number; quantity: number }[]) {
-    const results: {
-        productId: number;
-        requested: number;
-        available: number;
-        sufficient: boolean;
-        alternativeIds?: { id: number; stock: number; description: string }[];
-        otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[];
-    }[] = []
+export async function checkStockAvailability(warehouseId: number, items: DeliveryStockCheckInput[]) {
+    const results: DeliveryStockCheckResult[] = []
 
     console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
 
     for (const item of items) {
-        // 1. Get exact product stock in requested warehouse
-        const stockRecord = await db.query.stockLevels.findFirst({
-            where: and(
-                eq(stockLevels.warehouseId, warehouseId),
-                eq(stockLevels.productId, item.productId),
-            )
-        })
+        const result = await buildDeliveryStockCheckResult(db, warehouseId, item)
 
-        const directAvailable = stockRecord ? stockRecord.totalStock : 0
-
-        let totalAvailable = directAvailable
-        const alternatives: { id: number; stock: number; description: string }[] = []
-
-        // 2. Smart Check: look for other products with same description in requested warehouse
-        const currentProduct = await db.query.products.findFirst({
-            where: eq(products.id, item.productId)
-        })
-
-        if (currentProduct?.materialDescription) {
-            // Find other products with SAME description
-            const relatedProducts = await db.query.products.findMany({
-                where: and(
-                    eq(products.materialDescription, currentProduct.materialDescription),
-                    sql`${products.id} != ${item.productId}`
-                )
-            })
-
-            for (const rel of relatedProducts) {
-                const relStock = await db.query.stockLevels.findFirst({
-                    where: and(
-                        eq(stockLevels.warehouseId, warehouseId),
-                        eq(stockLevels.productId, rel.id)
-                    )
-                })
-                if (relStock && relStock.totalStock > 0) {
-                    alternatives.push({
-                        id: rel.id,
-                        stock: relStock.totalStock,
-                        description: rel.materialDescription || ""
-                    })
-                    totalAvailable += relStock.totalStock
-                }
-            }
-        }
-
-        // 3. Check other warehouses for the same product
-        const otherWarehouseStocks = await db.query.stockLevels.findMany({
-            where: and(
-                eq(stockLevels.productId, item.productId),
-                sql`${stockLevels.warehouseId} != ${warehouseId}`,
-                sql`${stockLevels.totalStock} > 0`
-            ),
-            with: {
-                warehouse: true
-            }
-        })
-
-        const otherWarehouses = otherWarehouseStocks.map(sw => ({
-            warehouseId: sw.warehouseId,
-            warehouseName: formatWarehouseLabel(sw.warehouse, "Unknown"),
-            stock: sw.totalStock
-        }))
-
-        const sufficient = totalAvailable >= item.quantity
-
-        const result = {
-            productId: item.productId,
-            requested: item.quantity,
-            available: directAvailable,
-            sufficient,
-            alternativeIds: alternatives.length > 0 ? alternatives : undefined,
-            otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined
-        }
-
-        console.log(`[STOCKS] Product ${item.productId}: available=${directAvailable}, alternatives=${alternatives.length}, otherWHs=${otherWarehouses.length}`)
+        console.log(
+            `[STOCKS] Product ${item.productId}: available=${result.available}, requested=${result.requested}, remaining=${result.remainingAfterDelivery}, alternatives=${result.alternativeIds?.length ?? 0}, otherWHs=${result.otherWarehouses?.length ?? 0}`,
+        )
         results.push(result)
     }
 
@@ -413,6 +472,16 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             }
 
             if (data.items.length > 0) {
+                const hasDestination = data.warehouseToId && data.warehouseToId !== 0
+                const isCancelled = data.status === "cancelled"
+
+                if (!isCancelled && data.warehouseId) {
+                    await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                        productId: item.productId,
+                        deliveredQuantity: item.deliveredQuantity,
+                    })))
+                }
+
                 console.log("[CREATE DELIVERY] Inserting items...")
                 await tx.insert(deliveryItems)
                     .values(data.items.map(item => ({
@@ -432,9 +501,6 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     where: eq(salesOrders.id, data.salesOrderId),
                     columns: { categoryPo: true, customerId: true }
                 })
-
-                const hasDestination = data.warehouseToId && data.warehouseToId !== 0
-                const isCancelled = data.status === "cancelled"
 
                 if (hasDestination && !isCancelled) {
                     console.log("[CREATE DELIVERY] Creating stock transfer...")
@@ -608,6 +674,13 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                         customerId: originalOrder?.customerId ?? undefined,
                     })
                 }
+            }
+
+            if (shouldReconcileStock && newIsCommitted && data.warehouseId) {
+                await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                    productId: item.productId,
+                    deliveredQuantity: item.deliveredQuantity,
+                })))
             }
 
             await tx.update(deliveries)
@@ -1010,6 +1083,11 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                 // 2. From cancelled to non-cancelled: APPLY stock
                 if (delivery.status === "cancelled" && status !== "cancelled") {
                     if (delivery.warehouseId) {
+                        await assertOriginWarehouseStock(tx, delivery.warehouseId, delivery.items.map((item) => ({
+                            productId: item.productId,
+                            deliveredQuantity: item.deliveredQuantity,
+                        })))
+
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
                             await tx.update(stockLevels)
