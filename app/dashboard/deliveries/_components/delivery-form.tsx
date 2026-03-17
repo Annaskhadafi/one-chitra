@@ -752,7 +752,17 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
                 }
                 toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
-                const listUrl = `/dashboard/deliveries?refresh=${Date.now()}`
+                const savedId =
+                    ("id" in result && typeof result.id === "number")
+                        ? result.id
+                        : initialData?.id
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/deliveries?${listParams.toString()}`
                 if (typeof window !== "undefined") {
                     window.location.assign(listUrl)
                     return

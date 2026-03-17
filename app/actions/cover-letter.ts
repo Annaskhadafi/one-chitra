@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { billingRecords, salesRevenueSap as historyOrders, customers, coverLetters, coverLetterItems } from "@/db/schema";
-import { eq, isNotNull, ne, and, sql, desc, notInArray, like } from "drizzle-orm";
+import { eq, isNotNull, ne, and, sql, desc, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizeCodeValue } from "@/lib/formatters";
 
@@ -138,8 +138,9 @@ export async function getCoverLetterBillingData(
         noInvSap: sql<string>`COALESCE(${billingRecords.noInvSap}, "groupedHistory"."noInvSap")`,
         dateInvoice: sql<Date>`COALESCE(${billingRecords.dateInvoice}::timestamptz, "groupedHistory"."dateInvoice"::timestamptz)`,
         datePo: sql<Date>`COALESCE(${billingRecords.datePo}::timestamptz, "groupedHistory"."datePo"::timestamptz)`,
+        // Ignore default 0 from billing_records so SAP total still shows when no manual amount override exists.
         totalLocCurr: sql<string>`COALESCE(
-            NULLIF(CAST(${billingRecords.totalPriceIdr} AS TEXT), ''),
+            CAST(NULLIF(${billingRecords.totalPriceIdr}, 0) AS TEXT),
             "groupedHistory"."totalLocCurr"
         )`,
         custId: sql<string>`COALESCE(${billingRecords.custId}, "groupedHistory"."custId")`,

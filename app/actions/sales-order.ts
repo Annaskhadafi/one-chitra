@@ -534,9 +534,17 @@ export async function getSalesOrderPicUsers() {
     noStore()
     await getAuthenticatedSession()
     return await db
-        .select({ id: user.id, name: user.name, email: user.email })
+        .select({ id: user.id, name: user.name, email: user.email, role: user.role })
         .from(user)
-        .orderBy(user.name)
+        .orderBy(
+            sql`CASE
+                WHEN lower(${user.role}) = 'sales' THEN 0
+                WHEN lower(${user.role}) LIKE '%sales%' THEN 1
+                ELSE 2
+            END`,
+            user.role,
+            user.name
+        )
 }
 
 export async function deleteSalesOrder(id: number) {

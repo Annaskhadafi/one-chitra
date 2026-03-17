@@ -57,6 +57,7 @@ import {
 import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -205,6 +206,8 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTableProps) {
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
     const columnVisibilityStorageKey = `deliveries:column-visibility:${currentUserId}`
@@ -255,6 +258,14 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
+    const refreshToken = searchParams.get("refresh")
+    const focusId = useMemo(() => {
+        const rawId = searchParams.get("focusId")
+        if (!rawId) return null
+
+        const parsedId = Number.parseInt(rawId, 10)
+        return Number.isFinite(parsedId) ? parsedId : null
+    }, [searchParams])
 
     React.useEffect(() => {
         if (!mounted) return
@@ -272,6 +283,44 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         if (!mounted) return
         localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(columnVisibility))
     }, [mounted, columnVisibilityStorageKey, columnVisibility])
+
+    React.useEffect(() => {
+        if (!refreshToken) return
+
+        let cancelled = false
+
+        const syncSavedDelivery = async () => {
+            const minimumAttempts = 2
+            const maximumAttempts = focusId ? 5 : minimumAttempts
+
+            for (let attempt = 0; attempt < maximumAttempts && !cancelled; attempt++) {
+                const result = await refetch()
+                const latestDeliveries =
+                    result.data ??
+                    queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"]) ??
+                    EMPTY_DELIVERIES
+                const hasFocusedDelivery = focusId
+                    ? latestDeliveries.some((delivery) => delivery.id === focusId)
+                    : true
+
+                if (attempt + 1 >= minimumAttempts && hasFocusedDelivery) {
+                    break
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 700))
+            }
+
+            if (!cancelled) {
+                router.replace("/dashboard/deliveries", { scroll: false })
+            }
+        }
+
+        void syncSavedDelivery()
+
+        return () => {
+            cancelled = true
+        }
+    }, [focusId, queryClient, refetch, refreshToken, router])
 
     // Mutations
     const updateStatusMutation = useMutation({

@@ -62,7 +62,7 @@ interface SalesOrderFormProps {
     customers: Customer[]
     products: Product[]
     warehouses: Warehouse[]
-    users: Pick<User, "id" | "name" | "email">[]
+    users: Pick<User, "id" | "name" | "email" | "role">[]
     ckMasterPrices: CkMasterPriceReference[]
     initialData?: {
         id: number
@@ -169,6 +169,7 @@ export function SalesOrderForm({
     // Customer search popover
     const [customerOpen, setCustomerOpen] = useState(false)
     const [whOpen, setWhOpen] = useState(false)
+    const [salesPicOpen, setSalesPicOpen] = useState(false)
     // Product search popover
     const [productOpen, setProductOpen] = useState(false)
 
@@ -193,9 +194,21 @@ export function SalesOrderForm({
         () => customers.find(c => c.id === customerId),
         [customers, customerId]
     )
+    const selectedSalesPerson = useMemo(
+        () => users.find((user) => user.id === salesPersonId),
+        [salesPersonId, users]
+    )
     const isSelectedCkCustomer = useMemo(
         () => isCkCustomer(selectedCustomer),
         [selectedCustomer]
+    )
+    const salesRoleUsers = useMemo(
+        () => users.filter((user) => user.role.toLowerCase().includes("sales")),
+        [users]
+    )
+    const otherPicUsers = useMemo(
+        () => users.filter((user) => !user.role.toLowerCase().includes("sales")),
+        [users]
     )
 
     const selectedWarehouse = useMemo(
@@ -460,7 +473,17 @@ export function SalesOrderForm({
 
             if (result.success) {
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
-                const listUrl = `/dashboard/sales-orders?refresh=${Date.now()}`
+                const savedId =
+                    ("id" in result && typeof result.id === "number")
+                        ? result.id
+                        : initialData?.id
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/sales-orders?${listParams.toString()}`
                 if (typeof window !== "undefined") {
                     window.location.assign(listUrl)
                     return
@@ -655,18 +678,93 @@ export function SalesOrderForm({
                         {/* Warehouse */}
                         <div className="space-y-2">
                             <Label className="font-semibold">PIC Sales</Label>
-                            <Select value={salesPersonId || undefined} onValueChange={setSalesPersonId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select PIC Sales..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {users.map((u) => (
-                                        <SelectItem key={u.id} value={u.id}>
-                                            {u.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={salesPicOpen} onOpenChange={setSalesPicOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={salesPicOpen}
+                                        className="w-full justify-between font-normal"
+                                    >
+                                        {selectedSalesPerson ? (
+                                            <div className="flex min-w-0 flex-col items-start text-left">
+                                                <span className="truncate">{selectedSalesPerson.name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {selectedSalesPerson.role}
+                                                </span>
+                                            </div>
+                                        ) : "Select PIC Sales..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[360px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Search PIC by name, email, or role..." />
+                                        <CommandList>
+                                            <CommandEmpty>PIC Sales tidak ditemukan.</CommandEmpty>
+                                            <CommandGroup heading="Pilihan">
+                                                <CommandItem
+                                                    value="tanpa pic sales kosong clear"
+                                                    onSelect={() => {
+                                                        setSalesPersonId("")
+                                                        setSalesPicOpen(false)
+                                                    }}
+                                                >
+                                                    <Check className={cn("mr-2 h-4 w-4", !salesPersonId ? "opacity-100" : "opacity-0")} />
+                                                    <div className="flex flex-col">
+                                                        <span>Tanpa PIC Sales</span>
+                                                        <span className="text-xs text-muted-foreground">Kosongkan pilihan</span>
+                                                    </div>
+                                                </CommandItem>
+                                            </CommandGroup>
+                                            {salesRoleUsers.length > 0 ? (
+                                                <CommandGroup heading="Role Sales">
+                                                    {salesRoleUsers.map((salesUser) => (
+                                                        <CommandItem
+                                                            key={salesUser.id}
+                                                            value={`${salesUser.name} ${salesUser.email} ${salesUser.role}`}
+                                                            onSelect={() => {
+                                                                setSalesPersonId(salesUser.id)
+                                                                setSalesPicOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", salesPersonId === salesUser.id ? "opacity-100" : "opacity-0")} />
+                                                            <div className="flex min-w-0 flex-col">
+                                                                <span className="truncate font-medium">{salesUser.name}</span>
+                                                                <span className="truncate text-xs text-muted-foreground">
+                                                                    {salesUser.role} · {salesUser.email}
+                                                                </span>
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            ) : null}
+                                            {otherPicUsers.length > 0 ? (
+                                                <CommandGroup heading="Role Lainnya">
+                                                    {otherPicUsers.map((otherUser) => (
+                                                        <CommandItem
+                                                            key={otherUser.id}
+                                                            value={`${otherUser.name} ${otherUser.email} ${otherUser.role}`}
+                                                            onSelect={() => {
+                                                                setSalesPersonId(otherUser.id)
+                                                                setSalesPicOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", salesPersonId === otherUser.id ? "opacity-100" : "opacity-0")} />
+                                                            <div className="flex min-w-0 flex-col">
+                                                                <span className="truncate font-medium">{otherUser.name}</span>
+                                                                <span className="truncate text-xs text-muted-foreground">
+                                                                    {otherUser.role} · {otherUser.email}
+                                                                </span>
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            ) : null}
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         {/* Warehouse */}

@@ -51,6 +51,7 @@ import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Do
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
@@ -110,6 +111,8 @@ function calculateGrandTotal(order: SalesOrderListItem) {
 
 export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
     const columnVisibilityStorageKey = `sales-orders:column-visibility:${currentUserId}`
@@ -127,6 +130,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
     })
     const data = queryData ?? initialData
+    const refreshToken = searchParams.get("refresh")
+    const focusId = useMemo(() => {
+        const rawId = searchParams.get("focusId")
+        if (!rawId) return null
+
+        const parsedId = Number.parseInt(rawId, 10)
+        return Number.isFinite(parsedId) ? parsedId : null
+    }, [searchParams])
 
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('sales-orders', 'edit')
@@ -169,6 +180,44 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         if (!mounted) return
         localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(columnVisibility))
     }, [mounted, columnVisibilityStorageKey, columnVisibility])
+
+    useEffect(() => {
+        if (!refreshToken) return
+
+        let cancelled = false
+
+        const syncSavedOrder = async () => {
+            const minimumAttempts = 2
+            const maximumAttempts = focusId ? 5 : minimumAttempts
+
+            for (let attempt = 0; attempt < maximumAttempts && !cancelled; attempt++) {
+                const result = await refetch()
+                const latestOrders =
+                    result.data ??
+                    queryClient.getQueryData<SalesOrderListItem[]>(["sales-orders"]) ??
+                    []
+                const hasFocusedOrder = focusId
+                    ? latestOrders.some((order) => order.id === focusId)
+                    : true
+
+                if (attempt + 1 >= minimumAttempts && hasFocusedOrder) {
+                    break
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 700))
+            }
+
+            if (!cancelled) {
+                router.replace("/dashboard/sales-orders", { scroll: false })
+            }
+        }
+
+        void syncSavedOrder()
+
+        return () => {
+            cancelled = true
+        }
+    }, [focusId, queryClient, refetch, refreshToken, router])
 
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
     const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
