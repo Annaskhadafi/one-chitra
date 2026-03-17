@@ -6,6 +6,7 @@ import Image from "next/image"
 import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
 import { getCustomerAddresses } from "@/app/actions/customer"
+import { getStocks } from "@/app/actions/stock"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,12 +33,21 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog"
+import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
 } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     Table,
     TableBody,
@@ -49,7 +59,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus } from "lucide-react"
+import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -323,6 +333,21 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     // Stock check
     const [stockResults, setStockResults] = useState<StockResult[]>([])
     const [checkingStock, setCheckingStock] = useState(false)
+
+    // Alternative product selection dialog
+    const [selectedAlternative, setSelectedAlternative] = useState<{
+        productId: number
+        productName: string
+        alternatives: { id: number; stock: number; description: string }[]
+    } | null>(null)
+    const [selectingAlternative, setSelectingAlternative] = useState(false)
+
+    // Stock view dialog
+    const [stockViewOpen, setStockViewOpen] = useState(false)
+    const [allStocks, setAllStocks] = useState<any[]>([])
+    const [loadingStocks, setLoadingStocks] = useState(false)
+    const [stockFilter, setStockFilter] = useState("")
+    const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false)
 
     // UI
     const [soOpen, setSoOpen] = useState(false)
@@ -655,6 +680,52 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         if (!stock || stock.requested <= 0 || !stock.otherWarehouses) return []
 
         return stock.otherWarehouses.filter((warehouse) => warehouse.stock >= stock.requested)
+    }, [])
+
+    // Handle alternative product selection
+    const handleSelectAlternative = useCallback(async (productId: number, alternativeId: number, alternativeDescription: string) => {
+        setSelectingAlternative(true)
+        try {
+            // Update the item with the new product
+            setItems(prev => prev.map((item) => {
+                if (item.productId !== productId) return item
+                
+                return {
+                    ...item,
+                    productId: alternativeId,
+                    productName: alternativeDescription,
+                }
+            }))
+
+            // Reset stock results to force re-check
+            setStockResults([])
+            
+            // Close the dialog
+            setSelectedAlternative(null)
+            
+            toast.success("Produk alternatif dipilih! Silakan check stock ulang.")
+        } catch (error) {
+            console.error("Failed to select alternative:", error)
+            toast.error("Gagal memilih produk alternatif")
+        } finally {
+            setSelectingAlternative(false)
+        }
+    }, [])
+
+    // Handle view all stocks
+    const handleViewStocks = useCallback(async () => {
+        setLoadingStocks(true)
+        try {
+            const stocks = await getStocks()
+            setAllStocks(stocks)
+            setStockViewOpen(true)
+            toast.success("Data stok berhasil dimuat!")
+        } catch (error) {
+            console.error("Failed to load stocks:", error)
+            toast.error("Gagal memuat data stok")
+        } finally {
+            setLoadingStocks(false)
+        }
     }, [])
 
     const showSaveBlockedToast = useCallback((errors: string[]) => {
@@ -1289,10 +1360,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                                 )}
 
                                                                                 {!stock.sufficient && stock.alternativeIds && stock.alternativeIds.length > 0 && (
-                                                                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                                                                                        <AlertTriangle className="h-3 w-3" />
-                                                                                        Alt. record origin: <strong>{stock.alternativeIds[0].stock}</strong>
-                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setSelectedAlternative({
+                                                                                            productId: item.productId,
+                                                                                            productName: item.productName,
+                                                                                            alternatives: stock.alternativeIds!,
+                                                                                        })}
+                                                                                        className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                                                                                    >
+                                                                                        <Info className="h-3 w-3" />
+                                                                                        Alt. record: <strong>{stock.alternativeIds[0].stock}</strong>
+                                                                                    </button>
                                                                                 )}
                                                                             </div>
 
@@ -2045,6 +2124,401 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     </Card>
                 </div >
             </div >
+
+            {/* Alternative Product Selection Dialog */}
+            <Dialog open={!!selectedAlternative} onOpenChange={(open) => !open && setSelectedAlternative(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Alternative Product Records</DialogTitle>
+                        <DialogDescription>
+                            Produk ini memiliki catatan stok alternatif dengan deskripsi material yang sama. Pilih produk alternatif untuk digunakan dalam delivery ini.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedAlternative && (
+                        <div className="py-4">
+                            {/* Current Product Info */}
+                            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-900">
+                                <div className="flex items-start gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-red-800 dark:text-red-400 mb-1">
+                                            Produk Saat Ini (Stok Tidak Cukup)
+                                        </p>
+                                        <div className="text-xs text-red-700 dark:text-red-300 space-y-1 ml-6">
+                                            <p><strong>Product ID:</strong> {selectedAlternative.productId}</p>
+                                            <p><strong>Nama:</strong> {selectedAlternative.productName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Alternative Products List */}
+                            <div className="space-y-2">
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                    Produk Alternatif Tersedia:
+                                </p>
+                                {selectedAlternative.alternatives.map((alt, idx) => (
+                                    <div
+                                        key={alt.id}
+                                        className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900 hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                    <span className="text-sm font-semibold text-green-800 dark:text-green-400">
+                                                        Alternative #{idx + 1}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-green-700 dark:text-green-300 space-y-1 ml-6">
+                                                    <p><strong>Product ID:</strong> {alt.id}</p>
+                                                    <p><strong>Deskripsi:</strong> {alt.description || `Product #${alt.id}`}</p>
+                                                    <p><strong>Stok Tersedia:</strong> <span className="font-bold">{alt.stock}</span></p>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleSelectAlternative(selectedAlternative.productId, alt.id, alt.description || `Product #${alt.id}`)}
+                                                disabled={selectingAlternative}
+                                                className="bg-green-600 hover:bg-green-700 text-white"
+                                            >
+                                                {selectingAlternative ? "Selecting..." : "Use This"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {selectedAlternative.alternatives.length === 0 && (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                    <p>Tidak ada produk alternatif yang tersedia</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedAlternative(null)} disabled={selectingAlternative}>
+                            Cancel
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Stock View Dialog */}
+            <Dialog open={stockViewOpen} onOpenChange={setStockViewOpen}>
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[calc(100vw-2rem)] h-[85vh] p-0 gap-0 overflow-hidden">
+                    <DialogTitle className="sr-only">Stok Aktual - Semua Warehouse</DialogTitle>
+                    {/* Gradient Header */}
+                    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 py-4 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight">Stok Aktual - Semua Warehouse</h2>
+                                <p className="text-blue-100 text-sm">Lihat detail stok aktual untuk semua produk di semua warehouse</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 min-h-0 flex flex-col px-6 pt-4 pb-4">
+                        {/* Search Bar */}
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Cari material number, deskripsi, sloc..."
+                                    value={stockFilter}
+                                    onChange={(e) => setStockFilter(e.target.value)}
+                                    className="pl-10 h-10 border-2 focus:border-blue-500 transition-colors"
+                                />
+                            </div>
+                            {stockFilter && (
+                                <Button variant="ghost" onClick={() => setStockFilter("")} size="sm" className="text-muted-foreground hover:text-foreground">
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            )}
+                            <Button
+                                variant={showDuplicatesOnly ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                                className={cn(
+                                    "gap-1.5 text-xs shrink-0 h-10",
+                                    showDuplicatesOnly && "bg-violet-600 hover:bg-violet-700 text-white"
+                                )}
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                                Duplikat
+                            </Button>
+                        </div>
+
+                        {/* Stats Strip */}
+                        {!loadingStocks && (
+                            (() => {
+                                // Calculate duplicate keys for stats
+                                const keyCounts = new Map<string, number>()
+                                allStocks.forEach(s => {
+                                    const key = [
+                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                        s.warehouse?.description
+                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                    keyCounts.set(key, (keyCounts.get(key) || 0) + 1)
+                                })
+                                const dupCount = allStocks.filter(s => {
+                                    const key = [
+                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                        s.warehouse?.description
+                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                    return (keyCounts.get(key) || 0) > 1
+                                }).length
+                                return (
+                                    <div className="grid grid-cols-4 gap-3 mb-4">
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+                                            <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-md">
+                                                <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Produk</p>
+                                                <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{allStocks.length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900">
+                                            <div className="p-1.5 bg-red-100 dark:bg-red-900 rounded-md">
+                                                <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-red-600 dark:text-red-400 font-medium">Stok Negatif</p>
+                                                <p className="text-lg font-bold text-red-700 dark:text-red-300">{allStocks.filter(s => (s.totalStock ?? 0) < 0).length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900">
+                                            <div className="p-1.5 bg-amber-100 dark:bg-amber-900 rounded-md">
+                                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Stok Kosong</p>
+                                                <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{allStocks.filter(s => (s.totalStock ?? 0) === 0).length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div
+                                            className={cn(
+                                                "flex items-center gap-3 px-4 py-2.5 rounded-lg border cursor-pointer transition-colors",
+                                                showDuplicatesOnly
+                                                    ? 'bg-violet-100 dark:bg-violet-950/50 border-violet-400 dark:border-violet-700 ring-2 ring-violet-400/50'
+                                                    : 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900 hover:bg-violet-100 dark:hover:bg-violet-950/40'
+                                            )}
+                                            onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                                        >
+                                            <div className="p-1.5 bg-violet-100 dark:bg-violet-900 rounded-md">
+                                                <Copy className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Duplikat</p>
+                                                <p className="text-lg font-bold text-violet-700 dark:text-violet-300">{dupCount.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })()
+                        )}
+
+                        {/* Stock Table */}
+                        <div className="flex-1 min-h-0 rounded-lg border overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                <Table className="min-w-[1200px]">
+                                    <TableHeader className="sticky top-0 z-10">
+                                        <TableRow className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800">
+                                            <TableHead className="w-[60px] text-xs font-bold uppercase tracking-wider">Plnt</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-bold uppercase tracking-wider">Category</TableHead>
+                                            <TableHead className="w-[90px] text-xs font-bold uppercase tracking-wider">Brand</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Material #</TableHead>
+                                            <TableHead className="w-[150px] text-xs font-bold uppercase tracking-wider">Old Mat. No</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-wider">Description</TableHead>
+                                            <TableHead className="w-[60px] text-xs font-bold uppercase tracking-wider">SLoc</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Sloc Desc</TableHead>
+                                            <TableHead className="w-[90px] text-right text-xs font-bold uppercase tracking-wider">Act Stock</TableHead>
+                                            <TableHead className="w-[90px] text-right text-xs font-bold uppercase tracking-wider">Min Stock</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Type WH</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loadingStocks ? (
+                                            <TableRow>
+                                                <TableCell colSpan={11} className="h-32 text-center">
+                                                    <div className="flex flex-col items-center justify-center gap-3">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                                                        <span className="text-sm text-muted-foreground">Memuat data stok...</span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            (() => {
+                                                // Build duplicate map
+                                                const dupKeyCounts = new Map<string, number>()
+                                                allStocks.forEach(s => {
+                                                    const key = [
+                                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                                        s.warehouse?.description
+                                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                                    dupKeyCounts.set(key, (dupKeyCounts.get(key) || 0) + 1)
+                                                })
+                                                return allStocks
+                                                    .filter((stock) => {
+                                                        // Text search filter
+                                                        if (stockFilter.trim()) {
+                                                            const filter = stockFilter.toLowerCase()
+                                                            const matches = (
+                                                                stock.product?.materialNumber?.toLowerCase().includes(filter) ||
+                                                                stock.product?.materialDescription?.toLowerCase().includes(filter) ||
+                                                                stock.product?.oldMaterialNo?.toLowerCase().includes(filter) ||
+                                                                stock.warehouse?.sloc?.toLowerCase().includes(filter) ||
+                                                                stock.warehouse?.description?.toLowerCase().includes(filter) ||
+                                                                stock.product?.category?.toLowerCase().includes(filter) ||
+                                                                stock.product?.brand?.toLowerCase().includes(filter) ||
+                                                                stock.product?.plant?.toLowerCase().includes(filter)
+                                                            )
+                                                            if (!matches) return false
+                                                        }
+                                                        // Duplicate filter
+                                                        if (showDuplicatesOnly) {
+                                                            const key = [
+                                                                stock.product?.plant, stock.product?.category, stock.product?.brand,
+                                                                stock.product?.materialNumber, stock.product?.oldMaterialNo,
+                                                                stock.product?.materialDescription, stock.warehouse?.sloc,
+                                                                stock.warehouse?.description
+                                                            ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                                            return (dupKeyCounts.get(key) || 0) > 1
+                                                        }
+                                                        return true
+                                                    })
+                                                .map((stock, idx) => {
+                                                    const totalStock = stock.totalStock ?? 0
+                                                    const categoryColors: Record<string, string> = {
+                                                        'TYRE': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+                                                        'ACC': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+                                                        'SPM': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+                                                        'WHEEL & RIM': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border-orange-200 dark:border-orange-800',
+                                                    }
+                                                    const catClass = categoryColors[stock.product?.category?.toUpperCase() || ''] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                                                    const whType = stock.warehouse?.type || '-'
+                                                    const whClass = whType.toLowerCase().includes('hub')
+                                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                        : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                                    return (
+                                                        <TableRow key={stock.id} className={cn(
+                                                            idx % 2 === 0 ? 'bg-white dark:bg-gray-950' : 'bg-gray-50/70 dark:bg-gray-900/50',
+                                                            'hover:bg-blue-50/70 dark:hover:bg-blue-950/30 transition-colors'
+                                                        )}>
+                                                            <TableCell className="font-mono text-xs font-semibold">
+                                                                {stock.product?.plant || "-"}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className={cn('text-[10px] font-semibold border', catClass)}>
+                                                                    {stock.product?.category || "-"}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-xs">{stock.product?.brand || "-"}</TableCell>
+                                                            <TableCell>
+                                                                <span className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                                                    {stock.product?.materialNumber || "-"}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground">{stock.product?.oldMaterialNo || "-"}</TableCell>
+                                                            <TableCell className="max-w-[300px] truncate text-xs" title={stock.product?.materialDescription || ""}>
+                                                                {stock.product?.materialDescription || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="font-mono text-xs font-semibold">{stock.warehouse?.sloc || "-"}</TableCell>
+                                                            <TableCell className="max-w-[130px] truncate text-xs text-muted-foreground" title={stock.warehouse?.description || ""}>
+                                                                {stock.warehouse?.description || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <span className={cn(
+                                                                    'font-mono text-xs font-bold px-2 py-0.5 rounded-md',
+                                                                    totalStock < 0 && 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+                                                                    totalStock === 0 && 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+                                                                    totalStock > 0 && 'text-emerald-700 dark:text-emerald-400'
+                                                                )}>
+                                                                    {totalStock.toLocaleString('id-ID')}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono text-xs text-orange-600 dark:text-orange-400">
+                                                                {stock.minStock?.toLocaleString("id-ID") || "0"}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className={cn('text-[10px] font-semibold border', whClass)}>
+                                                                    {whType}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })
+                                            })()
+                                        )}
+                                    </TableBody>
+                                </Table>
+                        </div>
+
+                        {/* Enhanced Footer */}
+                        <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                            <div className="flex items-center gap-3 text-sm">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-muted-foreground">Total:</span>
+                                    <Badge variant="secondary" className="font-mono text-xs">{allStocks.length}</Badge>
+                                </div>
+                                {stockFilter && (
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-muted-foreground">Filtered:</span>
+                                        <Badge className="font-mono text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-100">
+                                            {allStocks.filter((stock) => {
+                                                const filter = stockFilter.toLowerCase()
+                                                return (
+                                                    stock.product?.materialNumber?.toLowerCase().includes(filter) ||
+                                                    stock.product?.materialDescription?.toLowerCase().includes(filter) ||
+                                                    stock.product?.oldMaterialNo?.toLowerCase().includes(filter) ||
+                                                    stock.warehouse?.sloc?.toLowerCase().includes(filter) ||
+                                                    stock.warehouse?.description?.toLowerCase().includes(filter)
+                                                )
+                                            }).length}
+                                        </Badge>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={handleViewStocks} disabled={loadingStocks} className="gap-1.5">
+                                    <RefreshCcw className={cn("h-3.5 w-3.5", loadingStocks && "animate-spin")} />
+                                    Refresh
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setStockViewOpen(false)}>
+                                    Close
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Floating Action Button with Pulse */}
+            <div className="fixed bottom-4 right-4 z-50">
+                <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-blue-500 animate-ping opacity-20" />
+                    <Button
+                        size="sm"
+                        onClick={handleViewStocks}
+                        className="relative h-9 px-4 rounded-full shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-1.5 text-xs font-medium"
+                    >
+                        <Eye className="h-3.5 w-3.5" />
+                        Cek Stok Aktual
+                    </Button>
+                </div>
+            </div>
         </div >
     )
 }
