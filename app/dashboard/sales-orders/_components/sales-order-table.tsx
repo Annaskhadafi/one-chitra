@@ -51,7 +51,7 @@ import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Do
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { SalesOrderDetail } from "./sales-order-detail"
@@ -111,7 +111,6 @@ function calculateGrandTotal(order: SalesOrderListItem) {
 
 export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const queryClient = useQueryClient()
-    const router = useRouter()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -131,6 +130,13 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     })
 
     useEffect(() => {
+        const queryState = queryClient.getQueryState<SalesOrderListItem[]>(["sales-orders"])
+
+        // Jangan timpa hasil refetch/mutasi client dengan server payload yang lebih lama.
+        if ((queryState?.dataUpdatedAt ?? 0) > 0) {
+            return
+        }
+
         queryClient.setQueryData<SalesOrderListItem[]>(["sales-orders"], initialData)
     }, [initialData, queryClient])
 
@@ -168,6 +174,17 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [isViewOpen, setIsViewOpen] = useState(false)
     const [poPreviewOrder, setPoPreviewOrder] = useState<SalesOrderListItem | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
+
+    const clearRefreshParams = useCallback(() => {
+        if (typeof window === "undefined") {
+            return
+        }
+
+        const nextUrl = new URL(window.location.href)
+        nextUrl.searchParams.delete("refresh")
+        nextUrl.searchParams.delete("focusId")
+        window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+    }, [])
 
     useEffect(() => {
         if (!mounted) return
@@ -213,7 +230,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             }
 
             if (!cancelled) {
-                router.replace("/dashboard/sales-orders", { scroll: false })
+                clearRefreshParams()
             }
         }
 
@@ -222,7 +239,21 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         return () => {
             cancelled = true
         }
-    }, [focusId, queryClient, refetch, refreshToken, router])
+    }, [clearRefreshParams, focusId, queryClient, refetch, refreshToken])
+
+    useEffect(() => {
+        const availableRowIds = new Set(data.map((order) => String(order.id)))
+
+        setRowSelection((current) => {
+            const nextEntries = Object.entries(current).filter(([rowId, selected]) => selected && availableRowIds.has(rowId))
+
+            if (nextEntries.length === Object.keys(current).length) {
+                return current
+            }
+
+            return Object.fromEntries(nextEntries)
+        })
+    }, [data])
 
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
     const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
@@ -337,7 +368,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
     const handleDelete = useCallback(async (id: number) => {
         deleteMutation.mutate([id], {
-            onSuccess: () => toast.success("Sales order deleted")
+            onSuccess: (result) => {
+                if (result.success) {
+                    toast.success("Sales order deleted")
+                    return
+                }
+
+                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
+            }
         })
     }, [deleteMutation])
 
@@ -627,7 +665,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
                 return (canEdit && isEditableStatus) ? (
                     <Select
-                        defaultValue={order.status}
+                        value={order.status}
                         onValueChange={(value) => handleUpdateStatus(order.id, value)}
                     >
                         <SelectTrigger className={cn(
@@ -702,6 +740,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const table = useReactTable({
         data: filteredData,
         columns,
+        getRowId: (row) => String(row.id),
         state: {
             sorting,
             rowSelection,
@@ -1196,7 +1235,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id} className="sticky top-[var(--header-height)] z-20 bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
+                                        <TableHead key={header.id} className="bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(

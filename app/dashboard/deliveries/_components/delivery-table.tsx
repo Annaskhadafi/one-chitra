@@ -57,7 +57,7 @@ import {
 import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -207,7 +207,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTableProps) {
-    const router = useRouter()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -261,6 +260,13 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     })
 
     React.useEffect(() => {
+        const queryState = queryClient.getQueryState<DeliveryWithRelations[]>(["deliveries"])
+
+        // Hindari menimpa hasil refetch client dengan payload server yang lebih lama.
+        if ((queryState?.dataUpdatedAt ?? 0) > 0) {
+            return
+        }
+
         queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], initialData)
     }, [initialData, queryClient])
 
@@ -272,6 +278,17 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         const parsedId = Number.parseInt(rawId, 10)
         return Number.isFinite(parsedId) ? parsedId : null
     }, [searchParams])
+
+    const clearRefreshParams = useCallback(() => {
+        if (typeof window === "undefined") {
+            return
+        }
+
+        const nextUrl = new URL(window.location.href)
+        nextUrl.searchParams.delete("refresh")
+        nextUrl.searchParams.delete("focusId")
+        window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+    }, [])
 
     React.useEffect(() => {
         if (!mounted) return
@@ -317,7 +334,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             }
 
             if (!cancelled) {
-                router.replace("/dashboard/deliveries", { scroll: false })
+                clearRefreshParams()
             }
         }
 
@@ -326,7 +343,21 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         return () => {
             cancelled = true
         }
-    }, [focusId, queryClient, refetch, refreshToken, router])
+    }, [clearRefreshParams, focusId, queryClient, refetch, refreshToken])
+
+    React.useEffect(() => {
+        const availableRowIds = new Set(data.map((delivery) => String(delivery.id)))
+
+        setRowSelection((current) => {
+            const nextEntries = Object.entries(current).filter(([rowId, selected]) => selected && availableRowIds.has(rowId))
+
+            if (nextEntries.length === Object.keys(current).length) {
+                return current
+            }
+
+            return Object.fromEntries(nextEntries)
+        })
+    }, [data])
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -933,6 +964,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const table = useReactTable({
         data: filteredData,
         columns,
+        getRowId: (row) => String(row.id),
         state: {
             sorting,
             columnFilters,
@@ -2339,7 +2371,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                 {table.getHeaderGroups().map((headerGroup) => (
                                     <TableRow key={headerGroup.id}>
                                         {headerGroup.headers.map((header) => (
-                                            <TableHead key={header.id} className="sticky top-[var(--header-height)] z-20 bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
+                                            <TableHead key={header.id} className="bg-background shadow-[inset_0_-1px_0_hsl(var(--border))]">
                                                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                                             </TableHead>
                                         ))}
