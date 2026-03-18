@@ -103,31 +103,86 @@ const bboxAnnotationSchema = z.object({
     }),
 })
 
+const documentAnnotationFormat = {
+    type: "object",
+    properties: {
+        customer_company_name: { type: "string" },
+        customer_code: { type: ["string", "null"] },
+        po_number: { type: "string" },
+        document_date: { type: "string" },
+        products: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    name: { type: "string" },
+                    code: { type: ["string", "null"] },
+                    qty: { type: "number" },
+                    unit_price: { type: "number" },
+                    total_price: { type: ["number", "null"] },
+                },
+                required: ["name", "qty", "unit_price"],
+            },
+        },
+        tax_total: { type: ["number", "null"] },
+        grand_total: { type: ["number", "null"] },
+    },
+    required: ["customer_company_name", "po_number", "document_date", "products"],
+}
+
+const bboxAnnotationFormat = {
+    type: "object",
+    properties: {
+        product_boxes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    page: { type: "number" },
+                    top_left_x: { type: "number" },
+                    top_left_y: { type: "number" },
+                    bottom_right_x: { type: "number" },
+                    bottom_right_y: { type: "number" },
+                },
+                required: ["page", "top_left_x", "top_left_y", "bottom_right_x", "bottom_right_y"],
+            },
+        },
+        entity_boxes: {
+            type: "object",
+            properties: {
+                customer_company_name: { type: "object" },
+                po_number: { type: "object" },
+                document_date: { type: "object" },
+                tax_total: { type: "object" },
+                grand_total: { type: "object" },
+            },
+        },
+    },
+    required: ["product_boxes", "entity_boxes"],
+}
+
 export async function extractStructuredFromDocument(params: {
     fileBuffer: Buffer
     filename: string
     pages?: string | number[] | null
 }): Promise<OcrResult> {
     const apiKey = process.env.MISTRAL_API_KEY
-    const endpoint = process.env.MISTRAL_OCR_ENDPOINT
+    const endpoint = process.env.MISTRAL_OCR_ENDPOINT?.trim() || "https://api.mistral.ai/v1/ocr"
     if (!apiKey) {
         throw new Error("MISTRAL_API_KEY is not set")
     }
-    if (!endpoint) {
-        throw new Error("MISTRAL_OCR_ENDPOINT is not set")
-    }
     const base64 = params.fileBuffer.toString("base64")
+    const documentUrl = buildDataUri(params.filename, base64)
     const body = {
         model: "mistral-ocr-latest",
         document: {
-            type: "document_base64",
-            document_base64: base64,
-            filename: params.filename,
+            type: "document_url",
+            document_url: documentUrl,
         },
         pages: params.pages ?? "all",
         include_image_base64: true,
-        document_annotation_format: documentAnnotationSchema.toJSON(),
-        bbox_annotation_format: bboxAnnotationSchema.toJSON(),
+        document_annotation_format: documentAnnotationFormat,
+        bbox_annotation_format: bboxAnnotationFormat,
         output_format: "json",
         language_hint: "latin",
         numeric_precision_hint: "high",
@@ -144,7 +199,20 @@ export async function extractStructuredFromDocument(params: {
     })
     if (!res.ok) {
         const text = await res.text()
-        throw new Error(`Mistral OCR error: ${res.status} ${text}`)
+        let upstreamMessage = text
+        try {
+            const parsed = JSON.parse(text) as { detail?: Array<{ msg?: string; loc?: string[] }> }
+            if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+                upstreamMessage = parsed.detail
+                    .slice(0, 3)
+                    .map((d) => {
+                        const loc = Array.isArray(d.loc) ? d.loc.join(".") : "body"
+                        return `${loc}: ${d.msg || "invalid request"}`
+                    })
+                    .join(" | ")
+            }
+        } catch {}
+        throw new Error(`MISTRAL_UPSTREAM_ERROR ${res.status} ${upstreamMessage}`)
     }
     const json = await res.json()
     const rawText: string = json?.markdown ?? json?.text ?? ""
@@ -165,4 +233,18 @@ export async function extractStructuredFromDocument(params: {
         model,
         pagesProcessed,
     }
+}
+
+function buildDataUri(filename: string, base64: string) {
+    const lower = filename.toLowerCase()
+    if (lower.endsWith(".pdf")) {
+        return `data:application/pdf;base64,${base64}`
+    }
+    if (lower.endsWith(".png")) {
+        return `data:image/png;base64,${base64}`
+    }
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+        return `data:image/jpeg;base64,${base64}`
+    }
+    return `data:application/octet-stream;base64,${base64}`
 }

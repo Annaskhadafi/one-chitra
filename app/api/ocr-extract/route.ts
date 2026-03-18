@@ -61,6 +61,12 @@ export async function POST(req: NextRequest) {
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR extraction failed"
+        if (message.includes("MISTRAL_API_KEY is not set")) {
+            return Response.json({ error: "Konfigurasi OCR belum lengkap: MISTRAL_API_KEY belum diset" }, { status: 500 })
+        }
+        if (message.includes("MISTRAL_UPSTREAM_ERROR")) {
+            return Response.json({ error: `Gagal memproses OCR dari provider: ${message}` }, { status: 502 })
+        }
         return Response.json({ error: message }, { status: 500 })
     }
 }
