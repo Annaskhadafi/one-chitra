@@ -29,6 +29,7 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/lib/email", () => ({
   sendNotificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendSystemTemplatedEmailByCode: vi.fn().mockResolvedValue(undefined),
 }))
 
 let definitionId = ""
@@ -99,17 +100,49 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  if (requestId) {
-    await db.delete(approvalAssignments).where(eq(approvalAssignments.requestId, requestId))
-    await db.delete(approvalRequests).where(eq(approvalRequests.id, requestId))
+  // Full cascade cleanup — handles both current run and any orphaned data from previous failed runs.
+  // Order: assignments → requests → steps → definitions → form_registry → users
+
+  // 1. Delete all requests submitted by the test requester (covers current + orphaned runs)
+  const orphanedRequests = await db.select({ id: approvalRequests.id })
+    .from(approvalRequests)
+    .where(eq(approvalRequests.requesterId, TEST_REQUESTER_ID))
+  for (const req of orphanedRequests) {
+    await db.delete(approvalAssignments).where(eq(approvalAssignments.requestId, req.id))
+  }
+  await db.delete(approvalRequests).where(eq(approvalRequests.requesterId, TEST_REQUESTER_ID))
+
+  // 2. Delete all definitions created by the test requester (covers current + orphaned runs)
+  const orphanedDefs = await db.select({ id: approvalDefinitions.id })
+    .from(approvalDefinitions)
+    .where(eq(approvalDefinitions.createdBy, TEST_REQUESTER_ID))
+  for (const def of orphanedDefs) {
+    const steps = await db.select({ id: approvalDefinitionSteps.id })
+      .from(approvalDefinitionSteps)
+      .where(eq(approvalDefinitionSteps.definitionId, def.id))
+    for (const step of steps) {
+      await db.delete(approvalAssignments).where(eq(approvalAssignments.stepId, step.id))
+    }
+    await db.delete(approvalDefinitionSteps).where(eq(approvalDefinitionSteps.definitionId, def.id))
+  }
+  await db.delete(approvalDefinitions).where(eq(approvalDefinitions.createdBy, TEST_REQUESTER_ID))
+
+  // 3. Delete all steps referencing the test approver user
+  const approverSteps = await db.select({ id: approvalDefinitionSteps.id })
+    .from(approvalDefinitionSteps)
+    .where(eq(approvalDefinitionSteps.approverUserId, TEST_APPROVER_ID))
+  for (const step of approverSteps) {
+    await db.delete(approvalAssignments).where(eq(approvalAssignments.stepId, step.id))
+  }
+  if (approverSteps.length > 0) {
+    await db.delete(approvalDefinitionSteps).where(eq(approvalDefinitionSteps.approverUserId, TEST_APPROVER_ID))
   }
 
-  if (definitionId) {
-    await db.delete(approvalDefinitionSteps).where(eq(approvalDefinitionSteps.definitionId, definitionId))
-    await db.delete(approvalDefinitions).where(eq(approvalDefinitions.id, definitionId))
-  }
-
+  // 4. Delete form registry entries created by test users
+  await db.delete(approvalFormRegistry).where(eq(approvalFormRegistry.createdBy, TEST_REQUESTER_ID))
   await db.delete(approvalFormRegistry).where(eq(approvalFormRegistry.formKey, TEST_FORM_KEY))
+
+  // 5. Finally delete the test users
   await db.delete(user).where(and(eq(user.id, TEST_APPROVER_ID), eq(user.email, "approver-race@onechitra.local")))
   await db.delete(user).where(and(eq(user.id, TEST_REQUESTER_ID), eq(user.email, "requester-race@onechitra.local")))
 })

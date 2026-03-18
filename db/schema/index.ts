@@ -49,6 +49,7 @@ export { fleetTrips, fleetTripsRelations } from "./fleet-trips";
 // Old historyOrders removed, aliased from sap.ts below
 export { historyOrders as oldHistoryOrdersTable } from "./history-orders";
 export { salesDocuments } from "./sales-documents";
+export { ocrPoSessions } from "./ocr-po-sessions";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
@@ -130,14 +131,23 @@ export {
     evhsGiItemsRelations,
     evhsMasterPricesRelations,
 } from "./evhs";
+export { ocrExtractions } from "./ocr-extractions";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";
+import { ocrPoSessions } from "./ocr-po-sessions";
 import { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 
 export const salesDocumentsRelations = relations(salesDocuments, ({ one }) => ({
     uploadedBy: one(user, {
         fields: [salesDocuments.uploadedById],
+        references: [user.id],
+    }),
+}));
+
+export const ocrPoSessionsRelations = relations(ocrPoSessions, ({ one }) => ({
+    uploadedBy: one(user, {
+        fields: [ocrPoSessions.uploadedById],
         references: [user.id],
     }),
 }));

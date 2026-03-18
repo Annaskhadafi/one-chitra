@@ -5,6 +5,7 @@ import {
     createApprovalOrgStructure,
     deleteApprovalOrgNode,
     deleteApprovalOrgStructure,
+    getApprovalDefinitions,
     getApprovalMatrixImports,
     getApprovalOrgStructures,
     getApprovalOrgUsers,
@@ -26,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { MatrixBuilder } from "./_components/matrix-builder"
+import { WorkflowCanvas, deriveStepType } from "./_components/workflow-canvas"
 
 type OrgNode = {
     id: string
@@ -95,10 +97,11 @@ const matrixTemplateCsv = [
 const matrixTemplateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(matrixTemplateCsv)}`
 
 export default async function ApprovalMatrixPage() {
-    const [structures, users, importLogs] = await Promise.all([
+    const [structures, users, importLogs, definitions] = await Promise.all([
         getApprovalOrgStructures(),
         getApprovalOrgUsers(),
         getApprovalMatrixImports(),
+        getApprovalDefinitions(),
     ])
 
     const handleCreateStructure = async (formData: FormData): Promise<void> => {
@@ -373,6 +376,35 @@ export default async function ApprovalMatrixPage() {
                             </Card>
                         )
                     })
+                )}
+            </div>
+
+            <div className="space-y-4">
+                <div>
+                    <h2 className="text-xl font-semibold tracking-tight">Workflow Steps</h2>
+                    <p className="text-sm text-muted-foreground">
+                        Kelola urutan step untuk setiap workflow definition.
+                    </p>
+                </div>
+                {definitions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Belum ada workflow definition.</p>
+                ) : (
+                    definitions.map((def) => (
+                        <div key={def.id} className="rounded-lg border p-4">
+                            <WorkflowCanvas
+                                definitionId={def.id}
+                                definitionName={def.name}
+                                steps={def.steps.map((step) => ({
+                                    id: step.id,
+                                    stepOrder: step.stepOrder,
+                                    stepName: step.stepName,
+                                    stepType: deriveStepType(step.conditionJson ?? {}),
+                                    entriesCount: 0,
+                                    conditionJson: step.conditionJson ?? {},
+                                }))}
+                            />
+                        </div>
+                    ))
                 )}
             </div>
         </div>
