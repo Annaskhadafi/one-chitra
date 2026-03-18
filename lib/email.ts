@@ -366,6 +366,11 @@ export async function sendSystemTemplatedEmailByCode(args: {
     cc?: string | string[]
     data: TemplateData
     customSubject?: string
+    attachments?: Array<{
+        filename: string
+        content: Buffer | string
+        contentType?: string
+    }>
 }) {
     await ensureSystemEmailTemplates()
 
@@ -417,6 +422,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
         subject: replaceTemplateVariables(subjectSource, normalizedData),
         html: replaceTemplateVariables(htmlSource, normalizedData),
         text: textSource ? replaceTemplateVariables(textSource, normalizedData) : undefined,
+        attachments: args.attachments,
         logMeta: {
             templateId: "id" in template ? template.id : null,
             templateCode: "code" in template ? template.code : args.code,

@@ -327,3 +327,34 @@ export async function fetchDashboardInventory() {
         data: { jasum, kalEi, singapore, total: jasum + kalEi + singapore }
     };
 }
+
+export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters) {
+    try {
+        const periodStr = filters.period || "02.2026";
+        const isYearlyView = !periodStr.includes('.');
+
+        // Date filter
+        const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
+        const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
+
+        // Fetch all data
+        const allData = await db.select().from(salesRevenueSap).where(dateFilter);
+
+        // Calculate total revenue_in_loc_curr
+        const totalResult = await db.select({
+            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
+        }).from(salesRevenueSap).where(dateFilter);
+
+        const totalRevenue = Number(totalResult[0]?.total || 0);
+
+        return {
+            success: true,
+            data: allData,
+            total: totalRevenue,
+            count: allData.length
+        };
+    } catch (error) {
+        console.error("Failed to fetch all sales revenue data:", error);
+        return { success: false, error: "Failed to fetch sales revenue data" };
+    }
+}

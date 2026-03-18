@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm"
+import { inArray, eq } from "drizzle-orm"
 import { db } from "@/db"
 import { emailTemplates } from "@/db/schema"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
@@ -254,123 +254,24 @@ const revenueReportTemplate = createEmailShell({
     accentColor: "#0f172a",
     bodyHtml: `
       <p style="margin:0 0 16px;">Halo Team,</p>
-      <p style="margin:0 0 20px;">Berikut adalah rangkuman laporan <strong>Revenue VS SAP</strong> untuk periode <strong>{{period}}</strong>.</p>
-
-      <div style="margin-bottom: 24px;">
-        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Revenue Performance</h3>
-        <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#f8fafc;font-size:14px;line-height:1.5;">
-          <thead style="background:#f1f5f9;">
-            <tr>
-              <th style="padding:10px;border:1px solid #dbe2ea;text-align:left;">Category</th>
-              <th style="padding:10px;border:1px solid #dbe2ea;text-align:right;">Actual Revenue</th>
-              <th style="padding:10px;border:1px solid #dbe2ea;text-align:right;">Target Forecast</th>
-              <th style="padding:10px;border:1px solid #dbe2ea;text-align:center;">Achievement</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="padding:10px;border:1px solid #dbe2ea;"><strong>Consolidate</strong></td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{consolidateRevenue}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{consolidateForecast}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;"><strong>{{consolidatePct}}%</strong></td>
-            </tr>
-            <tr>
-              <td style="padding:10px;border:1px solid #dbe2ea;">Prime Product</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{primeProductRevenue}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{primeProductForecast}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{primeProductPct}}%</td>
-            </tr>
-            <tr>
-              <td style="padding:10px;border:1px solid #dbe2ea;">Service</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{serviceRevenue}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{serviceForecast}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{servicePct}}%</td>
-            </tr>
-            <tr>
-              <td style="padding:10px;border:1px solid #dbe2ea;">Product Accessories</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{paRevenue}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:right;">{{paForecast}}</td>
-              <td style="padding:10px;border:1px solid #dbe2ea;text-align:center;">{{paPct}}%</td>
-            </tr>
-          </tbody>
-        </table>
+      
+      <div style="margin: 0 0 24px; padding: 16px; background: #f8fafc; border-left: 4px solid #3b82f6; border-radius: 4px;">
+        <p style="margin: 0; font-style: italic; color: #1e293b;">{{customMessage}}</p>
       </div>
 
-      <div style="margin-bottom: 24px;">
-        <div style="display:flex;gap:20px;">
-          <div style="flex:1;">
-            <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Customer Performance</h3>
-            <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
-              <thead style="background:#f1f5f9;">
-                <tr>
-                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:left;">Customer</th>
-                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
-                  <th style="padding:8px;border:1px solid #cbd5e1;text-align:center;">%</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="padding:8px;border:1px solid #cbd5e1;">CK</td>
-                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{ckRevenue}}</td>
-                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">{{ckPct}}%</td>
-                </tr>
-                <tr>
-                  <td style="padding:8px;border:1px solid #cbd5e1;">SIS</td>
-                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{sisRevenue}}</td>
-                  <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;">{{sisPct}}%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="flex:1;">
-            <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Inventory Status</h3>
-            <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
-              <tbody>
-                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Jasum</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventoryJasum}}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Kal-Ei</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventoryKalEi}}</td></tr>
-                <tr><td style="padding:8px;border:1px solid #cbd5e1;background:#f8fafc;"><strong>Singapore</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;">{{inventorySingapore}}</td></tr>
-                <tr style="background:#f1f5f9;"><td style="padding:8px;border:1px solid #cbd5e1;"><strong>Total</strong></td><td style="padding:8px;border:1px solid #cbd5e1;text-align:right;"><strong>{{inventoryTotal}}</strong></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <p style="margin:0 0 20px; line-height: 1.6; color: #475569;">
+        Laporan lengkap <strong>Revenue vs Forecast</strong> untuk periode <strong>{{period}}</strong> telah di-generate dan dilampirkan dalam format PDF pada email ini.
+      </p>
 
-      <div style="margin-bottom: 24px;">
-        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Salesman Performance</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;line-height:1.5;">
-          <thead style="background:#f1f5f9;">
-            <tr>
-              <th style="padding:10px;border:1px solid #cbd5e1;text-align:left;">Salesman</th>
-              <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
-              <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Forecast</th>
-              <th style="padding:10px;border:1px solid #cbd5e1;text-align:center;">Achievement</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{salesmanTableRows}}
-          </tbody>
-        </table>
-      </div>
+      <p style="margin:0 0 24px; line-height: 1.6; color: #475569;">
+        Silakan buka lampiran PDF untuk melihat rincian performa per Salesman, Inventory, dan Customer Achievement.
+      </p>
 
-      <div style="margin-bottom: 24px;">
-        <h3 style="margin:0 0 12px;font-size:16px;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:5px;">Top 10 Materials (Trading)</h3>
-        <div style="width:100%;overflow:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;line-height:1.5;">
-            <thead style="background:#f1f5f9;">
-              <tr>
-                <th style="padding:10px;border:1px solid #cbd5e1;text-align:left;">Material Description</th>
-                <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Qty</th>
-                <th style="padding:10px;border:1px solid #cbd5e1;text-align:right;">Revenue</th>
-              </tr>
-            </thead>
-            <tbody>{{materialsTableRows}}</tbody>
-          </table>
-        </div>
-      </div>
-
-      <p style="margin:24px 0 12px;font-size:14px;color:#475569;">Untuk melihat laporan interaktif dan grafik lengkap, silahkan akses dashboard di One Chitra.</p>
-      ${createActionButton("Buka Dashboard Revenue", "{{actionUrl}}", "#0f172a")}
+      ${createActionButton("Buka Dashboard Revenue", "{{actionUrl}}?period={{period}}", "#0f172a")}
+      
+      <p style="margin:24px 0 0; font-size:12px; color:#94a3b8; text-align:center;">
+        Vision: "To be the trusted leader in mining tire solution"
+      </p>
     `,
 })
 
@@ -907,38 +808,32 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplateDefinition[] = [
         type: "notification",
         subject: "[Report] Sales Revenue vs SAP - {{period}}",
         variables: [
-            "period",
+            "period", "customMessage",
             "consolidateRevenue", "consolidateForecast", "consolidatePct",
             "primeProductRevenue", "primeProductForecast", "primeProductPct",
             "serviceRevenue", "serviceForecast", "servicePct",
             "paRevenue", "paForecast", "paPct",
             "ckRevenue", "ckPct", "sisRevenue", "sisPct",
-            "inventoryJasum", "inventoryKalEi", "inventorySingapore", "inventoryTotal",
-            "salesmanTableRows",
-            "materialsTableRows", "materialsTextRows",
+            "inventoryTotal",
             "actionUrl"
         ],
-        recipientRoles: ["admin", "manager"],
+        recipientRoles: [],
         recipientUserIds: [],
         ccEmails: [],
         defaultActive: true,
         htmlContent: revenueReportTemplate,
         textContent: createTextBlock("Sales Revenue vs SAP", [
-            "Periode: {{period}}",
+            "Halo Team,",
             "",
-            "Revenue Performance:",
-            "- Consolidate: {{consolidateRevenue}} / {{consolidateForecast}} ({{consolidatePct}}%)",
-            "- Prime Product: {{primeProductRevenue}} / {{primeProductForecast}} ({{primeProductPct}}%)",
-            "- Service: {{serviceRevenue}} / {{serviceForecast}} ({{servicePct}}%)",
-            "- Product Accessories: {{paRevenue}} / {{paForecast}} ({{paPct}}%)",
+            "{{customMessage}}",
             "",
-            "Inventory Status:",
-            "- Jasum: {{inventoryJasum}}",
-            "- Kal-Ei: {{inventoryKalEi}}",
-            "- Singapore: {{inventorySingapore}}",
-            "- Total: {{inventoryTotal}}",
+            "Laporan lengkap Revenue vs Forecast untuk periode {{period}} telah di-generate dan dilampirkan dalam format PDF pada email ini.",
             "",
-            "Buka Dashboard: {{actionUrl}}"
+            "Silakan buka lampiran PDF untuk melihat rincian performa per Salesman, Inventory, dan Customer Achievement.",
+            "",
+            "Buka Dashboard: {{actionUrl}}?period={{period}}",
+            "",
+            "One Chitra Vision: \"To be the trusted leader in mining tire solution\"",
         ]),
     },
 ]
@@ -959,23 +854,44 @@ export async function ensureSystemEmailTemplates() {
     const existingCodes = new Set(existing.map((entry) => entry.code).filter(Boolean))
     const missingTemplates = SYSTEM_EMAIL_TEMPLATES.filter((entry) => !existingCodes.has(entry.code))
 
-    if (missingTemplates.length === 0) {
-        return
+    // Insert missing templates
+    if (missingTemplates.length > 0) {
+        await db.insert(emailTemplates).values(
+            missingTemplates.map((template) => ({
+                name: template.name,
+                code: template.code,
+                type: template.type,
+                subject: template.subject,
+                htmlContent: template.htmlContent,
+                textContent: template.textContent,
+                variables: template.variables,
+                recipientRoles: template.recipientRoles,
+                recipientUserIds: template.recipientUserIds,
+                ccEmails: template.ccEmails,
+                isActive: template.defaultActive,
+            })),
+        )
     }
 
-    await db.insert(emailTemplates).values(
-        missingTemplates.map((template) => ({
-            name: template.name,
-            code: template.code,
-            type: template.type,
-            subject: template.subject,
-            htmlContent: template.htmlContent,
-            textContent: template.textContent,
-            variables: template.variables,
-            recipientRoles: template.recipientRoles,
-            recipientUserIds: template.recipientUserIds,
-            ccEmails: template.ccEmails,
-            isActive: template.defaultActive,
-        })),
-    )
+    // Update existing system templates to match current definitions (content, variables, etc.)
+    // Only update if they match one of our system codes to avoid touching user custom templates
+    for (const template of SYSTEM_EMAIL_TEMPLATES) {
+        if (existingCodes.has(template.code)) {
+            await db.update(emailTemplates)
+                .set({
+                    name: template.name,
+                    subject: template.subject,
+                    htmlContent: template.htmlContent,
+                    textContent: template.textContent,
+                    variables: template.variables,
+                    recipientRoles: template.recipientRoles,
+                    recipientUserIds: template.recipientUserIds,
+                    ccEmails: template.ccEmails,
+                    updatedAt: new Date(),
+                    // Optionally force active if it's a critical system template
+                    // isActive: template.defaultActive 
+                })
+                .where(eq(emailTemplates.code, template.code))
+        }
+    }
 }

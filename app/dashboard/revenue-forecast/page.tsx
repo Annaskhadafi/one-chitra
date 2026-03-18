@@ -36,7 +36,7 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
         materials: [],
         revTypes: [],
         matGroups: [],
-        ytdChart: []
+        ytdChart: [] as Array<{ name: string; revenue: number; forecast: number }>
     }
 
     const data = response.success && response.data ? response.data : defaultData

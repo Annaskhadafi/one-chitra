@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 import { fetchDashboardRevenueForecast, fetchDashboardInventory } from "@/app/actions/dashboard-revenue-logic"
-import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { getRevenueReportConfig } from "@/app/actions/dashboard-revenue"
+import { sendSystemTemplatedEmailByCode, resolveUserEmailsFromRolesAndIds } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatCurrency } from "@/lib/utils"
-import { toCanonicalAppUrl } from "@/lib/app-url"
+import { generateRevenueReportPdf } from "@/lib/revenue-report-pdf"
 
 /**
  * GET /api/cron/revenue-report
@@ -29,60 +30,46 @@ export async function GET(request: Request) {
         const year = now.getFullYear()
         const period = `${month}.${year}`
 
-        // 3. Fetch Data
-        const [revenueRes, inventoryRes] = await Promise.all([
+        // 3. Fetch Data & Config
+        const [revenueRes, inventoryRes, configRes] = await Promise.all([
             fetchDashboardRevenueForecast({ period }),
-            fetchDashboardInventory()
+            fetchDashboardInventory(),
+            getRevenueReportConfig()
         ])
 
-        if (!revenueRes.success || !inventoryRes.success) {
-            throw new Error("Failed to fetch dashboard data")
+        if (!revenueRes.success || !inventoryRes.success || !configRes.success) {
+            throw new Error("Failed to fetch dashboard data or configuration")
         }
 
         const rev = revenueRes.data!
         const inv = inventoryRes.data!
+        const config = configRes.data!
 
-        // 4. Format achievement percentages
+        // 4. Resolve Recipients
+        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, config.recipientUserIds)
+        
+        if (recipients.length === 0) {
+            console.log("[CRON] No recipients configured for revenue report. Skipping.")
+            return NextResponse.json({ success: true, message: "No recipients configured" })
+        }
+
+        // 5. Generate PDF
+        const pdfContent = await generateRevenueReportPdf({
+            ...rev,
+            inventory: inv
+        })
+
+        // 6. Format achievement percentages for email body (legacy support)
         const getPct = (actual: number, target: number) => 
             target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
-
-        // 5. Generate Salesman Table Rows
-        const salesmanData = [
-            { name: "MA OC", rev: rev.targets.ma_oc.revenue, target: rev.targets.ma_oc.forecast },
-            { name: "MA WS", rev: rev.targets.ma_ws.revenue, target: rev.targets.ma_ws.forecast },
-            { name: "MA FQ", rev: rev.targets.ma_fq.revenue, target: rev.targets.ma_fq.forecast },
-            { name: "MA BR", rev: rev.targets.ma_br.revenue, target: rev.targets.ma_br.forecast },
-            { name: "MA AG", rev: rev.targets.ma_ag.revenue, target: rev.targets.ma_ag.forecast },
-            { name: "MA MC", rev: rev.targets.ma_mc.revenue, target: rev.targets.ma_mc.forecast },
-        ]
-
-        const salesmanTableRows = salesmanData.map(s => `
-            <tr>
-              <td style="padding:10px;border:1px solid #cbd5e1;">${s.name}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.rev)}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.target)}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:center;">${getPct(s.rev, s.target)}%</td>
-            </tr>
-        `).join("")
-
-        // 6. Generate Materials Table Rows (Top 10)
-        const materialsTableRows = rev.materials.slice(0, 10).map((m, i) => `
-            <tr>
-              <td style="padding:10px;border:1px solid #cbd5e1;">${m.desc}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${m.qty}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(m.revenue)}</td>
-            </tr>
-        `).join("")
-
-        const materialsTextRows = rev.materials.slice(0, 10)
-            .map(m => `- ${m.desc}: ${m.qty} pcs (${formatCurrency(m.revenue)})`)
-            .join("\n")
 
         // 7. Send Email
         const emailResult = await sendSystemTemplatedEmailByCode({
             code: SYSTEM_EMAIL_TEMPLATE_CODES.revenueReport,
+            to: recipients,
             data: {
                 period,
+                customMessage: config.customMessage, // User-defined message
                 consolidateRevenue: formatCurrency(rev.targets.consolidate.revenue),
                 consolidateForecast: formatCurrency(rev.targets.consolidate.forecast),
                 consolidatePct: getPct(rev.targets.consolidate.revenue, rev.targets.consolidate.forecast),
@@ -109,15 +96,20 @@ export async function GET(request: Request) {
                 inventorySingapore: formatCurrency(inv.singapore),
                 inventoryTotal: formatCurrency(inv.total),
 
-                salesmanTableRows,
-                materialsTableRows,
-                materialsTextRows,
                 actionUrl: "/dashboard/revenue-forecast"
-            }
+            },
+            // Add PDF Attachment
+            attachments: [
+                {
+                    filename: `Revenue_Report_${period}.pdf`,
+                    content: pdfContent,
+                    contentType: "application/pdf"
+                }
+            ]
         })
 
         if (emailResult.success) {
-            console.log("[CRON] Revenue report email sent successfully")
+            console.log("[CRON] Revenue report email sent successfully to", recipients.length, "users")
             return NextResponse.json({ success: true, message: "Report sent" })
         } else {
             console.error("[CRON] Failed to send email:", emailResult.error)

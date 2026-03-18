@@ -1,40 +1,21 @@
 "use server"
 import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
+import { settings } from "@/db/schema/settings"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { eq } from "drizzle-orm"
 import type { DashboardRevenueFilters } from "./dashboard-revenue-logic"
 import { 
     fetchDashboardRevenueForecast, 
-    fetchDashboardInventory
+    fetchDashboardInventory,
+    fetchAllSalesRevenueData
 } from "./dashboard-revenue-logic"
 
 
 export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
     try {
         await getAuthenticatedSession("revenue-forecast", "view")
-        const periodStr = filters.period || "02.2026";
-        const isYearlyView = !periodStr.includes('.');
-
-        // Date filter
-        const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
-        const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
-
-        // Fetch all data
-        const allData = await db.select().from(salesRevenueSap).where(dateFilter);
-
-        // Calculate total revenue_in_loc_curr
-        const totalResult = await db.select({
-            total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(dateFilter);
-
-        const totalRevenue = Number(totalResult[0]?.total || 0);
-
-        return {
-            success: true,
-            data: allData,
-            total: totalRevenue,
-            count: allData.length
-        };
+        return await fetchAllSalesRevenueData(filters)
     } catch (error) {
         console.error("Failed to fetch all sales revenue data:", error);
         return { success: false, error: "Failed to fetch sales revenue data" };
@@ -67,62 +48,54 @@ import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatCurrency } from "@/lib/utils"
 
+import { generateRevenueReportPdf } from "@/lib/revenue-report-pdf"
+import { resolveUserEmailsFromRolesAndIds } from "@/lib/email"
+
 export async function sendManualRevenueReport(period: string) {
     try {
+        console.log(`[RevenueReport] Starting manual report for period: ${period}`)
         await getAuthenticatedSession("revenue-forecast", "view")
 
-        const [revenueRes, inventoryRes] = await Promise.all([
+        const [revenueRes, inventoryRes, configRes] = await Promise.all([
             fetchDashboardRevenueForecast({ period }),
-            fetchDashboardInventory()
+            fetchDashboardInventory(),
+            getRevenueReportConfig()
         ])
 
-        if (!revenueRes.success || !inventoryRes.success) {
-            throw new Error("Failed to fetch data for report")
+        if (!revenueRes.success || !inventoryRes.success || !configRes.success) {
+            console.error("[RevenueReport] Failed to fetch data:", { 
+                rev: revenueRes.success, 
+                inv: inventoryRes.success, 
+                conf: configRes.success 
+            })
+            throw new Error("Failed to fetch dashboard data or configuration")
         }
 
         const rev = revenueRes.data!
         const inv = inventoryRes.data!
+        const config = configRes.data!
 
-        // 4. Format achievement percentages
-        const getPct = (actual: number, target: number) => 
-            target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
+        console.log(`[RevenueReport] Resolving recipients for roles: ${config.recipientRoles.join(', ')}`)
+        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, config.recipientUserIds)
+        
+        if (recipients.length === 0) {
+            console.warn("[RevenueReport] No recipients resolved.")
+            return { success: false, error: "No recipients configured for revenue report." }
+        }
 
-        // 5. Generate Salesman Table Rows
-        const salesmanData = [
-            { name: "MA OC", rev: rev.targets.ma_oc.revenue, target: rev.targets.ma_oc.forecast },
-            { name: "MA WS", rev: rev.targets.ma_ws.revenue, target: rev.targets.ma_ws.forecast },
-            { name: "MA FQ", rev: rev.targets.ma_fq.revenue, target: rev.targets.ma_fq.forecast },
-            { name: "MA BR", rev: rev.targets.ma_br.revenue, target: rev.targets.ma_br.forecast },
-            { name: "MA AG", rev: rev.targets.ma_ag.revenue, target: rev.targets.ma_ag.forecast },
-            { name: "MA MC", rev: rev.targets.ma_mc.revenue, target: rev.targets.ma_mc.forecast },
-        ]
+        console.log(`[RevenueReport] Generating PDF for ${recipients.length} recipients...`)
+        const pdfContent = await generateRevenueReportPdf({
+            ...rev,
+            inventory: inv
+        })
 
-        const salesmanTableRows = salesmanData.map(s => `
-            <tr>
-              <td style="padding:10px;border:1px solid #cbd5e1;">${s.name}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.rev)}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(s.target)}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:center;">${getPct(s.rev, s.target)}%</td>
-            </tr>
-        `).join("")
-
-        // 6. Generate Materials Table Rows (Top 10)
-        const materialsTableRows = rev.materials.slice(0, 10).map((m, i) => `
-            <tr>
-              <td style="padding:10px;border:1px solid #cbd5e1;">${m.desc}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${m.qty}</td>
-              <td style="padding:10px;border:1px solid #cbd5e1;text-align:right;">${formatCurrency(m.revenue)}</td>
-            </tr>
-        `).join("")
-
-        const materialsTextRows = rev.materials.slice(0, 10)
-            .map(m => `- ${m.desc}: ${m.qty} pcs (${formatCurrency(m.revenue)})`)
-            .join("\n")
-
-        return await sendSystemTemplatedEmailByCode({
+        console.log(`[RevenueReport] Sending email via system template...`)
+        const result = await sendSystemTemplatedEmailByCode({
             code: SYSTEM_EMAIL_TEMPLATE_CODES.revenueReport,
+            to: recipients,
             data: {
                 period,
+                customMessage: config.customMessage,
                 consolidateRevenue: formatCurrency(rev.targets.consolidate.revenue),
                 consolidateForecast: formatCurrency(rev.targets.consolidate.forecast),
                 consolidatePct: getPct(rev.targets.consolidate.revenue, rev.targets.consolidate.forecast),
@@ -144,19 +117,93 @@ export async function sendManualRevenueReport(period: string) {
                 sisRevenue: formatCurrency(rev.targets.sis.revenue),
                 sisPct: getPct(rev.targets.sis.revenue, rev.targets.sis.forecast),
 
-                inventoryJasum: formatCurrency(inv.jasum),
-                inventoryKalEi: formatCurrency(inv.kalEi),
-                inventorySingapore: formatCurrency(inv.singapore),
                 inventoryTotal: formatCurrency(inv.total),
-
-                salesmanTableRows,
-                materialsTableRows,
-                materialsTextRows,
                 actionUrl: "/dashboard/revenue-forecast"
-            }
+            },
+            attachments: [
+                {
+                    filename: `Revenue_Report_${period}.pdf`,
+                    content: pdfContent,
+                    contentType: "application/pdf"
+                }
+            ]
         })
+
+        if (result.success) console.log("[RevenueReport] Manual report sent successfully")
+        else console.error("[RevenueReport] Failed to send email:", result.error)
+
+        return result
     } catch (error) {
         console.error("Failed to send manual revenue report:", error)
         return { success: false, error: error instanceof Error ? error.message : "Failed to send report" }
+    }
+}
+
+const getPct = (actual: number, target: number) => 
+    target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
+
+
+export type RevenueReportConfig = {
+    recipientRoles: string[]
+    recipientUserIds: string[]
+    customMessage: string
+}
+
+export async function getRevenueReportConfig() {
+    try {
+        await getAuthenticatedSession("revenue-forecast", "view")
+        const result = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
+        
+        if (result.length === 0) {
+            return {
+                success: true,
+                data: {
+                    recipientRoles: ["admin"],
+                    recipientUserIds: [],
+                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+                } as RevenueReportConfig
+            }
+        }
+
+        const rawData = JSON.parse(result[0].value)
+        
+        // Handle migration from old 'recipients' field if it exists
+        const data: RevenueReportConfig = {
+            recipientRoles: rawData.recipientRoles || [],
+            recipientUserIds: rawData.recipientUserIds || (rawData.recipients || []),
+            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+        }
+
+        return {
+            success: true,
+            data
+        }
+    } catch (error) {
+        console.error("Failed to fetch revenue report config:", error)
+        return { success: false, error: "Failed to fetch configuration" }
+    }
+}
+
+export async function saveRevenueReportConfig(config: RevenueReportConfig) {
+    try {
+        await getAuthenticatedSession("revenue-forecast", "edit")
+        
+        const value = JSON.stringify(config)
+        
+        const existing = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
+        
+        if (existing.length > 0) {
+            await db.update(settings)
+                .set({ value, updatedAt: new Date() })
+                .where(eq(settings.key, "revenue_report_config"))
+        } else {
+            await db.insert(settings)
+                .values({ key: "revenue_report_config", value })
+        }
+
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to save revenue report config:", error)
+        return { success: false, error: "Failed to save configuration" }
     }
 }

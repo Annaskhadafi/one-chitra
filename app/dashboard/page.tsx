@@ -26,15 +26,12 @@ export default async function DashboardPage({
     getDashboardRevenueForecast({ period, range: selectedRange }),
   ])
 
-  const revenueVsForecastYtd =
-    revenueVsForecastResponse.success && revenueVsForecastResponse.data
-      ? revenueVsForecastResponse.data.ytdChart
-      : []
+    const dashboardData = (revenueVsForecastResponse as any).success 
+        ? (revenueVsForecastResponse as any).data 
+        : null
 
-  const topCustomersLocCurr =
-    revenueVsForecastResponse.success && revenueVsForecastResponse.data
-      ? revenueVsForecastResponse.data.topCustomersLocCurr ?? []
-      : []
+    const revenueVsForecastYtd = dashboardData?.ytdChart ?? []
+    const topCustomersLocCurr = dashboardData?.topCustomersLocCurr ?? []
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-4 px-4 py-4 lg:px-6 lg:py-6">

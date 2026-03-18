@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Settings, FileText, Activity, Bell } from "lucide-react"
 import { SmtpSettingsForm } from "./smtp-settings-form"
 import { TemplateList } from "./template-list"
+import { RevenueReportSettings } from "./revenue-report-settings"
 import { EmailLogsTable } from "./email-logs"
 import { NotificationRules } from "./notification-rules"
 import type { smtpSettings, emailTemplates, emailLogs } from "@/db/schema/email"
@@ -78,10 +79,14 @@ export function EmailSettingsClient({ smtpData, templates, logs, rules, recipien
                 </Suspense>
             </TabsContent>
 
-            <TabsContent value="templates">
+            <TabsContent value="templates" className="space-y-6">
                 <Suspense fallback={<div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>}>
                     <TemplateList
                         initialTemplates={templates}
+                        recipientUsers={recipientUsers}
+                        recipientRoles={recipientRoles}
+                    />
+                    <RevenueReportSettings
                         recipientUsers={recipientUsers}
                         recipientRoles={recipientRoles}
                     />

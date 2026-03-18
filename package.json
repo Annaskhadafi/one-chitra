@@ -125,6 +125,7 @@
     "nodemailer": "^8.0.1",
     "papaparse": "^5.5.3",
     "pg": "^8.16.3",
+    "puppeteer": "^24.39.1",
     "react": "19.1.0",
     "react-day-picker": "^9.9.0",
     "react-dom": "19.1.0",

@@ -31,7 +31,7 @@ interface RevenueClientProps {
         materials: Array<{ desc: string; revenue: number; qty: number }>
         revTypes: Array<{ type: string; total: number }>
         matGroups: Array<{ desc: string; revenue: number }>
-        ytdChart: Array<{ name: string; revenue: number }>
+        ytdChart: Array<{ name: string; revenue: number; forecast: number }>
     }
     selectedPeriod: string
     inventoryData?: { jasum: number; kalEi: number; singapore: number; total: number } | null
@@ -330,31 +330,12 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
 }
 
 import { toast } from "sonner"
-import { Mail } from "lucide-react"
-import { sendManualRevenueReport } from "@/app/actions/dashboard-revenue"
 
 export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
     const router = useRouter()
     const dashboardRef = useRef<HTMLDivElement>(null)
     const [isExportingJpg, setIsExportingJpg] = useState(false)
-    const [isSendingEmail, setIsSendingEmail] = useState(false)
     const { targets, materials, revTypes, matGroups, ytdChart } = initialData
-
-    const handleEmailReport = async () => {
-        try {
-            setIsSendingEmail(true)
-            const result = await sendManualRevenueReport(selectedPeriod)
-            if (result.success) {
-                toast.success("Revenue report has been sent to administrators.")
-            } else {
-                toast.error(result.error || "Failed to send report.")
-            }
-        } catch (error) {
-            toast.error("An unexpected error occurred.")
-        } finally {
-            setIsSendingEmail(false)
-        }
-    }
 
     const handleExportJPG = async () => {
         if (!dashboardRef.current) return
@@ -423,16 +404,6 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                     </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        disabled={isSendingEmail}
-                        className="h-8 text-xs font-bold gap-2 border-primary/20 hover:bg-primary/5 text-primary export-button-hide"
-                        onClick={handleEmailReport}
-                    >
-                        <Mail className="w-3.5 h-3.5" />
-                        {isSendingEmail ? "Sending..." : "Email Report"}
-                    </Button>
                     <Button 
                         variant="outline" 
                         size="sm" 
