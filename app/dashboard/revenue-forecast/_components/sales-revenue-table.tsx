@@ -239,7 +239,7 @@ export function SalesRevenueTable({ data, total, count, period, defaultExpanded 
     }
 
     return (
-        <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="bg-card border rounded-xl overflow-hidden print:hidden">
             {/* Header with collapse button */}
             <div className="px-4 py-3 border-b bg-blue-600 flex justify-between items-center print:hidden">
                 <div className="flex items-center gap-3">
