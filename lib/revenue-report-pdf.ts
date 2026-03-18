@@ -6,12 +6,13 @@ import puppeteer from 'puppeteer'
  */
 export async function generateRevenueReportPdf(data: { period: string }) {
     const { period } = data
-    const token = process.env.CRON_SECRET || ""
+    // Use a shared fallback for development if CRON_SECRET is missing
+    const token = process.env.CRON_SECRET || "one-chitra-internal-secret-2026"
     
     // In production (Dokploy/Docker), localhost:3000 might not work depending on networking.
     // We prefer an explicit APP_URL.
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-    const snapshotUrl = `${baseUrl}/report/revenue-snapshot?period=${period}&token=${token}&range=this-month`
+    const snapshotUrl = `${baseUrl}/report/revenue-snapshot?period=${period}&token=${token}`
 
     console.log(`[Puppeteer] Launching browser to capture: ${snapshotUrl}`)
 
