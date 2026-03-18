@@ -70,6 +70,7 @@ interface SalesRevenueTableProps {
     total: number
     count: number
     period: string
+    defaultExpanded?: boolean
 }
 
 const fmt = (v: number | null) => {
@@ -83,8 +84,8 @@ const formatDateCell = (value: Date | string | null) => {
     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("id-ID")
 }
 
-export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTableProps) {
-    const [isExpanded, setIsExpanded] = useState(false)
+export function SalesRevenueTable({ data, total, count, period, defaultExpanded = false }: SalesRevenueTableProps) {
+    const [isExpanded, setIsExpanded] = useState(defaultExpanded)
     const [selectedCustomerNames, setSelectedCustomerNames] = useState<string[]>([])
     const [selectedSalesmen, setSelectedSalesmen] = useState<string[]>([])
     const [searchQuery, setSearchQuery] = useState("")
@@ -343,7 +344,7 @@ export function SalesRevenueTable({ data, total, count, period }: SalesRevenueTa
                         </div>
                     </div>
 
-                    <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-accent">
+                    <div className="overflow-auto max-h-[600px] print:max-h-none scrollbar-thin scrollbar-thumb-accent">
                     <table className="w-full text-xs">
                         <thead className="bg-blue-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
                             <tr>

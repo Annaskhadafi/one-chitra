@@ -35,6 +35,7 @@ interface RevenueClientProps {
     }
     selectedPeriod: string
     inventoryData?: { jasum: number; kalEi: number; singapore: number; total: number } | null
+    isExporting?: boolean
 }
 
 const fmt = (v: number) => {
@@ -300,6 +301,7 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
                                 dataKey="value"
                                 nameKey="name"
                                 label={false}
+                                isAnimationActive={false}
                             >
                                 {chartData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -331,7 +333,7 @@ function InventoryPieChart({ data }: { data: { jasum: number; kalEi: number; sin
 
 import { toast } from "sonner"
 
-export function RevenueClient({ initialData, selectedPeriod, inventoryData }: RevenueClientProps) {
+export function RevenueClient({ initialData, selectedPeriod, inventoryData, isExporting = false }: RevenueClientProps) {
     const router = useRouter()
     const dashboardRef = useRef<HTMLDivElement>(null)
     const [isExportingJpg, setIsExportingJpg] = useState(false)
@@ -512,6 +514,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                                         paddingAngle={2} 
                                         label={({ name }) => (name || "").substring(0, 20)}
                                         labelLine={true}
+                                        isAnimationActive={!isExporting}
                                     >
                                         {materials.slice(0, 10).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                                     </Pie>
@@ -594,7 +597,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                         <h3 className="text-xs font-bold uppercase tracking-widest text-white">Rank. Material Sell Out</h3>
                         <span className="text-[10px] text-white/80">1 - {materials.length} / {materials.length}</span>
                     </div>
-                    <div className="overflow-auto max-h-[450px] scrollbar-thin scrollbar-thumb-accent">
+                    <div className="overflow-auto max-h-[450px] print:max-h-none scrollbar-thin scrollbar-thumb-accent">
                         <table className="w-full text-xs">
                             <thead className="bg-blue-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
                                 <tr>
@@ -641,9 +644,11 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData }: Re
                                 wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
                             />
                             <Bar dataKey="forecast" name="Forecast" fill="#fcd34d" radius={[6, 6, 0, 0]}
+                                isAnimationActive={!isExporting}
                                 label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
                             />
                             <Bar dataKey="revenue" name="Revenue" fill="#a5b4fc" radius={[6, 6, 0, 0]}
+                                isAnimationActive={!isExporting}
                                 label={{ position: 'top', formatter: (v: number) => fmt(v), fontSize: 9, fill: '#64748b' }}
                             />
                         </BarChart>

@@ -67,12 +67,14 @@ export default async function RevenueSnapshotPage({
                     initialData={data as any} 
                     selectedPeriod={period} 
                     inventoryData={inventoryResponse.success && inventoryResponse.data ? inventoryResponse.data : null} 
+                    isExporting={true}
                 />
                 <SalesRevenueTable 
                     data={salesRevenueData as any} 
                     total={salesRevenueTotal} 
                     count={salesRevenueCount}
                     period={period}
+                    defaultExpanded={true}
                 />
             </div>
             
@@ -82,8 +84,9 @@ export default async function RevenueSnapshotPage({
             
             <style dangerouslySetInnerHTML={{ __html: `
                 .export-button-hide { display: none !important; }
-                body { background-color: white !important; }
+                body { background-color: white !important; overflow-x: hidden !important; width: 1280px !important; margin: 0 !important; padding: 0 !important; }
                 .p-4 { padding: 1rem !important; }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             ` }} />
         </div>
     )

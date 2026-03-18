@@ -32,23 +32,36 @@ export async function generateRevenueReportPdf(data: { period: string }) {
             deviceScaleFactor: 2, // High resolution
         })
 
-        // Navigate and wait for network to be idle (charts finished loading)
+        // 1. Navigate and wait for network to be idle (charts finished loading)
         await page.goto(snapshotUrl, {
             waitUntil: 'networkidle0',
             timeout: 60000 // 60s timeout
         })
 
-        // Wait a bit more for Recharts animations if any
-        await new Promise(r => setTimeout(r, 2000))
+        // 2. Wait a bit more for Recharts animations if any
+        await new Promise(r => setTimeout(r, 3000))
+
+        // 3. Calculate the actual content height to avoid splitting into A4 pages
+        const height = await page.evaluate(() => {
+            const body = document.body;
+            const html = document.documentElement;
+            return Math.max(
+                body.scrollHeight, body.offsetHeight,
+                html.clientHeight, html.scrollHeight, html.offsetHeight
+            );
+        });
+
+        console.log(`[Puppeteer] Capturing PDF with height: ${height}px`)
 
         const pdfBuffer = await page.pdf({
-            format: 'A4',
+            width: '1280px',
+            height: `${height}px`,
             printBackground: true,
             margin: {
-                top: '10mm',
-                right: '10mm',
-                bottom: '10mm',
-                left: '10mm'
+                top: '0mm',
+                right: '0mm',
+                bottom: '0mm',
+                left: '0mm'
             }
         })
 
