@@ -65,6 +65,7 @@ import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
+import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { BarChart3 } from "lucide-react"
 
 import {
@@ -122,6 +123,15 @@ interface DeliveryWithRelations {
 interface DeliveryTableProps {
     data: DeliveryWithRelations[]
     itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
+}
+
+const DELIVERY_TRANSITIONS = {
+    scheduled: ["ready", "partial", "in_transit", "delivered", "cancelled"],
+    ready: ["partial", "in_transit", "delivered", "cancelled"],
+    partial: ["in_transit", "delivered", "cancelled"],
+    in_transit: ["delivered", "cancelled"],
+    delivered: [],
+    cancelled: ["scheduled"],
 }
 
 const EMPTY_DELIVERIES: DeliveryWithRelations[] = []
@@ -224,7 +234,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         pageIndex: 0,
         pageSize: DEFAULT_PAGE_SIZE,
     })
-    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items" | "calendar">("list")
+    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items" | "calendar" | "kanban">("list")
     const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
     const [calendarStatusFilter, setCalendarStatusFilter] = useState<string>("all")
@@ -257,6 +267,8 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         staleTime: 0,               // Selalu anggap data stale setelah fetched
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
+        refetchInterval: 15_000,
+        refetchIntervalInBackground: true,
     })
 
     React.useEffect(() => {
@@ -478,6 +490,26 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         setSuccessMessage(`Status pengiriman berhasil diubah menjadi ${statusLabels[status] || status}`)
         setShowSuccessDialog(true)
     }, [updateStatusMutation])
+
+    const handleKanbanStatusChange = useCallback(async (id: number, status: string) => {
+        const result = await updateStatusMutation.mutateAsync({ ids: [id], status })
+        if (!result?.success) {
+            return { success: false, error: "Gagal memperbarui status delivery" }
+        }
+        return { success: true }
+    }, [updateStatusMutation])
+
+    const handleDeliveryEmail = useCallback((delivery: DeliveryWithRelations) => {
+        const email = delivery.salesOrder?.customer?.email
+        if (!email) {
+            toast.error("Email customer tidak tersedia")
+            return
+        }
+        const deliveryNumber = delivery.deliveryNumber || `DO-${delivery.id}`
+        const subject = encodeURIComponent(`Delivery Order ${deliveryNumber}`)
+        const body = encodeURIComponent(`Halo ${delivery.salesOrder?.customer?.name || "Customer"},\n\nDelivery Order ${deliveryNumber} sedang diproses.\n\nTerima kasih.`)
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
+    }, [])
 
     const handleUpdateDeliveryDate = useCallback(async (id: number, date: Date | undefined) => {
         updateDateMutation.mutate({ id, date: date || null }, {
@@ -1617,6 +1649,19 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                     <PackageSearch className="h-4 w-4" />
                     Delivery Items
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setViewMode("kanban")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
+                        viewMode === "kanban"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <BarChart3 className="h-4 w-4" />
+                    Kanban
+                </button>
             </div>
 
             {/* Delivery Items View */}
@@ -2046,6 +2091,45 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                             ))}
                         </CardContent>
                     </Card>
+                </div>
+            )}
+
+            {viewMode === "kanban" && (
+                <div className="pt-4">
+                    <ProcessKanbanBoard
+                        records={filteredData}
+                        statuses={[
+                            { key: "scheduled", label: "Scheduled", variant: "secondary" },
+                            { key: "ready", label: "Ready", variant: "warning" },
+                            { key: "partial", label: "Partial", variant: "outline" },
+                            { key: "in_transit", label: "In Transit", variant: "outline" },
+                            { key: "delivered", label: "Delivered", variant: "success" },
+                            { key: "cancelled", label: "Cancelled", variant: "destructive" },
+                        ]}
+                        transitionMap={DELIVERY_TRANSITIONS}
+                        mapRecord={(delivery) => ({
+                            id: delivery.id,
+                            status: delivery.status,
+                            documentNumber: delivery.deliveryNumber || `DO-${delivery.id}`,
+                            customerName: delivery.salesOrder?.customer?.name || "-",
+                            totalAmount: delivery.items.reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0),
+                            dueDate: delivery.scheduledDate,
+                            assignedPerson: delivery.driverName || delivery.createdByUser?.name || null,
+                            priority: delivery.deliveryType || null,
+                            raw: delivery,
+                        })}
+                        canEdit={canEdit}
+                        onStatusChange={handleKanbanStatusChange}
+                        onRefresh={() => { void refetch() }}
+                        onQuickPrint={(delivery) => {
+                            setPdfDelivery(delivery)
+                            setIsPdfOpen(true)
+                        }}
+                        onQuickCancel={(delivery) => {
+                            void handleKanbanStatusChange(delivery.id, "cancelled")
+                        }}
+                        onQuickEmail={handleDeliveryEmail}
+                    />
                 </div>
             )}
 

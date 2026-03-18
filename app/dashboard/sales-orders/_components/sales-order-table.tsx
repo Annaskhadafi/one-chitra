@@ -37,6 +37,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -59,6 +60,7 @@ import { ProformaInvoiceDialog } from "./proforma-invoice-dialog"
 import type { SalesOrderListItem, ProformaInvoiceOrder } from "./types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
+import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -92,6 +94,13 @@ const STATUS_COLORS: Record<string, string> = {
     confirmed: "hsl(43, 96%, 56%)",
     completed: "hsl(160, 84%, 39%)",
     cancelled: "hsl(346, 77%, 49%)",
+}
+
+const SALES_ORDER_TRANSITIONS = {
+    draft: ["confirmed", "cancelled"],
+    confirmed: ["completed", "cancelled", "draft"],
+    completed: [],
+    cancelled: ["draft"],
 }
 
 function formatCurrency(value: number) {
@@ -128,6 +137,8 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         staleTime: 0,               // Selalu anggap data stale setelah fetched
         refetchOnMount: true,       // Selalu refetch saat komponen mount
         refetchOnWindowFocus: true, // Refetch saat window kembali aktif
+        refetchInterval: 15_000,
+        refetchIntervalInBackground: true,
     })
 
     useEffect(() => {
@@ -170,6 +181,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         pageIndex: 0,
         pageSize: DEFAULT_PAGE_SIZE,
     })
+    const [viewMode, setViewMode] = useState<"table" | "kanban">("table")
 
     const [viewOrder, setViewOrder] = useState<SalesOrderListItem | null>(null)
     const [isViewOpen, setIsViewOpen] = useState(false)
@@ -839,12 +851,40 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
         link.click()
         document.body.removeChild(link)
     }
+
+    const handleKanbanStatusChange = useCallback(async (id: number, status: string) => {
+        const result = await updateStatusMutation.mutateAsync({ ids: [id], status })
+        if (!result?.success) {
+            return { success: false, error: "Gagal memperbarui status" }
+        }
+        return { success: true }
+    }, [updateStatusMutation])
+
+    const handleEmailSalesOrder = useCallback((order: SalesOrderListItem) => {
+        const email = order.customer?.email
+        if (!email) {
+            toast.error("Email customer tidak tersedia")
+            return
+        }
+        const subject = encodeURIComponent(`Sales Order ${order.invoiceNumber || `SO-${order.id}`}`)
+        const body = encodeURIComponent(`Halo ${order.customer.name},\n\nMohon tinjau dokumen Sales Order ${order.invoiceNumber || `SO-${order.id}`}.\n\nTerima kasih.`)
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
+    }, [])
     useEffect(() => {
         setPagination((prev) => ({ ...prev, pageIndex: 0 }))
     }, [globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
 
     return (
         <div className="space-y-6">
+            <div className="flex items-center justify-between gap-2">
+                <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "table" | "kanban")}>
+                    <TabsList>
+                        <TabsTrigger value="table">Table</TabsTrigger>
+                        <TabsTrigger value="kanban">Kanban</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+
             <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="analytics" className="border-none">
                     <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
@@ -979,6 +1019,43 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                 </AccordionItem>
             </Accordion>
 
+            {viewMode === "kanban" && (
+                <ProcessKanbanBoard
+                    records={data}
+                    statuses={[
+                        { key: "draft", label: "Draft", variant: "secondary" },
+                        { key: "confirmed", label: "Confirmed", variant: "warning" },
+                        { key: "completed", label: "Done", variant: "success" },
+                        { key: "cancelled", label: "Cancelled", variant: "destructive" },
+                    ]}
+                    transitionMap={SALES_ORDER_TRANSITIONS}
+                    mapRecord={(order) => ({
+                        id: order.id,
+                        status: order.status,
+                        documentNumber: order.invoiceNumber || `SO-${order.id}`,
+                        customerName: order.customer?.name || "-",
+                        totalAmount: calculateGrandTotal(order),
+                        dueDate: order.poReceive || order.salesDate,
+                        assignedPerson: order.salesPerson?.name || order.createdByUser?.name || null,
+                        priority: order.categoryPo || null,
+                        raw: order,
+                    })}
+                    canEdit={canEdit}
+                    onStatusChange={handleKanbanStatusChange}
+                    onRefresh={() => { void refetch() }}
+                    onQuickPrint={(order) => {
+                        setProformaOrder(order as ProformaInvoiceOrder)
+                        setIsProformaOpen(true)
+                    }}
+                    onQuickCancel={(order) => {
+                        void handleKanbanStatusChange(order.id, "cancelled")
+                    }}
+                    onQuickEmail={handleEmailSalesOrder}
+                />
+            )}
+
+            {viewMode === "table" && (
+                <>
             <div className="flex justify-end mb-2">
                 <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">Rows</span>
@@ -1334,6 +1411,8 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                     />
                 )
             }
+                </>
+            )}
 
             <SalesOrderDetail
                 open={isViewOpen}

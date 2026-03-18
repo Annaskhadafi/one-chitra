@@ -47,6 +47,7 @@ import type { Customer, Product } from "@/lib/types"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Area, AreaChart, BarChart, Bar, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { useQuery } from "@tanstack/react-query"
 import { useSession } from "@/lib/auth-client"
 import {
@@ -182,6 +183,15 @@ const STATUS_LABELS: Record<string, string> = {
     rejected: "Rejected",
     expired: "Expired",
     converted: "Converted",
+}
+
+const QUOTATION_TRANSITIONS = {
+    draft: ["sent", "rejected", "expired"],
+    sent: ["approved", "rejected", "expired"],
+    approved: ["converted", "rejected"],
+    rejected: [],
+    expired: ["draft"],
+    converted: [],
 }
 
 const CHART_TOOLTIP_STYLE = {
@@ -354,6 +364,8 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         },
         initialData,
         staleTime: 60 * 1000,
+        refetchInterval: 15_000,
+        refetchIntervalInBackground: true,
     })
 
     const { hasResourcePermission } = usePermissions()
@@ -845,6 +857,37 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         }
 
         toast.success("Export Excel berhasil dibuat")
+    }
+
+    const handleKanbanStatusChange = async (id: number, status: string) => {
+        const result = await updateQuotationStatus(id, status)
+        if (!result.success) {
+            return { success: false, error: result.error || "Gagal update status" }
+        }
+        void refetch()
+        return { success: true }
+    }
+
+    const handleKanbanDuplicate = async (quotation: QuotationWithRelations) => {
+        const result = await duplicateQuotation(quotation.id)
+        if (!result.success) {
+            toast.error(result.error || "Gagal duplicate quotation")
+            return
+        }
+        toast.success("Quotation berhasil diduplikasi")
+        void refetch()
+    }
+
+    const handleQuotationEmail = (quotation: QuotationWithRelations) => {
+        const email = quotation.customer?.email
+        if (!email) {
+            toast.error("Email customer tidak tersedia")
+            return
+        }
+        const quotationNumber = quotation.quotationNumber || `QT-${quotation.id}`
+        const subject = encodeURIComponent(`Quotation ${quotationNumber}`)
+        const body = encodeURIComponent(`Halo ${quotation.customer.name},\n\nBerikut quotation ${quotationNumber} untuk ditinjau.\n\nTerima kasih.`)
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
     }
 
     const sortedProductRows = useMemo(() => {
@@ -1463,6 +1506,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     <TabsList className="h-10">
                         <TabsTrigger value="quotations">Quotation List</TabsTrigger>
                         <TabsTrigger value="products">Product Offers</TabsTrigger>
+                        <TabsTrigger value="kanban">Kanban Board</TabsTrigger>
                     </TabsList>
 
                     <div className="flex flex-wrap gap-2">
@@ -1927,6 +1971,44 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     <div className="text-sm text-muted-foreground">
                         Showing {sortedProductRows.length} product offer rows from {filteredQuotations.length} filtered quotations
                     </div>
+                </TabsContent>
+
+                <TabsContent value="kanban" className="space-y-4">
+                    <ProcessKanbanBoard
+                        records={filteredQuotations}
+                        statuses={[
+                            { key: "draft", label: "Draft", variant: "secondary" },
+                            { key: "sent", label: "Sent", variant: "warning" },
+                            { key: "approved", label: "Approved", variant: "success" },
+                            { key: "converted", label: "Converted", variant: "outline" },
+                            { key: "rejected", label: "Rejected", variant: "destructive" },
+                            { key: "expired", label: "Expired", variant: "secondary" },
+                        ]}
+                        transitionMap={QUOTATION_TRANSITIONS}
+                        mapRecord={(quotation) => ({
+                            id: quotation.id,
+                            status: quotation.status,
+                            documentNumber: quotation.quotationNumber || `QT-${quotation.id}`,
+                            customerName: quotation.customer?.name || "-",
+                            totalAmount: calculateGrandTotal(quotation),
+                            dueDate: quotation.validUntil,
+                            assignedPerson: quotation.salesPerson?.name || quotation.createdByUser?.name || null,
+                            priority: quotation.tags || quotation.closingStatus || null,
+                            raw: quotation,
+                        })}
+                        canEdit={canEdit}
+                        onStatusChange={handleKanbanStatusChange}
+                        onRefresh={() => { void refetch() }}
+                        onQuickPrint={(quotation) => {
+                            setPreviewQuotation(quotation)
+                            setIsPreviewOpen(true)
+                        }}
+                        onQuickDuplicate={handleKanbanDuplicate}
+                        onQuickCancel={(quotation) => {
+                            void handleKanbanStatusChange(quotation.id, "rejected")
+                        }}
+                        onQuickEmail={handleQuotationEmail}
+                    />
                 </TabsContent>
             </Tabs>
 
