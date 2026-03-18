@@ -2,8 +2,11 @@
 
 import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
-import { sql, and, isNotNull, ne, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
+import { sql, and, isNotNull, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
 import { type SQL } from "drizzle-orm"
+
+const ACTIVE_SALESMAN_BILLING_START = '2026-01-01';
+const ACTIVE_SALESMAN_BILLING_END = '2027-01-01';
 
 export interface R49DashboardFilters {
     years?: string[];
@@ -31,9 +34,19 @@ export async function getR49DashboardFilters() {
             )
         );
 
+        const salesmanFilterWhere = and(
+            baseWhere,
+            sql`${salesRevenueSap.billingDate} >= ${ACTIVE_SALESMAN_BILLING_START}::date`,
+            sql`${salesRevenueSap.billingDate} < ${ACTIVE_SALESMAN_BILLING_END}::date`,
+            sql`NULLIF(BTRIM(${salesRevenueSap.salesman}), '') IS NOT NULL`
+        );
+
         const [customers, salesmen] = await Promise.all([
             db.selectDistinct({ v: salesRevenueSap.customerName }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.customerName),
-            db.selectDistinct({ v: salesRevenueSap.salesman }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.salesman),
+            db.selectDistinct({ v: sql<string>`BTRIM(${salesRevenueSap.salesman})` })
+                .from(salesRevenueSap)
+                .where(salesmanFilterWhere)
+                .orderBy(sql`BTRIM(${salesRevenueSap.salesman})`),
         ]);
 
         const [yearsResult, monthsResult] = await Promise.all([
@@ -88,7 +101,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
         ];
 
         if (customers.length > 0) filterArray.push(inArray(salesRevenueSap.customerName, customers));
-        if (salesman.length > 0) filterArray.push(inArray(salesRevenueSap.salesman, salesman));
+        if (salesman.length > 0) filterArray.push(inArray(sql<string>`BTRIM(${salesRevenueSap.salesman})`, salesman));
 
         if (years.length > 0) {
             filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`, years));
