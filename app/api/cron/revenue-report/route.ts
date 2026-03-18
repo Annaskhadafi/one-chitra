@@ -45,6 +45,24 @@ export async function GET(request: Request) {
         const inv = inventoryRes.data!
         const config = configRes.data!
 
+        // Scheduling Logic (UTC+7 / WIB)
+        const nowUtc = new Date().getTime()
+        const wibTime = new Date(nowUtc + (7 * 60 * 60 * 1000))
+        const currentHour = wibTime.getUTCHours()
+        const currentDay = wibTime.getUTCDay() 
+        const [schedHour] = (config.scheduleTime || "08:00").split(":").map(Number)
+
+        if (currentHour !== schedHour) {
+            return NextResponse.json({ success: true, message: `Skipped: Hour ${currentHour} != ${schedHour}` })
+        }
+
+        if (config.scheduleType === "weekly" || config.scheduleType === "custom") {
+            const allowedDays = config.scheduleValue?.split(",") || []
+            if (!allowedDays.includes(String(currentDay))) {
+                return NextResponse.json({ success: true, message: "Skipped: Day mismatch" })
+            }
+        }
+
         // 4. Resolve Recipients
         const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, config.recipientUserIds)
         

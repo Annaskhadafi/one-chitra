@@ -338,7 +338,11 @@ export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters)
         const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
 
         // Fetch all data
-        const allData = await db.select().from(salesRevenueSap).where(dateFilter);
+        const rawData = await db.select().from(salesRevenueSap).where(dateFilter);
+        const allData = rawData.map(row => ({
+            ...row,
+            billingNo: row.billingNo?.endsWith('.0') ? row.billingNo.slice(0, -2) : row.billingNo
+        }));
 
         // Calculate total revenue_in_loc_curr
         const totalResult = await db.select({

@@ -34,10 +34,15 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
         recipientRoles: string[]
         recipientUserIds: string[]
         customMessage: string
+        scheduleType: "immediate" | "daily" | "weekly" | "custom"
+        scheduleValue?: string
+        scheduleTime: string
     }>({
         recipientRoles: ["admin"],
         recipientUserIds: [],
-        customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+        customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+        scheduleType: "daily",
+        scheduleTime: "08:00"
     })
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -51,7 +56,10 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                     setConfig({
                         recipientRoles: res.data.recipientRoles || [],
                         recipientUserIds: res.data.recipientUserIds || [],
-                        customMessage: res.data.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+                        customMessage: res.data.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+                        scheduleType: res.data.scheduleType || "daily",
+                        scheduleValue: res.data.scheduleValue || "",
+                        scheduleTime: res.data.scheduleTime || "08:00"
                     })
                 }
             } catch (error) {
@@ -96,7 +104,7 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                     <CardTitle>Revenue Report Automation</CardTitle>
                 </div>
                 <CardDescription>
-                    Konfigurasi pengiriman laporan Revenue vs Forecast otomatis setiap malam (22:00 UTC+7).
+                    Konfigurasi pengiriman laporan Revenue vs Forecast otomatis (UTC+7 / WIB).
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -122,7 +130,71 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                     </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4 border-t">
+                    <Label className="text-base font-semibold">Jadwal Pengiriman (WIB / UTC+7)</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <Label>Tipe Jadwal</Label>
+                            <Select 
+                                value={config.scheduleType} 
+                                onValueChange={(v: any) => setConfig({ ...config, scheduleType: v })}
+                            >
+                                <SelectTrigger className="bg-white">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="daily">Harian (Daily)</SelectItem>
+                                    <SelectItem value="weekly">Mingguan (Weekly)</SelectItem>
+                                    <SelectItem value="custom">Kustom Hari (Custom Days)</SelectItem>
+                                    <SelectItem value="immediate" disabled>Immediate (Experimental)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Waktu Pengiriman (HH:mm)</Label>
+                            <input 
+                                type="time" 
+                                value={config.scheduleTime} 
+                                onChange={(e) => setConfig({ ...config, scheduleTime: e.target.value })}
+                                className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                        </div>
+                    </div>
+
+                    {(config.scheduleType === "weekly" || config.scheduleType === "custom") && (
+                        <div className="space-y-3">
+                            <Label>Pilih Hari</Label>
+                            <div className="flex flex-wrap gap-3">
+                                {[
+                                    { label: "Sen", val: "1" },
+                                    { label: "Sel", val: "2" },
+                                    { label: "Rab", val: "3" },
+                                    { label: "Kam", val: "4" },
+                                    { label: "Jum", val: "5" },
+                                    { label: "Sab", val: "6" },
+                                    { label: "Min", val: "0" },
+                                ].map((day) => (
+                                    <div key={day.val} className="flex items-center space-x-2 bg-white p-2 rounded-md border shadow-sm">
+                                        <Checkbox 
+                                            id={`day-${day.val}`} 
+                                            checked={config.scheduleValue?.split(",").includes(day.val) || false}
+                                            onCheckedChange={(checked) => {
+                                                const currentDays = config.scheduleValue ? config.scheduleValue.split(",") : []
+                                                const newDays = checked 
+                                                    ? [...currentDays, day.val] 
+                                                    : currentDays.filter(d => d !== day.val)
+                                                setConfig({ ...config, scheduleValue: newDays.join(",") })
+                                            }}
+                                        />
+                                        <Label htmlFor={`day-${day.val}`} className="cursor-pointer">{day.label}</Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
                     <Label className="text-base font-semibold">Pesan Custom (Email Body)</Label>
                     <Textarea
                         value={config.customMessage}

@@ -260,11 +260,11 @@ function ConsolidateGauge({ data }: { data: TargetData }) {
             <div className="grid grid-cols-2 gap-4 w-full relative z-10 bg-muted/30 p-4 rounded-xl border border-muted/50">
                 <div className="text-center">
                     <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Forecast</div>
-                    <div className="text-xl font-black text-foreground tracking-tight">{fmt(data.forecast)}</div>
+                    <div className="text-sm font-black text-foreground tracking-tight">{fmt(data.forecast)}</div>
                 </div>
                 <div className="text-center border-l border-border/50">
                     <div className="text-[10px] font-bold text-primary/70 uppercase tracking-wider mb-1">Revenue</div>
-                    <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
+                    <div className="text-sm font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
                 </div>
             </div>
         </div>

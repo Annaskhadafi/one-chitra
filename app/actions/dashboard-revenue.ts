@@ -147,6 +147,9 @@ export type RevenueReportConfig = {
     recipientRoles: string[]
     recipientUserIds: string[]
     customMessage: string
+    scheduleType: "immediate" | "daily" | "weekly" | "custom"
+    scheduleValue?: string // e.g., "1,2,3,4,5" for weekdays (1=Mon, 0=Sun)
+    scheduleTime: string // HH:mm format (WIB/UTC+7)
 }
 
 export async function getRevenueReportConfig() {
@@ -160,7 +163,9 @@ export async function getRevenueReportConfig() {
                 data: {
                     recipientRoles: ["admin"],
                     recipientUserIds: [],
-                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+                    scheduleType: "daily",
+                    scheduleTime: "08:00"
                 } as RevenueReportConfig
             }
         }
@@ -171,7 +176,10 @@ export async function getRevenueReportConfig() {
         const data: RevenueReportConfig = {
             recipientRoles: rawData.recipientRoles || [],
             recipientUserIds: rawData.recipientUserIds || (rawData.recipients || []),
-            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF."
+            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+            scheduleType: rawData.scheduleType || "daily",
+            scheduleValue: rawData.scheduleValue || "",
+            scheduleTime: rawData.scheduleTime || "08:00"
         }
 
         return {
