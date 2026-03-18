@@ -1,3 +1,4 @@
+import "server-only"
 import nodemailer from "nodemailer"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/db"

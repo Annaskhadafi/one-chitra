@@ -1,13 +1,13 @@
+"use server"
 import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import type { DashboardRevenueFilters } from "./dashboard-revenue-logic"
 import { 
     fetchDashboardRevenueForecast, 
-    fetchDashboardInventory,
-    DashboardRevenueFilters 
+    fetchDashboardInventory
 } from "./dashboard-revenue-logic"
 
-export type { DashboardRevenueFilters }
 
 export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
     try {
