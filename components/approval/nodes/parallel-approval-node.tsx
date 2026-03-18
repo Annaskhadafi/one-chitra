@@ -12,6 +12,8 @@ export type ParallelApprovalNodeData = {
     expectedApprovers: number
     minApprovals: number
     parallelStrategy: "any" | "all" | "quorum"
+    runtimeStatus?: "waiting" | "pending" | "approved" | "rejected"
+    runtimeApprovalCount?: number
 }
 
 type ParallelApprovalNodeProps = {
@@ -38,6 +40,20 @@ export function ParallelApprovalNode({ data, selected }: ParallelApprovalNodePro
         : approverIds.length > 0
             ? `${approverIds.length} user dipilih`
             : (data?.approverRole || "No approver set")
+    const runtimeStatus = data?.runtimeStatus ?? "waiting"
+    const runtimeLabel = runtimeStatus === "approved"
+        ? "Approved"
+        : runtimeStatus === "pending"
+            ? "Pending"
+            : runtimeStatus === "rejected"
+                ? "Rejected"
+                : "Waiting"
+    const runtimeVariant = runtimeStatus === "approved"
+        ? "default"
+        : runtimeStatus === "rejected"
+            ? "destructive"
+            : "outline"
+    const runtimeApprovalCount = Math.max(0, Number(data?.runtimeApprovalCount ?? 0))
 
     return (
         <div
@@ -63,11 +79,17 @@ export function ParallelApprovalNode({ data, selected }: ParallelApprovalNodePro
                 </div>
 
                 <div className="flex flex-wrap gap-1">
+                    <Badge variant={runtimeVariant} className="text-[10px] px-1.5 py-0">
+                        {runtimeLabel}
+                    </Badge>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {STRATEGY_LABEL[strategy]}
                     </Badge>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                         {minApprovals}/{expectedApprovers}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {runtimeApprovalCount} approved
                     </Badge>
                 </div>
             </div>

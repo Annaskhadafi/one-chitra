@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useMachine } from "@xstate/react"
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -23,6 +24,7 @@ import "@xyflow/react/dist/style.css"
 import { Save, RotateCcw, CheckCircle2, Loader2, ChevronDown, GitBranch, Bell, Zap, Timer, UserCheck, X, Users, Funnel, Workflow, AlarmClockCheck, PauseCircle, Ban, SplitSquareVertical, CalendarClock, Paperclip, UserRoundCog } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -51,6 +53,12 @@ import { DynamicRoleResolverNode, type DynamicRoleResolverNodeData } from "./nod
 import { StepConfigPanel } from "./step-config-panel"
 import type { WorkflowStepInput } from "@/app/actions/approval"
 import { getApprovalFormFieldOptions, getSubWorkflowOptions, saveWorkflowSteps, type SubWorkflowOption } from "@/app/actions/approval"
+import {
+    approvalStateMachine,
+    type ApprovalMachineConfig,
+    type ApprovalWorkflowStatus,
+} from "@/lib/approval-state-machine"
+import { createNodeMachineDefinition, type ApprovalCanvasNodeType } from "@/lib/approval-node-machine-library"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPES: Record<string, any> = {
@@ -534,6 +542,142 @@ function defaultData(type: AddNodeType, idx: number): NodeData {
     }
 }
 
+const SIMULATOR_ACTOR = "simulator.user"
+
+const APPROVAL_NODE_TYPES = new Set(["approvalStep", "parallelApprovalNode"])
+const PROCESS_NODE_TYPES = new Set<ApprovalCanvasNodeType>([
+    "approvalStep",
+    "parallelApprovalNode",
+    "conditionNode",
+    "conditionByFieldNode",
+    "notifyNode",
+    "autoApproveNode",
+    "delayNode",
+    "subWorkflowNode",
+    "deadlineBranchNode",
+    "waitEventNode",
+    "cancelNode",
+    "switchNode",
+    "businessDelayNode",
+    "requiredAttachmentNode",
+    "dynamicRoleResolverNode",
+])
+
+const getSortedApprovalNodes = (nodes: Node[]) => {
+    return nodes
+        .filter((node) => APPROVAL_NODE_TYPES.has(node.type ?? ""))
+        .sort((a, b) => {
+            if (a.position.x === b.position.x) {
+                return a.position.y - b.position.y
+            }
+            return a.position.x - b.position.x
+        })
+}
+
+function buildMachineConfig(nodes: Node[], edges: Edge[]): ApprovalMachineConfig {
+    const processNodes = nodes.filter((node): node is Node & { type: ApprovalCanvasNodeType } => PROCESS_NODE_TYPES.has((node.type ?? "") as ApprovalCanvasNodeType))
+    const approvalNodes = getSortedApprovalNodes(nodes)
+    const outgoing = new Map<string, string[]>()
+    const incomingCount = new Map<string, number>()
+    const approvalNodeIds = new Set(approvalNodes.map((node) => node.id))
+    const starts = new Set<string>()
+
+    for (const node of approvalNodes) {
+        outgoing.set(node.id, [])
+        incomingCount.set(node.id, 0)
+    }
+
+    for (const edge of edges) {
+        if (!edge.source || !edge.target) continue
+        if (edge.source === "start" && approvalNodeIds.has(edge.target)) {
+            starts.add(edge.target)
+            continue
+        }
+        if (!approvalNodeIds.has(edge.source) || !approvalNodeIds.has(edge.target)) continue
+        outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target])
+        incomingCount.set(edge.target, (incomingCount.get(edge.target) ?? 0) + 1)
+    }
+
+    const queue: string[] = approvalNodes
+        .filter((node) => starts.has(node.id) || (incomingCount.get(node.id) ?? 0) === 0)
+        .map((node) => node.id)
+    const visited = new Set<string>()
+    const levels: string[][] = []
+
+    while (queue.length > 0) {
+        const levelSize = queue.length
+        const levelNodeIds: string[] = []
+        for (let i = 0; i < levelSize; i += 1) {
+            const current = queue.shift()
+            if (!current || visited.has(current)) continue
+            visited.add(current)
+            levelNodeIds.push(current)
+            for (const next of outgoing.get(current) ?? []) {
+                const nextIncoming = (incomingCount.get(next) ?? 0) - 1
+                incomingCount.set(next, nextIncoming)
+                if (nextIncoming <= 0) {
+                    queue.push(next)
+                }
+            }
+        }
+        if (levelNodeIds.length > 0) {
+            levels.push(levelNodeIds)
+        }
+    }
+
+    const unvisited = approvalNodes.map((node) => node.id).filter((nodeId) => !visited.has(nodeId))
+    for (const nodeId of unvisited) {
+        levels.push([nodeId])
+    }
+
+    const steps = approvalNodes.map((node) => {
+        const data = (node.data ?? {}) as Record<string, unknown>
+        const approverType = data.approverType === "user" ? "user" : "role"
+        const approvers = node.type === "parallelApprovalNode"
+            ? Array.isArray(data.approverUserIds)
+                ? data.approverUserIds.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+                : []
+            : approverType === "user"
+                ? typeof data.approverUserId === "string" && data.approverUserId.trim().length > 0
+                    ? [data.approverUserId]
+                    : []
+                : typeof data.approverRole === "string" && data.approverRole.trim().length > 0
+                    ? [`role:${data.approverRole}`]
+                    : []
+        const expectedApprovers = Math.max(1, Number(data.expectedApprovers ?? approvers.length ?? 1))
+        const minApprovalsRaw = Number(data.minApprovals ?? 1)
+        const minApprovals = node.type === "parallelApprovalNode"
+            ? Math.min(expectedApprovers, Math.max(1, minApprovalsRaw))
+            : Math.max(1, minApprovalsRaw)
+
+        return {
+            id: node.id,
+            name: typeof data.stepName === "string" ? data.stepName : node.id,
+            approvers,
+            minApprovals,
+        }
+    })
+
+    const nodeDefinitions = processNodes.map((node) => createNodeMachineDefinition(node.id, node.type))
+
+    return {
+        levels: levels.map((stepIds, index) => ({
+            id: `L${index + 1}`,
+            stepIds,
+        })),
+        steps,
+        nodeDefinitions,
+    }
+}
+
+const STATUS_VARIANT: Record<ApprovalWorkflowStatus, "secondary" | "default" | "outline" | "destructive"> = {
+    draft: "secondary",
+    submitted: "outline",
+    pending: "default",
+    approved: "default",
+    rejected: "destructive",
+}
+
 export function WorkflowCanvas({ definitionId, definitionName, definitionFormKey, onClose, initialSteps, users }: WorkflowCanvasProps) {
     const isConnectionDebug = process.env.NODE_ENV !== "production"
     const { nodes: initNodes, edges: initEdges } = buildInitialGraph(initialSteps, users)
@@ -546,6 +690,34 @@ export function WorkflowCanvas({ definitionId, definitionName, definitionFormKey
     const [fieldMetaOptions, setFieldMetaOptions] = useState<FormFieldOption[]>([])
     const [subWorkflowOptions, setSubWorkflowOptions] = useState<SubWorkflowOption[]>([])
     const pendingConnectionRef = useRef<{ source: string; sourceHandle: string | null } | null>(null)
+    const [approvalState, sendApprovalEvent] = useMachine(approvalStateMachine)
+
+    const runtimeConfig = useMemo(() => buildMachineConfig(nodes, edges), [nodes, edges])
+
+    useEffect(() => {
+        sendApprovalEvent({
+            type: "CONFIGURE",
+            config: runtimeConfig,
+        })
+    }, [runtimeConfig, sendApprovalEvent])
+
+    const runtimeDisplayNodes = useMemo(() => {
+        return nodes.map((node) => {
+            if (!APPROVAL_NODE_TYPES.has(node.type ?? "")) {
+                return node
+            }
+            const runtimeStatus = approvalState.context.stepStatuses[node.id] ?? "waiting"
+            const runtimeApprovalCount = approvalState.context.approvedBy[node.id]?.length ?? 0
+            return {
+                ...node,
+                data: {
+                    ...(node.data as Record<string, unknown>),
+                    runtimeStatus,
+                    runtimeApprovalCount,
+                },
+            } satisfies Node
+        })
+    }, [nodes, approvalState.context.stepStatuses, approvalState.context.approvedBy])
 
     useEffect(() => {
         let active = true
@@ -1059,13 +1231,21 @@ export function WorkflowCanvas({ definitionId, definitionName, definitionFormKey
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId)
     const selectedNodeData = selectedNode?.data as (ApprovalStepNodeData & { stepName?: string }) | undefined
+    const machineStatus = approvalState.context.status
+    const currentLevelIndex = approvalState.context.currentLevelIndex
+    const currentLevel = typeof currentLevelIndex === "number"
+        ? approvalState.context.levels[currentLevelIndex] ?? null
+        : null
+    const pendingStepIds = Object.entries(approvalState.context.stepStatuses)
+        .filter(([, stepStatus]) => stepStatus === "pending")
+        .map(([stepId]) => stepId)
 
     return (
         <ReactFlowProvider>
             <div className="approval-workflow-canvas absolute inset-0 overflow-hidden bg-muted/10">
                 {/* ReactFlow canvas — full fill */}
                 <ReactFlow
-                    nodes={nodes}
+                    nodes={runtimeDisplayNodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
@@ -1195,6 +1375,97 @@ export function WorkflowCanvas({ definitionId, definitionName, definitionFormKey
                                 <X className="h-3 w-3" />
                                 Tutup
                             </Button>
+                        </div>
+                    </Panel>
+
+                    <Panel position="top-right" className="m-3 max-w-[320px]">
+                        <div className="space-y-2 rounded-xl border bg-card/95 px-3 py-3 shadow-lg backdrop-blur">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold">Approval Engine</p>
+                                <Badge variant={STATUS_VARIANT[machineStatus]}>{machineStatus}</Badge>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                                {currentLevel ? `Level aktif: ${currentLevel.id} (${currentLevel.stepIds.length} step)` : "Belum ada level aktif"}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px]"
+                                    disabled={machineStatus !== "draft"}
+                                    onClick={() => sendApprovalEvent({ type: "SUBMIT", actorId: SIMULATOR_ACTOR })}
+                                >
+                                    Submit
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px]"
+                                    onClick={() => sendApprovalEvent({ type: "RESET", actorId: SIMULATOR_ACTOR })}
+                                >
+                                    Reset State
+                                </Button>
+                            </div>
+                            {approvalState.context.validationErrors.length > 0 && (
+                                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2">
+                                    <p className="text-[11px] font-medium text-destructive">Guard validation</p>
+                                    <ul className="mt-1 space-y-0.5 text-[10px] text-destructive/90">
+                                        {approvalState.context.validationErrors.slice(0, 4).map((error) => (
+                                            <li key={error}>{error}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {pendingStepIds.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] font-medium">Pending approvals</p>
+                                    {pendingStepIds.map((stepId) => {
+                                        const step = approvalState.context.stepsById[stepId]
+                                        if (!step) return null
+                                        const stepApprovers = step.approvers.length > 0 ? step.approvers : [SIMULATOR_ACTOR]
+                                        return (
+                                            <div key={stepId} className="rounded-md border p-2">
+                                                <p className="truncate text-[11px] font-medium">{step.name}</p>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    {approvalState.context.approvedBy[stepId]?.length ?? 0}/{Math.max(1, step.minApprovals)} approved
+                                                </p>
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    {stepApprovers.slice(0, 3).map((actorId) => (
+                                                        <Button
+                                                            key={`${stepId}:${actorId}:approve`}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-6 text-[10px]"
+                                                            onClick={() => sendApprovalEvent({ type: "APPROVE", stepId, actorId })}
+                                                        >
+                                                            {actorId}
+                                                        </Button>
+                                                    ))}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        className="h-6 text-[10px]"
+                                                        onClick={() => sendApprovalEvent({ type: "REJECT", stepId, actorId: SIMULATOR_ACTOR, reason: "Rejected from canvas simulation" })}
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                            <div className="space-y-1">
+                                <p className="text-[11px] font-medium">History</p>
+                                <div className="max-h-[180px] space-y-1 overflow-y-auto">
+                                    {approvalState.context.history.slice(-8).reverse().map((entry, index) => (
+                                        <div key={`${entry.timestamp}:${index}`} className="rounded-md border px-2 py-1">
+                                            <p className="text-[10px] font-medium">{entry.event}</p>
+                                            <p className="text-[10px] text-muted-foreground">{entry.fromStatus} → {entry.toStatus}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </Panel>
 

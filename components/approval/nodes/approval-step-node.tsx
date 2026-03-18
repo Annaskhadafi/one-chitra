@@ -18,6 +18,7 @@ export type ApprovalStepNodeData = {
     notifyOnComplete: boolean
     ccEmails: string | null
     slaDays: number | null
+    runtimeStatus?: "waiting" | "pending" | "approved" | "rejected"
 }
 
 type ApprovalStepNodeProps = {
@@ -27,6 +28,19 @@ type ApprovalStepNodeProps = {
 
 export function ApprovalStepNode({ data, selected }: ApprovalStepNodeProps) {
     const hasNotification = data?.notifyOnAssign || data?.notifyOnComplete
+    const runtimeStatus = data?.runtimeStatus ?? "waiting"
+    const runtimeLabel = runtimeStatus === "approved"
+        ? "Approved"
+        : runtimeStatus === "pending"
+            ? "Pending"
+            : runtimeStatus === "rejected"
+                ? "Rejected"
+                : "Waiting"
+    const runtimeVariant = runtimeStatus === "approved"
+        ? "default"
+        : runtimeStatus === "rejected"
+            ? "destructive"
+            : "outline"
 
     return (
         <div
@@ -61,6 +75,9 @@ export function ApprovalStepNode({ data, selected }: ApprovalStepNodeProps) {
 
                 {/* Badges */}
                 <div className="flex flex-wrap gap-1">
+                    <Badge variant={runtimeVariant} className="text-[10px] px-1.5 py-0">
+                        {runtimeLabel}
+                    </Badge>
                     {data?.approvalPolicy && data.approvalPolicy !== "quorum" && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 uppercase">
                             {data.approvalPolicy}
