@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation"
 
 import { reorderWorkflowSteps } from "@/app/actions/approval"
 import type { UIStepType, WorkflowStep } from "@/app/dashboard/approvals/_lib/types"
+import { deriveStepType } from "@/app/dashboard/approvals/_lib/utils"
 import { StepConfigForm } from "./step-config-form"
 import { StepTypeSelector } from "./step-type-selector"
 import { Badge } from "@/components/ui/badge"
@@ -56,25 +57,6 @@ const stepTypeMeta: Record<UIStepType, { label: string; className: string }> = {
     label: "User Input",
     className: "bg-green-100 text-green-800 hover:bg-green-100",
   },
-}
-
-// ─── Derive step type from conditionJson ──────────────────────────────────────
-
-export function deriveStepType(conditionJson: Record<string, unknown>): UIStepType {
-  const nodeKind = conditionJson?.nodeKind as string | undefined
-  switch (nodeKind) {
-    case "approvalStep":
-    case "parallelApproval":
-      return "approval"
-    case "notifyNode":
-      return "notification"
-    case "updateUserNode":
-      return "update_user"
-    case "userInputNode":
-      return "user_input"
-    default:
-      return "approval"
-  }
 }
 
 // ─── Sortable row ─────────────────────────────────────────────────────────────

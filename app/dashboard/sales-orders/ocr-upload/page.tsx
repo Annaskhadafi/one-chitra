@@ -1,7 +1,7 @@
 "use client"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@radix-ui/react-progress"
+import { Progress } from "@/components/ui/progress"
 import { Card, CardContent } from "@/components/ui/card"
 import { uploadFile } from "@/app/actions/upload"
 import { useRouter } from "next/navigation"
@@ -15,8 +15,7 @@ export default function OcrUploadPage() {
     const [error, setError] = useState<string | null>(null)
     const inputRef = useRef<HTMLInputElement | null>(null)
 
-    function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
-        const f = Array.from(e.target.files || [])
+    function applySelectedFiles(f: File[]) {
         const valid = f.filter(file => {
             const okType = ["application/pdf", "image/jpeg", "image/png"].includes(file.type)
             const okSize = file.size <= 10 * 1024 * 1024
@@ -31,13 +30,15 @@ export default function OcrUploadPage() {
         setPreviews(valid.map(file => URL.createObjectURL(file)))
     }
 
+    function onSelect(e: React.ChangeEvent<HTMLInputElement>) {
+        const selectedFiles = Array.from(e.target.files || [])
+        applySelectedFiles(selectedFiles)
+    }
+
     function onDrop(e: React.DragEvent<HTMLDivElement>) {
         e.preventDefault()
-        const f = Array.from(e.dataTransfer.files || [])
-        const dt = new DataTransfer()
-        f.forEach(file => dt.items.add(file))
-        const fakeEvent = { target: { files: dt.files } } as any
-        onSelect(fakeEvent)
+        const droppedFiles = Array.from(e.dataTransfer.files || [])
+        applySelectedFiles(droppedFiles)
     }
 
     function onDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -63,13 +64,34 @@ export default function OcrUploadPage() {
             return
         }
         setProgress(80)
-        const ocrRes = await fetch("/api/ocr-extract", {
+        const ocrResponse = await fetch("/api/ocr-extract", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileUrl: res.url }),
-        }).then(r => r.json())
+        })
+        const ocrBodyText = await ocrResponse.text()
+        let ocrRes: { error?: string; sessionId?: number } = {}
+        if (ocrBodyText.trim().length > 0) {
+            try {
+                ocrRes = JSON.parse(ocrBodyText) as { error?: string; sessionId?: number }
+            } catch {
+                setError("Respons OCR tidak valid")
+                return
+            }
+        } else {
+            setError("Respons OCR kosong")
+            return
+        }
+        if (!ocrResponse.ok) {
+            setError(ocrRes.error || "OCR gagal diproses")
+            return
+        }
         if (ocrRes?.error) {
             setError(ocrRes.error)
+            return
+        }
+        if (!ocrRes.sessionId) {
+            setError("Session OCR tidak ditemukan")
             return
         }
         setProgress(100)
@@ -101,7 +123,13 @@ export default function OcrUploadPage() {
                     <CardContent className="p-4 flex gap-4">
                         {previews.map((src, i) => (
                             <div key={i} className="w-32 h-32 relative">
-                                <Image src={src} alt={`preview-${i}`} fill className="object-cover rounded" />
+                                {files[i]?.type === "application/pdf" ? (
+                                    <div className="h-full w-full rounded border bg-muted flex items-center justify-center text-xs">
+                                        PDF
+                                    </div>
+                                ) : (
+                                    <Image src={src} alt={`preview-${i}`} fill className="object-cover rounded" />
+                                )}
                             </div>
                         ))}
                     </CardContent>

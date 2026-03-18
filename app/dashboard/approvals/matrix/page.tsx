@@ -26,8 +26,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { deriveStepType } from "@/app/dashboard/approvals/_lib/utils"
 import { MatrixBuilder } from "./_components/matrix-builder"
-import { WorkflowCanvas, deriveStepType } from "./_components/workflow-canvas"
+import { WorkflowCanvas } from "./_components/workflow-canvas"
 
 type OrgNode = {
     id: string

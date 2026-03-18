@@ -1,4 +1,4 @@
-import type { ApprovalStatusItem, StatusFilter, StepReorderItem, TimelineEntry } from "./types"
+import type { ApprovalStatusItem, StatusFilter, StepReorderItem, TimelineEntry, UIStepType } from "./types"
 
 /**
  * Validates whether a comment satisfies the note policy for a given action.
@@ -115,4 +115,21 @@ export function validateStepReorder(
  */
 export function sortTimelineEntries(entries: TimelineEntry[]): TimelineEntry[] {
   return [...entries].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+}
+
+export function deriveStepType(conditionJson: Record<string, unknown>): UIStepType {
+  const nodeKind = conditionJson?.nodeKind as string | undefined
+  switch (nodeKind) {
+    case "approvalStep":
+    case "parallelApproval":
+      return "approval"
+    case "notifyNode":
+      return "notification"
+    case "updateUserNode":
+      return "update_user"
+    case "userInputNode":
+      return "user_input"
+    default:
+      return "approval"
+  }
 }
