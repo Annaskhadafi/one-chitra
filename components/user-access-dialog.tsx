@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
@@ -45,7 +45,25 @@ type UserAccessDialogProps = {
     }) => Promise<{ success: boolean; error?: string }>
 }
 
-export function UserAccessDialog({
+/**
+ * Wrapper component to avoid "No QueryClient set" error during SSR.
+ * useQueryClient and other context-dependent hooks are only called after mounting.
+ */
+export function UserAccessDialog(props: UserAccessDialogProps) {
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) {
+        return <>{props.trigger}</>
+    }
+
+    return <UserAccessDialogInner {...props} />
+}
+
+function UserAccessDialogInner({
     userId,
     currentRole,
     currentWarehouseAccesses,
