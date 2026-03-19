@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { RecipientSelect } from "../_components/recipient-select"
 import { FileAttachment } from "../_components/file-attachment"
+import { MagicGenerator } from "../_components/magic-generator"
 
 const DEFAULT_TARGET = { userIds: [], groupIds: [], contactIds: [], manual: [] }
 
@@ -165,23 +166,26 @@ export default function CreateCampaignPage() {
                                 <div className="grid gap-1.5 pt-4 border-t">
                                     <div className="flex items-center justify-between mb-2">
                                         <Label className="text-sm font-semibold">Konten Email</Label>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" size="sm" className="h-8">
-                                                    Gunakan Template <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                {dbTemplates.map(tpl => (
-                                                    <DropdownMenuItem key={tpl.id} onClick={() => applyTemplate(tpl)}>
-                                                        {tpl.name}
-                                                    </DropdownMenuItem>
-                                                ))}
-                                                {dbTemplates.length === 0 && (
-                                                    <DropdownMenuItem disabled>Tidak ada template di database</DropdownMenuItem>
-                                                )}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                        <div className="flex items-center gap-2">
+                                            <MagicGenerator onApply={(html) => setFormData({ ...formData, content: html })} />
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" size="sm" className="h-8">
+                                                        Gunakan Template <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    {dbTemplates.map(tpl => (
+                                                        <DropdownMenuItem key={tpl.id} onClick={() => applyTemplate(tpl)}>
+                                                            {tpl.name}
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                    {dbTemplates.length === 0 && (
+                                                        <DropdownMenuItem disabled>Tidak ada template di database</DropdownMenuItem>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
                                     </div>
                                     <EmailEditor
                                         value={formData.content}
