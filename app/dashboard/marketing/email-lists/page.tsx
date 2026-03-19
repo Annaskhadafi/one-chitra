@@ -5,7 +5,8 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import {
     getEmailGroups, createEmailGroup, updateEmailGroup, deleteEmailGroup,
     getEmailContacts, createEmailContact, updateEmailContact, deleteEmailContact,
-    importEmailContacts
+    importEmailContacts,
+    getPlatformUsers, getPlatformCustomers
 } from "@/app/actions/email-contacts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,7 +71,7 @@ export default function EmailListsPage() {
                     <Button variant="outline" size="icon" onClick={() => loadData()} disabled={loading}>
                         <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                     </Button>
-                    <ImportDialog groups={groups} onComplete={loadData} />
+                    <MultiImportDialog groups={groups} onComplete={loadData} />
                 </div>
             </div>
 
@@ -176,6 +177,7 @@ export default function EmailListsPage() {
                                        <Users className="h-5 w-5" />
                                    </div>
                                    <div className="flex gap-1">
+                                       <MultiImportDialog groups={groups} onComplete={loadData} initialGroupId={g.id.toString()} isIcon={true} />
                                        <GroupDialog group={g} onComplete={loadData} />
                                        <DeleteGroupDialog id={g.id} name={g.name} onComplete={loadData} />
                                    </div>
@@ -449,81 +451,198 @@ function DeleteContactDialog({ id, name, onComplete }: { id: number, name: strin
     )
 }
 
-function ImportDialog({ groups, onComplete }: { groups: any[], onComplete: () => void }) {
+function MultiImportDialog({ groups, onComplete, initialGroupId, isIcon = false }: { groups: any[], onComplete: () => void, initialGroupId?: string, isIcon?: boolean }) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
-    const [targetGroup, setTargetGroup] = useState<string>("0")
+    const [activeTab, setActiveTab] = useState("csv")
+    const [targetGroup, setTargetGroup] = useState<string>(initialGroupId || "0")
+    
+    // CSV State
     const [file, setFile] = useState<File | null>(null)
+    
+    // Platform State
+    const [platformSearch, setPlatformSearch] = useState("")
+    const [platformUsers, setPlatformUsers] = useState<any[]>([])
+    const [platformCustomers, setPlatformCustomers] = useState<any[]>([])
+    const [selectedEntities, setSelectedEntities] = useState<any[]>([])
+    
+    // Manual State
+    const [manualText, setManualText] = useState("")
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const f = e.target.files?.[0]
-        if (f) setFile(f)
+    useEffect(() => {
+        if (open && (activeTab === "users" || activeTab === "customers")) {
+            fetchPlatformData()
+        }
+    }, [open, activeTab, platformSearch])
+
+    const fetchPlatformData = async () => {
+        if (activeTab === "users") {
+            const data = await getPlatformUsers(platformSearch)
+            setPlatformUsers(data)
+        } else if (activeTab === "customers") {
+            const data = await getPlatformCustomers(platformSearch)
+            setPlatformCustomers(data)
+        }
+    }
+
+    const toggleSelection = (entity: any) => {
+        const exists = selectedEntities.find(e => e.email === entity.email)
+        if (exists) {
+            setSelectedEntities(selectedEntities.filter(e => e.email !== entity.email))
+        } else {
+            setSelectedEntities([...selectedEntities, {
+                name: entity.name,
+                email: entity.email,
+                company: entity.customerCode ? `Customer ${entity.customerCode}` : (entity.department || "Internal"),
+                category: entity.customerCode ? "customer" : "internal"
+            }])
+        }
     }
 
     const handleImport = async () => {
-        if (!file) return toast.error("Pilih file terlebih dahulu")
         setLoading(true)
+        let rowsToImport: any[] = []
 
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-            const text = e.target?.result as string
+        if (activeTab === "csv") {
+            if (!file) { toast.error("Pilih file CSV"); setLoading(false); return }
+            const text = await file.text()
             const lines = text.split("\n")
             const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ''))
-            const rows = lines.slice(1).filter(l => l.trim().length > 0).map(line => {
+            rowsToImport = lines.slice(1).filter(l => l.trim().length > 0).map(line => {
                 const values = line.split(",").map(v => v.trim().replace(/"/g, ''))
                 const obj: any = {}
                 headers.forEach((h, i) => obj[h] = values[i])
                 return obj
             })
-
-            const res = await importEmailContacts(rows, targetGroup !== "0" ? parseInt(targetGroup) : undefined)
-            if (res.success) {
-                toast.success(`Berhasil impor ${res.imported} kontak, dilewati ${res.skipped}`)
-                setOpen(false)
-                onComplete()
-            } else {
-                toast.error(res.error || "Gagal impor")
-            }
-            setLoading(false)
+        } else if (activeTab === "users" || activeTab === "customers") {
+            if (selectedEntities.length === 0) { toast.error("Pilih minimal satu data"); setLoading(false); return }
+            rowsToImport = selectedEntities
+        } else if (activeTab === "manual") {
+            if (!manualText.trim()) { toast.error("Masukkan data email"); setLoading(false); return }
+            const lines = manualText.split("\n")
+            rowsToImport = lines.map(line => {
+                const match = line.match(/(.*)<(.+@.+)>/)
+                if (match) return { name: match[1].trim(), email: match[2].trim(), category: "customer" }
+                const commaMatch = line.split(",")
+                if (commaMatch.length >= 2) return { name: commaMatch[0].trim(), email: commaMatch[1].trim(), category: "customer" }
+                return { name: line.trim(), email: line.trim(), category: "customer" }
+            }).filter(r => r.email.includes("@"))
         }
-        reader.readAsText(file)
-    }
 
-    const downloadTemplate = () => {
-        const csv = "name,email,company,position,category\nJohn Doe,john@example.com,Google,CEO,customer\nJane Smith,jane@internal.com,One Chitra,Staff,internal"
-        const blob = new Blob([csv], { type: "text/csv" })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = "template_import_email.csv"
-        a.click()
+        const res = await importEmailContacts(rowsToImport, targetGroup !== "0" ? parseInt(targetGroup) : undefined)
+        if (res.success) {
+            toast.success(`Berhasil impor ${res.imported} kontak`)
+            setOpen(false)
+            onComplete()
+            // Reset
+            setFile(null)
+            setSelectedEntities([])
+            setManualText("")
+        } else {
+            toast.error(res.error || "Gagal impor")
+        }
+        setLoading(false)
     }
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2"><Upload className="h-4 w-4" /> Import CSV</Button>
+                {isIcon ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary"><Plus className="h-4 w-4" /></Button>
+                ) : (
+                    <Button variant="outline" className="gap-2"><Upload className="h-4 w-4" /> Import Kontak</Button>
+                )}
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[600px] h-[600px] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Import Kontak Email</DialogTitle>
-                    <DialogDescription>Unggah file CSV untuk mendaftarkan kontak secara massal.</DialogDescription>
+                    <DialogDescription>Tambahkan kontak dari berbagai sumber ke dalam daftar marketing.</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="p-4 border border-dashed rounded-lg bg-muted/30 text-center space-y-2">
-                        <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                        <div className="text-sm">
-                            <label htmlFor="file-upload" className="font-semibold text-primary cursor-pointer hover:underline">Pilih file</label>
-                            <span className="text-muted-foreground"> atau drag & drop file CSV</span>
-                        </div>
-                        <input id="file-upload" type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-                        {file && <p className="text-xs font-mono bg-background p-1 rounded border">{file.name}</p>}
+
+                <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedEntities([]) }} className="flex-1 overflow-hidden flex flex-col">
+                    <TabsList className="grid grid-cols-4 w-full">
+                        <TabsTrigger value="csv" className="text-xs">CSV</TabsTrigger>
+                        <TabsTrigger value="users" className="text-xs">Sistem User</TabsTrigger>
+                        <TabsTrigger value="customers" className="text-xs">Customer</TabsTrigger>
+                        <TabsTrigger value="manual" className="text-xs">Manual</TabsTrigger>
+                    </TabsList>
+
+                    <div className="flex-1 overflow-auto py-4">
+                        <TabsContent value="csv" className="space-y-4 mt-0">
+                            <div className="p-8 border border-dashed rounded-lg bg-muted/30 text-center space-y-2">
+                                <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                                <div className="text-sm">
+                                    <label htmlFor="file-upload" className="font-semibold text-primary cursor-pointer hover:underline">Pilih file</label>
+                                    <span className="text-muted-foreground"> atau drag & drop file CSV</span>
+                                </div>
+                                <input id="file-upload" type="file" accept=".csv" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
+                                {file && <p className="text-xs font-mono bg-background p-1 rounded border">{file.name}</p>}
+                            </div>
+                            <Button variant="link" className="px-0 h-auto text-xs" onClick={() => {
+                                const csv = "name,email,company,position,category\nJohn Doe,john@example.com,Google,CEO,customer"
+                                const blob = new Blob([csv], { type: "text/csv" })
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement("a"); a.href = url; a.download = "template_import.csv"; a.click()
+                            }}>
+                                <Download className="h-3 w-3 mr-1" /> Unduh Template CSV
+                            </Button>
+                        </TabsContent>
+
+                        <TabsContent value="users" className="space-y-4 mt-0 h-full flex flex-col">
+                            <div className="relative">
+                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Cari user..." className="pl-8 h-9" value={platformSearch} onChange={e => setPlatformSearch(e.target.value)} />
+                            </div>
+                            <div className="border rounded-md divide-y max-h-[250px] overflow-auto">
+                                {platformUsers.map(u => (
+                                    <div key={u.id} className="flex items-center gap-3 p-2 hover:bg-muted/50">
+                                        <Checkbox id={`u-${u.id}`} checked={!!selectedEntities.find(se => se.email === u.email)} onCheckedChange={() => toggleSelection(u)} />
+                                        <Label htmlFor={`u-${u.id}`} className="flex-1 cursor-pointer">
+                                            <div className="font-medium text-xs">{u.name}</div>
+                                            <div className="text-[10px] text-muted-foreground">{u.email}</div>
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="customers" className="space-y-4 mt-0 h-full flex flex-col">
+                            <div className="relative">
+                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Cari customer..." className="pl-8 h-9" value={platformSearch} onChange={e => setPlatformSearch(e.target.value)} />
+                            </div>
+                            <div className="border rounded-md divide-y max-h-[250px] overflow-auto">
+                                {platformCustomers.map(c => (
+                                    <div key={c.id} className="flex items-center gap-3 p-2 hover:bg-muted/50">
+                                        <Checkbox id={`c-${c.id}`} checked={!!selectedEntities.find(se => se.email === c.email)} onCheckedChange={() => toggleSelection(c)} />
+                                        <Label htmlFor={`c-${c.id}`} className="flex-1 cursor-pointer">
+                                            <div className="font-medium text-xs truncate max-w-[200px]">{c.name}</div>
+                                            <div className="text-[10px] text-muted-foreground">{c.email || c.customerCode}</div>
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="manual" className="space-y-3 mt-0">
+                            <Label className="text-xs">Masukkan Nama dan Email (satu per baris)</Label>
+                            <Textarea 
+                                placeholder="Contoh:&#10;John <john@mail.com>&#10;Jane, jane@mail.com&#10;only-email@mail.com" 
+                                className="h-[200px] text-xs font-mono"
+                                value={manualText}
+                                onChange={e => setManualText(e.target.value)}
+                            />
+                            <p className="text-[10px] text-muted-foreground italic">Tips: Format &ldquo;Nama &lt;email@mail.com&gt;&rdquo; lebih disarankan.</p>
+                        </TabsContent>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label>Masukkan ke Grup (Opsional)</Label>
+                    <div className="pt-4 border-t space-y-4">
+                        <div className="flex items-center justify-between">
+                             <Label className="text-xs font-bold">Pilih Grup (Opsional)</Label>
+                             <Badge variant="outline">{selectedEntities.length} dipilih</Badge>
+                        </div>
                         <Select value={targetGroup} onValueChange={setTargetGroup}>
-                            <SelectTrigger>
+                            <SelectTrigger className="h-9">
                                 <SelectValue placeholder="Pilih Grup" />
                             </SelectTrigger>
                             <SelectContent>
@@ -534,16 +653,14 @@ function ImportDialog({ groups, onComplete }: { groups: any[], onComplete: () =>
                             </SelectContent>
                         </Select>
                     </div>
+                </Tabs>
 
-                    <Button variant="link" className="px-0 h-auto text-xs" onClick={downloadTemplate}>
-                        <Download className="h-3 w-3 mr-1" /> Unduh Template CSV
-                    </Button>
-                </div>
-                <DialogFooter>
+                <DialogFooter className="mt-4">
                     <Button variant="outline" onClick={() => setOpen(false)}>Batal</Button>
-                    <Button onClick={handleImport} disabled={loading || !file}>{loading ? "Memproses..." : "Mulai Import"}</Button>
+                    <Button onClick={handleImport} disabled={loading}>{loading ? "Memproses..." : "Mulai Import"}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
     )
 }
+

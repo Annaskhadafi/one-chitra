@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { emailGroups, emailContacts, emailGroupMembers, user } from "@/db/schema"
-import { eq, desc, and, inArray, sql, count, like } from "drizzle-orm"
+import { emailGroups, emailContacts, emailGroupMembers, user, customers } from "@/db/schema"
+import { eq, desc, and, inArray, sql, count, like, or } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -240,4 +240,48 @@ export async function importEmailContacts(rows: any[], targetGroupId?: number) {
     } catch (error) {
         return { success: false, error: "Gagal mengimpor kontak" }
     }
+}
+// ─── PLATFORM DATA ──────────────────────────────────────────────────────────
+
+export async function getPlatformUsers(search?: string) {
+    await getAuthenticatedSession("marketing", "view")
+    
+    let query = db.select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        jobTitle: user.jobTitle,
+        department: user.department
+    }).from(user)
+
+    if (search) {
+        query = query.where(or(
+            like(user.name, `%${search}%`),
+            like(user.email, `%${search}%`)
+        ))
+    }
+
+    return await query.limit(50)
+}
+
+export async function getPlatformCustomers(search?: string) {
+    await getAuthenticatedSession("marketing", "view")
+    
+    let query = db.select({
+        id: customers.id,
+        name: customers.name,
+        email: customers.email,
+        customerCode: customers.customerCode,
+        contactName: customers.contactName
+    }).from(customers)
+
+    if (search) {
+        query = query.where(or(
+            like(customers.name, `%${search}%`),
+            like(customers.email, `%${search}%`),
+            like(customers.customerCode, `%${search}%`)
+        ))
+    }
+
+    return await query.limit(50)
 }
