@@ -7,6 +7,8 @@ import Link from "@tiptap/extension-link"
 import TextAlign from "@tiptap/extension-text-align"
 import { TextStyle } from "@tiptap/extension-text-style"
 import Image from "@tiptap/extension-image"
+import Underline from "@tiptap/extension-underline"
+import { Color } from "@tiptap/extension-color"
 import {
     Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon,
     AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react"
 import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import { Toggle } from "@/components/ui/toggle"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
@@ -35,6 +38,8 @@ export function EmailEditor({ value, onChange }: Props) {
             Link.configure({ openOnClick: false }),
             TextAlign.configure({ types: ["heading", "paragraph"] }),
             TextStyle,
+            Color,
+            Underline,
             Image.configure({
                 allowBase64: true,
                 HTMLAttributes: {
@@ -61,6 +66,13 @@ export function EmailEditor({ value, onChange }: Props) {
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    useEffect(() => {
+        if (editor && value !== editor.getHTML()) {
+            editor.commands.setContent(value)
+            setHtmlValue(value)
+        }
+    }, [value, editor])
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]

@@ -33,6 +33,7 @@ export function MagicGenerator({ onApply }: MagicGeneratorProps) {
           { role: "assistant", content: res.html }
         ])
         setPrompt("") // Clear for revision prompts
+        onApply(res.html) // Auto-apply to main editor
       } else {
         toast.error(res.error || "Gagal menghasilkan email")
       }

@@ -1,12 +1,14 @@
 "use server"
 
 export async function generateEmailHtml(prompt: string, history: { role: string; content: string }[] = []) {
-  const baseUrl = (process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "")
+  const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
+  const baseUrl = rawUrl.replace(/\/$/, "")
+  const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
   const ollamaModel = process.env.OLLAMA_MODEL || "kimi-k2.5:cloud"
   const ollamaApiKey = process.env.OLLAMA_API_KEY || ""
 
   try {
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -25,7 +27,9 @@ export async function generateEmailHtml(prompt: string, history: { role: string;
             2. Professional Copywriting: Write persuasive, engaging, and professional copy in the language requested (defaulting to Indonesian if not specified).
             3. Responsive Design: Use solid inline CSS to ensure the email looks perfect on all devices and email clients.
             4. Dynamic Personalization: Naturally integrate placeholders like {{name}}, {{company}}, or {{position}}.
-            5. Design Aesthetics: Use rounded corners, subtle borders, and professional headers/footers.
+            5. Design Aesthetics: Use rounded corners, subtle borders. 
+            6. Minimalist Branding: The header and footer MUST ONLY contain the text "One Chitra". DO NOT include website links, "Contact Us", social media icons, or copyright notices unless explicitly asked.
+            7. Editor Compatibility: Avoid using complex <table> layouts if possible. Use simple, clean semantic HTML (headers, paragraphs, lists) with inline styles on these elements. This ensures the user can edit the content easily in a visual editor.
             
             Strict Rules:
             - ONLY output the raw HTML code. 
