@@ -2,11 +2,23 @@ import { db } from "@/db"
 import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
+import { settings } from "@/db/schema/settings"
+
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
     range?: "this-week" | "this-month" | "this-quarter";
 }
+
+export type RevenueReportConfig = {
+    recipientRoles: string[]
+    recipientUserIds: string[]
+    customMessage: string
+    scheduleType: "immediate" | "daily" | "weekly" | "custom"
+    scheduleValue?: string // e.g., "1,2,3,4,5" for weekdays (1=Mon, 0=Sun)
+    scheduleTime: string // HH:mm format (WIB/UTC+7)
+}
+
 
 function getRangeBounds(range: "this-week" | "this-month" | "this-quarter") {
     const now = new Date();
@@ -362,3 +374,42 @@ export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters)
         return { success: false, error: "Failed to fetch sales revenue data" };
     }
 }
+
+export async function fetchRevenueReportConfig() {
+    try {
+        const result = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
+        
+        if (result.length === 0) {
+            return {
+                success: true,
+                data: {
+                    recipientRoles: ["admin"],
+                    recipientUserIds: [],
+                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+                    scheduleType: "daily",
+                    scheduleTime: "08:00"
+                } as RevenueReportConfig
+            }
+        }
+
+        const rawData = JSON.parse(result[0].value)
+        
+        const data: RevenueReportConfig = {
+            recipientRoles: rawData.recipientRoles || [],
+            recipientUserIds: rawData.recipientUserIds || (rawData.recipients || []),
+            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
+            scheduleType: rawData.scheduleType || "daily",
+            scheduleValue: rawData.scheduleValue || "",
+            scheduleTime: rawData.scheduleTime || "08:00"
+        }
+
+        return {
+            success: true,
+            data
+        }
+    } catch (error) {
+        console.error("Failed to fetch revenue report config:", error)
+        return { success: false, error: "Failed to fetch configuration" }
+    }
+}
+

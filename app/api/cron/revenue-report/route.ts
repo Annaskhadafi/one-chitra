@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { fetchDashboardRevenueForecast, fetchDashboardInventory } from "@/app/actions/dashboard-revenue-logic"
-import { getRevenueReportConfig } from "@/app/actions/dashboard-revenue"
+import { fetchDashboardRevenueForecast, fetchDashboardInventory, fetchRevenueReportConfig } from "@/app/actions/dashboard-revenue-logic"
+
 import { sendSystemTemplatedEmailByCode, resolveUserEmailsFromRolesAndIds } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatCurrency } from "@/lib/utils"
@@ -34,8 +34,9 @@ export async function GET(request: Request) {
         const [revenueRes, inventoryRes, configRes] = await Promise.all([
             fetchDashboardRevenueForecast({ period }),
             fetchDashboardInventory(),
-            getRevenueReportConfig()
+            fetchRevenueReportConfig()
         ])
+
 
         if (!revenueRes.success || !inventoryRes.success || !configRes.success) {
             throw new Error("Failed to fetch dashboard data or configuration")

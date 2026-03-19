@@ -8,8 +8,11 @@ import type { DashboardRevenueFilters } from "./dashboard-revenue-logic"
 import { 
     fetchDashboardRevenueForecast, 
     fetchDashboardInventory,
-    fetchAllSalesRevenueData
+    fetchAllSalesRevenueData,
+    fetchRevenueReportConfig,
+    type RevenueReportConfig
 } from "./dashboard-revenue-logic"
+
 
 
 export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
@@ -143,54 +146,16 @@ const getPct = (actual: number, target: number) =>
     target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
 
 
-export type RevenueReportConfig = {
-    recipientRoles: string[]
-    recipientUserIds: string[]
-    customMessage: string
-    scheduleType: "immediate" | "daily" | "weekly" | "custom"
-    scheduleValue?: string // e.g., "1,2,3,4,5" for weekdays (1=Mon, 0=Sun)
-    scheduleTime: string // HH:mm format (WIB/UTC+7)
-}
-
 export async function getRevenueReportConfig() {
     try {
         await getAuthenticatedSession("revenue-forecast", "view")
-        const result = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
-        
-        if (result.length === 0) {
-            return {
-                success: true,
-                data: {
-                    recipientRoles: ["admin"],
-                    recipientUserIds: [],
-                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
-                    scheduleType: "daily",
-                    scheduleTime: "08:00"
-                } as RevenueReportConfig
-            }
-        }
-
-        const rawData = JSON.parse(result[0].value)
-        
-        // Handle migration from old 'recipients' field if it exists
-        const data: RevenueReportConfig = {
-            recipientRoles: rawData.recipientRoles || [],
-            recipientUserIds: rawData.recipientUserIds || (rawData.recipients || []),
-            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
-            scheduleType: rawData.scheduleType || "daily",
-            scheduleValue: rawData.scheduleValue || "",
-            scheduleTime: rawData.scheduleTime || "08:00"
-        }
-
-        return {
-            success: true,
-            data
-        }
+        return await fetchRevenueReportConfig()
     } catch (error) {
         console.error("Failed to fetch revenue report config:", error)
         return { success: false, error: "Failed to fetch configuration" }
     }
 }
+
 
 export async function saveRevenueReportConfig(config: RevenueReportConfig) {
     try {

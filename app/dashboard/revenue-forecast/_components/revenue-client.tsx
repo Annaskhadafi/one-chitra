@@ -133,16 +133,17 @@ function SalesmanCard({ label, data, isExporting = false }: { label: string; dat
                 </div>
             </div>
 
-            <div className="flex justify-between items-end gap-2 mt-auto z-10">
-                <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Forecast</span>
-                    <span className="text-xs font-extrabold truncate">{fmt(data.forecast)}</span>
+            <div className="flex justify-between items-end gap-1.5 mt-auto z-10 w-full">
+                <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+                    <span className="text-[8px] font-bold text-muted-foreground uppercase leading-none mb-0.5">Forecast</span>
+                    <span className={`${isExporting ? "text-[9px]" : "text-[10px]"} font-extrabold truncate`}>{fmt(data.forecast)}</span>
                 </div>
-                <div className="flex flex-col text-right">
-                    <span className="text-[9px] font-bold text-primary/70 uppercase">Revenue</span>
-                    <span className="text-sm font-black text-primary truncate leading-none">{fmt(data.revenue)}</span>
+                <div className="flex flex-col text-right min-w-0 flex-1 overflow-hidden">
+                    <span className="text-[8px] font-bold text-primary/70 uppercase leading-none mb-0.5">Revenue</span>
+                    <span className={`${isExporting ? "text-[11px]" : "text-[12px]"} font-black text-primary truncate leading-none`}>{fmt(data.revenue)}</span>
                 </div>
             </div>
+
         </div>
     )
 }
@@ -444,17 +445,19 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                     <ConsolidateGauge data={targets.consolidate} />
                 </div>
                 <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <SalesmanCard label="MA OC" data={targets.ma_oc} isExporting={isExportingJpg} />
-                    <SalesmanCard label="MA WS" data={targets.ma_ws} isExporting={isExportingJpg} />
-                    <SalesmanCard label="MA AG" data={targets.ma_ag} isExporting={isExportingJpg} />
-                    <SalesmanCard label="MA BR" data={targets.ma_br} isExporting={isExportingJpg} />
-                    <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExportingJpg} />
-                    <SalesmanCard label="MA MC" data={targets.ma_mc} isExporting={isExportingJpg} />
+                    <SalesmanCard label="MA OC" data={targets.ma_oc} isExporting={isExporting || isExportingJpg} />
+                    <SalesmanCard label="MA WS" data={targets.ma_ws} isExporting={isExporting || isExportingJpg} />
+                    <SalesmanCard label="MA AG" data={targets.ma_ag} isExporting={isExporting || isExportingJpg} />
+                    <SalesmanCard label="MA BR" data={targets.ma_br} isExporting={isExporting || isExportingJpg} />
+                    <SalesmanCard label="MA FQ" data={targets.ma_fq} isExporting={isExporting || isExportingJpg} />
+                    <SalesmanCard label="MA MC" data={targets.ma_mc} isExporting={isExporting || isExportingJpg} />
                 </div>
+
                 <div className="lg:col-span-4 grid grid-cols-2 gap-3">
-                    <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" isExporting={isExportingJpg} />
-                    <CustomerGauge label="SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" isExporting={isExportingJpg} />
+                    <CustomerGauge label="CK" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-700 dark:text-gray-300" strokeColor="#6b7280" isExporting={isExporting || isExportingJpg} />
+                    <CustomerGauge label="SIS" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-700 dark:text-purple-400" strokeColor="#9333ea" isExporting={isExporting || isExportingJpg} />
                 </div>
+
             </div>
 
             {/* ─── ROW 2: Service / PA / PA+Service ────────────────────────────── */}
