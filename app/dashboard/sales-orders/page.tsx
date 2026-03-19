@@ -2,7 +2,7 @@ import { getSalesOrders } from "@/app/actions/sales-order"
 import { SalesOrderTable } from "./_components/sales-order-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Plus, ShoppingCart, FileText } from "lucide-react"
+import { Plus, ShoppingCart, FileText, Zap } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
@@ -32,9 +32,13 @@ export default async function SalesOrdersPage() {
                             </Button>
                         </Link>
                         <Link href="/dashboard/sales-orders/ocr-upload" className="w-full sm:w-auto">
-                            <Button variant="outline" className="w-full sm:w-auto sm:min-w-[190px] justify-center">
-                                <FileText className="mr-2 h-4 w-4" />
-                                Sales Order OCR
+                            <Button className="w-full sm:w-auto sm:min-w-[190px] justify-center bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-700 hover:via-violet-700 hover:to-purple-700 border-none shadow-lg shadow-indigo-200/50 transition-all duration-300 hover:scale-[1.03] active:scale-[0.98] group relative overflow-hidden">
+                                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                                <Zap className="mr-2 h-4 w-4 fill-white flex-shrink-0" />
+                                <span className="relative">Sales Order OCR</span>
+                                <div className="ml-2 px-1.5 py-0.5 rounded-[4px] bg-white/20 text-[8px] font-black uppercase tracking-tight flex items-center justify-center border border-white/30 backdrop-blur-sm">
+                                    AI
+                                </div>
                             </Button>
                         </Link>
                     </div>

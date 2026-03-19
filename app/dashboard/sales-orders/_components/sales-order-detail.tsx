@@ -75,281 +75,203 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
     }
 
     // Combine address parts
-    const customerAddress = [
-        order.customer.address1,
-        order.customer.address2,
-        order.customer.address3,
-        order.customer.address4,
-        order.customer.address5
-    ].filter(Boolean).join(", ")
+    const customerAddress = order.customer ? [
+        order.customer?.address1,
+        order.customer?.address2,
+        order.customer?.address3,
+        order.customer?.address4,
+        order.customer?.address5
+    ].filter(Boolean).join(", ") : ""
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-7xl w-full h-[90vh] flex flex-col p-0 gap-0 sm:max-w-[90vw]">
-                <DialogHeader className="px-8 py-6 border-b shrink-0 bg-muted/5">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <div className="flex items-center gap-4 mb-2">
-                                <DialogTitle className="text-3xl font-bold tracking-tight">
-                                    {order.invoiceNumber || "Draft Order"}
-                                </DialogTitle>
-                                <Badge variant={statusVariants[order.status]} className="px-3 py-1 text-sm font-medium">
-                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                                </Badge>
-                            </div>
-                            <DialogDescription className="flex items-center gap-2 text-base">
-                                <Calendar className="h-4 w-4" />
-                                {format(new Date(order.salesDate), "PPP")}
-                            </DialogDescription>
-                        </div>
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="h-10">
-                                <Printer className="h-4 w-4 mr-2" />
-                                Print
-                            </Button>
-                            <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
-                                <Button className="h-10 px-6">
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Edit Order
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
+            <DialogContent className="!max-w-none !w-[92vw] h-[95vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl bg-white rounded-xl">
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{order.invoiceNumber || "Sales Order Detail"}</DialogTitle>
+                    <DialogDescription>Professional document view for Sales Order {order.invoiceNumber}</DialogDescription>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1">
-                    <div className="p-8 space-y-10">
-                        {/* Information Cards */}
-                        <div className="grid md:grid-cols-2 gap-8">
-                            <div className="bg-card rounded-xl border shadow-sm p-6 space-y-5">
-                                <div className="flex items-center gap-2 pb-2 border-b">
-                                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                        <UserIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                    </div>
-                                    <h3 className="font-semibold text-lg">Customer Information</h3>
-                                </div>
+                {/* Refined Professional Header */}
+                <header className="px-10 py-5 shrink-0 bg-white border-b flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="space-y-0.5">
+                            <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                                {order.invoiceNumber || "Draft Order"}
+                            </h2>
+                            <p className="text-[11px] font-semibold text-slate-400 font-mono tracking-tight">{format(new Date(order.salesDate), "PPPP")}</p>
+                        </div>
+                        <Badge variant={statusVariants[order.status]} className="h-5 px-3 rounded-full font-bold text-[9px] uppercase tracking-widest shadow-sm">
+                            {order.status}
+                        </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
+                            <Button variant="outline" className="h-9 px-5 rounded-lg border-slate-200 text-slate-700 bg-white hover:bg-slate-50 shadow-sm text-[10px] font-bold uppercase tracking-wider">
+                                <Pencil className="h-3 w-3 mr-2" />
+                                Edit Order
+                            </Button>
+                        </Link>
+                    </div>
+                </header>
 
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Customer Name</div>
-                                        <div className="font-medium text-xl">{order.customer.name}</div>
-                                        <div className="text-sm font-mono text-muted-foreground mt-1">{order.customer.customerCode}</div>
+                {/* Main Content Area - Balanced Professional Flow */}
+                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 bg-slate-50/5">
+                    <div className="max-w-7xl mx-auto py-10 px-12 space-y-12 bg-white my-8 shadow-sm border border-slate-100 rounded-lg">
+                        
+                        {/* Summary Section - Balanced spacing for broad canvas */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                            {/* Left Column: Customer */}
+                            <div className="space-y-5">
+                                <section className="space-y-2">
+                                    <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50 pb-2">Customer Details</h3>
+                                    <div className="space-y-0.5">
+                                        <p className="text-xl font-bold text-slate-900 tracking-tight leading-tight">{order.customer?.name}</p>
+                                        <p className="text-xs text-slate-500 font-semibold tracking-wide">Customer ID: {order.customer?.customerCode}</p>
                                     </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {order.customer.email && (
-                                            <div>
-                                                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Email</div>
-                                                <div className="flex items-center gap-2 text-sm">
-                                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                                    <span>{order.customer.email}</span>
-                                                </div>
+                                    <div className="pt-3 space-y-2 text-[13px] text-slate-600 font-medium">
+                                        {order.customer?.email && (
+                                            <div className="flex items-center gap-2">
+                                                <Mail className="h-3.5 w-3.5 text-slate-400" />
+                                                <span>{order.customer.email}</span>
                                             </div>
                                         )}
-
-                                        {/* Placeholder for phone if needed later */}
-                                        {/* 
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Phone</div>
-                                            <div className="flex items-center gap-2 text-sm">
-                                                <Phone className="h-4 w-4 text-muted-foreground" />
-                                                <span>-</span>
+                                        {customerAddress && (
+                                            <div className="flex items-start gap-2 leading-relaxed text-slate-500 font-normal">
+                                                <MapPin className="h-3.5 w-3.5 text-slate-400 mt-1 shrink-0" />
+                                                <span>{customerAddress}</span>
                                             </div>
-                                        </div> 
-                                        */}
+                                        )}
                                     </div>
-
-                                    {customerAddress && (
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Address</div>
-                                            <div className="flex items-start gap-2 text-sm bg-muted/30 p-3 rounded-md">
-                                                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                                <span className="leading-relaxed">{customerAddress}</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                </section>
                             </div>
 
-                            <div className="bg-card rounded-xl border shadow-sm p-6 space-y-5">
-                                <div className="flex items-center gap-2 pb-2 border-b">
-                                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                                        <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                                    </div>
-                                    <h3 className="font-semibold text-lg">Order Details</h3>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PO Number</div>
-                                            <div className="font-medium text-lg">{order.customerPo || "-"}</div>
+                            {/* Right Column: Order Metadata */}
+                            <div className="space-y-5">
+                                <section className="space-y-5">
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div className="space-y-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">PO Number</span>
+                                            <p className="text-sm font-bold text-slate-800">{order.customerPo || "-"}</p>
                                         </div>
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created By</div>
-                                            <div className="font-medium text-lg flex items-center gap-2">
-                                                <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                                                    {order.createdByUser?.name?.charAt(0) || "?"}
-                                                </div>
-                                                {order.createdByUser?.name || "-"}
-                                            </div>
+                                        <div className="space-y-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Transaction</span>
+                                            <p className="text-sm font-bold text-slate-800 uppercase tracking-tight">{order.categoryPo || "Normal"}</p>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Product Category</span>
+                                            <p className="text-sm font-bold text-slate-800 uppercase tracking-tight">{order.categoryProduct || "-"}</p>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Authorized By</span>
+                                            <p className="text-sm font-bold text-slate-800">{order.createdByUser?.name || "-"}</p>
                                         </div>
                                     </div>
-
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category PO</div>
-                                            <Badge variant="outline" className="font-medium">{order.categoryPo || "Normal"}</Badge>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Category Product</div>
-                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
-                                                {order.categoryProduct || "-"}
-                                            </Badge>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Payment Terms</div>
-                                        <div className="font-medium">{order.termsConditions || "-"}</div>
-                                    </div>
-
-                                    {order.notes && (
-                                        <div>
-                                            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Internal Notes</div>
-                                            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-3 rounded-md text-sm text-amber-900 dark:text-amber-100">
-                                                {order.notes}
-                                            </div>
+                                    {order.termsConditions && (
+                                        <div className="pt-4 border-t border-slate-50 space-y-1">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Terms & Conditions</span>
+                                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed italic">{order.termsConditions}</p>
                                         </div>
                                     )}
-                                </div>
+                                </section>
                             </div>
                         </div>
 
-                        {/* Items Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-bold text-xl">Order Items</h3>
-                                <Badge variant="outline" className="text-base px-3 py-1">
-                                    {order.items.length} Items
-                                </Badge>
-                            </div>
-
-                            <div className="rounded-xl border shadow-sm overflow-hidden bg-card">
-                                <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader className="bg-muted/40">
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead className="w-[45%] pl-6 py-4 h-auto">Product</TableHead>
-                                            <TableHead className="text-right py-4 h-auto">Quantity</TableHead>
-                                            <TableHead className="text-right py-4 h-auto">Unit Price</TableHead>
-                                            <TableHead className="text-right py-4 h-auto">Discount</TableHead>
-                                            <TableHead className="text-right pr-6 py-4 h-auto">Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {order.items.map((item) => (
-                                            <TableRow key={item.id} className="group">
-                                                <TableCell className="pl-6 py-4">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="font-semibold text-base text-foreground group-hover:text-blue-600 transition-colors">
-                                                            {item.product?.materialDescription || "Unknown Product"}
-                                                        </span>
-                                                        <div className="flex items-center gap-2">
-                                                            <Badge variant="secondary" className="text-[10px] h-5 rounded-sm px-1.5 font-mono text-muted-foreground">
-                                                                {item.product?.materialNumber || "NO-CODE"}
-                                                            </Badge>
-                                                            {item.product?.oldMaterialNo && (
-                                                                <span className="text-xs text-muted-foreground border-l pl-2 ml-1">
-                                                                    Old: {item.product.oldMaterialNo}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right font-mono text-base py-4">
-                                                    {item.quantity}
-                                                </TableCell>
-                                                <TableCell className="text-right font-mono text-base py-4 text-muted-foreground">
-                                                    {formatCurrency(Number(item.unitPrice))}
-                                                </TableCell>
-                                                <TableCell className="text-right font-mono text-base py-4 text-red-600">
-                                                    {Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "-"}
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6 py-4 font-mono text-base font-bold">
-                                                    {formatCurrency(
-                                                        (Number(item.quantity) * Number(item.unitPrice)) - Number(item.discount)
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                        {/* Administrative Notes */}
+                        {order.notes && (
+                            <div className="py-5 px-6 bg-slate-50 border border-slate-100 rounded-xl flex gap-4">
+                                <FileText className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                                <div className="space-y-0.5">
+                                    <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Administrative Notes</h4>
+                                    <p className="text-[13px] text-slate-600 font-medium leading-relaxed italic">&ldquo;{order.notes}&rdquo;</p>
                                 </div>
                             </div>
+                        )}
+
+                        {/* Items Section - Professional Table */}
+                        <div className="space-y-5">
+                            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-2">Line Items Summary</h3>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="border-b-2 border-slate-100 hover:bg-transparent">
+                                        <TableHead className="pl-0 py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Product / Material Description</TableHead>
+                                        <TableHead className="text-center py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Qty</TableHead>
+                                        <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Unit Price</TableHead>
+                                        <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Discount</TableHead>
+                                        <TableHead className="text-right pr-0 py-3 text-[9px] font-bold uppercase text-slate-900 tracking-wider">Total (IDR)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {order.items.map((item) => (
+                                        <TableRow key={item.id} className="border-b border-slate-50 last:border-0 group hover:bg-slate-50/20 transition-colors">
+                                            <TableCell className="pl-0 py-5">
+                                                <div className="space-y-1">
+                                                    <p className="font-bold text-slate-800 text-sm uppercase tracking-tight">{item.product?.materialDescription}</p>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[9px] font-bold text-slate-500 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{item.product?.materialNumber}</span>
+                                                        {item.product?.oldMaterialNo && <span className="text-[9px] font-medium text-slate-400">| {item.product.oldMaterialNo}</span>}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-center font-bold text-slate-800 text-sm py-5">{item.quantity}</TableCell>
+                                            <TableCell className="text-right font-medium text-slate-500 text-[11px] py-5">{formatCurrency(Number(item.unitPrice))}</TableCell>
+                                            <TableCell className="text-right font-medium text-rose-500/80 text-[11px] py-5">{Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "—"}</TableCell>
+                                            <TableCell className="text-right pr-0 py-5 text-sm font-bold text-slate-900">
+                                                {formatCurrency((Number(item.quantity) * Number(item.unitPrice)) - Number(item.discount))}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </div>
 
                         {/* Totals Section */}
-                        <div className="flex justify-end pt-2">
-                            <div className="w-full max-w-sm bg-card rounded-xl border shadow-sm p-6 space-y-4">
-                                <div className="space-y-3">
-                                    <div className="flex justify-between text-base">
-                                        <span className="text-muted-foreground">Subtotal</span>
-                                        <span className="font-medium font-mono">{formatCurrency(calculateSubtotal())}</span>
+                        <div className="flex justify-end pt-8">
+                            <div className="w-full max-w-[320px] space-y-4">
+                                <div className="space-y-2 text-[13px]">
+                                    <div className="flex justify-between py-0.5">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-widest text-[9px]">Subtotal</span>
+                                        <span className="font-bold text-slate-800">{formatCurrency(calculateSubtotal())}</span>
                                     </div>
                                     {calculateTotalDiscount() > 0 && (
-                                        <div className="flex justify-between text-base text-red-600">
-                                            <span>Total Discount</span>
-                                            <span className="font-mono">-{formatCurrency(calculateTotalDiscount())}</span>
+                                        <div className="flex justify-between py-0.5 text-rose-600">
+                                            <span className="font-semibold uppercase tracking-widest text-[9px]">Discount</span>
+                                            <span className="font-bold">-{formatCurrency(calculateTotalDiscount())}</span>
                                         </div>
                                     )}
-                                    {calculateTotalTax() > 0 && (
-                                        <div className="flex justify-between text-base">
-                                            <span>Tax (VAT)</span>
-                                            <span className="font-medium font-mono">{formatCurrency(calculateTotalTax())}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between text-base">
-                                        <span>Shipping</span>
-                                        <span className="font-medium font-mono">{formatCurrency(Number(order.shipping))}</span>
+                                    <div className="flex justify-between py-0.5">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-widest text-[9px]">VAT (11%)</span>
+                                        <span className="font-bold text-slate-800">{formatCurrency(calculateTotalTax())}</span>
+                                    </div>
+                                    <div className="flex justify-between py-0.5 pb-3">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-widest text-[9px]">Logistics</span>
+                                        <span className="font-bold text-slate-800">{formatCurrency(Number(order.shipping))}</span>
                                     </div>
                                 </div>
-                                <Separator />
-                                <div className="pt-2">
-                                    <div className="flex justify-between items-end">
-                                        <span className="text-lg font-bold">Grand Total</span>
-                                        <span className="text-2xl font-bold text-primary font-mono">{formatCurrency(calculateGrandTotal())}</span>
-                                    </div>
+                                <div className="border-t-2 border-slate-900 pt-5 flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Grand Total</span>
+                                    <span className="text-3xl font-bold text-slate-900 tracking-tighter">
+                                        {formatCurrency(calculateGrandTotal())}
+                                    </span>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </ScrollArea>
 
-                <DialogFooter className="p-4 border-t bg-muted/5 shrink-0">
-                    <Button variant="outline" size="lg" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-                        Close
+                    </div>
+                </div>
+
+                {/* Final Professional Footer */}
+                <footer className="px-10 py-5 border-t bg-slate-50/50 shrink-0 flex justify-center">
+                    <Button 
+                        variant="link" 
+                        onClick={() => onOpenChange(false)} 
+                        className="text-slate-400 hover:text-slate-600 no-underline font-bold text-[10px] uppercase tracking-[0.3em]"
+                    >
+                        Close Document Preview
                     </Button>
-                </DialogFooter>
+                </footer>
             </DialogContent>
         </Dialog>
     )
 }
 
-function UserIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={className}
-        >
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-        </svg>
-    )
-}
