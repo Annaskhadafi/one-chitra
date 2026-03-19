@@ -171,23 +171,35 @@ export async function extractStructuredFromDocument(params: {
     if (!apiKey) {
         throw new Error("MISTRAL_API_KEY is not set")
     }
+    const lower = params.filename.toLowerCase()
+    if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+        throw new Error("File gambar tidak didukung oleh model OCR ini. Silakan gunakan file PDF untuk hasil terbaik.")
+    }
     const base64 = params.fileBuffer.toString("base64")
     const documentUrl = buildDataUri(params.filename, base64)
+    const normalizedPages = normalizePages(params.pages)
     const body = {
         model: "mistral-ocr-latest",
         document: {
             type: "document_url",
             document_url: documentUrl,
         },
-        pages: params.pages ?? "all",
+        ...(normalizedPages ? { pages: normalizedPages } : {}),
         include_image_base64: true,
-        document_annotation_format: documentAnnotationFormat,
-        bbox_annotation_format: bboxAnnotationFormat,
-        output_format: "json",
-        language_hint: "latin",
-        numeric_precision_hint: "high",
-        prompt: "Ekstrak data Sales Order/PO dalam JSON mengikuti schema document_annotation_format, dengan angka dan tanggal yang akurat. Kembalikan juga bbox sesuai schema.",
-        max_tokens: 4000,
+        document_annotation_format: {
+            type: "json_schema",
+            json_schema: {
+                name: "so_document_annotation",
+                schema: documentAnnotationFormat,
+            },
+        },
+        bbox_annotation_format: {
+            type: "json_schema",
+            json_schema: {
+                name: "so_bbox_annotation",
+                schema: bboxAnnotationFormat,
+            },
+        },
     }
     const res = await fetch(endpoint, {
         method: "POST",
@@ -212,17 +224,25 @@ export async function extractStructuredFromDocument(params: {
                     .join(" | ")
             }
         } catch {}
+        if (upstreamMessage.includes("does not support image input")) {
+            throw new Error("File gambar tidak didukung oleh model OCR ini. Silakan gunakan file PDF untuk hasil terbaik.")
+        }
         throw new Error(`MISTRAL_UPSTREAM_ERROR ${res.status} ${upstreamMessage}`)
     }
     const json = await res.json()
-    const rawText: string = json?.markdown ?? json?.text ?? ""
+    const rawText: string = getRawText(json)
     const model: string = json?.model ?? "mistral-ocr-latest"
     const pagesProcessed: number = json?.usage_info?.pages_processed ?? 0
-    const docAnn = documentAnnotationSchema.safeParse(json?.document_annotation ?? json?.documentAnnotations)
+    const documentAnnotationInput = getDocumentAnnotationInput(json, rawText)
+    const docAnn = documentAnnotationSchema.safeParse(documentAnnotationInput)
     if (!docAnn.success) {
-        throw new Error("Document annotation parse failed")
+        const firstIssue = docAnn.error.issues[0]
+        const path = firstIssue?.path?.join(".") || "document_annotation"
+        const message = firstIssue?.message || "invalid annotation shape"
+        throw new Error(`Document annotation parse failed: ${path}: ${message}`)
     }
-    const bboxAnn = bboxAnnotationSchema.safeParse(json?.bbox_annotation ?? json?.bboxAnnotations)
+    const bboxAnnotationInput = getBboxAnnotationInput(json)
+    const bboxAnn = bboxAnnotationSchema.safeParse(bboxAnnotationInput)
     const productBoxes: OcrBoundingBox[] = bboxAnn.success ? bboxAnn.data.product_boxes : []
     const entityBoxes = bboxAnn.success ? bboxAnn.data.entity_boxes : {}
     return {
@@ -247,4 +267,136 @@ function buildDataUri(filename: string, base64: string) {
         return `data:image/jpeg;base64,${base64}`
     }
     return `data:application/octet-stream;base64,${base64}`
+}
+
+function normalizePages(pages?: string | number[] | null): number[] | undefined {
+    if (!pages || pages === "all") {
+        return undefined
+    }
+    if (Array.isArray(pages)) {
+        const validPages = pages.filter((page) => Number.isInteger(page) && page > 0)
+        return validPages.length > 0 ? validPages : undefined
+    }
+    const parsed = Number(pages)
+    if (Number.isInteger(parsed) && parsed > 0) {
+        return [parsed]
+    }
+    return undefined
+}
+
+function getRawText(json: unknown): string {
+    if (!json || typeof json !== "object") {
+        return ""
+    }
+    const root = json as Record<string, unknown>
+    if (typeof root.markdown === "string" && root.markdown.trim().length > 0) {
+        return root.markdown
+    }
+    if (typeof root.text === "string" && root.text.trim().length > 0) {
+        return root.text
+    }
+    if (Array.isArray(root.pages)) {
+        const parts = root.pages
+            .map((page) => {
+                if (!page || typeof page !== "object") {
+                    return ""
+                }
+                const markdown = (page as Record<string, unknown>).markdown
+                return typeof markdown === "string" ? markdown : ""
+            })
+            .filter((part) => part.length > 0)
+        if (parts.length > 0) {
+            return parts.join("\n")
+        }
+    }
+    return ""
+}
+
+function getDocumentAnnotationInput(json: unknown, rawText: string): unknown {
+    if (!json || typeof json !== "object") {
+        return extractJsonFromText(rawText) ?? {}
+    }
+    const root = json as Record<string, unknown>
+    const candidates = [
+        root.document_annotation,
+        root.documentAnnotations,
+        root.documentAnnotation,
+        root.structured,
+        root.extracted,
+        (root.result as Record<string, unknown> | undefined)?.document_annotation,
+        (root.output as Record<string, unknown> | undefined)?.document_annotation,
+        (root.data as Record<string, unknown> | undefined)?.document_annotation,
+    ]
+    for (const candidate of candidates) {
+        const normalized = parseJsonLike(candidate)
+        if (normalized && typeof normalized === "object") {
+            return normalized
+        }
+    }
+    const fromText = extractJsonFromText(rawText)
+    if (fromText) {
+        return fromText
+    }
+    return root
+}
+
+function getBboxAnnotationInput(json: unknown): unknown {
+    if (!json || typeof json !== "object") {
+        return undefined
+    }
+    const root = json as Record<string, unknown>
+    const candidates = [
+        root.bbox_annotation,
+        root.bboxAnnotations,
+        root.bboxAnnotation,
+        (root.result as Record<string, unknown> | undefined)?.bbox_annotation,
+        (root.output as Record<string, unknown> | undefined)?.bbox_annotation,
+        (root.data as Record<string, unknown> | undefined)?.bbox_annotation,
+    ]
+    for (const candidate of candidates) {
+        const normalized = parseJsonLike(candidate)
+        if (normalized && typeof normalized === "object") {
+            return normalized
+        }
+    }
+    return undefined
+}
+
+function parseJsonLike(value: unknown): unknown {
+    if (!value) {
+        return undefined
+    }
+    if (typeof value === "string") {
+        try {
+            return JSON.parse(value)
+        } catch {
+            return undefined
+        }
+    }
+    return value
+}
+
+function extractJsonFromText(text: string): unknown {
+    if (!text) {
+        return undefined
+    }
+    const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi
+    for (const match of text.matchAll(fenceRegex)) {
+        const candidate = match[1]?.trim()
+        if (!candidate) {
+            continue
+        }
+        try {
+            return JSON.parse(candidate)
+        } catch {}
+    }
+    const firstBrace = text.indexOf("{")
+    const lastBrace = text.lastIndexOf("}")
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const slice = text.slice(firstBrace, lastBrace + 1)
+        try {
+            return JSON.parse(slice)
+        } catch {}
+    }
+    return undefined
 }

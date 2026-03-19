@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { marketingCampaigns, campaignRecipients, customers } from "@/db/schema"
-import { eq, desc, isNotNull, like, and, sql, count, or, lte } from "drizzle-orm"
+import { marketingCampaigns, campaignRecipients, customers, emailGroups, emailContacts, user, emailTemplates } from "@/db/schema"
+import { eq, desc, isNotNull, like, and, sql, count, or, lte, inArray } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
@@ -13,8 +13,10 @@ const campaignSchema = z.object({
     subject: z.string().min(3),
     content: z.string().min(10),
     description: z.string().optional(),
-    segmentCriteria: z.string().optional(), // JSON string e.g. {"type":"all"} or {"type":"rfm_segment","segment":"Champions"}
-    ccEmails: z.string().optional(), // JSON array string e.g. ["a@b.com","c@d.com"]
+    segmentCriteria: z.string().optional(), // Keep for backward compatibility
+    targetConfig: z.string().optional(), // New complex target config
+    ccEmails: z.string().optional(), // New CC config
+    attachments: z.string().optional(), // New attachments [{name, url}]
     scheduledAt: z.string().optional(), // ISO string
 })
 
@@ -128,8 +130,9 @@ export async function createCampaign(data: z.infer<typeof campaignSchema>) {
             subject: data.subject,
             content: data.content,
             description: data.description || null,
-            segmentCriteria: data.segmentCriteria || '{"type":"all"}',
-            ccEmails: data.ccEmails || null,
+            segmentCriteria: data.segmentCriteria || null,
+            targetConfig: data.targetConfig || null,
+            attachments: data.attachments || null,
             scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
             createdBy: session.user.id,
             status: "draft",
@@ -153,8 +156,9 @@ export async function updateCampaign(id: number, data: z.infer<typeof campaignSc
                 subject: data.subject,
                 content: data.content,
                 description: data.description || null,
-                segmentCriteria: data.segmentCriteria,
-                ccEmails: data.ccEmails || null,
+                segmentCriteria: data.segmentCriteria || null,
+                targetConfig: data.targetConfig || null,
+                attachments: data.attachments || null,
                 scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
                 updatedAt: new Date(),
             })
@@ -181,7 +185,7 @@ export async function deleteCampaign(id: number) {
 export async function duplicateCampaign(id: number) {
     try {
         const session = await getAuthenticatedSession("marketing", "create");
-        const original = await getCampaign(id);
+        const original = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, id)).then(r => r[0]);
         if (!original) return { success: false, error: "Campaign not found" };
 
         await db.insert(marketingCampaigns).values({
@@ -190,7 +194,8 @@ export async function duplicateCampaign(id: number) {
             content: original.content,
             description: original.description,
             segmentCriteria: original.segmentCriteria,
-            ccEmails: original.ccEmails,
+            targetConfig: original.targetConfig,
+            attachments: original.attachments,
             status: "draft",
             createdBy: session.user.id,
         });
@@ -215,16 +220,89 @@ export async function updateCampaignStatus(id: number, status: string) {
     }
 }
 
+// ─── RECIPIENT RESOLVER ─────────────────────────────────────────────────────
+
+async function resolveEmails(configStr: string | null) {
+    if (!configStr) return [];
+    try {
+        const config = JSON.parse(configStr);
+        const results: { email: string; name: string; company: string; position: string }[] = [];
+        const seen = new Set<string>();
+
+        const add = (e: string, n: string, c?: string | null, p?: string | null) => {
+            if (!e || seen.has(e.toLowerCase())) return;
+            seen.add(e.toLowerCase());
+            results.push({ 
+                email: e.toLowerCase(), 
+                name: n || "Recipient", 
+                company: c || "No Company", 
+                position: p || "No Position" 
+            });
+        };
+
+        // 1. Manual Emails
+        if (config.manual && Array.isArray(config.manual)) {
+            config.manual.forEach((e: string) => add(e, "Recipient"));
+        }
+
+        // 2. System Users
+        if (config.userIds && Array.isArray(config.userIds) && config.userIds.length > 0) {
+            const users = await db.select({ email: user.email, name: user.name })
+                .from(user)
+                .where(inArray(user.id, config.userIds));
+            // Users typically don't have company/position in this schema yet, or we'd join roles
+            users.forEach(u => add(u.email, u.name));
+        }
+
+        // 3. Email Groups
+        if (config.groupIds && Array.isArray(config.groupIds) && config.groupIds.length > 0) {
+            const groupContacts = await db.select({ 
+                email: emailContacts.email, 
+                name: emailContacts.name,
+                company: emailContacts.companyName,
+                position: emailContacts.position
+            })
+                .from(emailGroupMembers)
+                .innerJoin(emailContacts, eq(emailGroupMembers.contactId, emailContacts.id))
+                .where(inArray(emailGroupMembers.groupId, config.groupIds));
+            groupContacts.forEach(c => add(c.email, c.name, c.company, c.position));
+        }
+
+        // 4. Specific Contacts
+        if (config.contactIds && Array.isArray(config.contactIds) && config.contactIds.length > 0) {
+            const contacts = await db.select({ 
+                email: emailContacts.email, 
+                name: emailContacts.name,
+                company: emailContacts.companyName,
+                position: emailContacts.position
+            })
+                .from(emailContacts)
+                .where(inArray(emailContacts.id, config.contactIds));
+            contacts.forEach(c => add(c.email, c.name, c.company, c.position));
+        }
+
+        return results;
+    } catch (e) {
+        console.error("Resolve emails error:", e);
+        return [];
+    }
+}
+
+export async function getEmailTemplates() {
+    await getAuthenticatedSession("marketing", "view");
+    return await db.select().from(emailTemplates).where(eq(emailTemplates.isActive, true));
+}
+
 // ─── SEND CAMPAIGN ───────────────────────────────────────────────────────────
 
 export async function sendCampaignNow(id: number) {
     try {
         await getAuthenticatedSession("marketing", "edit");
 
-        const campaign = await getCampaign(id);
-        if (!campaign) return { success: false, error: "Campaign not found" };
+        const campaign = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, id)).then(r => r[0]);
+        if (!campaign) return { success: false, error: "Campaign tidak ditemukan" };
         if (campaign.status === 'sent' || campaign.status === 'processing') {
-            return { success: false, error: "Campaign already sent or processing" };
+            return { success: false, error: "Campaign sudah terkirim atau sedang diproses" };
         }
 
         // Mark as processing
@@ -232,59 +310,41 @@ export async function sendCampaignNow(id: number) {
             .set({ status: 'processing', updatedAt: new Date() })
             .where(eq(marketingCampaigns.id, id));
 
-        // Parse segment criteria
-        let criteria: Record<string, string> = { type: "all" };
-        try {
-            criteria = JSON.parse(campaign.segmentCriteria || '{"type":"all"}');
-        } catch { /* use default */ }
-
-        // Parse CC emails
-        let ccList: string[] = [];
-        try {
-            ccList = JSON.parse(campaign.ccEmails || '[]');
-        } catch { /* no CC */ }
-
-        // Build recipients query
-        const baseCondition = isNotNull(customers.email);
-        let recipientList: { email: string, name: string }[] = [];
-
-        if (criteria.type === "custom") {
-            const emails = Array.isArray(criteria.emails) ? criteria.emails : [];
-            recipientList = emails.map((e: string) => ({ email: e, name: "Pelanggan" }));
-        } else {
-            let recipientsData;
-            if (criteria.type === "city") {
-                recipientsData = await db.select()
-                    .from(customers)
-                    .where(and(baseCondition, like(customers.address1, `%${criteria.city}%`)));
-            } else {
-                recipientsData = await db.select()
-                    .from(customers)
-                    .where(baseCondition);
-            }
-            recipientList = recipientsData.map(c => ({ email: c.email!, name: c.name || "Pelanggan" }));
-        }
+        // Resolve Recipients & CC
+        const recipientList = await resolveEmails(campaign.targetConfig);
+        const ccList = await resolveEmails(campaign.ccEmails);
 
         if (recipientList.length === 0) {
-            await db.update(marketingCampaigns)
-                .set({ status: 'failed', updatedAt: new Date() })
-                .where(eq(marketingCampaigns.id, id));
-            return { success: false, error: criteria.type === "custom" ? "Custom email kosong." : "Data email pelanggan (kolom email di database) masih kosong untuk segmen ini!" };
+            await db.update(marketingCampaigns).set({ status: 'failed', updatedAt: new Date() }).where(eq(marketingCampaigns.id, id));
+            return { success: false, error: "Penerima tidak ditemukan. Pilih setidaknya satu target." };
         }
+
+        // Parse Attachments
+        let attachments: any[] = [];
+        try { attachments = JSON.parse(campaign.attachments || '[]'); } catch {}
 
         let successCount = 0;
         let failedCount = 0;
-        const recipientLogs: typeof campaignRecipients.$inferInsert[] = [];
+        const recipientLogs: any[] = [];
 
         // Send to each recipient
         for (const recipient of recipientList) {
             try {
+                const htmlContent = campaign.content
+                    .replace(/{{name}}/g, recipient.name)
+                    .replace(/{{company}}/g, recipient.company)
+                    .replace(/{{position}}/g, recipient.position);
+
                 const result = await sendEmail({
                     to: recipient.email,
                     subject: campaign.subject,
-                    html: campaign.content.replace(/{{name}}/g, recipient.name),
-                    ...(ccList.length > 0 ? { cc: ccList.join(", ") } as any : {}),
-                });
+                    html: htmlContent,
+                    cc: ccList.length > 0 ? ccList.map(c => c.email).join(", ") : undefined,
+                    attachments: attachments.map(a => ({
+                        filename: a.name,
+                        path: `${process.cwd()}/public${a.url}` // Adjust based on how uploadFile returns path
+                    }))
+                } as any);
 
                 recipientLogs.push({
                     campaignId: id,
@@ -333,9 +393,7 @@ export async function sendCampaignNow(id: number) {
 
     } catch (error) {
         console.error("Send campaign error:", error);
-        await db.update(marketingCampaigns)
-            .set({ status: 'failed', updatedAt: new Date() })
-            .where(eq(marketingCampaigns.id, id));
-        return { success: false, error: "Failed to send campaign" };
+        await db.update(marketingCampaigns).set({ status: 'failed', updatedAt: new Date() }).where(eq(marketingCampaigns.id, id));
+        return { success: false, error: "Gagal mengirim campaign" };
     }
 }

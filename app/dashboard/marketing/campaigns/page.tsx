@@ -34,6 +34,7 @@ interface Campaign {
     description: string | null
     segmentCriteria: string | null
     ccEmails: string | null
+    targetConfig: string | null
     status: string
     totalRecipients: number | null
     successCount: number | null
@@ -66,6 +67,20 @@ function parseCCCount(ccJson: string | null): number {
 
 function parseCCList(ccJson: string | null): string[] {
     try { return JSON.parse(ccJson || "[]") } catch { return [] }
+}
+
+function parseTargetCount(targetConfig: string | null): number {
+    if (!targetConfig) return 0
+    try {
+        const config = JSON.parse(targetConfig)
+        const userCount = (config.userIds || []).length
+        const groupCount = (config.groupIds || []).length
+        const contactCount = (config.contactIds || []).length
+        const manualCount = (config.manual || []).length
+        return userCount + groupCount + contactCount + manualCount
+    } catch {
+        return 0
+    }
 }
 
 export default function MarketingCampaignsPage() {
@@ -293,7 +308,7 @@ export default function MarketingCampaignsPage() {
 
                                         {/* Penerima */}
                                         <div className="px-3 py-2">
-                                            {c.status === "sent" && c.totalRecipients ? (
+                                            {c.status === "sent" && (c.totalRecipients ?? 0) > 0 ? (
                                                 <div className="space-y-1">
                                                     <div className="flex items-center gap-1 text-xs">
                                                         <Users className="h-3 w-3 text-muted-foreground" />
@@ -304,7 +319,10 @@ export default function MarketingCampaignsPage() {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
+                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                    <Users className="h-3.5 w-3.5" />
+                                                    <span>{parseTargetCount(c.targetConfig)}</span>
+                                                </div>
                                             )}
                                         </div>
 

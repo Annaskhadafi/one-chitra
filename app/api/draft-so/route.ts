@@ -6,6 +6,39 @@ import { eq } from "drizzle-orm"
 
 export const runtime = "nodejs"
 
+type DraftSoItemInput = {
+    productId?: number | null
+    qty?: number
+    quantity?: number
+    unitPrice?: number | string
+    discount?: number | string
+    tax?: number | string
+}
+
+type DraftSoPostInput = {
+    customerId?: number
+    customerPo?: string | null
+    salesDate?: string | Date | null
+    items?: DraftSoItemInput[]
+    status?: string | null
+    notes?: string | null
+    discount?: number | string | null
+    shipping?: number | string | null
+    warehouseId?: number | null
+    salesPersonId?: string | null
+    poDocument?: string | null
+    termsConditions?: string | null
+}
+
+type DraftSoPutInput = {
+    id?: number
+    status?: string | null
+    items?: DraftSoItemInput[]
+    notes?: string | null
+    discount?: number | string | null
+    shipping?: number | string | null
+}
+
 export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
     if (!body) {
@@ -24,7 +57,7 @@ export async function POST(req: NextRequest) {
         salesPersonId,
         poDocument,
         termsConditions,
-    } = body as any
+    } = body as DraftSoPostInput
     if (!customerId || !Array.isArray(items) || items.length === 0) {
         return Response.json({ error: "customerId and items are required" }, { status: 400 })
     }
@@ -62,7 +95,7 @@ export async function PUT(req: NextRequest) {
     if (!body) {
         return Response.json({ error: "Invalid JSON" }, { status: 400 })
     }
-    const { id, status, items, notes, discount, shipping } = body as any
+    const { id, status, items, notes, discount, shipping } = body as DraftSoPutInput
     if (!id) {
         return Response.json({ error: "id is required" }, { status: 400 })
     }

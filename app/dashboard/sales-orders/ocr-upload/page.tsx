@@ -13,16 +13,29 @@ export default function OcrUploadPage() {
     const [previews, setPreviews] = useState<string[]>([])
     const [progress, setProgress] = useState(0)
     const [error, setError] = useState<string | null>(null)
+    const [basicResult, setBasicResult] = useState<{
+        customer_name: string
+        po_number: string
+        date?: string
+        items: Array<{ product: string; qty: number; price: number }>
+    } | null>(null)
+    const [uploadedMeta, setUploadedMeta] = useState<{
+        fileUrl: string
+        fileName: string
+        fileType: string
+        rawText: string
+    } | null>(null)
+    const [isMapping, setIsMapping] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
 
     function applySelectedFiles(f: File[]) {
         const valid = f.filter(file => {
-            const okType = ["application/pdf", "image/jpeg", "image/png"].includes(file.type)
+            const okType = ["application/pdf"].includes(file.type)
             const okSize = file.size <= 10 * 1024 * 1024
             return okType && okSize
         })
         if (valid.length !== f.length) {
-            setError("Format harus PDF/JPG/PNG dan ukuran maks 10 MB per file")
+            setError("Format harus PDF (gambar tidak didukung) dan ukuran maks 10 MB per file")
         } else {
             setError(null)
         }
@@ -49,6 +62,8 @@ export default function OcrUploadPage() {
         if (files.length === 0) return
         setProgress(0)
         setError(null)
+        setBasicResult(null)
+        setUploadedMeta(null)
         const file = files[0]
         const form = new FormData()
         form.append("file", file)
@@ -64,16 +79,24 @@ export default function OcrUploadPage() {
             return
         }
         setProgress(80)
-        const ocrResponse = await fetch("/api/ocr-extract", {
+        const ocrResponse = await fetch("/api/ocr-extract-basic", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileUrl: res.url }),
         })
         const ocrBodyText = await ocrResponse.text()
-        let ocrRes: { error?: string; sessionId?: number } = {}
+        let ocrRes: {
+            error?: string
+            basic?: { customer_name: string; po_number: string; items: Array<{ product: string; qty: number; price: number }> }
+            rawText?: string
+        } = {}
         if (ocrBodyText.trim().length > 0) {
             try {
-                ocrRes = JSON.parse(ocrBodyText) as { error?: string; sessionId?: number }
+                ocrRes = JSON.parse(ocrBodyText) as {
+                    error?: string
+                    basic?: { customer_name: string; po_number: string; date: string; items: Array<{ product: string; qty: number; price: number }> }
+                    rawText?: string
+                }
             } catch {
                 setError("Respons OCR tidak valid")
                 return
@@ -90,12 +113,51 @@ export default function OcrUploadPage() {
             setError(ocrRes.error)
             return
         }
-        if (!ocrRes.sessionId) {
-            setError("Session OCR tidak ditemukan")
+        if (!ocrRes.basic) {
+            setError("Hasil ekstraksi OCR kosong")
             return
         }
         setProgress(100)
-        router.push(`/dashboard/sales-orders/ocr-validate?session=${ocrRes.sessionId}`)
+        setBasicResult(ocrRes.basic)
+        setUploadedMeta({
+            fileUrl: res.url,
+            fileName: file.name,
+            fileType: file.type,
+            rawText: ocrRes.rawText || "",
+        })
+    }
+
+    async function continueToAiMapping() {
+        if (!basicResult || !uploadedMeta) {
+            return
+        }
+        setIsMapping(true)
+        setError(null)
+        try {
+            const response = await fetch("/api/ocr-map-ai", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fileUrl: uploadedMeta.fileUrl,
+                    fileName: uploadedMeta.fileName,
+                    fileType: uploadedMeta.fileType,
+                    rawText: uploadedMeta.rawText,
+                    basic: basicResult,
+                }),
+            })
+            const body = await response.json().catch(() => null)
+            if (!response.ok) {
+                setError(body?.error || "Gagal proses mapping AI")
+                return
+            }
+            if (!body?.sessionId) {
+                setError("Session hasil mapping tidak ditemukan")
+                return
+            }
+            router.push(`/dashboard/sales-orders/ocr-validate?session=${body.sessionId}`)
+        } finally {
+            setIsMapping(false)
+        }
     }
 
     return (
@@ -106,11 +168,11 @@ export default function OcrUploadPage() {
                 onDrop={onDrop}
                 onDragOver={onDragOver}
             >
-                <p className="mb-4">Tarik file ke sini atau pilih</p>
+                <p className="mb-4">Tarik file PDF ke sini atau pilih (format gambar tidak didukung)</p>
                 <input
                     ref={inputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png"
+                    accept="application/pdf"
                     multiple={false}
                     onChange={onSelect}
                     className="mb-4"
@@ -142,6 +204,22 @@ export default function OcrUploadPage() {
                 </div>
                 <span>{progress}%</span>
             </div>
+            {basicResult && (
+                <Card>
+                    <CardContent className="p-4 space-y-4">
+                        <div className="text-sm font-medium">Hasil OCR Dasar (Tahap 1)</div>
+                        <pre className="text-xs bg-muted p-3 rounded overflow-auto">{JSON.stringify(basicResult, null, 2)}</pre>
+                        <div className="flex items-center gap-3">
+                            <Button onClick={continueToAiMapping} disabled={isMapping}>
+                                {isMapping ? "Memproses Mapping AI..." : "Lanjutkan Mapping AI (Tahap 2)"}
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                                Setelah ini user bisa review hasil mapping di halaman validasi
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     )
 }

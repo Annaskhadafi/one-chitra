@@ -132,6 +132,15 @@ export {
     evhsMasterPricesRelations,
 } from "./evhs";
 export { ocrExtractions } from "./ocr-extractions";
+export {
+    emailGroups,
+    emailContacts,
+    emailGroupMembers,
+    contactCategoryEnum,
+    emailGroupsRelations,
+    emailContactsRelations,
+    emailGroupMembersRelations,
+} from "./email-contacts";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";

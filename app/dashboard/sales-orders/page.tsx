@@ -9,15 +9,8 @@ import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export const dynamic = "force-dynamic"
 
-type SalesOrdersPageProps = {
-    searchParams: Promise<{ tab?: string }>
-}
-
-export default async function SalesOrdersPage({ searchParams }: SalesOrdersPageProps) {
-    const { tab } = await searchParams
-    const activeTab = tab ?? "all"
+export default async function SalesOrdersPage() {
     const allOrders = await getSalesOrders()
-    const orders = activeTab === "ocr" ? allOrders.filter(o => o.status === "ocr") : allOrders
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -48,21 +41,9 @@ export default async function SalesOrdersPage({ searchParams }: SalesOrdersPageP
                 </PermissionGuard>
             </div>
 
-            <div className="flex items-center gap-2">
-                <Link href="/dashboard/sales-orders?tab=all">
-                    <Button variant={activeTab === "all" ? "default" : "outline"} size="sm">
-                        Semua
-                    </Button>
-                </Link>
-                <Link href="/dashboard/sales-orders?tab=ocr">
-                    <Button variant={activeTab === "ocr" ? "default" : "outline"} size="sm">
-                        Draft OCR
-                    </Button>
-                </Link>
-            </div>
 
             <div className="flex-1">
-                <SalesOrderTable data={orders} />
+                <SalesOrderTable data={allOrders} />
             </div>
         </div>
     )

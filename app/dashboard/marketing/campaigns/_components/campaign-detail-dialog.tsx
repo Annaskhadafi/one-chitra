@@ -20,6 +20,7 @@ interface Campaign {
     description: string | null
     segmentCriteria: string | null
     ccEmails: string | null
+    targetConfig: string | null
     status: string
     totalRecipients: number | null
     successCount: number | null
@@ -56,7 +57,18 @@ function parseJsonArray(jsonStr: string | null): string[] {
     try { return JSON.parse(jsonStr || "[]") } catch { return [] }
 }
 
-function parseCriteria(jsonStr: string | null): string {
+function parseCriteria(jsonStr: string | null, targetConfig?: string | null): string {
+    if (targetConfig) {
+        try {
+            const config = JSON.parse(targetConfig)
+            const parts = []
+            if (config.userIds?.length) parts.push(`${config.userIds.length} User`)
+            if (config.groupIds?.length) parts.push(`${config.groupIds.length} Grup`)
+            if (config.contactIds?.length) parts.push(`${config.contactIds.length} Kontak`)
+            if (config.manual?.length) parts.push(`${config.manual.length} Manual`)
+            return parts.length > 0 ? parts.join(", ") : "Tidak ada target"
+        } catch { /* fallback to criteria */ }
+    }
     try {
         const c = JSON.parse(jsonStr || '{"type":"all"}')
         if (c.type === "all") return "Semua Pelanggan (dengan email)"
@@ -130,7 +142,7 @@ export function CampaignDetailDialog({ campaign, open, onClose }: Props) {
                     {/* Info Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <InfoCard icon={<Mail className="h-4 w-4" />} label="Subject" value={campaign.subject} />
-                        <InfoCard icon={<Users className="h-4 w-4" />} label="Target" value={parseCriteria(campaign.segmentCriteria)} />
+                        <InfoCard icon={<Users className="h-4 w-4" />} label="Target" value={parseCriteria(campaign.segmentCriteria, campaign.targetConfig)} />
                         <InfoCard
                             icon={<Calendar className="h-4 w-4" />}
                             label="Dibuat"

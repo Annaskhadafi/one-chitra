@@ -110,7 +110,7 @@ export function SalesOrderForm({
     initialData,
 }: SalesOrderFormProps) {
     const router = useRouter()
-    const isEdit = !!initialData
+    const isEdit = !!initialData && initialData.id > 0
 
     // Form State
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
@@ -480,7 +480,9 @@ export function SalesOrderForm({
                 const listParams = new URLSearchParams({
                     refresh: Date.now().toString(),
                 })
-                if (savedId) {
+                if (status === "draft" || status === "ocr") {
+                    listParams.set("tab", "ocr")
+                } else if (savedId) {
                     listParams.set("focusId", String(savedId))
                 }
                 const listUrl = `/dashboard/sales-orders?${listParams.toString()}`

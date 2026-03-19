@@ -218,43 +218,28 @@ export const navigationConfig: NavSection[] = [
                 resource: "marketing",
                 items: [
                     {
-                        title: "Marketing Calendar",
-                        url: "/dashboard/calendar",
-                        resource: "calendar-events",
-                    },
-                    {
-                        title: "Competitor Info New",
-                        url: "/dashboard/competitor-info-new",
-                        resource: "competitor-info-new",
-                    },
-                    {
-                        title: "Segmentasi Customer",
-                        url: "/dashboard/customer-segmentation",
-                        resource: "customer-segmentation",
-                    },
-                    {
-                        title: "Customers",
-                        url: "/dashboard/customers",
-                        resource: "customers",
-                    },
-                    {
                         title: "Campaign Manager",
                         url: "/dashboard/marketing/campaigns",
                         resource: "marketing",
                     },
+                    {
+                        title: "Contact & Grup Email",
+                        url: "/dashboard/marketing/email-lists",
+                        resource: "marketing",
+                    },
+                    {
+                        title: "Marketing Calendar",
+                        url: "/dashboard/calendar",
+                        resource: "calendar-events",
+                    },
                 ],
             },
             {
-                title: "Sales",
+                title: "Sales Preview",
                 url: "#",
                 icon: ShoppingCart,
                 resource: "sales",
                 items: [
-                    {
-                        title: "Price Management",
-                        url: "/dashboard/price-management",
-                        resource: "price-management",
-                    },
                     {
                         title: "Quotations",
                         url: "/dashboard/quotations",
@@ -274,16 +259,6 @@ export const navigationConfig: NavSection[] = [
                         title: "History Order",
                         url: "/dashboard/history-order",
                         resource: "history-order",
-                    },
-                    {
-                        title: "Master Data Forecast",
-                        url: "/dashboard/forecasts",
-                        resource: "forecast-management",
-                    },
-                    {
-                        title: "Bundling Builder",
-                        url: "/dashboard/calculator",
-                        resource: "bundling-calculator",
                     },
                 ],
             },

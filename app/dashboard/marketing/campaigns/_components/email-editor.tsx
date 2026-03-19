@@ -6,11 +6,13 @@ import StarterKit from "@tiptap/starter-kit"
 import Link from "@tiptap/extension-link"
 import TextAlign from "@tiptap/extension-text-align"
 import { TextStyle } from "@tiptap/extension-text-style"
+import Image from "@tiptap/extension-image"
 import {
     Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon,
     AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
-    Code, Code2, Eye, EyeOff
+    Code, Code2, Eye, EyeOff, Image as ImageIcon, Upload, Loader2
 } from "lucide-react"
+import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { Separator } from "@/components/ui/separator"
@@ -25,12 +27,20 @@ export function EmailEditor({ value, onChange }: Props) {
     const [isHtmlMode, setIsHtmlMode] = useState(false)
     const [htmlValue, setHtmlValue] = useState(value)
 
+    const [imageUploading, setImageUploading] = useState(false)
+
     const editor = useEditor({
         extensions: [
             StarterKit,
             Link.configure({ openOnClick: false }),
             TextAlign.configure({ types: ["heading", "paragraph"] }),
             TextStyle,
+            Image.configure({
+                allowBase64: true,
+                HTMLAttributes: {
+                    class: 'max-w-full h-auto rounded-lg shadow-sm my-4',
+                },
+            }),
         ],
         content: value,
         immediatelyRender: false,
@@ -51,6 +61,25 @@ export function EmailEditor({ value, onChange }: Props) {
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !editor) return
+
+        setImageUploading(true)
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const res = await uploadFile(formData)
+        if (res.success && res.url) {
+            editor.chain().focus().setImage({ src: res.url }).run()
+            toast.success("Gambar berhasil disisipkan")
+        } else {
+            toast.error("Gagal mengunggah gambar")
+        }
+        setImageUploading(false)
+        e.target.value = ""
+    }
 
     const handleHtmlChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const html = e.target.value
@@ -134,6 +163,27 @@ export function EmailEditor({ value, onChange }: Props) {
                 <Button size="sm" variant="ghost" className="h-7 px-2" onClick={setLink}>
                     <LinkIcon className="h-3.5 w-3.5" />
                 </Button>
+                
+                <Separator orientation="vertical" className="h-5 mx-0.5" />
+                
+                <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="h-7 px-2 gap-1.5" 
+                    disabled={imageUploading}
+                    onClick={() => document.getElementById('editor-image-upload')?.click()}
+                >
+                    {imageUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                    <span className="text-[10px] hidden sm:inline">Gambar</span>
+                </Button>
+                <input 
+                    id="editor-image-upload" 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleImageUpload} 
+                />
+
                 <div className="ml-auto">
                     <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={toggleHtmlMode}>
                         {isHtmlMode ? <><Eye className="h-3.5 w-3.5" />Visual</> : <><Code className="h-3.5 w-3.5" />HTML</>}

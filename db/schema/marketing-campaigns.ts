@@ -9,8 +9,10 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
     content: text("content").notNull(), // HTML content
     description: text("description"), // Internal notes
     segmentCriteria: text("segment_criteria"), // JSON string for criteria
+    ccEmails: text("cc_emails"), // JSON configuration for CC recipients
     channelType: varchar("channel_type", { length: 50 }).default("email").notNull(),
-    ccEmails: text("cc_emails"), // JSON array string of CC emails e.g. '["a@b.com","c@d.com"]'
+    attachments: text("attachments"), // JSON array string of {name, url}
+    targetConfig: text("target_config"), // JSON configuration for recipients
     scheduledAt: timestamp("scheduled_at"),
     sentAt: timestamp("sent_at"), // When campaign was actually sent
     status: varchar("status", { length: 50 }).default("draft").notNull(), // draft, scheduled, processing, sent, failed
