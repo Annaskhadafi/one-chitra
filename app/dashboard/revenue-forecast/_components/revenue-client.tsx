@@ -56,6 +56,7 @@ function MiniGauge({
     showProgress = true,
     showPercentage = true,
     emphasizeRevenue = false,
+    isExporting = false,
 }: {
     label: string
     data: TargetData
@@ -64,6 +65,7 @@ function MiniGauge({
     showProgress?: boolean
     showPercentage?: boolean
     emphasizeRevenue?: boolean
+    isExporting?: boolean
 }) {
     const p = pct(data.revenue, data.forecast)
     return (
@@ -77,9 +79,9 @@ function MiniGauge({
                     <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(p, 100)}%` }} />
                 </div>
             ) : null}
-            <div className="flex justify-between items-end text-[10px] text-muted-foreground font-medium">
-                <span className={emphasizeRevenue ? "text-[10px]" : ""}>F: {fmt(data.forecast)}</span>
-                <span className={emphasizeRevenue ? "text-xl font-black text-primary leading-none" : ""}>R: {fmt(data.revenue)}</span>
+            <div className={`flex justify-between items-end ${isExporting ? "text-[8px]" : "text-[10px]"} text-muted-foreground font-medium`}>
+                <span className={emphasizeRevenue ? (isExporting ? "text-[8px]" : "text-[10px]") : ""}>F: {fmt(data.forecast)}</span>
+                <span className={emphasizeRevenue ? (isExporting ? "text-sm font-black text-primary leading-none" : "text-xl font-black text-primary leading-none") : ""}>R: {fmt(data.revenue)}</span>
             </div>
         </div>
     )
@@ -133,14 +135,14 @@ function SalesmanCard({ label, data, isExporting = false }: { label: string; dat
                 </div>
             </div>
 
-            <div className="flex justify-between items-end gap-1.5 mt-auto z-10 w-full">
-                <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
-                    <span className="text-[8px] font-bold text-muted-foreground uppercase leading-none mb-0.5">Forecast</span>
-                    <span className={`${isExporting ? "text-[9px]" : "text-[10px]"} font-extrabold truncate`}>{fmt(data.forecast)}</span>
+            <div className="flex justify-between items-end gap-1 mt-auto z-10 w-full pt-1 border-t border-muted/20">
+                <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-[7px] font-bold text-muted-foreground uppercase leading-none mb-0.5">Forecast</span>
+                    <span className={`${isExporting ? "text-[8px]" : "text-[9px]"} font-extrabold tracking-tighter leading-none`}>{fmt(data.forecast)}</span>
                 </div>
-                <div className="flex flex-col text-right min-w-0 flex-1 overflow-hidden">
-                    <span className="text-[8px] font-bold text-primary/70 uppercase leading-none mb-0.5">Revenue</span>
-                    <span className={`${isExporting ? "text-[11px]" : "text-[12px]"} font-black text-primary truncate leading-none`}>{fmt(data.revenue)}</span>
+                <div className="flex flex-col text-right min-w-0 flex-1">
+                    <span className="text-[7px] font-bold text-primary/70 uppercase leading-none mb-0.5">Revenue</span>
+                    <span className={`${isExporting ? "text-[8px]" : "text-[10px]"} font-black text-primary tracking-tighter leading-none`}>{fmt(data.revenue)}</span>
                 </div>
             </div>
 
@@ -162,8 +164,8 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
             <div className="flex justify-between items-start mb-2 mt-1 z-10 w-full relative">
                 <div className="flex flex-col">
                     <div className="text-xs font-black text-muted-foreground uppercase tracking-wider">{label}</div>
-                    <div className="text-2xl font-black mt-1 tracking-tight">{fmt(data.forecast)}</div>
-                    <div className="text-[10px] uppercase text-muted-foreground font-bold mt-0.5">Forecast</div>
+                    <div className={`${isExporting ? "text-lg" : "text-2xl"} font-black mt-1 tracking-tighter leading-none`}>{fmt(data.forecast)}</div>
+                    <div className="text-[10px] uppercase text-muted-foreground font-bold mt-1">Forecast</div>
                 </div>
             </div>
 
@@ -196,8 +198,8 @@ function CustomerGauge({ label, data, colorClass = "bg-gray-500", textClass = "t
             </div>
 
             <div className="flex flex-col items-end z-10">
-                <div className="text-xl font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
-                <div className="text-[10px] uppercase text-primary/70 font-bold mt-0.5">Revenue</div>
+                <div className={`${isExporting ? "text-lg" : "text-xl"} font-black text-primary tracking-tighter leading-none`}>{fmt(data.revenue)}</div>
+                <div className="text-[10px] uppercase text-primary/70 font-bold mt-1">Revenue</div>
             </div>
         </div>
     )
@@ -221,12 +223,12 @@ function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "te
                 {!hideStats && (
                     <div className="flex flex-col">
                         <span className="text-[10px] text-muted-foreground font-bold uppercase">Forecast</span>
-                        <span className="text-lg font-black tracking-tight">{fmt(data.forecast)}</span>
+                        <span className={`${largeRevenue ? 'text-lg' : 'text-base'} font-black tracking-tight`}>{fmt(data.forecast)}</span>
                     </div>
                 )}
                 <div className={`flex flex-col ${hideStats ? 'w-full' : 'text-right'}`}>
                     <span className="text-[10px] text-primary/70 font-bold uppercase">Revenue</span>
-                    <span className={`${largeRevenue ? 'text-2xl font-black' : 'text-lg font-black'} text-primary tracking-tight truncate`}>{fmt(data.revenue)}</span>
+                    <span className={`${largeRevenue ? 'text-xl' : 'text-lg'} font-black text-primary tracking-tighter`}>{fmt(data.revenue)}</span>
                 </div>
             </div>
 
@@ -240,7 +242,7 @@ function CategoryCard({ label, data, colorClass = "bg-blue-500", textClass = "te
 }
 
 // Big consolidate gauge (center piece)
-function ConsolidateGauge({ data }: { data: TargetData }) {
+function ConsolidateGauge({ data, isExporting = false }: { data: TargetData, isExporting?: boolean }) {
     const p = pct(data.revenue, data.forecast)
     return (
         <div className="bg-card border-2 border-primary/10 rounded-xl p-6 flex flex-col items-center justify-center h-full shadow-md relative overflow-hidden">
@@ -261,11 +263,11 @@ function ConsolidateGauge({ data }: { data: TargetData }) {
             <div className="grid grid-cols-2 gap-4 w-full relative z-10 bg-muted/30 p-4 rounded-xl border border-muted/50">
                 <div className="text-center">
                     <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Forecast</div>
-                    <div className="text-sm font-black text-foreground tracking-tight">{fmt(data.forecast)}</div>
+                    <div className={`${isExporting ? "text-[11px]" : "text-sm"} font-black text-foreground tracking-tighter`}>{fmt(data.forecast)}</div>
                 </div>
                 <div className="text-center border-l border-border/50">
                     <div className="text-[10px] font-bold text-primary/70 uppercase tracking-wider mb-1">Revenue</div>
-                    <div className="text-sm font-black text-primary tracking-tight">{fmt(data.revenue)}</div>
+                    <div className={`${isExporting ? "text-[12px]" : "text-sm"} font-black text-primary tracking-tighter`}>{fmt(data.revenue)}</div>
                 </div>
             </div>
         </div>
@@ -442,7 +444,7 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
             {/* ─── ROW 1: Consolidate + Salesman + Customer ─────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
                 <div className="lg:col-span-3">
-                    <ConsolidateGauge data={targets.consolidate} />
+                    <ConsolidateGauge data={targets.consolidate} isExporting={isExporting || isExportingJpg} />
                 </div>
                 <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <SalesmanCard label="MA OC" data={targets.ma_oc} isExporting={isExporting || isExportingJpg} />
@@ -536,12 +538,12 @@ export function RevenueClient({ initialData, selectedPeriod, inventoryData, isEx
                     </div>
                     <div className="p-5 flex flex-col gap-4">
                         <div className="space-y-4">
-                            <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" showProgress={false} showPercentage={false} emphasizeRevenue={true} />
-                            <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" />
-                            <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" />
-                            <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" />
-                            <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" />
-                            <MiniGauge label="SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" />
+                            <MiniGauge label="Prime Product" data={targets.primeProduct} colorClass="bg-indigo-500" textClass="text-indigo-600 dark:text-indigo-400" showProgress={false} showPercentage={false} emphasizeRevenue={true} isExporting={isExporting} />
+                            <MiniGauge label="Service" data={targets.service} colorClass="bg-blue-500" textClass="text-blue-600 dark:text-blue-400" isExporting={isExporting} />
+                            <MiniGauge label="PA (Product Accessories)" data={targets.pa} colorClass="bg-emerald-500" textClass="text-emerald-600 dark:text-emerald-400" isExporting={isExporting} />
+                            <MiniGauge label="PA + Service" data={targets.paService} colorClass="bg-teal-500" textClass="text-teal-600 dark:text-teal-400" isExporting={isExporting} />
+                            <MiniGauge label="CK (Cipta Kridatama)" data={targets.ck} colorClass="bg-gray-500" textClass="text-gray-600 dark:text-gray-400" isExporting={isExporting} />
+                            <MiniGauge label="SIS (Saptaindra Sejati)" data={targets.sis} colorClass="bg-purple-500" textClass="text-purple-600 dark:text-purple-400" isExporting={isExporting} />
                         </div>
                     </div>
                 </div>

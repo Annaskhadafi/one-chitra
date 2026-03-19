@@ -371,6 +371,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
         content: Buffer | string
         contentType?: string
     }>
+    ignoreTemplateRecipients?: boolean
 }) {
     await ensureSystemEmailTemplates()
 
@@ -411,7 +412,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
     const htmlSource = template.htmlContent
     const textSource = template.textContent ?? undefined
     const ccEmails = "ccEmails" in template ? (template.ccEmails ?? []) : []
-    const templateRecipients = await resolveUserEmailsFromRolesAndIds(
+    const templateRecipients = args.ignoreTemplateRecipients ? [] : await resolveUserEmailsFromRolesAndIds(
         ("recipientRoles" in template ? (template.recipientRoles ?? []) : []) as string[],
         ("recipientUserIds" in template ? (template.recipientUserIds ?? []) : []) as string[],
     )

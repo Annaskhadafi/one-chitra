@@ -123,6 +123,7 @@ export async function sendManualRevenueReport(period: string) {
                 inventoryTotal: formatCurrency(inv.total),
                 actionUrl: "/dashboard/revenue-forecast"
             },
+            ignoreTemplateRecipients: true,
             attachments: [
                 {
                     filename: `Revenue_Report_${period}.pdf`,

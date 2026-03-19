@@ -117,6 +117,7 @@ export async function GET(request: Request) {
 
                 actionUrl: "/dashboard/revenue-forecast"
             },
+            ignoreTemplateRecipients: true,
             // Add PDF Attachment
             attachments: [
                 {
