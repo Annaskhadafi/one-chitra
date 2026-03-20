@@ -59,7 +59,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy } from "lucide-react"
+import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy, ClipboardPaste } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
@@ -638,6 +638,46 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         }))
     }, [])
 
+    const handlePasteSN = useCallback(async (itemIndex: number, requiredQty: number) => {
+        try {
+            const text = await navigator.clipboard.readText()
+            if (!text) {
+                toast.error("Clipboard kosong")
+                return
+            }
+
+            // Pisahkan berdasarkan baris baru, koma, atau spasi beruntun
+            const snList = text
+                .split(/[\n,\s]+/)
+                .map(sn => sn.trim().toUpperCase())
+                .filter(sn => sn.length > 0)
+
+            if (snList.length === 0) {
+                toast.error("Tidak ada teks Serial Number yang valid di Clipboard")
+                return
+            }
+
+            setItems(prev => prev.map((item, i) => {
+                if (i !== itemIndex) return item
+                
+                const newSNs = [...item.serialNumbers]
+                let pastedCount = 0
+                
+                // Isi slot
+                for (let j = 0; j < Math.min(snList.length, requiredQty); j++) {
+                    newSNs[j] = snList[j]
+                    pastedCount++
+                }
+                
+                toast.success(`Berhasil paste ${pastedCount} Serial Number`, { duration: 3000 })
+                return { ...item, serialNumbers: newSNs }
+            }))
+        } catch (err) {
+            console.error("Paste Error:", err)
+            toast.error("Gagal paste SN. Pastikan Anda memberi izin akses Clipboard ke browser.")
+        }
+    }, [])
+
     // Check stock
     const handleCheckStock = useCallback(async () => {
         console.log("🔍 Check Stock clicked")
@@ -1213,121 +1253,77 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     </Button>
                                 </div>
                             </CardHeader>
-                            <CardContent className="p-0">
-                                <div className="overflow-x-auto">
-                                    <Table className="table-fixed">
-                                        <TableHeader>
-                                            <TableRow className="bg-transparent hover:bg-transparent">
-                                                <TableHead className="w-[50%] pl-6 whitespace-normal">Product Details</TableHead>
-                                                <TableHead className="w-[10%] text-center whitespace-normal">Ordered</TableHead>
-                                                <TableHead className="w-[12%] whitespace-nowrap">Deliver Qty</TableHead>
-                                                <TableHead className="w-[28%] pr-6 text-right whitespace-normal">Ketersediaan</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {items.map((item, idx) => {
-                                                const stock = getStockStatus(item.productId)
-                                                const isTyre = item.productCategory === "TYRE"
-                                                const readyWarehouses = getReadyStockWarehouses(stock)
+                            <CardContent className="p-0 w-full overflow-hidden">
+                                <div className="flex flex-col divide-y w-full">
+                                    {items.map((item, idx) => {
+                                        const stock = getStockStatus(item.productId)
+                                        const isTyre = item.productCategory === "TYRE"
+                                        const readyWarehouses = getReadyStockWarehouses(stock)
 
-                                                return (
-                                                    <TableRow key={idx} className="group">
-                                                        <TableCell className="pl-6 pr-4 align-top py-4 whitespace-normal">
-                                                            <div className="flex flex-col gap-1">
-                                                                <span className="font-medium text-base leading-snug break-words text-gray-900 dark:text-gray-100">
-                                                                    {item.productName}
-                                                                </span>
-                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                                                                        {item.productCategory}
-                                                                    </Badge>
-                                                                    {isTyre && (
-                                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
-                                                                            Serial No. Required
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Serial Number Input Section for TYRE */}
-                                                            {isTyre && item.deliveredQuantity > 0 && (
-                                                                <div className="mt-4 space-y-3">
-                                                                    {/* Info Alert */}
-                                                                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-900">
-                                                                        <div className="flex items-start gap-2">
-                                                                            <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                                                            <div className="flex-1 text-xs text-blue-800 dark:text-blue-200">
-                                                                                <p className="font-semibold mb-1">Serial Number Wajib Diisi</p>
-                                                                                <p className="mb-2">Setiap ban harus memiliki serial number yang UNIK dan BERBEDA.</p>
-                                                                                <div className="bg-white dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800 font-mono text-[11px]">
-                                                                                    <p className="text-blue-600 dark:text-blue-400 font-semibold mb-1">Contoh Format:</p>
-                                                                                    <p>SN-001</p>
-                                                                                    <p>SN-002</p>
-                                                                                    <p>SN-003</p>
-                                                                                    <p className="text-blue-500 mt-1">... dan seterusnya</p>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    {/* Serial Number Inputs */}
-                                                                    <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
-                                                                        <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
-                                                                            Enter {item.deliveredQuantity} Serial Number(s)
-                                                                        </Label>
-                                                                        <div className="grid grid-cols-1 gap-2">
-                                                                            {item.serialNumbers.map((sn, snIdx) => (
-                                                                                <Input
-                                                                                    key={snIdx}
-                                                                                    placeholder={`Contoh: SN-${String(snIdx + 1).padStart(3, '0')}`}
-                                                                                    value={sn}
-                                                                                    onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                                    className={cn(
-                                                                                        "h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500",
-                                                                                        !sn.trim() && "border-red-300 bg-red-50 dark:bg-red-950/20"
-                                                                                    )}
-                                                                                />
-                                                                            ))}
-                                                                        </div>
-                                                                        {item.serialNumbers.some(sn => !sn.trim()) && (
-                                                                            <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
-                                                                                <XCircle className="h-3 w-3" />
-                                                                                Semua serial number harus diisi!
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
+                                        return (
+                                            <div key={idx} className="flex flex-col p-4 sm:px-6 md:py-6 gap-5 group hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors">
+                                                
+                                                {/* TOP SECTION: Info, Quantities, Stock */}
+                                                <div className="flex flex-col lg:flex-row gap-5 lg:gap-8 items-start lg:items-center">
+                                                    
+                                                    {/* 1. Product Info */}
+                                                    <div className="flex-1 flex flex-col gap-2.5 w-full lg:w-auto">
+                                                        <span className="font-semibold text-base sm:text-lg leading-tight break-words text-gray-900 dark:text-gray-100">
+                                                            {item.productName}
+                                                        </span>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <Badge variant="secondary" className="text-[10px] sm:text-xs h-6 px-2">
+                                                                {item.productCategory}
+                                                            </Badge>
+                                                            {isTyre && (
+                                                                <Badge variant="outline" className="text-[10px] sm:text-xs h-6 px-2 border-orange-200 text-orange-700 bg-orange-50 dark:bg-orange-950/30">
+                                                                    Serial No. Required
+                                                                </Badge>
                                                             )}
-                                                        </TableCell>
+                                                        </div>
+                                                    </div>
 
-                                                        <TableCell className="text-center align-top py-4 whitespace-nowrap">
-                                                            <div className="text-sm">
-                                                                <span className="font-semibold">{item.orderedQuantity}</span>
-                                                                <span className="text-muted-foreground text-xs block">Order</span>
+                                                    {/* 2. Controls & Stats */}
+                                                    <div className="w-full lg:w-auto grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-row gap-4 lg:gap-8 bg-gray-50/50 dark:bg-gray-900/50 lg:bg-transparent rounded-xl p-4 lg:p-0 border lg:border-0 items-start lg:items-center shadow-sm lg:shadow-none">
+                                                        
+                                                        {/* Ordered Qty */}
+                                                        <div className="flex flex-col gap-1.5 items-start sm:items-center lg:w-20">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider lg:hidden">Ordered</span>
+                                                            <div className="flex flex-col sm:items-center">
+                                                                <span className="font-extrabold text-xl lg:text-lg leading-none">{item.orderedQuantity}</span>
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold hidden lg:block mt-1">Order</span>
+                                                                <span className="text-[11px] sm:text-xs text-amber-600 dark:text-amber-500 font-bold mt-1.5 whitespace-nowrap bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-md">
+                                                                    Rem: {item.remainingQuantity}
+                                                                </span>
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground mt-1">
-                                                                (Rem: {item.remainingQuantity})
+                                                        </div>
+
+                                                        {/* Deliver Qty */}
+                                                        <div className="flex flex-col gap-1.5 items-start sm:items-center lg:w-24">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider lg:hidden">Deliver Qty</span>
+                                                            <div className="flex flex-col sm:items-center w-full max-w-[120px] lg:max-w-none">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={item.remainingQuantity}
+                                                                    value={item.deliveredQuantity}
+                                                                    onChange={e => updateItemQty(idx, Number(e.target.value))}
+                                                                    className="w-full lg:w-24 font-mono text-center font-bold text-lg h-10 lg:h-11 shadow-sm border-gray-300 dark:border-gray-700 focus-visible:ring-blue-500"
+                                                                />
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold hidden lg:block mt-1">Deliver</span>
                                                             </div>
-                                                        </TableCell>
+                                                        </div>
 
-                                                        <TableCell className="align-top py-4 whitespace-nowrap">
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                max={item.remainingQuantity}
-                                                                value={item.deliveredQuantity}
-                                                                onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                                className="w-20 font-mono text-center"
-                                                            />
-                                                        </TableCell>
-
-                                                        <TableCell className="pr-6 align-top py-4 whitespace-normal">
+                                                        {/* Ketersediaan / Stock */}
+                                                        <div className="col-span-2 sm:col-span-1 lg:w-72 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-200 dark:border-gray-800 flex flex-col items-start lg:items-end w-full">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mb-2.5 lg:hidden">Ketersediaan Stok</span>
+                                                            
                                                             {warehouseId ? (
                                                                 stock ? (
-                                                                    <div className="ml-auto w-full max-w-[250px] rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                                                                    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3.5 shadow-sm">
                                                                         <div className={cn(
-                                                                            "flex items-center justify-between gap-2 font-medium text-sm",
-                                                                            stock.sufficient ? "text-green-600" : "text-red-600"
+                                                                            "flex items-center justify-between gap-2.5 font-semibold text-sm",
+                                                                            stock.sufficient ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"
                                                                         )}>
                                                                             <div className="flex min-w-0 items-center gap-1.5">
                                                                                 {stock.sufficient ? (
@@ -1335,27 +1331,29 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                                 ) : (
                                                                                     <XCircle className="h-4 w-4 flex-shrink-0" />
                                                                                 )}
-                                                                                <span>{stock.sufficient ? "Tersedia" : "Stok kurang"}</span>
+                                                                                <span className="whitespace-nowrap">{stock.sufficient ? "Tersedia" : "Stok kurang"}</span>
                                                                             </div>
                                                                             <span className={cn(
-                                                                                "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                                                                stock.available >= 0 ? "bg-slate-100 text-slate-700" : "bg-red-50 text-red-700"
+                                                                                "rounded-full px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap shadow-sm border",
+                                                                                stock.available >= 0 
+                                                                                    ? "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" 
+                                                                                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-400 dark:border-rose-900"
                                                                             )}>
                                                                                 Aktual: {stock.available}
                                                                             </span>
                                                                         </div>
-                                                                        <div className="mt-2">
-                                                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground break-words">
+                                                                        <div className="mt-3">
+                                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground break-words line-clamp-1 opacity-75">
                                                                                 {selectedWarehouseLabel}
                                                                             </p>
-                                                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                                            <div className="mt-2.5 flex flex-wrap gap-2">
                                                                                 {stock.sufficient ? (
-                                                                                    <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700">
-                                                                                        Sisa: <strong>{stock.remainingAfterDelivery}</strong>
+                                                                                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 shadow-sm">
+                                                                                        Sisa: <strong className="text-emerald-900">{stock.remainingAfterDelivery}</strong>
                                                                                     </span>
                                                                                 ) : (
-                                                                                    <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">
-                                                                                        Kurang: <strong>{stock.shortage}</strong>
+                                                                                    <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 shadow-sm">
+                                                                                        Kekurangan: <strong className="text-rose-900">{stock.shortage}</strong>
                                                                                     </span>
                                                                                 )}
 
@@ -1367,22 +1365,23 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                                             productName: item.productName,
                                                                                             alternatives: stock.alternativeIds!,
                                                                                         })}
-                                                                                        className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                                                                                        className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer shadow-sm group/alt"
                                                                                     >
-                                                                                        <Info className="h-3 w-3" />
-                                                                                        Alt. record: <strong>{stock.alternativeIds[0].stock}</strong>
+                                                                                        <Info className="h-3 w-3 text-amber-500 group-hover/alt:scale-110 transition-transform" />
+                                                                                        Alt. record: <span className="text-amber-900">{stock.alternativeIds[0].stock}</span>
                                                                                     </button>
                                                                                 )}
                                                                             </div>
 
                                                                             {readyWarehouses.length > 0 && (
-                                                                                <div className="mt-2 border-t border-slate-100 pt-2">
-                                                                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                                                                        Warehouse ready stock
-                                                                                    </p>
-                                                                                    <div className="mt-1 flex flex-wrap gap-1.5">
+                                                                                <div className="mt-3.5 border-t border-slate-100 dark:border-slate-800 pt-3">
+                                                                                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                                                                                        <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
+                                                                                        Gudang Alternatif
+                                                                                    </div>
+                                                                                    <div className="flex flex-wrap gap-1.5">
                                                                                         {readyWarehouses.map((warehouse) => (
-                                                                                            <span key={warehouse.warehouseId} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                                                                            <span key={warehouse.warehouseId} className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-800/50 dark:text-indigo-300">
                                                                                                 {warehouse.warehouseName}: <strong>{warehouse.stock}</strong>
                                                                                             </span>
                                                                                         ))}
@@ -1392,19 +1391,84 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                         </div>
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="text-xs text-muted-foreground italic">
+                                                                    <div className="w-full text-center p-4 rounded-xl border-2 border-dashed text-xs font-medium text-muted-foreground italic bg-gray-50/50 dark:bg-gray-900/50">
                                                                         Check stock to see availability
-                                                                    </span>
+                                                                    </div>
                                                                 )
                                                             ) : (
-                                                                <span className="text-xs text-muted-foreground">Select warehouse first</span>
+                                                                <div className="w-full text-center p-4 rounded-xl border-2 border-dashed text-xs font-medium text-muted-foreground italic bg-gray-50/50 dark:bg-gray-900/50">
+                                                                    Select warehouse first
+                                                                </div>
                                                             )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                        </div>
+
+                                                    </div>
+                                                </div>
+
+                                                {/* BOTTOM SECTION: Serial Numbers (Full Width Block) */}
+                                                {isTyre && item.deliveredQuantity > 0 && (
+                                                    <div className="flex flex-col mt-1">
+                                                        
+                                                        {/* Input Grid Box */}
+                                                        <div className="w-full bg-white dark:bg-zinc-950 rounded-xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                                                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
+                                                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-5">
+                                                                <Label className="text-xs font-bold text-orange-600 dark:text-orange-500 uppercase tracking-wider flex items-center gap-2">
+                                                                    <div className="h-2.5 w-2.5 rounded-full bg-orange-500 animate-pulse shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+                                                                    Lengkapi {item.deliveredQuantity} Serial Number
+                                                                </Label>
+                                                                
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => handlePasteSN(idx, item.deliveredQuantity)}
+                                                                        className="h-8 text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 dark:border-orange-900 dark:text-orange-400 font-semibold shadow-sm"
+                                                                    >
+                                                                        <ClipboardPaste className="h-3.5 w-3.5 mr-1.5" />
+                                                                        Paste dari WA
+                                                                    </Button>
+
+                                                                    {/* "Tooltip" Style Inline Info */}
+                                                                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-100 dark:border-blue-900/50 text-[10px] sm:text-xs font-medium w-fit">
+                                                                        <Info className="h-3.5 w-3.5 flex-shrink-0" />
+                                                                        <span>S/N wajib unik. <strong className="font-mono bg-blue-100/50 dark:bg-blue-900/50 px-1 py-0.5 rounded ml-0.5 font-bold">Cth: SN-24A001</strong></span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                                                {item.serialNumbers.map((sn, snIdx) => (
+                                                                    <div key={snIdx} className="relative group/sn">
+                                                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/sn:text-orange-500 transition-colors">
+                                                                            #{(snIdx + 1).toString().padStart(2, '0')}
+                                                                        </div>
+                                                                        <Input
+                                                                            placeholder="Ketik SN..."
+                                                                            value={sn}
+                                                                            onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                            className={cn(
+                                                                                "h-11 text-sm pl-11 bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-orange-500 focus-visible:border-orange-500 font-mono uppercase transition-all shadow-sm rounded-lg",
+                                                                                !sn.trim() && "border-red-300/80 bg-red-50/50 dark:bg-red-900/20 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.1)] focus-visible:ring-red-400"
+                                                                            )}
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            {item.serialNumbers.some(sn => !sn.trim()) && (
+                                                                <div className="mt-5 flex items-center gap-2.5 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-100 dark:border-red-900/50 shadow-sm">
+                                                                    <XCircle className="h-4 w-4" />
+                                                                    Mohon isi semua serial number!
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                    </div>
+                                                )}
+
+                                            </div>
+                                        )
+                                    })}
                                 </div>
                             </CardContent>
                             <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
