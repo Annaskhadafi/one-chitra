@@ -135,6 +135,16 @@ function ProductPickerCell({
     const isNotFound = !selectedProductId && !matchedProductName
     const isLowConf = !selectedProductId && matchConfidence < 0.7
 
+    const uniqueProducts = useMemo(() => {
+        const seen = new Set()
+        return products.filter(p => {
+            const key = p.materialNumber
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+    }, [products])
+
     return (
         <div className="space-y-1 min-w-[220px]">
             {/* OCR original name */}
@@ -167,7 +177,7 @@ function ProductPickerCell({
                         <CommandList className="max-h-60">
                             <CommandEmpty>Product tidak ditemukan.</CommandEmpty>
                             <CommandGroup>
-                                {products.map(p => (
+                                {uniqueProducts.map(p => (
                                     <CommandItem
                                         key={p.id}
                                         value={`${p.materialDescription || ""} ${p.materialNumber} ${p.oldMaterialNo || ""}`}
@@ -296,9 +306,12 @@ export default function ValidationSplit(props: {
             customerId: resolvedCustomerId || customers[0]?.id || 0,
             salesPersonId: null,
             warehouseId: warehouses[0]?.id || null,
-            salesDate: (extracted.documentDate || mapped?.documentDate)
-                ? new Date(extracted.documentDate || mapped?.documentDate || "")
-                : new Date(),
+            salesDate: (() => {
+                const dateStr = extracted.documentDate || mapped?.documentDate || ""
+                if (!dateStr) return new Date()
+                const d = new Date(dateStr)
+                return isNaN(d.getTime()) ? new Date() : d
+            })(),
             poReceive: null,
             categoryPo: "Normal",
             categoryProduct: "Prime Product",

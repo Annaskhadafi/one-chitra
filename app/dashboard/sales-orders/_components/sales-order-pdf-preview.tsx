@@ -40,7 +40,7 @@ export default function SalesOrderPdfPreview(props: {
             }),
         })
         const blobUrl = doc.output("bloburl")
-        setUrl(blobUrl)
+        setUrl(String(blobUrl))
     }
     return (
         <div className="space-y-2">

@@ -101,6 +101,17 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+function formatDateForInput(date: Date | string | null | undefined): string {
+    if (!date) return ""
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ""
+    try {
+        return d.toISOString().split("T")[0]
+    } catch {
+        return ""
+    }
+}
+
 export function SalesOrderForm({
     customers,
     products,
@@ -119,14 +130,12 @@ export function SalesOrderForm({
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || "")
     const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
     const [salesDate, setSalesDate] = useState(
-        initialData
-            ? new Date(initialData.salesDate).toISOString().split("T")[0]
-            : new Date().toISOString().split("T")[0]
+        initialData?.salesDate
+            ? formatDateForInput(initialData.salesDate)
+            : formatDateForInput(new Date())
     )
     const [poReceive, setPoReceive] = useState(
-        initialData?.poReceive
-            ? new Date(initialData.poReceive).toISOString().split("T")[0]
-            : ""
+        formatDateForInput(initialData?.poReceive)
     )
     const [categoryPo, setCategoryPo] = useState(initialData?.categoryPo || "Normal")
     const [categoryProduct, setCategoryProduct] = useState(initialData?.categoryProduct || "Prime Product")
@@ -176,6 +185,7 @@ export function SalesOrderForm({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submitAlert, setSubmitAlert] = useState<string | null>(null)
     const [customerPoError, setCustomerPoError] = useState<string | null>(null)
+
     const uniqueProducts = useMemo(() => {
         const seen = new Set()
         return products.filter(p => {
@@ -185,6 +195,7 @@ export function SalesOrderForm({
             return true
         })
     }, [products])
+
     const productById = useMemo(
         () => new Map(products.map((product) => [product.id, product])),
         [products]
@@ -677,7 +688,7 @@ export function SalesOrderForm({
                             ) : null}
                         </div>
 
-                        {/* Warehouse */}
+                        {/* PIC Sales */}
                         <div className="space-y-2">
                             <Label className="font-semibold">PIC Sales</Label>
                             <Popover open={salesPicOpen} onOpenChange={setSalesPicOpen}>
