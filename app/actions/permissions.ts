@@ -63,6 +63,7 @@ export async function syncPermissions() {
         resources.add("cost-settlements")
         resources.add("evhs")
         resources.add("stock-opname-aktual")
+        resources.add("bundling")
 
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav
