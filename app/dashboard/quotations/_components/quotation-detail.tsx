@@ -266,8 +266,15 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         </Link>
                     )}
                     <Button variant="outline" className="gap-2" onClick={() => setPdfOpen(true)}>
+                        <FileText className="h-4 w-4" />
+                        Preview
+                    </Button>
+                    <Button onClick={async () => {
+                        const { generateQuotationPdf } = await import("./quotation-pdf-generator")
+                        generateQuotationPdf(quotation as any)
+                    }} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
                         <FileDown className="h-4 w-4" />
-                        Preview PDF
+                        Download PDF
                     </Button>
                     {canApprove && (
                         <AlertDialog>

@@ -80,7 +80,7 @@ export function ProductHistoryPopover({ materialNo, costSap, className }: Produc
                     <History className="h-4 w-4" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[350px] p-0" align="start">
+            <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[350px] p-0" align="start">
                 <div className="p-3 border-b bg-muted/30">
                     <div className="flex items-center justify-between">
                         <h4 className="font-semibold text-sm flex items-center gap-2">

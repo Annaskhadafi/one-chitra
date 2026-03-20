@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { stockLevels } from "@/db/schema"
+import { stockLevels, products } from "@/db/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -184,6 +184,36 @@ export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
         return { success: true }
     } catch (_error) {
         return { success: false, error: "Failed to import stocks" }
+    }
+}
+
+// ─── Export Inventory Comparison to Excel ──────────────────────────────────────
+export async function getStockByMaterialNumber(materialNumber: string) {
+    try {
+        const product = await db.query.products.findFirst({
+            where: eq(products.materialNumber, materialNumber)
+        })
+        
+        if (!product) {
+            return { success: false, error: "Product not found" }
+        }
+
+        const stocks = await db.query.stockLevels.findMany({
+            where: eq(stockLevels.productId, product.id),
+            with: {
+                warehouse: {
+                    columns: {
+                        sloc: true,
+                        description: true,
+                    }
+                }
+            }
+        })
+        
+        return { success: true, data: stocks }
+    } catch (error) {
+        console.error("getStockByMaterialNumber error:", error)
+        return { success: false, error: "Failed to fetch stock" }
     }
 }
 

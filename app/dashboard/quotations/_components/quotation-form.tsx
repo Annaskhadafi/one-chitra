@@ -47,6 +47,7 @@ import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { ProductHistoryPopover } from "./product-history-popover"
+import { StockCheckPopover } from "./stock-check-popover"
 
 type User = typeof user.$inferSelect
 
@@ -129,7 +130,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [validUntil, setValidUntil] = useState(
         initialData?.validUntil
             ? new Date(initialData.validUntil).toISOString().split("T")[0]
-            : ""
+            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
     )
     const [subject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
@@ -220,7 +221,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                 productId: bi.childProductId,
                                 productName: childProduct.materialDescription || childProduct.materialNumber,
                                 description: childProduct.materialDescription || "",
-                                longDescription: "",
+                                longDescription: childProduct.materialNumber || "",
                                 quantity: bi.quantity,
                                 unitPrice: unitPrice,
                                 discount: 0,
@@ -262,7 +263,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 description: product.materialDescription || "",
-                longDescription: "",
+                longDescription: product.materialNumber || "",
                 quantity: 1,
                 unitPrice: unitPrice,
                 discount: 0,
@@ -463,7 +464,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     return (
         <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 mx-auto w-full">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div className="flex items-center gap-4">
                     <Link href="/dashboard/quotations">
                         <Button variant="ghost" size="icon">
@@ -479,7 +480,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                     <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2">
                         <Save className="h-4 w-4" />
                         {isSubmitting ? "Saving..." : "Save"}
@@ -597,7 +598,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </div>
 
                         {/* Dates */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-destructive font-semibold">* Quo Date</Label>
                                 <Input
@@ -692,7 +693,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </div>
 
                         {/* Currency & Status */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-destructive font-semibold">* Currency</Label>
                                 <Select value={currency} onValueChange={setCurrency}>
@@ -731,7 +732,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </div>
 
                         {/* From (Sales Person) & Discount Type */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="font-semibold">From</Label>
                                 <Select value={salesPersonId} onValueChange={setSalesPersonId}>
@@ -818,7 +819,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                         <span className="truncate">Search Product Name / Item Code / Scan bar code</span>
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[500px] p-0" align="start">
+                                <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[500px] p-0" align="start">
                                     <Command>
                                         <CommandInput placeholder="Search products..." />
                                         <CommandList>
@@ -879,10 +880,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                 <span className="font-bold text-sm">Item #{index + 1}</span>
                                                 <div className="flex items-center space-x-2">
                                                     {item.materialNumber && (
-                                                        <ProductHistoryPopover
-                                                            materialNo={item.materialNumber}
-                                                            costSap={item.costSap || 0}
-                                                        />
+                                                        <div className="flex items-center">
+                                                            <ProductHistoryPopover
+                                                                materialNo={item.materialNumber}
+                                                                costSap={item.costSap || 0}
+                                                            />
+                                                            <StockCheckPopover
+                                                                materialNo={item.materialNumber}
+                                                            />
+                                                        </div>
                                                     )}
                                                     <Button
                                                         variant="ghost"
@@ -994,10 +1000,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         <TableCell className="font-mono text-muted-foreground">                                                            <div className="flex flex-col items-center gap-1">
                                                             {index + 1}
                                                             {item.materialNumber && (
-                                                                <ProductHistoryPopover
-                                                                    materialNo={item.materialNumber}
-                                                                    costSap={item.costSap || 0}
-                                                                />
+                                                                <>
+                                                                    <ProductHistoryPopover
+                                                                        materialNo={item.materialNumber}
+                                                                        costSap={item.costSap || 0}
+                                                                    />
+                                                                    <StockCheckPopover
+                                                                        materialNo={item.materialNumber}
+                                                                    />
+                                                                </>
                                                             )}
                                                         </div></TableCell>
                                                         <TableCell>
@@ -1115,12 +1126,12 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                         onChange={(e) => setShipping(Number(e.target.value))}
                                         className="w-24 md:w-20 h-8 text-right font-mono text-xs"
                                     />
-                                    <span className="text-sm font-bold md:w-32 text-right w-24 shrink-0 overflow-hidden text-ellipsis">{formatCurrency(shipping)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(shipping)}</span>
                                 </div>
                                 <Separator className="my-2 w-full md:w-[400px]" />
                                 <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-base font-black text-blue-700">TOTAL :</span>
-                                    <span className="text-lg font-black md:w-32 text-right text-blue-700 break-all min-w-[120px]">{formatCurrency(grandTotal)}</span>
+                                    <span className="text-lg font-black md:w-32 text-right text-blue-700">{formatCurrency(grandTotal)}</span>
                                 </div>
                             </div>
                         </div>
@@ -1155,7 +1166,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Bottom Save Buttons */}
-            <div className="flex justify-center gap-3 pb-6">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-6 px-4">
                 <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="w-full max-w-xs gap-2">
                     <Save className="h-4 w-4" />
                     {isSubmitting ? "Saving..." : "Save"}
