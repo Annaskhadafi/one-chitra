@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createQuotation, updateQuotation } from "@/app/actions/quotation"
+import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -191,7 +192,55 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const ceilToThousand = (val: number) => Math.ceil(val / 1000) * 1000
 
     // Add product
-    const addProduct = useCallback((product: Product) => {
+    const addProduct = useCallback(async (product: Product) => {
+        if (product.isBundle) {
+            const bundleItems = await getBundleItemsForExpansion(product.id)
+            if (bundleItems && bundleItems.length > 0) {
+                setItems(prev => {
+                    let nextItems = [...prev]
+                    bundleItems.forEach(bi => {
+                        const childProduct = bi.childProduct as Product
+                        const costSap = Number(childProduct.costSap || 0)
+                        const costIdr = costSap * exchangeRate
+                        
+                        let unitPrice = costIdr
+                        if (globalMargin > 0) {
+                            unitPrice = costIdr + (costIdr * globalMargin / 100)
+                        }
+                        unitPrice = ceilToThousand(unitPrice)
+
+                        const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
+                        if (existingIdx > -1) {
+                            nextItems[existingIdx] = {
+                                ...nextItems[existingIdx],
+                                quantity: nextItems[existingIdx].quantity + bi.quantity
+                            }
+                        } else {
+                            nextItems.push({
+                                productId: bi.childProductId,
+                                productName: childProduct.materialDescription || childProduct.materialNumber,
+                                description: childProduct.materialDescription || "",
+                                longDescription: "",
+                                quantity: bi.quantity,
+                                unitPrice: unitPrice,
+                                discount: 0,
+                                tax: 0,
+                                costIdr: costIdr,
+                                costSap: costSap,
+                                materialNumber: childProduct.materialNumber,
+                            })
+                        }
+                    })
+                    return nextItems
+                })
+                toast.success(`Bundle ${product.materialNumber} exploded into ${bundleItems.length} items`)
+            } else {
+                toast.error("Bundle has no components")
+            }
+            setProductOpen(false)
+            return
+        }
+
         const existing = items.find(i => i.productId === product.id)
         const costSap = Number(product.costSap || 0)
         const costIdr = costSap * exchangeRate

@@ -279,3 +279,17 @@ export const calendarEventSchema = z.object({
     emailReminderAt: z.date().optional().nullable(),
     emailReminderTo: z.string().email().optional().nullable().or(z.literal("")),
 })
+export const productBundleItemSchema = z.object({
+    childProductId: z.number().min(1, "Product is required"),
+    quantity: z.number().min(1, "Quantity must be at least 1"),
+})
+
+export const productBundleSchema = z.object({
+    materialNumber: z.string().min(1, "Material Number is required"),
+    materialDescription: z.string().min(1, "Description is required"),
+    category: z.string().min(1, "Category is required"),
+    items: z.array(productBundleItemSchema).min(1, "At least one component is required"),
+})
+
+export type ProductBundleInput = z.infer<typeof productBundleSchema>
+export type ProductBundleItemInput = z.infer<typeof productBundleItemSchema>

@@ -63,6 +63,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "products",
                     },
                     {
+                        title: "Product Bundling",
+                        url: "/dashboard/bundling",
+                        resource: "bundling",
+                    },
+                    {
                         title: "Warehouse",
                         url: "/dashboard/warehouse",
                         resource: "warehouses",

@@ -14,6 +14,7 @@ export const products = pgTable("products", {
     slocDescription: text("sloc_description"),
     typeWarehouse: varchar("type_warehouse", { length: 50 }),
     imageUrl: text("image_url"),
+    isBundle: boolean("is_bundle").default(false).notNull(),
     isConsignment: boolean("is_consignment").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

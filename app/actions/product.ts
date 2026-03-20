@@ -34,6 +34,7 @@ export async function getProducts() {
         imageUrl: products.imageUrl,
         createdAt: products.createdAt,
         updatedAt: products.updatedAt,
+        isBundle: products.isBundle,
         isConsignment: products.isConsignment,
         totalStock: sql<number>`coalesce(${aggregatedStock.totalStockSum}, 0)`.mapWith(Number),
     })

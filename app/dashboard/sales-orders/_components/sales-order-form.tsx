@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
+import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -309,7 +310,50 @@ export function SalesOrderForm({
     }
 
     // Add product to order
-    const addProduct = useCallback((product: Product) => {
+    const addProduct = useCallback(async (product: Product) => {
+        if (product.isBundle) {
+            const bundleItems = await getBundleItemsForExpansion(product.id)
+            if (bundleItems && bundleItems.length > 0) {
+                // We use localized variable to avoid closure issues with state
+                let currentItems: OrderItem[] = []
+                setItems(prev => {
+                    const nextItems = [...prev]
+                    bundleItems.forEach(bi => {
+                        const childProduct = bi.childProduct as Product
+                        
+                        // User requested: unit price for bundle components should be empty (0)
+                        const unitPrice = 0
+                        
+                        const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
+                        if (existingIdx > -1) {
+                            nextItems[existingIdx] = {
+                                ...nextItems[existingIdx],
+                                quantity: nextItems[existingIdx].quantity + bi.quantity,
+                                unitPrice: unitPrice // Reset to 0 when bundle is added/merged? 
+                                // Actually, usually better to just add quantity but if user says "biarkan kosong", 
+                                // maybe they want it 0 for all items coming from bundle.
+                            }
+                        } else {
+                            nextItems.push({
+                                productId: bi.childProductId,
+                                productName: childProduct.materialDescription || childProduct.materialNumber,
+                                quantity: bi.quantity,
+                                unitPrice: unitPrice,
+                                discount: 0,
+                                tax: 0,
+                            })
+                        }
+                    })
+                    return nextItems
+                })
+                toast.success(`Bundle ${product.materialNumber} exploded into ${bundleItems.length} items`)
+            } else {
+                toast.error("Bundle has no components")
+            }
+            setProductOpen(false)
+            return
+        }
+
         const suggestedUnitPrice = getSuggestedCkUnitPrice(product) ?? 0
 
         // Check if already exists

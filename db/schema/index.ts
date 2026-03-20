@@ -24,6 +24,7 @@ export { rolePermissions } from "./role-permissions";
 export { warehouses } from "./warehouses";
 export { userWarehouseAccess, userWarehouseAccessRelations } from "./user-warehouse-access";
 export { products } from "./products";
+export { productBundleItems, productBundleItemsRelations, productsBundlesRelations } from "./product-bundles";
 export { stockLevels, stockLevelsRelations } from "./stock-levels";
 export {
     stockTransfers,
