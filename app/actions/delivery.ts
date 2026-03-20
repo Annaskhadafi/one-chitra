@@ -366,6 +366,51 @@ export async function getSalesOrdersForDelivery() {
     })).filter(order => order.items.some(item => item.remainingQuantity > 0))
 }
 
+export type ReadyOutstandingSalesOrder = Awaited<ReturnType<typeof getSalesOrdersForDelivery>>[0] & {
+    readyItems: (Awaited<ReturnType<typeof getSalesOrdersForDelivery>>[0]["items"][0] & { availableStock: number })[]
+}
+
+export async function getReadyOutstandingSalesOrders(): Promise<ReadyOutstandingSalesOrder[]> {
+    noStore()
+
+    const orders = await getSalesOrdersForDelivery()
+    const readyOrdersList: ReadyOutstandingSalesOrder[] = []
+
+    for (const order of orders) {
+        // Cek apakah pesanan ini Outstanding (Parsial) dengan mengecek item yang sudah pernah dikirim
+        const isPartial = order.items.some(i => i.alreadyDelivered > 0)
+        
+        // Hanya notifikasi untuk pesanan parsial/outstanding seperti request user
+        // (Pesanan yang sama sekali belum disentuh bukan kategori Outstanding Tertunda)
+        if (!isPartial) continue
+
+        const readyItems = []
+
+        for (const item of order.items) {
+            if (item.remainingQuantity > 0) {
+                // Mengecek stok akurat di Origin Warehouse
+                const directAvailable = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
+                if (directAvailable > 0) {
+                    readyItems.push({
+                        ...item,
+                        availableStock: directAvailable
+                    })
+                }
+            }
+        }
+
+        // Kalau ada item sisa kelupaan yang sekarang ready di gudang, masukkan ke Notifikasi
+        if (readyItems.length > 0) {
+            readyOrdersList.push({
+                ...order,
+                readyItems
+            })
+        }
+    }
+
+    return readyOrdersList
+}
+
 export async function checkStockAvailability(warehouseId: number, items: DeliveryStockCheckInput[]) {
     const results: DeliveryStockCheckResult[] = []
 

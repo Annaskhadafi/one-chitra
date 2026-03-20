@@ -2,7 +2,8 @@ import { getSalesOrdersForDelivery } from "@/app/actions/delivery"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { DeliveryForm } from "../_components/delivery-form"
 
-export default async function CreateDeliveryPage() {
+export default async function CreateDeliveryPage({ searchParams }: { searchParams: Promise<{ so?: string }> }) {
+    const resolvedSearchParams = await searchParams
     const salesOrders = await getSalesOrdersForDelivery()
     const warehouses = await getWarehouses()
 
@@ -11,6 +12,7 @@ export default async function CreateDeliveryPage() {
             <DeliveryForm
                 salesOrders={salesOrders as Parameters<typeof DeliveryForm>[0]["salesOrders"]}
                 warehouses={warehouses}
+                defaultSalesOrderId={resolvedSearchParams.so ? parseInt(resolvedSearchParams.so) : undefined}
             />
         </div>
     )

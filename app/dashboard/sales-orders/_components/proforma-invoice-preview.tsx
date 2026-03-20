@@ -162,7 +162,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                     </thead>
                     <tbody>
                         {order.items.map((item, index) => (
-                            <tr key={index} style={{ verticalAlign: "top" }}>
+                            <tr key={index} style={{ verticalAlign: "top", pageBreakInside: "avoid", breakInside: "avoid" }}>
                                 <td style={{ padding: "5pt" }}>{String(index + 1).padStart(2, '0')}</td>
                                 <td style={{ padding: "5pt" }}>
                                     <div style={{ fontWeight: "bold" }}>{item.product?.materialNumber}</div>
@@ -177,7 +177,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                             </tr>
                         ))}
                     </tbody>
-                    <tfoot style={{ borderTop: "1px solid #000000" }}>
+                    <tbody style={{ borderTop: "1px solid #000000", pageBreakInside: "avoid", breakInside: "avoid" }}>
                          <tr>
                             <td colSpan={4}></td>
                             <td style={{ padding: "5pt" }}>Total Amount</td>
@@ -196,24 +196,27 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                                 {formatCurrency(grandTotal)}
                             </td>
                          </tr>
-                    </tfoot>
+                         <tr>
+                             <td colSpan={6} style={{ paddingTop: "15pt", paddingBottom: "5pt" }}>
+                                {/* Payment Instructions */}
+                                <div style={{ marginBottom: "20pt", fontSize: "9pt" }}>
+                                    <p style={{ margin: "0 0 5pt 0" }}>Payment should be made through one of our bank belows, related to their original currency.</p>
+                                    <div style={{ fontWeight: "bold" }}>PT. Bank Mandiri (Persero) Tbk.</div>
+                                    <div style={{ fontWeight: "bold", marginBottom: "5pt" }}>Cabang Jakarta Cibis Nine A.N PT. Chitra Paratama</div>
+                                    <div style={{ fontWeight: "bold" }}>IDR : 127-000-00-17416</div>
+                                </div>
+
+                                {/* Terms */}
+                                <div style={{ display: "grid", gridTemplateColumns: "120pt 1fr", rowGap: "5pt", fontSize: "9pt" }}>
+                                    <div style={{ fontWeight: "bold" }}>Term Of Payment</div>
+                                    <div>: CASH BEFORE DELIVERY</div>
+                                    <div style={{ fontWeight: "bold" }}>Term Of Delivery</div>
+                                    <div>:</div>
+                                </div>
+                             </td>
+                         </tr>
+                    </tbody>
                 </table>
-
-                {/* Payment Instructions */}
-                <div style={{ marginBottom: "20pt", fontSize: "9pt" }}>
-                    <p style={{ marginBottom: "5pt" }}>Payment should be made through one of our bank belows, related to their original currency.</p>
-                    <div style={{ fontWeight: "bold" }}>PT. Bank Mandiri (Persero) Tbk.</div>
-                    <div style={{ fontWeight: "bold", marginBottom: "5pt" }}>Cabang Jakarta Cibis Nine A.N PT. Chitra Paratama</div>
-                    <div style={{ fontWeight: "bold" }}>IDR : 127-000-00-17416</div>
-                </div>
-
-                {/* Terms */}
-                <div style={{ marginBottom: "20pt", display: "grid", gridTemplateColumns: "120pt 1fr", rowGap: "5pt", fontSize: "9pt" }}>
-                    <div style={{ fontWeight: "bold" }}>Term Of Payment</div>
-                    <div>: CASH BEFORE DELIVERY</div>
-                    <div style={{ fontWeight: "bold" }}>Term Of Delivery</div>
-                    <div>:</div>
-                </div>
 
                 <div style={{ fontStyle: "italic", marginBottom: "40pt", fontSize: "8pt" }}>
                     Please send us through fax/email, a copy of transfer payment when the payment is made.

@@ -1,5 +1,6 @@
-import { getDeliveries, getDeliveryItemsFlat } from "@/app/actions/delivery"
+import { getDeliveries, getDeliveryItemsFlat, getReadyOutstandingSalesOrders } from "@/app/actions/delivery"
 import { DeliveryTable } from "./_components/delivery-table"
+import { OutstandingReminder } from "./_components/outstanding-reminder"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus, Truck } from "lucide-react"
@@ -10,12 +11,11 @@ import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 export const dynamic = "force-dynamic"
 
 export default async function DeliveriesPage() {
-    const [deliveriesData, itemsData] = await Promise.all([
+    const [deliveriesData, itemsData, outstandingOrders] = await Promise.all([
         getDeliveries(),
-        getDeliveryItemsFlat()
+        getDeliveryItemsFlat(),
+        getReadyOutstandingSalesOrders()
     ])
-
-
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
@@ -38,6 +38,7 @@ export default async function DeliveriesPage() {
                 </PermissionGuard>
             </div>
 
+            <OutstandingReminder orders={outstandingOrders} />
 
             <div className="flex-1">
                 <DeliveryTable data={deliveriesData} itemsData={itemsData} />

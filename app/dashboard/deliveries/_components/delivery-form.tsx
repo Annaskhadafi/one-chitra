@@ -181,6 +181,7 @@ interface DeliveryFormProps {
             product: Product
         }[]
     }
+    defaultSalesOrderId?: number
 }
 
 const DELIVERY_FORM_DRAFT_KEY = "delivery-form-draft-v1"
@@ -226,7 +227,7 @@ function isStaleServerActionError(error: unknown) {
     return message.includes("UnrecognizedActionError") || message.includes("was not found on the server")
 }
 
-export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryFormProps) {
+export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSalesOrderId }: DeliveryFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
 
@@ -254,7 +255,9 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     }, [])
 
     // Form state
-    const [salesOrderId, setSalesOrderId] = useState<number | undefined>(initialData?.salesOrderId || undefined)
+    const defaultSO = useMemo(() => defaultSalesOrderId ? salesOrders.find(s => s.id === defaultSalesOrderId) : undefined, [salesOrders, defaultSalesOrderId])
+
+    const [salesOrderId, setSalesOrderId] = useState<number | undefined>(initialData?.salesOrderId || defaultSalesOrderId || undefined)
     const [scheduledDate, setScheduledDate] = useState(
         initialData?.scheduledDate
             ? new Date(initialData.scheduledDate).toISOString().slice(0, 10)
@@ -270,9 +273,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [driverName, setDriverName] = useState(initialData?.driverName || "")
     const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || "")
     const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || "")
-    const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
+    const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || defaultSO?.warehouseId || undefined)
     const [warehouseToId, setWarehouseToId] = useState<number | undefined>(initialData?.warehouseToId || undefined)
-    const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
+    const [shippingAddress, setShippingAddress] = useState(
+        initialData?.shippingAddress || (defaultSO ? [defaultSO.customer.address1, defaultSO.customer.address2, defaultSO.customer.address3, defaultSO.customer.address4, defaultSO.customer.address5].filter(Boolean).join(", ") : "")
+    )
     const [notes, setNotes] = useState(initialData?.notes || "")
 
     // Internal Cost Breakdown State
@@ -327,6 +332,20 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 serialNumbers: item.serialNumbers || [],
             }))
         }
+        if (defaultSO) {
+            return defaultSO.items
+                .filter(item => item.remainingQuantity > 0)
+                .map(item => ({
+                    salesOrderItemId: item.id,
+                    productId: item.productId,
+                    productName: item.product?.materialDescription || item.product?.materialNumber || "",
+                    productCategory: item.product?.category || "",
+                    orderedQuantity: item.quantity,
+                    remainingQuantity: item.remainingQuantity,
+                    deliveredQuantity: item.remainingQuantity,
+                    serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
+                }))
+        }
         return []
     })
 
@@ -372,9 +391,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         if (savedDraft) {
             try {
                 const draft = JSON.parse(savedDraft) as DeliveryFormDraft
+                
+                // Mencegah Draf yang bersinggah menimpa Parameter Otomatis yang dirujuk
+                const isOverridingSO = defaultSalesOrderId && defaultSalesOrderId !== draft.salesOrderId
+
                 setGeneratedDeliveryNumber(draft.generatedDeliveryNumber || "")
                 setDoSap(draft.doSap || "")
-                setSalesOrderId(draft.salesOrderId)
+                setSalesOrderId(isOverridingSO ? defaultSalesOrderId : draft.salesOrderId)
                 setScheduledDate(draft.scheduledDate || new Date().toISOString().slice(0, 10))
                 setDeliveryDate(draft.deliveryDate || "")
                 setStatus(draft.status || "scheduled")
@@ -382,7 +405,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 setDriverName(draft.driverName || "")
                 setVehicleNumber(draft.vehicleNumber || "")
                 setVehicleType(draft.vehicleType || "")
-                setWarehouseId(draft.warehouseId)
+                setWarehouseId(isOverridingSO ? undefined : draft.warehouseId)
                 setWarehouseToId(draft.warehouseToId)
                 setShippingAddress(draft.shippingAddress || "")
                 setNotes(draft.notes || "")
@@ -403,7 +426,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 setVendorName(draft.vendorName || "")
                 setAwbNumber(draft.awbNumber || "")
                 setShippingCost(draft.shippingCost || "0")
-                setItems(Array.isArray(draft.items) ? draft.items : [])
+                setItems(isOverridingSO ? [] : (Array.isArray(draft.items) ? draft.items : []))
             } catch (error) {
                 console.error("Failed to restore delivery draft:", error)
                 window.sessionStorage.removeItem(DELIVERY_FORM_DRAFT_KEY)
@@ -805,12 +828,17 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             validationErrors.push("Vendor Name wajib diisi untuk pengiriman external")
         }
 
-        for (const item of items) {
-            const productLabel = item.productName || `Produk #${item.productId}`
+        const hasDeliveringItems = items.some(item => item.deliveredQuantity > 0)
+        if (!hasDeliveringItems && items.length > 0) {
+            validationErrors.push("Setidaknya harus ada satu barang yang dikirim (Qty > 0)")
+        }
 
+        for (const item of items) {
             if (item.deliveredQuantity <= 0) {
-                validationErrors.push(`Qty kirim untuk ${productLabel} harus lebih dari 0`)
+                continue // Skip validation if item is not being delivered on this run
             }
+
+            const productLabel = item.productName || `Produk #${item.productId}`
 
             if (item.productCategory === "TYRE") {
                 const filledSerials = item.serialNumbers.filter(sn => sn.trim())
@@ -876,7 +904,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             warehouseToId: selectedSO?.categoryPo === "VHS/Consignment" ? warehouseToId : null,
             shippingAddress: shippingAddress || undefined,
             notes: notes || undefined,
-            items: items.map(item => ({
+            items: items.filter(item => item.deliveredQuantity > 0).map(item => ({
                 salesOrderItemId: item.salesOrderItemId || undefined,
                 productId: item.productId,
                 orderedQuantity: item.orderedQuantity,
