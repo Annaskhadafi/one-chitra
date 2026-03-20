@@ -1,9 +1,0 @@
-app/actions/history-order.ts(375,18): error TS7006: Parameter 'item' implicitly has an 'any' type.
-app/actions/history-order.ts(387,21): error TS7006: Parameter 'item' implicitly has an 'any' type.
-app/actions/history-order.ts(400,31): error TS7006: Parameter 'item' implicitly has an 'any' type.
-app/dashboard/deliveries/_components/delivery-table.tsx(1140,17): error TS2719: Type 'DeliveryWithRelations | null' is not assignable to type 'DeliveryWithRelations | null'. Two different types with this name exist, but they are unrelated.
-  Type 'DeliveryWithRelations' is missing the following properties from type 'DeliveryWithRelations': tripDestination, costGasoline, costToll, costParking, and 8 more.
-app/dashboard/do-monitoring/_components/do-monitoring-table.tsx(719,50): error TS2345: Argument of type 'DateRange' is not assignable to parameter of type 'SetStateAction<{ from: Date | undefined; to: Date | undefined; }>'.
-  Type 'DateRange' is not assignable to type '{ from: Date | undefined; to: Date | undefined; }'.
-    Property 'to' is optional in type 'DateRange' but required in type '{ from: Date | undefined; to: Date | undefined; }'.
-app/dashboard/do-monitoring/_components/edit-do-dialog.tsx(127,13): error TS2353: Object literal may only specify known properties, and 'doSap' does not exist in type '{ returnDoDate?: Date | null | undefined; invoiceNumber?: string | null | undefined; invoiceDate?: Date | null | undefined; doStatus?: string | undefined; remark?: string | null | undefined; scanDoDocument?: string | ... 1 more ... | undefined; }'.
