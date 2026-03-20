@@ -2209,24 +2209,24 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
             {/* Stock View Dialog */}
             <Dialog open={stockViewOpen} onOpenChange={setStockViewOpen}>
-                <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[calc(100vw-2rem)] h-[85vh] p-0 gap-0 overflow-hidden">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[calc(100vw-2rem)] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col">
                     <DialogTitle className="sr-only">Stok Aktual - Semua Warehouse</DialogTitle>
                     {/* Gradient Header */}
-                    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 py-4 text-white">
+                    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 sm:px-6 py-3 sm:py-4 text-white">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                            <div className="p-2 hidden sm:block bg-white/20 rounded-lg backdrop-blur-sm">
                                 <Package className="h-5 w-5" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold tracking-tight">Stok Aktual - Semua Warehouse</h2>
-                                <p className="text-blue-100 text-sm">Lihat detail stok aktual untuk semua produk di semua warehouse</p>
+                                <h2 className="text-base sm:text-lg font-bold tracking-tight">Stok Aktual - Semua Warehouse</h2>
+                                <p className="text-blue-100 text-xs sm:text-sm mt-0.5">Lihat detail stok aktual untuk semua produk di semua warehouse</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex-1 min-h-0 flex flex-col px-6 pt-4 pb-4">
+                    <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 pt-3 sm:pt-4 pb-3 sm:pb-4">
                         {/* Search Bar */}
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
@@ -2279,7 +2279,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     return (keyCounts.get(key) || 0) > 1
                                 }).length
                                 return (
-                                    <div className="grid grid-cols-4 gap-3 mb-4">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                                         <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
                                             <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-md">
                                                 <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -2467,8 +2467,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                         </div>
 
                         {/* Enhanced Footer */}
-                        <div className="mt-3 pt-3 border-t flex items-center justify-between">
-                            <div className="flex items-center gap-3 text-sm">
+                        <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-muted-foreground">Total:</span>
                                     <Badge variant="secondary" className="font-mono text-xs">{allStocks.length}</Badge>
