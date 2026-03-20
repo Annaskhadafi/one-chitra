@@ -450,6 +450,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const qId = isEdit ? initialData!.id : (result as { id: number }).id
+                router.refresh()
                 router.push(`/dashboard/quotations/${qId}?pdf=true`)
             } else {
                 toast.error("error" in result ? result.error : "Something went wrong")
