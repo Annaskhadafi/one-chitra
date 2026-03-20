@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install drizzle-kit for migrations
+# Install drizzle-kit and tsx for migrations
 RUN npm install -g drizzle-kit tsx
 
 # Add a non-root user
@@ -66,12 +66,14 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy migration files and config
+# IMPORTANT: Copy the db folder (schema) and drizzle folder (migrations)
+# drizzle-kit push needs the schema files to work!
+COPY --from=builder --chown=nextjs:nodejs /app/db ./db
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
-# Important: ensure permissions for nextjs user on the app dir
+# Ensure correct permissions for the whole app folder
 RUN chown -R nextjs:nodejs /app
 
 USER nextjs
@@ -80,6 +82,12 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# ENTRYPOINT script to run migrations before starting the app
-# Use npx to find local dependencies if needed
-CMD ["sh", "-c", "mkdir -p /app/uploads && drizzle-kit push && node server.js"]
+# Shell script for more robust startup with better logging
+CMD ["sh", "-c", " \
+    echo 'Running database migrations...'; \
+    if drizzle-kit push; then \
+        echo 'Migrations successful. Starting the server...'; \
+    else \
+        echo 'WARNING: Migrations failed. Check your database connection. Starting server anyway...'; \
+    fi; \
+    node server.js"]
