@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Plus, FileText } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 
+export const dynamic = 'force-dynamic'
+
 export default async function QuotationsPage() {
     const quotations = await getQuotations()
 
