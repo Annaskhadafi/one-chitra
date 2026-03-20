@@ -29,6 +29,9 @@ cache = ["node_modules/.cache", ".next/cache"]
 cmd = "mkdir -p /app/uploads && npm run db:push && node .next/standalone/server.js"
 
 [variables]
+# Pin a stable nixpkgs revision to prevent "cannot read file from tarball" errors.
+# Using a late 2024 stable commit for reproducibility and stability.
+NIXPACKS_PKGS_REVISION = "847f9f257d9036c071d2c67990595304192b0c6c"
 NODE_ENV = "production"
 HOSTNAME = "0.0.0.0"
 PORT = "3000"
