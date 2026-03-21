@@ -3,6 +3,29 @@ import path from "node:path"
 import { promises as fs } from "node:fs"
 import puppeteer from "puppeteer"
 
+async function resolveChromiumExecutablePath() {
+    const candidates = [
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        process.env.CHROMIUM_PATH,
+        "/usr/lib/chromium/chromium",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ].filter(Boolean) as string[]
+
+    for (const candidate of candidates) {
+        try {
+            await fs.access(candidate)
+            return candidate
+        } catch {
+            // Try next known path.
+        }
+    }
+
+    return undefined
+}
+
 /**
  * Generates a high-fidelity PDF of the Revenue Dashboard by taking a screenshot 
  * of a dedicated snapshot page.
@@ -21,12 +44,25 @@ export async function generateRevenueReportPdf(data: { period: string; [key: str
 
     let browser;
     try {
-        const chromiumUserDataDir = path.join(os.tmpdir(), "one-chitra-chromium")
+        const writableRoot = process.env.XDG_CACHE_HOME || process.env.HOME || os.tmpdir()
+        const chromiumUserDataDir = path.join(writableRoot, "one-chitra-chromium")
         const chromiumCrashDir = path.join(chromiumUserDataDir, "crashpad")
+        const chromiumConfigDir = process.env.XDG_CONFIG_HOME || path.join(writableRoot, ".config")
+        const executablePath = await resolveChromiumExecutablePath()
+
+        process.env.HOME = process.env.HOME || writableRoot
+        process.env.XDG_CONFIG_HOME = chromiumConfigDir
+        process.env.XDG_CACHE_HOME = writableRoot
+
         await fs.mkdir(chromiumCrashDir, { recursive: true })
+        await fs.mkdir(chromiumConfigDir, { recursive: true })
+        await fs.mkdir(chromiumUserDataDir, { recursive: true })
+
+        console.log(`[Puppeteer] Using executable: ${executablePath || "bundled/default"}`)
+        console.log(`[Puppeteer] Writable root: ${writableRoot}`)
 
         browser = await puppeteer.launch({
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROMIUM_PATH || undefined,
+            executablePath,
             headless: true,
             args: [
                 "--no-sandbox",
@@ -34,6 +70,8 @@ export async function generateRevenueReportPdf(data: { period: string; [key: str
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--no-zygote",
+                "--no-first-run",
+                "--disable-features=Crashpad,Translate,AcceptCHFrame",
                 `--user-data-dir=${chromiumUserDataDir}`,
                 `--crash-dumps-dir=${chromiumCrashDir}`,
                 "--disable-crash-reporter",

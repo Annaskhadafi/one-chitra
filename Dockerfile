@@ -30,6 +30,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOME=/app
+ENV XDG_CONFIG_HOME=/app/.config
+ENV XDG_CACHE_HOME=/app/.cache
 
 # Install system libraries for Chromium/Puppeteer
 RUN apt-get update && apt-get install -y \
@@ -60,7 +63,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Create uploads directory
-RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+RUN mkdir -p /app/uploads /app/.config /app/.cache && chown -R nextjs:nodejs /app/uploads /app/.config /app/.cache
 
 # Copy built files
 COPY --from=builder /app/public ./public
