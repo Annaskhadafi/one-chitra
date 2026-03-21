@@ -49,29 +49,29 @@ export default async function StockCardDetailPage({ params }: StockCardDetailPag
     }
 
     return (
-        <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eff6ff_45%,#ffffff_100%)] px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-6xl flex-col gap-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eff6ff_45%,#ffffff_100%)] px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+            <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:gap-6">
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:p-5">
                     <div>
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                             <Badge variant="outline">Stock Card</Badge>
                             <Badge variant="secondary">{detail.warehouseType || "Warehouse"}</Badge>
                         </div>
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
                             {detail.materialDescription || "Produk tanpa deskripsi"}
                         </h1>
-                        <p className="mt-2 text-sm text-slate-600">
+                        <p className="mt-2 break-words text-sm text-slate-600">
                             Material Number {detail.materialNumber}
                             {detail.oldMaterialNo ? ` | Old Number ${detail.oldMaterialNo}` : ""}
                         </p>
                     </div>
 
-                    <div className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
+                    <div className="w-fit rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
                         Stock ID #{detail.stockId}
                     </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <Card className="border-blue-200/60 bg-blue-50/70">
                         <CardHeader className="pb-3">
                             <CardDescription>Warehouse</CardDescription>
@@ -121,7 +121,7 @@ export default async function StockCardDetailPage({ params }: StockCardDetailPag
                     </Card>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[1.1fr_1.9fr]">
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.1fr_1.9fr]">
                     <Card className="border-slate-200/70">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-lg">
@@ -172,53 +172,103 @@ export default async function StockCardDetailPage({ params }: StockCardDetailPag
                         </CardHeader>
                         <CardContent>
                             {detail.history.length ? (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.18em] text-slate-500">
-                                                <th className="pb-3 pr-4 font-medium">Tanggal</th>
-                                                <th className="pb-3 pr-4 font-medium">Customer</th>
-                                                <th className="pb-3 pr-4 font-medium">Qty</th>
-                                                <th className="pb-3 pr-4 font-medium">Ref</th>
-                                                <th className="pb-3 pr-4 font-medium">No PO Customer</th>
-                                                <th className="pb-3 pr-4 font-medium">Warehouse</th>
-                                                <th className="pb-3 font-medium">Sumber</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {detail.history.map((item, index) => (
-                                                <tr key={`${item.source}-${item.referenceNumber}-${index}`} className="border-b border-slate-100 align-top">
-                                                    <td className="py-3 pr-4 text-slate-700">
-                                                        {item.deliveryDate || "-"}
-                                                    </td>
-                                                    <td className="py-3 pr-4">
-                                                        <div className="font-medium text-slate-900">{item.customerName}</div>
+                                <>
+                                    <div className="space-y-3 md:hidden">
+                                        {detail.history.map((item, index) => (
+                                            <div
+                                                key={`${item.source}-${item.referenceNumber}-${index}`}
+                                                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                                            >
+                                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                        <div className="font-semibold text-slate-900">{item.customerName}</div>
                                                         <div className="mt-1 text-xs text-slate-500">
-                                                            {statusLabel(item.status)}
+                                                            {item.deliveryDate || "-"} | {statusLabel(item.status)}
                                                         </div>
-                                                    </td>
-                                                    <td className="py-3 pr-4 font-mono text-slate-900">
-                                                        {item.qty.toLocaleString("id-ID")}
-                                                    </td>
-                                                    <td className="py-3 pr-4 text-slate-700">
-                                                        {item.referenceNumber || "-"}
-                                                    </td>
-                                                    <td className="py-3 pr-4 text-slate-700">
-                                                        {item.orderNumber || "-"}
-                                                    </td>
-                                                    <td className="py-3 pr-4 text-slate-700">
-                                                        {item.warehouseLabel || "-"}
-                                                    </td>
-                                                    <td className="py-3">
-                                                        <Badge variant={statusVariant(item.status)}>
-                                                            {item.source === "delivery" ? "Delivery" : "History Order"}
-                                                        </Badge>
-                                                    </td>
+                                                    </div>
+                                                    <Badge variant={statusVariant(item.status)}>
+                                                        {item.source === "delivery" ? "Delivery" : "History Order"}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                                    <div>
+                                                        <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Qty</div>
+                                                        <div className="mt-1 font-mono font-semibold text-slate-900">
+                                                            {item.qty.toLocaleString("id-ID")}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Ref</div>
+                                                        <div className="mt-1 break-words text-slate-900">
+                                                            {item.referenceNumber || "-"}
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">No PO Customer</div>
+                                                        <div className="mt-1 break-words text-slate-900">
+                                                            {item.orderNumber || "-"}
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Warehouse</div>
+                                                        <div className="mt-1 break-words text-slate-900">
+                                                            {item.warehouseLabel || "-"}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="hidden overflow-x-auto md:block">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.18em] text-slate-500">
+                                                    <th className="pb-3 pr-4 font-medium">Tanggal</th>
+                                                    <th className="pb-3 pr-4 font-medium">Customer</th>
+                                                    <th className="pb-3 pr-4 font-medium">Qty</th>
+                                                    <th className="pb-3 pr-4 font-medium">Ref</th>
+                                                    <th className="pb-3 pr-4 font-medium">No PO Customer</th>
+                                                    <th className="pb-3 pr-4 font-medium">Warehouse</th>
+                                                    <th className="pb-3 font-medium">Sumber</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {detail.history.map((item, index) => (
+                                                    <tr key={`${item.source}-${item.referenceNumber}-${index}`} className="border-b border-slate-100 align-top">
+                                                        <td className="py-3 pr-4 text-slate-700">
+                                                            {item.deliveryDate || "-"}
+                                                        </td>
+                                                        <td className="py-3 pr-4">
+                                                            <div className="font-medium text-slate-900">{item.customerName}</div>
+                                                            <div className="mt-1 text-xs text-slate-500">
+                                                                {statusLabel(item.status)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-3 pr-4 font-mono text-slate-900">
+                                                            {item.qty.toLocaleString("id-ID")}
+                                                        </td>
+                                                        <td className="py-3 pr-4 text-slate-700">
+                                                            {item.referenceNumber || "-"}
+                                                        </td>
+                                                        <td className="py-3 pr-4 text-slate-700">
+                                                            {item.orderNumber || "-"}
+                                                        </td>
+                                                        <td className="py-3 pr-4 text-slate-700">
+                                                            {item.warehouseLabel || "-"}
+                                                        </td>
+                                                        <td className="py-3">
+                                                            <Badge variant={statusVariant(item.status)}>
+                                                                {item.source === "delivery" ? "Delivery" : "History Order"}
+                                                            </Badge>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
                             ) : (
                                 <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center">
                                     <Users className="h-8 w-8 text-slate-300" />
