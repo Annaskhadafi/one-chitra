@@ -3,6 +3,7 @@ import { db } from "@/db"
 import { settings } from "@/db/schema/settings"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
 import type { DashboardRevenueFilters } from "./dashboard-revenue-logic"
 import { 
     fetchDashboardRevenueForecast, 
@@ -53,7 +54,7 @@ import { resolveUserEmailsFromRolesAndIds } from "@/lib/email"
 export async function sendManualRevenueReport(period: string) {
     try {
         console.log(`[RevenueReport] Starting manual report for period: ${period}`)
-        await getAuthenticatedSession("revenue-forecast", "view")
+        await getAuthenticatedSession("email-settings", "edit")
 
         const [revenueRes, inventoryRes, configRes] = await Promise.all([
             fetchDashboardRevenueForecast({ period }),
@@ -145,20 +146,21 @@ const getPct = (actual: number, target: number) =>
 
 export async function getRevenueReportConfig() {
     try {
-        await getAuthenticatedSession("revenue-forecast", "view")
+        await getAuthenticatedSession("email-settings", "view")
         return await fetchRevenueReportConfig()
     } catch (error) {
         console.error("Failed to fetch revenue report config:", error)
-        return { success: false, error: "Failed to fetch configuration" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to fetch configuration" }
     }
 }
 
 
 export async function saveRevenueReportConfig(config: RevenueReportConfig) {
     try {
-        await getAuthenticatedSession("revenue-forecast", "edit")
+        await getAuthenticatedSession("email-settings", "edit")
         
-        const value = JSON.stringify(normalizeRevenueReportConfig(config))
+        const normalizedConfig = normalizeRevenueReportConfig(config)
+        const value = JSON.stringify(normalizedConfig)
         
         const existing = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
         
@@ -171,9 +173,10 @@ export async function saveRevenueReportConfig(config: RevenueReportConfig) {
                 .values({ key: "revenue_report_config", value })
         }
 
-        return { success: true }
+        revalidatePath("/dashboard/settings/email")
+        return { success: true, data: normalizedConfig }
     } catch (error) {
         console.error("Failed to save revenue report config:", error)
-        return { success: false, error: "Failed to save configuration" }
+        return { success: false, error: error instanceof Error ? error.message : "Failed to save configuration" }
     }
 }

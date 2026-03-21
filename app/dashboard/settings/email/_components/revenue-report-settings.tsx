@@ -63,7 +63,12 @@ export function RevenueReportSettings({ recipientRoles }: Props) {
         setSaving(true)
         try {
             const res = await saveRevenueReportConfig(config)
-            if (res.success) toast.success("Konfigurasi berhasil disimpan")
+            if (res.success) {
+                if (res.data) {
+                    setConfig(res.data)
+                }
+                toast.success("Konfigurasi berhasil disimpan")
+            }
             else toast.error(res.error || "Gagal menyimpan")
         } finally {
             setSaving(false)
