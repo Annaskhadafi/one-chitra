@@ -61,7 +61,7 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview"
 import { ProductHistoryPopover } from "./product-history-popover"
 import { QuotationFileCenter } from "./quotation-file-center"
 import { QuotationHistoryPanel } from "./quotation-history-panel"
-import type { QuotationRevisionSnapshot } from "@/db/schema/quotations"
+import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
 
 type User = typeof user.$inferSelect
 
@@ -98,6 +98,10 @@ interface QuotationDetailData {
     customerPoNumber: string | null
     customerPoDocument: string | null
     customerPoUploadedAt: Date | null
+    poValidationStatus: string | null
+    poValidationCheckedAt: Date | null
+    poValidationOcrSessionId: number | null
+    poValidationSummary: QuotationPoValidationSummary | null
     customer: Customer
     attachments: {
         id: number
@@ -193,7 +197,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     const isExpired = quotation.validUntil && new Date(quotation.validUntil) < new Date()
     const canApprove = ["draft", "sent"].includes(quotation.status)
     const canReject = ["draft", "sent"].includes(quotation.status)
-    const canConvert = quotation.status === "approved" || Boolean(quotation.customerPoNumber)
+    const poRequiresOcrReview = Boolean(
+        quotation.customerPoNumber &&
+        quotation.poValidationStatus &&
+        quotation.poValidationStatus !== "full_match"
+    )
+    const canConvert = !poRequiresOcrReview && (quotation.status === "approved" || Boolean(quotation.customerPoNumber))
     const canEdit = ["draft", "sent"].includes(quotation.status)
 
     // Calculations
@@ -405,9 +414,9 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                             <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Convert to Sales Order?</AlertDialogTitle>
-                                    <AlertDialogDescription>
+                                <AlertDialogDescription>
                                         This will create a new Sales Order from quotation {quotation.quotationNumber} with all its items and details. The quotation status will be changed to &quot;Converted&quot;.
-                                    </AlertDialogDescription>
+                                </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -417,6 +426,14 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
+                    )}
+                    {!canConvert && quotation.poValidationOcrSessionId && (
+                        <Link href={`/dashboard/sales-orders/ocr-validate?session=${quotation.poValidationOcrSessionId}&quotation=${quotation.id}`}>
+                            <Button className="gap-2 bg-amber-600 hover:bg-amber-700">
+                                <ArrowRightLeft className="h-4 w-4" />
+                                Review OCR Before Convert
+                            </Button>
+                        </Link>
                     )}
                 </div>
             </div>
@@ -575,6 +592,44 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                 </Link>
                             </div>
                         )}
+                        {quotation.poValidationStatus && (
+                            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                                <div className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="text-muted-foreground">PO OCR Validation</span>
+                                    <Badge
+                                        variant={
+                                            quotation.poValidationStatus === "full_match"
+                                                ? "default"
+                                                : quotation.poValidationStatus === "partial_match"
+                                                    ? "secondary"
+                                                    : "destructive"
+                                        }
+                                    >
+                                        {quotation.poValidationStatus === "full_match"
+                                            ? "Full Match"
+                                            : quotation.poValidationStatus === "partial_match"
+                                                ? "Partial Match"
+                                                : quotation.poValidationStatus === "mismatch"
+                                                    ? "Mismatch"
+                                                    : "OCR Failed"}
+                                    </Badge>
+                                </div>
+                                {quotation.poValidationSummary?.reasons?.length ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        {quotation.poValidationSummary.reasons[0]}
+                                    </p>
+                                ) : null}
+                                {quotation.poValidationOcrSessionId && (
+                                    <Link
+                                        href={`/dashboard/sales-orders/ocr-validate?session=${quotation.poValidationOcrSessionId}&quotation=${quotation.id}`}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                    >
+                                        Review OCR Validation
+                                        <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -585,6 +640,9 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                 salesOrderId={quotation.salesOrderId}
                 customerPoNumber={quotation.customerPoNumber}
                 customerPoDocument={quotation.customerPoDocument}
+                poValidationStatus={quotation.poValidationStatus}
+                poValidationSummary={quotation.poValidationSummary}
+                poValidationOcrSessionId={quotation.poValidationOcrSessionId}
                 attachments={quotation.attachments}
             />
 

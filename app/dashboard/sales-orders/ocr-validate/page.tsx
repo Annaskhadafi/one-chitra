@@ -8,9 +8,10 @@ import { ocrPoSessions } from "@/db/schema/ocr-po-sessions"
 import { eq } from "drizzle-orm"
 import ValidationSplit from "./validation-split"
 
-export default async function OcrValidatePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
+export default async function OcrValidatePage({ searchParams }: { searchParams: Promise<{ session?: string; quotation?: string }> }) {
     const params = await searchParams
     const sessionId = Number(params.session || 0)
+    const quotationId = Number(params.quotation || 0)
     const [session] = sessionId
         ? await db.select().from(ocrPoSessions).where(eq(ocrPoSessions.id, sessionId)).limit(1)
         : []
@@ -24,6 +25,7 @@ export default async function OcrValidatePage({ searchParams }: { searchParams: 
     return (
         <ValidationSplit
             session={session || null}
+            quotationId={Number.isInteger(quotationId) && quotationId > 0 ? quotationId : null}
             customers={customers}
             products={products}
             warehouses={warehouses}

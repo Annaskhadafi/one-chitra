@@ -32,6 +32,10 @@ export type QuotationRevisionSnapshot = {
         customerPoNumber: string | null
         customerPoDocument: string | null
         customerPoUploadedAt: string | null
+        poValidationStatus: string | null
+        poValidationCheckedAt: string | null
+        poValidationOcrSessionId: number | null
+        poValidationSummary: QuotationPoValidationSummary | null
         salesOrderId: number | null
     }
     items: Array<{
@@ -54,6 +58,48 @@ export type QuotationRevisionSnapshot = {
         description: string | null
         includeInPdf: boolean
         createdAt?: string
+    }>
+}
+
+export type QuotationPoValidationSummary = {
+    status: "full_match" | "partial_match" | "mismatch" | "ocr_failed"
+    checkedAt: string
+    documentNumber: string | null
+    documentDate: string | null
+    customerName: string | null
+    customerMatched: boolean
+    customerConfidence: number
+    matchedItemCount: number
+    quotationItemCount: number
+    ocrItemCount: number
+    unmatchedQuotationItemCount: number
+    unmatchedOcrItemCount: number
+    requiresManualReview: boolean
+    ocrSessionId?: number | null
+    reasons: string[]
+    comparisons: Array<{
+        key: string
+        ocrName: string
+        ocrCode: string | null
+        ocrQuantity: number
+        ocrUnitPrice: string
+        matchedQuotationItemId: number | null
+        quotationMaterialNumber: string | null
+        quotationDescription: string | null
+        quotationQuantity: number | null
+        quotationUnitPrice: string | null
+        matchConfidence: number
+        status: "matched" | "partial_qty" | "qty_exceeds" | "price_changed" | "unmatched_ocr"
+        quantityDelta: number | null
+        priceDelta: string | null
+        priceDeltaPercent: number | null
+    }>
+    unmatchedQuotationItems: Array<{
+        quotationItemId: number
+        materialNumber: string | null
+        description: string | null
+        quantity: number
+        unitPrice: string
     }>
 }
 
@@ -97,6 +143,10 @@ export const quotations = pgTable("quotations", {
     customerPoDocument: varchar("customer_po_document", { length: 255 }),
     customerPoUploadedAt: timestamp("customer_po_uploaded_at"),
     customerPoUploadedBy: varchar("customer_po_uploaded_by").references(() => user.id),
+    poValidationStatus: varchar("po_validation_status", { length: 30 }),
+    poValidationCheckedAt: timestamp("po_validation_checked_at"),
+    poValidationOcrSessionId: integer("po_validation_ocr_session_id"),
+    poValidationSummary: jsonb("po_validation_summary").$type<QuotationPoValidationSummary>(),
     autoConvertedAt: timestamp("auto_converted_at"),
     autoConvertedBy: varchar("auto_converted_by").references(() => user.id),
 });

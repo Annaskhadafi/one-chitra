@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
+import { finalizeQuotationOcrSalesOrderLink } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
@@ -65,6 +66,10 @@ interface SalesOrderFormProps {
     warehouses: Warehouse[]
     users: Pick<User, "id" | "name" | "email" | "role">[]
     ckMasterPrices: CkMasterPriceReference[]
+    quotationContext?: {
+        quotationId: number
+        ocrSessionId?: number | null
+    }
     initialData?: {
         id: number
         invoiceNumber: string | null
@@ -119,6 +124,7 @@ export function SalesOrderForm({
     warehouses,
     users,
     ckMasterPrices,
+    quotationContext,
     initialData,
 }: SalesOrderFormProps) {
     const router = useRouter()
@@ -315,7 +321,6 @@ export function SalesOrderForm({
             const bundleItems = await getBundleItemsForExpansion(product.id)
             if (bundleItems && bundleItems.length > 0) {
                 // We use localized variable to avoid closure issues with state
-                let currentItems: OrderItem[] = []
                 setItems(prev => {
                     const nextItems = [...prev]
                     bundleItems.forEach(bi => {
@@ -532,6 +537,19 @@ export function SalesOrderForm({
                     ("id" in result && typeof result.id === "number")
                         ? result.id
                         : initialData?.id
+
+                if (!isEdit && savedId && quotationContext?.quotationId) {
+                    const linkResult = await finalizeQuotationOcrSalesOrderLink({
+                        quotationId: quotationContext.quotationId,
+                        salesOrderId: savedId,
+                        ocrSessionId: quotationContext.ocrSessionId,
+                    })
+
+                    if (!linkResult.success) {
+                        toast.warning("Sales Order tersimpan, tapi belum berhasil terhubung ke quotation")
+                    }
+                }
+
                 const listParams = new URLSearchParams({
                     refresh: Date.now().toString(),
                 })

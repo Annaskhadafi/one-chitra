@@ -171,12 +171,9 @@ export async function extractStructuredFromDocument(params: {
     if (!apiKey) {
         throw new Error("MISTRAL_API_KEY is not set")
     }
-    const lower = params.filename.toLowerCase()
-    if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-        throw new Error("File gambar tidak didukung oleh model OCR ini. Silakan gunakan file PDF untuk hasil terbaik.")
-    }
-    const base64 = params.fileBuffer.toString("base64")
-    const documentUrl = buildDataUri(params.filename, base64)
+    const { filename, fileBuffer } = await normalizeDocumentForOcr(params.filename, params.fileBuffer)
+    const base64 = fileBuffer.toString("base64")
+    const documentUrl = buildDataUri(filename, base64)
     const normalizedPages = normalizePages(params.pages)
     const body = {
         model: "mistral-ocr-latest",
@@ -252,6 +249,43 @@ export async function extractStructuredFromDocument(params: {
         entityBoxes,
         model,
         pagesProcessed,
+    }
+}
+
+async function normalizeDocumentForOcr(filename: string, fileBuffer: Buffer) {
+    const lower = filename.toLowerCase()
+    if (!lower.endsWith(".png") && !lower.endsWith(".jpg") && !lower.endsWith(".jpeg")) {
+        return { filename, fileBuffer }
+    }
+
+    const { PDFDocument } = await import("pdf-lib")
+    const pdf = await PDFDocument.create()
+    const embeddedImage = lower.endsWith(".png")
+        ? await pdf.embedPng(fileBuffer)
+        : await pdf.embedJpg(fileBuffer)
+
+    const pageWidth = 595.28
+    const pageHeight = 841.89
+    const page = pdf.addPage([pageWidth, pageHeight])
+    const margin = 24
+    const scale = Math.min(
+        (pageWidth - margin * 2) / embeddedImage.width,
+        (pageHeight - margin * 2) / embeddedImage.height,
+        1,
+    )
+    const imageWidth = embeddedImage.width * scale
+    const imageHeight = embeddedImage.height * scale
+
+    page.drawImage(embeddedImage, {
+        x: (pageWidth - imageWidth) / 2,
+        y: (pageHeight - imageHeight) / 2,
+        width: imageWidth,
+        height: imageHeight,
+    })
+
+    return {
+        filename: filename.replace(/\.(png|jpg|jpeg)$/i, ".pdf"),
+        fileBuffer: Buffer.from(await pdf.save()),
     }
 }
 

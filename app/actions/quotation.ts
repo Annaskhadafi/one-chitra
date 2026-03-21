@@ -3,6 +3,7 @@
 import { db } from "@/db"
 import {
     deliveries,
+    ocrPoSessions,
     quotationAttachments,
     quotationItems,
     quotationRevisions,
@@ -10,7 +11,7 @@ import {
     salesOrderItems,
     salesOrders,
 } from "@/db/schema"
-import type { QuotationRevisionSnapshot } from "@/db/schema/quotations"
+import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
 import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
@@ -18,6 +19,10 @@ import { quotationSchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { deleteFile } from "./upload"
+import { readManagedUpload } from "@/lib/upload-storage"
+import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
+import { mapExtractedToMaster } from "@/lib/so-mapping"
+import { extractUploadFilename } from "@/lib/upload-url"
 
 type QuotationInput = z.infer<typeof quotationSchema>
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -25,6 +30,7 @@ type QuotationRecord = typeof quotations.$inferSelect
 type QuotationItemRecord = typeof quotationItems.$inferSelect
 type QuotationAttachmentRecord = typeof quotationAttachments.$inferSelect
 type SalesOrderRecord = typeof salesOrders.$inferSelect
+type QuotationPoValidationStatus = QuotationPoValidationSummary["status"]
 
 const quotationAttachmentSchema = z.object({
     quotationId: z.number().int().positive(),
@@ -74,6 +80,296 @@ function toIsoDate(value: Date | string | null | undefined) {
     return new Date(value).toISOString()
 }
 
+function normalizeComparisonText(value: string | null | undefined) {
+    return (value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
+function parseAmount(value: string | number | null | undefined) {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isSameAmount(left: number, right: number, tolerance = 0.01) {
+    return Math.abs(left - right) <= tolerance
+}
+
+function toFixedAmountString(value: number) {
+    return value.toFixed(2)
+}
+
+type PoValidationComparisonStatus = QuotationPoValidationSummary["comparisons"][number]["status"]
+
+type ComparableQuotationItem = {
+    itemId: number
+    productId: number | null
+    materialNumber: string | null
+    description: string | null
+    quantity: number
+    unitPrice: number
+    comparisonKey: string
+}
+
+function buildComparableQuotationItems(
+    quotation: {
+        items: Array<{
+            id: number
+            productId: number | null
+            quantity: number
+            unitPrice: string | number
+            description: string | null
+            product: {
+                materialNumber: string
+                materialDescription: string | null
+            } | null
+        }>
+    } | null | undefined
+): ComparableQuotationItem[] {
+    if (!quotation?.items) {
+        return []
+    }
+
+    return quotation.items.map((item) => {
+        const materialNumber = item.product?.materialNumber ?? null
+        const description = item.description || item.product?.materialDescription || materialNumber
+        const comparisonKey = item.productId
+            ? `product:${item.productId}`
+            : `text:${normalizeComparisonText(description || materialNumber)}`
+
+        return {
+            itemId: item.id,
+            productId: item.productId,
+            materialNumber,
+            description,
+            quantity: item.quantity,
+            unitPrice: parseAmount(item.unitPrice),
+            comparisonKey,
+        }
+    })
+}
+
+function buildMappedDataFromOcr(ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>, mapping: Awaited<ReturnType<typeof mapExtractedToMaster>>) {
+    return {
+        customerId: mapping.customer.id,
+        customerName: ocr.structured.customer_company_name,
+        customerMatchConfidence: mapping.customer.confidence,
+        customerSuggestions: mapping.customer.candidates.map((candidate) => ({
+            id: candidate.id,
+            name: candidate.name,
+            code: candidate.code,
+            score: candidate.score,
+        })),
+        documentNumber: ocr.structured.po_number,
+        documentDate: ocr.structured.document_date,
+        items: ocr.structured.products.map((product, index) => {
+            const mappedItem = mapping.items[index]
+            return {
+                ocrProductName: product.name,
+                ocrProductCode: product.code || null,
+                ocrQuantity: Number.isFinite(product.qty) ? product.qty : 0,
+                ocrUnitPrice: Number.isFinite(product.unit_price) ? product.unit_price : 0,
+                matchedProductId: mappedItem?.id ?? null,
+                matchedProductName: mappedItem?.candidates[0]?.name || null,
+                matchConfidence: mappedItem?.confidence ?? 0,
+                isValidated: false,
+            }
+        }),
+    }
+}
+
+function buildExtractedDataFromOcr(ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>) {
+    return {
+        customerName: ocr.structured.customer_company_name,
+        customerCode: ocr.structured.customer_code || null,
+        documentNumber: ocr.structured.po_number,
+        documentDate: ocr.structured.document_date,
+        items: ocr.structured.products.map((product) => ({
+            productName: product.name,
+            productCode: product.code || null,
+            quantity: Number.isFinite(product.qty) ? product.qty : 0,
+            unitPrice: Number.isFinite(product.unit_price) ? product.unit_price : 0,
+            totalPrice: product.total_price == null
+                ? ((Number.isFinite(product.qty) ? product.qty : 0) * (Number.isFinite(product.unit_price) ? product.unit_price : 0))
+                : product.total_price,
+            unit: null as string | null,
+        })),
+        rawText: ocr.rawText,
+    }
+}
+
+function comparePoOcrAgainstQuotation(params: {
+    quotation: {
+        customerId: number
+        items: Array<{
+            id: number
+            productId: number | null
+            quantity: number
+            unitPrice: string | number
+            description: string | null
+            product: {
+                materialNumber: string
+                materialDescription: string | null
+            } | null
+        }>
+    }
+    ocr: Awaited<ReturnType<typeof extractStructuredFromDocument>>
+    mapping: Awaited<ReturnType<typeof mapExtractedToMaster>>
+}): QuotationPoValidationSummary {
+    const quoteItems = buildComparableQuotationItems(params.quotation)
+    const usedQuotationItemIds = new Set<number>()
+    const customerMatched = params.mapping.customer.id === params.quotation?.customerId
+    const comparisons: QuotationPoValidationSummary["comparisons"] = []
+
+    for (const [index, product] of params.ocr.structured.products.entries()) {
+        const mappedItem = params.mapping.items[index]
+        const comparisonKey = mappedItem?.id
+            ? `product:${mappedItem.id}`
+            : `text:${normalizeComparisonText(product.name)}`
+        const candidates = quoteItems
+            .filter((item) => item.comparisonKey === comparisonKey && !usedQuotationItemIds.has(item.itemId))
+            .sort((left, right) => {
+                const qtyDistance = Math.abs(left.quantity - product.qty) - Math.abs(right.quantity - product.qty)
+                if (qtyDistance !== 0) {
+                    return qtyDistance
+                }
+                return Math.abs(left.unitPrice - product.unit_price) - Math.abs(right.unitPrice - product.unit_price)
+            })
+
+        const matchedQuotationItem = candidates[0] ?? null
+        let comparisonStatus: PoValidationComparisonStatus = "unmatched_ocr"
+        let quantityDelta: number | null = null
+        let priceDelta: string | null = null
+        let priceDeltaPercent: number | null = null
+
+        if (matchedQuotationItem) {
+            usedQuotationItemIds.add(matchedQuotationItem.itemId)
+            quantityDelta = product.qty - matchedQuotationItem.quantity
+
+            const currentPriceDelta = product.unit_price - matchedQuotationItem.unitPrice
+            priceDelta = toFixedAmountString(currentPriceDelta)
+            priceDeltaPercent = matchedQuotationItem.unitPrice > 0
+                ? Number((((currentPriceDelta) / matchedQuotationItem.unitPrice) * 100).toFixed(2))
+                : null
+
+            if (!isSameAmount(product.unit_price, matchedQuotationItem.unitPrice)) {
+                comparisonStatus = "price_changed"
+            } else if (product.qty > matchedQuotationItem.quantity) {
+                comparisonStatus = "qty_exceeds"
+            } else if (product.qty < matchedQuotationItem.quantity) {
+                comparisonStatus = "partial_qty"
+            } else {
+                comparisonStatus = "matched"
+            }
+        }
+
+        comparisons.push({
+            key: comparisonKey,
+            ocrName: product.name,
+            ocrCode: product.code || null,
+            ocrQuantity: product.qty,
+            ocrUnitPrice: toFixedAmountString(product.unit_price),
+            matchedQuotationItemId: matchedQuotationItem?.itemId ?? null,
+            quotationMaterialNumber: matchedQuotationItem?.materialNumber ?? null,
+            quotationDescription: matchedQuotationItem?.description ?? null,
+            quotationQuantity: matchedQuotationItem?.quantity ?? null,
+            quotationUnitPrice: matchedQuotationItem ? toFixedAmountString(matchedQuotationItem.unitPrice) : null,
+            matchConfidence: mappedItem?.confidence ?? 0,
+            status: comparisonStatus,
+            quantityDelta,
+            priceDelta,
+            priceDeltaPercent,
+        })
+    }
+
+    const unmatchedQuotationItems = quoteItems
+        .filter((item) => !usedQuotationItemIds.has(item.itemId))
+        .map((item) => ({
+            quotationItemId: item.itemId,
+            materialNumber: item.materialNumber,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: toFixedAmountString(item.unitPrice),
+        }))
+
+    const hasCriticalMismatch =
+        !customerMatched ||
+        comparisons.some((comparison) => ["unmatched_ocr", "qty_exceeds", "price_changed"].includes(comparison.status))
+
+    const hasPartialCoverage =
+        unmatchedQuotationItems.length > 0 ||
+        comparisons.some((comparison) => comparison.status === "partial_qty")
+
+    const status: QuotationPoValidationStatus = hasCriticalMismatch
+        ? "mismatch"
+        : hasPartialCoverage
+            ? "partial_match"
+            : "full_match"
+
+    const reasons: string[] = []
+    if (!customerMatched) {
+        reasons.push("Customer hasil OCR tidak sama dengan customer quotation")
+    }
+    if (comparisons.some((comparison) => comparison.status === "unmatched_ocr")) {
+        reasons.push("Ada item PO yang tidak ditemukan di quotation")
+    }
+    if (comparisons.some((comparison) => comparison.status === "qty_exceeds")) {
+        reasons.push("Ada quantity PO yang melebihi quantity quotation")
+    }
+    if (comparisons.some((comparison) => comparison.status === "price_changed")) {
+        reasons.push("Ada harga item PO yang berbeda dengan quotation")
+    }
+    if (comparisons.some((comparison) => comparison.status === "partial_qty")) {
+        reasons.push("Ada quantity PO yang lebih kecil dari quotation")
+    }
+    if (unmatchedQuotationItems.length > 0) {
+        reasons.push("Sebagian item quotation tidak tercantum di PO customer")
+    }
+
+    return {
+        status,
+        checkedAt: new Date().toISOString(),
+        documentNumber: params.ocr.structured.po_number || null,
+        documentDate: params.ocr.structured.document_date || null,
+        customerName: params.ocr.structured.customer_company_name || null,
+        customerMatched,
+        customerConfidence: Number(params.mapping.customer.confidence.toFixed(4)),
+        matchedItemCount: comparisons.filter((comparison) => comparison.status === "matched").length,
+        quotationItemCount: quoteItems.length,
+        ocrItemCount: comparisons.length,
+        unmatchedQuotationItemCount: unmatchedQuotationItems.length,
+        unmatchedOcrItemCount: comparisons.filter((comparison) => comparison.status === "unmatched_ocr").length,
+        requiresManualReview: status !== "full_match",
+        reasons,
+        comparisons,
+        unmatchedQuotationItems,
+    }
+}
+
+function buildOcrFailureSummary(error: unknown): QuotationPoValidationSummary {
+    const message = error instanceof Error ? error.message : "OCR validation failed"
+    return {
+        status: "ocr_failed",
+        checkedAt: new Date().toISOString(),
+        documentNumber: null,
+        documentDate: null,
+        customerName: null,
+        customerMatched: false,
+        customerConfidence: 0,
+        matchedItemCount: 0,
+        quotationItemCount: 0,
+        ocrItemCount: 0,
+        unmatchedQuotationItemCount: 0,
+        unmatchedOcrItemCount: 0,
+        requiresManualReview: true,
+        reasons: [message],
+        comparisons: [],
+        unmatchedQuotationItems: [],
+    }
+}
+
 function normalizeItemSignature(item: QuotationRevisionSnapshot["items"][number]) {
     return JSON.stringify({
         productId: item.productId ?? null,
@@ -114,6 +410,10 @@ function summarizeQuotationChanges(previous: QuotationRevisionSnapshot, next: Qu
         customerPoNumber: "customer PO number",
         customerPoDocument: "customer PO document",
         customerPoUploadedAt: "customer PO upload time",
+        poValidationStatus: "PO validation status",
+        poValidationCheckedAt: "PO validation check time",
+        poValidationOcrSessionId: "PO OCR session link",
+        poValidationSummary: "PO validation summary",
         salesOrderId: "sales order link",
     }
 
@@ -221,6 +521,10 @@ function buildQuotationSnapshot(
             customerPoNumber: quotation.customerPoNumber,
             customerPoDocument: quotation.customerPoDocument,
             customerPoUploadedAt: toIsoDate(quotation.customerPoUploadedAt),
+            poValidationStatus: quotation.poValidationStatus,
+            poValidationCheckedAt: toIsoDate(quotation.poValidationCheckedAt),
+            poValidationOcrSessionId: quotation.poValidationOcrSessionId,
+            poValidationSummary: quotation.poValidationSummary,
             salesOrderId: quotation.salesOrderId,
         },
         items: items.map((item) => ({
@@ -410,6 +714,76 @@ function buildSalesOrderNotes(quotation: Awaited<ReturnType<typeof db.query.quot
         quotation.adminNote ? `Admin Note: ${quotation.adminNote}` : null,
         quotation.clientNote ? `Client Note: ${quotation.clientNote}` : null,
     ].filter(Boolean).join("\n")
+}
+
+async function linkSalesOrderToQuotationRecord(tx: DbTransaction, params: {
+    quotationId: number
+    salesOrderId: number
+    triggeredBy: string | null
+    sourceType: string
+    markAsConverted?: boolean
+}) {
+    const quotation = await tx.query.quotations.findFirst({
+        where: eq(quotations.id, params.quotationId),
+        with: {
+            items: true,
+        },
+    })
+
+    if (!quotation) {
+        return { success: false as const, error: "Quotation not found" }
+    }
+
+    const currentRevision = await ensureInitialRevision(tx, quotation.id, params.triggeredBy)
+
+    await tx.update(salesOrders)
+        .set({
+            sourceType: params.sourceType,
+            quotationId: quotation.id,
+            quotationNumber: quotation.quotationNumber,
+            quotationRevision: currentRevision,
+            quotationSubject: quotation.subject,
+            quotationReferenceNumber: quotation.referenceNumber,
+            quotationValidUntil: quotation.validUntil,
+            quotationCurrency: quotation.currency,
+            quotationDiscountType: quotation.discountType,
+            quotationTax: quotation.tax,
+            quotationAdminNote: quotation.adminNote,
+            quotationClientNote: quotation.clientNote,
+            customerAttn: quotation.attn,
+            updatedAt: new Date(),
+        })
+        .where(eq(salesOrders.id, params.salesOrderId))
+
+    await tx.update(salesOrderItems)
+        .set({
+            sourceQuotationItemId: sql`case when ${salesOrderItems.productId} = ${quotationItems.productId} then ${quotationItems.id} else ${salesOrderItems.sourceQuotationItemId} end`,
+        })
+        .from(quotationItems)
+        .where(and(
+            eq(quotationItems.quotationId, quotation.id),
+            eq(salesOrderItems.salesOrderId, params.salesOrderId),
+            eq(salesOrderItems.productId, quotationItems.productId),
+        ))
+
+    await tx.update(quotations)
+        .set({
+            salesOrderId: params.salesOrderId,
+            status: params.markAsConverted === false ? quotation.status : "converted",
+            updatedAt: new Date(),
+        })
+        .where(eq(quotations.id, quotation.id))
+
+    await createNextRevision(
+        tx,
+        quotation.id,
+        params.triggeredBy,
+        params.markAsConverted === false
+            ? `Sales Order ${params.salesOrderId} linked from OCR validation`
+            : `Linked to Sales Order ${params.salesOrderId} from OCR validation`,
+    )
+
+    return { success: true as const }
 }
 
 type ConvertQuotationOptions = {
@@ -905,6 +1279,17 @@ export async function convertToSalesOrder(id: number, options?: ConvertQuotation
                 return { success: false as const, error: "Rejected quotation cannot be converted" }
             }
 
+            if (
+                quotation.customerPoNumber &&
+                ["partial_match", "mismatch", "ocr_failed", "pending_ocr"].includes(quotation.poValidationStatus || "")
+            ) {
+                return {
+                    success: false as const,
+                    error: "Customer PO quotation masih perlu divalidasi melalui OCR sebelum bisa dikonversi",
+                    ocrSessionId: quotation.poValidationOcrSessionId ?? undefined,
+                }
+            }
+
             const resolvedCustomerPo = normalizeText(options?.customerPoNumber) ?? quotation.customerPoNumber
             const poDocument = normalizeText(options?.poDocument) ?? quotation.customerPoDocument
             const poReceivedAt = options?.poReceivedAt ?? quotation.customerPoUploadedAt ?? null
@@ -1290,6 +1675,10 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                     customerPoDocument: payload.fileUrl,
                     customerPoUploadedAt: poReceivedAt,
                     customerPoUploadedBy: userId,
+                    poValidationStatus: "pending_ocr",
+                    poValidationCheckedAt: null,
+                    poValidationOcrSessionId: null,
+                    poValidationSummary: null,
                     updatedAt: poReceivedAt,
                 })
                 .where(eq(quotations.id, payload.quotationId))
@@ -1329,6 +1718,98 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
             return uploadResult
         }
 
+        let validationSummary: QuotationPoValidationSummary
+        let ocrSessionId: number | null = null
+
+        try {
+            const quotationForValidation = await db.query.quotations.findFirst({
+                where: eq(quotations.id, payload.quotationId),
+                with: {
+                    customer: true,
+                    items: {
+                        with: {
+                            product: true,
+                        },
+                    },
+                },
+            })
+
+            if (!quotationForValidation) {
+                throw new Error("Quotation not found for OCR validation")
+            }
+
+            const uploadedPo = await readManagedUpload(payload.fileUrl)
+            if (!uploadedPo) {
+                throw new Error("Uploaded PO file not found for OCR validation")
+            }
+
+            const ocr = await extractStructuredFromDocument({
+                fileBuffer: uploadedPo.buffer,
+                filename: uploadedPo.filename,
+                pages: "all",
+            })
+            const mapping = await mapExtractedToMaster(ocr.structured)
+            const mappedData = buildMappedDataFromOcr(ocr, mapping)
+            const extractedData = buildExtractedDataFromOcr(ocr)
+            const [ocrSession] = await db.insert(ocrPoSessions).values({
+                fileUrl: extractUploadFilename(payload.fileUrl) || payload.fileUrl,
+                fileName: uploadedPo.filename.slice(0, 255),
+                fileType: normalizeText(payload.mimeType) || uploadedPo.contentType || null,
+                extractedData,
+                mappedData,
+                status: "pending",
+                uploadedById: userId,
+            }).returning({ id: ocrPoSessions.id })
+
+            ocrSessionId = ocrSession.id
+            validationSummary = comparePoOcrAgainstQuotation({
+                quotation: quotationForValidation,
+                ocr,
+                mapping,
+            })
+            validationSummary.ocrSessionId = ocrSessionId
+        } catch (validationError) {
+            console.error("Quotation PO OCR validation failed:", validationError)
+            validationSummary = buildOcrFailureSummary(validationError)
+        }
+
+        await db.transaction(async (tx) => {
+            await tx.update(quotations)
+                .set({
+                    poValidationStatus: validationSummary.status,
+                    poValidationCheckedAt: new Date(validationSummary.checkedAt),
+                    poValidationOcrSessionId: ocrSessionId,
+                    poValidationSummary: validationSummary,
+                    updatedAt: new Date(),
+                })
+                .where(eq(quotations.id, payload.quotationId))
+
+            await createNextRevision(
+                tx,
+                payload.quotationId,
+                userId,
+                validationSummary.status === "full_match"
+                    ? "Customer PO OCR validated as full match"
+                    : validationSummary.status === "partial_match"
+                        ? "Customer PO OCR detected partial match and requires review"
+                        : validationSummary.status === "mismatch"
+                            ? "Customer PO OCR detected mismatch and blocked auto-convert"
+                            : "Customer PO OCR validation failed and requires manual review",
+            )
+        })
+
+        if (validationSummary.status !== "full_match") {
+            revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
+            revalidatePath("/dashboard/quotations")
+            return {
+                success: true as const,
+                validationStatus: validationSummary.status,
+                validationSummary,
+                ocrSessionId,
+                requiresManualReview: true,
+            }
+        }
+
         const convertResult = await convertToSalesOrder(payload.quotationId, {
             triggeredBy: userId,
             forceAuto: true,
@@ -1348,10 +1829,66 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
             success: true as const,
             salesOrderId: convertResult.salesOrderId,
             autoConverted: true,
+            validationStatus: validationSummary.status,
+            validationSummary,
+            ocrSessionId,
         }
     } catch (error) {
         console.error("Failed to upload quotation customer PO:", error)
         return { success: false as const, error: error instanceof Error ? error.message : "Failed to upload customer PO" }
+    }
+}
+
+export async function finalizeQuotationOcrSalesOrderLink(input: {
+    quotationId: number
+    salesOrderId: number
+    ocrSessionId?: number | null
+}) {
+    try {
+        const userId = await getAuthenticatedUserId()
+        if (!userId) {
+            return { success: false as const, error: "Unauthorized" }
+        }
+
+        const result = await db.transaction(async (tx) => {
+            const existingQuotation = await tx.query.quotations.findFirst({
+                where: eq(quotations.id, input.quotationId),
+                columns: {
+                    poValidationStatus: true,
+                },
+            })
+
+            const linked = await linkSalesOrderToQuotationRecord(tx, {
+                quotationId: input.quotationId,
+                salesOrderId: input.salesOrderId,
+                triggeredBy: userId,
+                sourceType: input.ocrSessionId ? "quotation_po_ocr" : "quotation_po_manual",
+                markAsConverted: existingQuotation?.poValidationStatus === "full_match",
+            })
+
+            if (!linked.success) {
+                return linked
+            }
+
+            await tx.update(quotations)
+                .set({
+                    poValidationStatus: existingQuotation?.poValidationStatus ?? "full_match",
+                    poValidationCheckedAt: new Date(),
+                    poValidationOcrSessionId: input.ocrSessionId ?? null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(quotations.id, input.quotationId))
+
+            return { success: true as const }
+        })
+
+        revalidatePath(`/dashboard/quotations/${input.quotationId}`)
+        revalidatePath("/dashboard/quotations")
+        revalidatePath("/dashboard/sales-orders")
+        return result
+    } catch (error) {
+        console.error("Failed to finalize quotation OCR sales order link:", error)
+        return { success: false as const, error: "Failed to link OCR sales order to quotation" }
     }
 }
 

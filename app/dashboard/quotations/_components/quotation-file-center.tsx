@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { BookOpen, FileStack, Loader2, Paperclip, Trash2, UploadCloud, X } from "lucide-react"
+import type { QuotationPoValidationSummary } from "@/db/schema/quotations"
 
 type AttachmentEntry = {
     id: number
@@ -43,6 +44,9 @@ interface QuotationFileCenterProps {
     salesOrderId: number | null
     customerPoNumber: string | null
     customerPoDocument: string | null
+    poValidationStatus?: string | null
+    poValidationSummary?: QuotationPoValidationSummary | null
+    poValidationOcrSessionId?: number | null
     attachments: AttachmentEntry[]
 }
 
@@ -91,6 +95,9 @@ export function QuotationFileCenter({
     salesOrderId,
     customerPoNumber,
     customerPoDocument,
+    poValidationStatus,
+    poValidationSummary,
+    poValidationOcrSessionId,
     attachments,
 }: QuotationFileCenterProps) {
     const router = useRouter()
@@ -297,13 +304,38 @@ export function QuotationFileCenter({
                 throw new Error(result.error || "PO gagal disimpan")
             }
 
-            toast.success(("autoConverted" in result && result.autoConverted) ? "PO tersimpan dan quotation otomatis dikonversi ke Sales Order" : "PO berhasil diupload")
             setPoFile(null)
             router.refresh()
 
-            if (result.salesOrderId) {
+            if ("autoConverted" in result && result.autoConverted && result.salesOrderId) {
+                toast.success("PO tervalidasi OCR dan quotation otomatis dikonversi ke Sales Order")
                 router.push(`/dashboard/sales-orders/${result.salesOrderId}/edit`)
+                return
             }
+
+            if ("requiresManualReview" in result && result.requiresManualReview) {
+                const validationStatus = "validationStatus" in result ? result.validationStatus : null
+                toast.warning(
+                    validationStatus === "partial_match"
+                        ? "PO hanya mengambil sebagian item quotation. Lanjutkan ke validasi OCR."
+                        : validationStatus === "mismatch"
+                            ? "PO customer tidak sama dengan quotation. Validasi OCR wajib dilakukan."
+                            : "OCR PO gagal diverifikasi otomatis. Silakan validasi manual."
+                )
+
+                if ("ocrSessionId" in result && result.ocrSessionId) {
+                    router.push(`/dashboard/sales-orders/ocr-validate?session=${result.ocrSessionId}&quotation=${quotationId}`)
+                    return
+                }
+            }
+
+            if (result.salesOrderId) {
+                toast.success("PO berhasil diupload")
+                router.push(`/dashboard/sales-orders/${result.salesOrderId}/edit`)
+                return
+            }
+
+            toast.success("PO berhasil diupload")
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Upload PO gagal")
         } finally {
@@ -591,7 +623,7 @@ export function QuotationFileCenter({
                         <div>
                             <p className="font-medium">Customer PO</p>
                             <p className="text-sm text-muted-foreground">
-                                Upload PO customer untuk quotation {quotationNumber || `#${quotationId}`}. Sistem akan otomatis membuat Sales Order jika belum ada.
+                                Upload PO customer untuk quotation {quotationNumber || `#${quotationId}`}. Sistem akan memvalidasi PO dengan OCR sebelum auto-convert ke Sales Order.
                             </p>
                         </div>
                         <div className="space-y-2">
@@ -606,7 +638,7 @@ export function QuotationFileCenter({
                             {salesOrderId ? (
                                 <span>Quotation ini sudah punya Sales Order. Upload PO akan mensinkronkan data PO ke Sales Order yang sudah ada.</span>
                             ) : (
-                                <span>Setelah PO masuk, quotation akan auto-convert ke Sales Order draft dengan konteks komersial dari quotation.</span>
+                                <span>Setelah PO masuk, sistem akan cek OCR PO vs quotation. Hanya full match yang auto-convert; partial atau mismatch akan diarahkan ke validasi OCR.</span>
                             )}
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -614,16 +646,49 @@ export function QuotationFileCenter({
                         </p>
                         <Button onClick={handleUploadPo} disabled={isUploadingPo} className="w-full gap-2">
                             {isUploadingPo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-                            Upload PO & Auto Convert
+                            Upload PO & Validate OCR
                         </Button>
                         {(customerPoNumber || customerPoDocument) && (
-                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
                                 <p className="font-medium">PO customer aktif</p>
                                 {customerPoNumber && <p>Nomor PO: {customerPoNumber}</p>}
                                 {customerPoDocument && (
                                     <Link href={customerPoDocument} target="_blank" className="underline underline-offset-4">
                                         Buka file PO terbaru
                                     </Link>
+                                )}
+                                {poValidationStatus && (
+                                    <div className="rounded-lg border border-emerald-200/70 bg-white/70 p-3">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Badge variant={poValidationStatus === "full_match" ? "default" : poValidationStatus === "partial_match" ? "secondary" : "destructive"}>
+                                                {poValidationStatus === "full_match"
+                                                    ? "Full Match"
+                                                    : poValidationStatus === "partial_match"
+                                                        ? "Partial Match"
+                                                        : poValidationStatus === "mismatch"
+                                                            ? "Mismatch"
+                                                            : "OCR Failed"}
+                                            </Badge>
+                                            {poValidationSummary?.checkedAt && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    {new Date(poValidationSummary.checkedAt).toLocaleString("id-ID")}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {poValidationSummary?.reasons?.length ? (
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                {poValidationSummary.reasons[0]}
+                                            </p>
+                                        ) : null}
+                                        {(poValidationOcrSessionId || poValidationSummary?.ocrSessionId) && (
+                                            <Link
+                                                href={`/dashboard/sales-orders/ocr-validate?session=${poValidationOcrSessionId || poValidationSummary?.ocrSessionId}&quotation=${quotationId}`}
+                                                className="mt-2 inline-flex text-xs font-medium text-primary underline underline-offset-4"
+                                            >
+                                                Buka validasi OCR PO
+                                            </Link>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}

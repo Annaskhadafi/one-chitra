@@ -217,13 +217,14 @@ function ProductPickerCell({
 /* ─── Main Component ─────────────────────────────────────────────── */
 export default function ValidationSplit(props: {
     session: SessionData | null
+    quotationId: number | null
     customers: Customer[]
     products: Product[]
     warehouses: Warehouse[]
     users: Pick<User, "id" | "name" | "email" | "role">[]
     ckMasterPrices: CkMasterPriceReference[]
 }) {
-    const { session, customers, products, warehouses, users, ckMasterPrices } = props
+    const { session, quotationId, customers, products, warehouses, users, ckMasterPrices } = props
     const extracted = session?.extractedData
     const mapped = session?.mappedData
 
@@ -339,7 +340,7 @@ export default function ValidationSplit(props: {
             return `${name}\t${it.quantity}\t${formatCurrency(it.unitPrice)}\t-\t-\t${formatCurrency(it.totalPrice || it.quantity * it.unitPrice)}`
         }).join("\n")
         return `${header}\n\nNama Product\tQty\tUnit Price\tDiscount\tTax\tTotal\n${rows}`
-    }, [extracted, mapped]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [extracted, mapped])
 
     const { copied: allCopied, copy: copyAll } = useCopy(ocrCopyText)
 
@@ -593,6 +594,10 @@ export default function ValidationSplit(props: {
                                     warehouses={warehouses}
                                     users={users}
                                     ckMasterPrices={ckMasterPrices}
+                                    quotationContext={quotationId && session ? {
+                                        quotationId,
+                                        ocrSessionId: session.id,
+                                    } : undefined}
                                     initialData={initialData}
                                 />
                             </CardContent>
