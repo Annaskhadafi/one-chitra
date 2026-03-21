@@ -107,7 +107,6 @@ export function QuotationFileCenter({
     const [attachmentInputKey, setAttachmentInputKey] = useState(0)
     const [includeInPdf, setIncludeInPdf] = useState(true)
     const [saveToSalesDocument, setSaveToSalesDocument] = useState(false)
-    const [poNumber, setPoNumber] = useState(customerPoNumber || "")
     const [poFile, setPoFile] = useState<File | null>(null)
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
     const [isUploadingPo, setIsUploadingPo] = useState(false)
@@ -272,10 +271,6 @@ export function QuotationFileCenter({
     }
 
     const handleUploadPo = async () => {
-        if (!poNumber.trim()) {
-            toast.error("Nomor PO wajib diisi")
-            return
-        }
         if (!poFile) {
             toast.error("File PO wajib diupload")
             return
@@ -293,7 +288,6 @@ export function QuotationFileCenter({
 
             const result = await uploadQuotationCustomerPo({
                 quotationId,
-                poNumber: poNumber.trim(),
                 fileUrl: uploadResult.url,
                 fileName: poFile.name,
                 mimeType: poFile.type || null,
@@ -623,12 +617,8 @@ export function QuotationFileCenter({
                         <div>
                             <p className="font-medium">Customer PO</p>
                             <p className="text-sm text-muted-foreground">
-                                Upload PO customer untuk quotation {quotationNumber || `#${quotationId}`}. Sistem akan memvalidasi PO dengan OCR sebelum auto-convert ke Sales Order.
+                                Upload PO customer untuk quotation {quotationNumber || `#${quotationId}`}. Nomor PO akan dibaca otomatis dari OCR sebelum sinkron ke Sales Order.
                             </p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Nomor PO Customer</Label>
-                            <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Mis. PO-2026-0012" />
                         </div>
                         <div className="space-y-2">
                             <Label>File PO</Label>
@@ -636,9 +626,9 @@ export function QuotationFileCenter({
                         </div>
                         <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
                             {salesOrderId ? (
-                                <span>Quotation ini sudah punya Sales Order. Upload PO akan mensinkronkan data PO ke Sales Order yang sudah ada.</span>
+                                <span>Quotation ini sudah punya Sales Order. Sistem akan baca nomor PO dari OCR lalu mensinkronkan PO ke Sales Order yang sudah ada.</span>
                             ) : (
-                                <span>Setelah PO masuk, sistem akan cek OCR PO vs quotation. Hanya full match yang auto-convert; partial atau mismatch akan diarahkan ke validasi OCR.</span>
+                                <span>Setelah PO masuk, sistem akan cek OCR PO vs quotation. Hanya full match yang auto-convert; partial, mismatch, atau OCR yang belum lengkap akan diarahkan ke validasi OCR.</span>
                             )}
                         </div>
                         <p className="text-xs text-muted-foreground">

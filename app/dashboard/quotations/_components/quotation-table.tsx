@@ -463,7 +463,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
     const [isSearchFocused, setIsSearchFocused] = useState(false)
     const [poDialogQuotation, setPoDialogQuotation] = useState<QuotationWithRelations | null>(null)
-    const [poNumber, setPoNumber] = useState("")
     const [poFile, setPoFile] = useState<File | null>(null)
     const [isUploadingPo, setIsUploadingPo] = useState(false)
     const [deliveryDialogQuotation, setDeliveryDialogQuotation] = useState<QuotationWithRelations | null>(null)
@@ -971,17 +970,11 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         }
 
         setPoDialogQuotation(null)
-        setPoNumber("")
         setPoFile(null)
     }
 
     const handleUploadPoFromList = async () => {
         if (!poDialogQuotation) {
-            return
-        }
-
-        if (!poNumber.trim()) {
-            toast.error("Nomor PO wajib diisi")
             return
         }
 
@@ -1003,7 +996,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
             const result = await uploadQuotationCustomerPo({
                 quotationId: poDialogQuotation.id,
-                poNumber: poNumber.trim(),
                 fileUrl: uploadResult.url,
                 fileName: poFile.name,
                 mimeType: poFile.type || null,
@@ -1023,7 +1015,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             }
 
             setPoDialogQuotation(null)
-            setPoNumber("")
             setPoFile(null)
             await refetch()
         } catch (error) {
@@ -1229,8 +1220,8 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 const canUploadPo = row.original.status !== "rejected"
                 const hasDeliveryContext = row.original.salesOrderId !== null || row.original.relatedDeliveries.length > 0
                 const uploadPoTitle = row.original.customerPoDocument
-                    ? "Update customer PO dan sinkronkan ke Sales Order"
-                    : "Upload customer PO dan auto convert ke Sales Order"
+                    ? "Update customer PO dan sinkronkan via OCR"
+                    : "Upload customer PO dan validasi OCR"
                 const deleteDisabledReason = !canDelete
                     ? "You do not have permission to delete quotations"
                     : "You can only delete quotations you created"
@@ -1255,7 +1246,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         disabled={!canUploadPo}
                         onClick={() => {
                             setPoDialogQuotation(row.original)
-                            setPoNumber(row.original.customerPoNumber || "")
                             setPoFile(null)
                         }}
                     >
@@ -1508,7 +1498,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     <DialogHeader>
                         <DialogTitle>Upload Customer PO</DialogTitle>
                         <DialogDescription>
-                            Simpan PO customer langsung dari list quotation. Jika quotation belum punya Sales Order, sistem akan auto convert setelah PO masuk.
+                            Simpan PO customer langsung dari list quotation. Nomor PO akan diambil otomatis dari OCR, lalu quotation divalidasi sebelum sinkron ke Sales Order.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1516,16 +1506,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                             <p className="font-medium">{poDialogQuotation?.quotationNumber || (poDialogQuotation ? `QT-${poDialogQuotation.id}` : "-")}</p>
                             <p className="text-muted-foreground">{poDialogQuotation?.customer.name || "-"}</p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="quotation-list-po-number">Nomor PO Customer</Label>
-                            <Input
-                                id="quotation-list-po-number"
-                                value={poNumber}
-                                onChange={(event) => setPoNumber(event.target.value)}
-                                placeholder="Mis. PO-2026-0012"
-                            />
                         </div>
 
                         <div className="space-y-2">
@@ -1554,6 +1534,14 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                                 )}
                             </div>
                         )}
+
+                        <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                            {poDialogQuotation?.salesOrderId ? (
+                                <span>Sistem akan membaca nomor PO dari OCR lalu mensinkronkan hasilnya ke Sales Order yang sudah ada.</span>
+                            ) : (
+                                <span>Sistem akan membaca nomor PO dari OCR dan membandingkan item PO vs quotation. Hanya full match yang auto-convert.</span>
+                            )}
+                        </div>
                     </div>
 
                     <DialogFooter>
@@ -1562,7 +1550,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         </Button>
                         <Button onClick={handleUploadPoFromList} disabled={isUploadingPo} className="gap-2">
                             {isUploadingPo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-                            Upload PO & Auto Convert
+                            Upload PO & Validate OCR
                         </Button>
                     </DialogFooter>
                 </DialogContent>

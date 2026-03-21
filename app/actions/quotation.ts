@@ -46,7 +46,7 @@ const quotationAttachmentSchema = z.object({
 
 const quotationCustomerPoSchema = z.object({
     quotationId: z.number().int().positive(),
-    poNumber: z.string().min(1, "PO number is required").max(100),
+    poNumber: z.string().max(100).optional().nullable().transform((value) => normalizeText(value)),
     fileUrl: z.string().min(1, "PO file URL is required"),
     fileName: z.string().min(1, "PO file name is required").max(255),
     mimeType: z.string().optional().nullable(),
@@ -78,6 +78,16 @@ function toIsoDate(value: Date | string | null | undefined) {
         return null
     }
     return new Date(value).toISOString()
+}
+
+function buildCustomerPoAttachmentTitle(poNumber: string | null | undefined, fileName: string) {
+    const normalizedPoNumber = normalizeText(poNumber)
+    if (normalizedPoNumber) {
+        return `Customer PO ${normalizedPoNumber}`
+    }
+
+    const normalizedFileName = normalizeText(fileName)
+    return normalizedFileName ? `Customer PO - ${normalizedFileName}` : "Customer PO"
 }
 
 function normalizeComparisonText(value: string | null | undefined) {
@@ -1293,7 +1303,7 @@ export async function convertToSalesOrder(id: number, options?: ConvertQuotation
             const resolvedCustomerPo = normalizeText(options?.customerPoNumber) ?? quotation.customerPoNumber
             const poDocument = normalizeText(options?.poDocument) ?? quotation.customerPoDocument
             const poReceivedAt = options?.poReceivedAt ?? quotation.customerPoUploadedAt ?? null
-            const canConvert = quotation.status === "approved" || Boolean(resolvedCustomerPo)
+            const canConvert = quotation.status === "approved" || Boolean(resolvedCustomerPo || poDocument)
 
             if (!canConvert) {
                 return { success: false as const, error: "Quotation must be approved or have a customer PO before conversion" }
@@ -1318,7 +1328,7 @@ export async function convertToSalesOrder(id: number, options?: ConvertQuotation
                     discount: quotation.discount,
                     shipping: quotation.shipping,
                     createdBy: triggeredBy,
-                    sourceType: resolvedCustomerPo ? "quotation_po" : "quotation",
+                    sourceType: resolvedCustomerPo || poDocument ? "quotation_po" : "quotation",
                     quotationId: quotation.id,
                     quotationNumber: quotation.quotationNumber,
                     quotationRevision: currentRevision,
@@ -1656,10 +1666,13 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 return { success: false as const, error: "Rejected quotation cannot accept PO upload" }
             }
 
-            await tx.insert(quotationAttachments).values({
+            const fallbackPoNumber = normalizeText(payload.poNumber)
+            const attachmentTitle = buildCustomerPoAttachmentTitle(fallbackPoNumber, payload.fileName)
+
+            const insertedAttachmentRows = await tx.insert(quotationAttachments).values({
                 quotationId: payload.quotationId,
                 kind: "customer_po",
-                title: `Customer PO ${payload.poNumber}`,
+                title: attachmentTitle,
                 fileUrl: payload.fileUrl,
                 fileName: payload.fileName,
                 mimeType: normalizeText(payload.mimeType),
@@ -1667,11 +1680,13 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 description: "Customer PO uploaded from quotation detail",
                 includeInPdf: false,
                 uploadedBy: userId,
-            })
+            }).returning() as QuotationAttachmentRecord[]
+
+            const attachment = insertedAttachmentRows[0]
 
             await tx.update(quotations)
                 .set({
-                    customerPoNumber: payload.poNumber.trim(),
+                    customerPoNumber: fallbackPoNumber,
                     customerPoDocument: payload.fileUrl,
                     customerPoUploadedAt: poReceivedAt,
                     customerPoUploadedBy: userId,
@@ -1683,28 +1698,20 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 })
                 .where(eq(quotations.id, payload.quotationId))
 
-            await createNextRevision(tx, payload.quotationId, userId, `Customer PO uploaded: ${payload.poNumber}`)
-
-            if (quotation.salesOrderId) {
-                await tx.update(salesOrders)
-                    .set({
-                        customerPo: payload.poNumber.trim(),
-                        poDocument: payload.fileUrl,
-                        poReceive: poReceivedAt,
-                        updatedAt: poReceivedAt,
-                    })
-                    .where(eq(salesOrders.id, quotation.salesOrderId))
-
-                return {
-                    success: true as const,
-                    salesOrderId: quotation.salesOrderId,
-                    alreadyConverted: true,
-                }
-            }
+            await createNextRevision(
+                tx,
+                payload.quotationId,
+                userId,
+                fallbackPoNumber
+                    ? `Customer PO uploaded: ${fallbackPoNumber}`
+                    : "Customer PO uploaded and queued for OCR number detection",
+            )
 
             return {
                 success: true as const,
-                alreadyConverted: false,
+                alreadyConverted: Boolean(quotation.salesOrderId),
+                salesOrderId: quotation.salesOrderId,
+                attachmentId: attachment.id,
             }
         })
 
@@ -1712,14 +1719,9 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
             return uploadResult
         }
 
-        if (uploadResult.alreadyConverted) {
-            revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
-            revalidatePath("/dashboard/sales-orders")
-            return uploadResult
-        }
-
         let validationSummary: QuotationPoValidationSummary
         let ocrSessionId: number | null = null
+        let resolvedPoNumber = normalizeText(payload.poNumber)
 
         try {
             const quotationForValidation = await db.query.quotations.findFirst({
@@ -1768,6 +1770,7 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 mapping,
             })
             validationSummary.ocrSessionId = ocrSessionId
+            resolvedPoNumber = normalizeText(ocr.structured.po_number) ?? resolvedPoNumber
         } catch (validationError) {
             console.error("Quotation PO OCR validation failed:", validationError)
             validationSummary = buildOcrFailureSummary(validationError)
@@ -1776,6 +1779,9 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
         await db.transaction(async (tx) => {
             await tx.update(quotations)
                 .set({
+                    customerPoNumber: resolvedPoNumber,
+                    customerPoDocument: payload.fileUrl,
+                    customerPoUploadedAt: poReceivedAt,
                     poValidationStatus: validationSummary.status,
                     poValidationCheckedAt: new Date(validationSummary.checkedAt),
                     poValidationOcrSessionId: ocrSessionId,
@@ -1783,6 +1789,25 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                     updatedAt: new Date(),
                 })
                 .where(eq(quotations.id, payload.quotationId))
+
+            if (uploadResult.attachmentId) {
+                await tx.update(quotationAttachments)
+                    .set({
+                        title: buildCustomerPoAttachmentTitle(resolvedPoNumber, payload.fileName),
+                    })
+                    .where(eq(quotationAttachments.id, uploadResult.attachmentId))
+            }
+
+            if (uploadResult.salesOrderId) {
+                await tx.update(salesOrders)
+                    .set({
+                        customerPo: resolvedPoNumber,
+                        poDocument: payload.fileUrl,
+                        poReceive: poReceivedAt,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(salesOrders.id, uploadResult.salesOrderId))
+            }
 
             await createNextRevision(
                 tx,
@@ -1807,13 +1832,31 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 validationSummary,
                 ocrSessionId,
                 requiresManualReview: true,
+                salesOrderId: uploadResult.salesOrderId,
+                customerPoNumber: resolvedPoNumber,
+            }
+        }
+
+        if (uploadResult.salesOrderId) {
+            revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
+            revalidatePath("/dashboard/quotations")
+            revalidatePath(`/dashboard/sales-orders/${uploadResult.salesOrderId}/edit`)
+            revalidatePath("/dashboard/sales-orders")
+            return {
+                success: true as const,
+                salesOrderId: uploadResult.salesOrderId,
+                alreadyConverted: true,
+                validationStatus: validationSummary.status,
+                validationSummary,
+                ocrSessionId,
+                customerPoNumber: resolvedPoNumber,
             }
         }
 
         const convertResult = await convertToSalesOrder(payload.quotationId, {
             triggeredBy: userId,
             forceAuto: true,
-            customerPoNumber: payload.poNumber,
+            customerPoNumber: resolvedPoNumber,
             poDocument: payload.fileUrl,
             poReceivedAt,
         })
@@ -1832,6 +1875,7 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
             validationStatus: validationSummary.status,
             validationSummary,
             ocrSessionId,
+            customerPoNumber: resolvedPoNumber,
         }
     } catch (error) {
         console.error("Failed to upload quotation customer PO:", error)
