@@ -152,6 +152,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "stocks",
                     },
                     {
+                        title: "Stock Card",
+                        url: "/dashboard/stock-card",
+                        resource: "stocks",
+                    },
+                    {
                         title: "Stock SAP New",
                         url: "/dashboard/stocks-sap-new",
                         resource: "stocks-sap",
