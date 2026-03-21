@@ -80,6 +80,46 @@ function downloadBlob(blob: Blob, filename: string) {
     URL.revokeObjectURL(url)
 }
 
+async function convertImageBlobToPdfPngBytes(blob: Blob) {
+    const imageUrl = URL.createObjectURL(blob)
+
+    try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const element = new Image()
+            element.onload = () => resolve(element)
+            element.onerror = () => reject(new Error("Image failed to load for PDF merge"))
+            element.src = imageUrl
+        })
+
+        const canvas = document.createElement("canvas")
+        canvas.width = image.naturalWidth || image.width
+        canvas.height = image.naturalHeight || image.height
+
+        const context = canvas.getContext("2d")
+        if (!context) {
+            throw new Error("Canvas context unavailable for image merge")
+        }
+
+        context.fillStyle = "#ffffff"
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+        const convertedBlob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((result) => {
+                if (!result) {
+                    reject(new Error("Failed to convert image attachment"))
+                    return
+                }
+                resolve(result)
+            }, "image/png")
+        })
+
+        return await convertedBlob.arrayBuffer()
+    } finally {
+        URL.revokeObjectURL(imageUrl)
+    }
+}
+
 export async function generateQuotationPdf(quotation: QuotationPdfData) {
     try {
         const { default: jsPDF } = await import("jspdf")
@@ -509,10 +549,11 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     continue
                 }
 
-                const attachmentBytes = await response.arrayBuffer()
+                const attachmentBlob = await response.blob()
+                const attachmentBytes = await attachmentBlob.arrayBuffer()
                 const detectedMimeType = inferMimeType(
                     attachment.fileName,
-                    response.headers.get("content-type") || attachment.mimeType,
+                    attachmentBlob.type || response.headers.get("content-type") || attachment.mimeType,
                 )
 
                 if (detectedMimeType.includes("pdf")) {
@@ -522,10 +563,9 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     continue
                 }
 
-                if (detectedMimeType.includes("png") || detectedMimeType.includes("jpeg") || detectedMimeType.includes("jpg")) {
-                    const image = detectedMimeType.includes("png")
-                        ? await mergedPdf.embedPng(attachmentBytes)
-                        : await mergedPdf.embedJpg(attachmentBytes)
+                if (detectedMimeType.startsWith("image/")) {
+                    const convertedImageBytes = await convertImageBlobToPdfPngBytes(attachmentBlob)
+                    const image = await mergedPdf.embedPng(convertedImageBytes)
 
                     const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
                     const availableWidth = A4_WIDTH - PAGE_MARGIN * 2
