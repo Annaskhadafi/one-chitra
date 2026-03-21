@@ -228,7 +228,7 @@ export async function getStockCardDetail(stockId: number) {
                 customerName: customers.name,
                 qty: deliveryItems.deliveredQuantity,
                 referenceNumber: deliveries.deliveryNumber,
-                orderNumber: salesOrders.invoiceNumber,
+                orderNumber: salesOrders.customerPo,
                 deliveryDate: sql<Date | null>`coalesce(${deliveries.deliveryDate}, ${deliveries.scheduledDate})`.as("delivery_date"),
                 status: deliveries.status,
                 warehouseCode: warehouses.sloc,
@@ -247,13 +247,14 @@ export async function getStockCardDetail(stockId: number) {
                 customerName: salesRevenueSap.customerName,
                 qty: salesRevenueSap.qty,
                 referenceNumber: salesRevenueSap.deliveryNo,
-                orderNumber: salesRevenueSap.salesOrder,
+                orderNumber: salesRevenueSap.poNo,
                 deliveryDate: salesRevenueSap.billingDate,
                 status: sql<string>`'history'`.as("status"),
                 warehouseCode: salesRevenueSap.sloc,
-                warehouseName: sql<string | null>`null`.as("warehouse_name"),
+                warehouseName: warehouses.description,
             })
             .from(salesRevenueSap)
+            .leftJoin(warehouses, eq(warehouses.sloc, salesRevenueSap.sloc))
             .where(eq(salesRevenueSap.materialNo, baseRow.materialNumber))
             .orderBy(desc(salesRevenueSap.billingDate))
             .limit(12),
@@ -289,7 +290,9 @@ export async function getStockCardDetail(stockId: number) {
             orderNumber: row.orderNumber || null,
             deliveryDate: formatDate(row.deliveryDate),
             status: row.status || null,
-            warehouseLabel: row.warehouseCode || null,
+            warehouseLabel: row.warehouseCode
+                ? `${row.warehouseCode}${row.warehouseName ? ` - ${row.warehouseName}` : ""}`
+                : row.warehouseName || null,
             sortTimestamp: toTimestamp(row.deliveryDate),
         })),
     ]

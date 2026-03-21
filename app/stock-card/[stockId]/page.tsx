@@ -180,7 +180,7 @@ export default async function StockCardDetailPage({ params }: StockCardDetailPag
                                                 <th className="pb-3 pr-4 font-medium">Customer</th>
                                                 <th className="pb-3 pr-4 font-medium">Qty</th>
                                                 <th className="pb-3 pr-4 font-medium">Ref</th>
-                                                <th className="pb-3 pr-4 font-medium">Order</th>
+                                                <th className="pb-3 pr-4 font-medium">No PO Customer</th>
                                                 <th className="pb-3 pr-4 font-medium">Warehouse</th>
                                                 <th className="pb-3 font-medium">Sumber</th>
                                             </tr>
