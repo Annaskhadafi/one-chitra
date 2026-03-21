@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Printer, Download, X, ImageIcon, Loader2 } from "lucide-react"
 import type { Product, Warehouse, Customer } from "@/lib/types"
-import { toPng, toJpeg } from "html-to-image"
+import { toPng } from "html-to-image"
 import jsPDF from "jspdf"
 
 interface DeliveryPdfData {
@@ -202,16 +202,16 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto p-0">
-                <DialogHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <DialogTitle className="text-lg">Delivery Order Preview — {delivery.deliveryNumber}</DialogTitle>
-                        <div className="flex items-center gap-2">
+            <DialogContent className="w-[calc(100vw-1rem)] max-h-[90vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-0 sm:w-[95vw] sm:max-w-7xl">
+                <DialogHeader className="sticky top-0 z-10 border-b bg-background px-4 py-4 sm:px-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <DialogTitle className="pr-10 text-base sm:text-lg">Delivery Order Preview — {delivery.deliveryNumber}</DialogTitle>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                             <Button 
                                 variant={withBackground ? "default" : "outline"} 
                                 size="sm" 
                                 onClick={() => setWithBackground(!withBackground)} 
-                                className={`gap-2 ${withBackground ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                                className={`w-full gap-2 sm:w-auto ${withBackground ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
                             >
                                 <ImageIcon className="h-3.5 w-3.5" />
                                 {withBackground ? "Kop Surat: On" : "Kop Surat: Off"}
@@ -221,7 +221,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 size="sm" 
                                 onClick={handleDownloadPdf} 
                                 disabled={isGenerating}
-                                className="gap-2"
+                                className="w-full gap-2 sm:w-auto"
                             >
                                 {isGenerating ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -230,7 +230,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 )}
                                 {isGenerating ? 'Generating...' : 'Download PDF'}
                             </Button>
-                            <Button size="sm" onClick={handlePrint} className="gap-2">
+                            <Button size="sm" onClick={handlePrint} className="w-full gap-2 sm:w-auto">
                                 <Printer className="h-3.5 w-3.5" />
                                 Print
                             </Button>
@@ -241,7 +241,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     </div>
                 </DialogHeader>
 
-                <div className="p-4 sm:p-8 bg-zinc-100 dark:bg-zinc-800 text-black flex justify-center w-full min-h-full">
+                <div className="flex min-h-full w-full justify-start overflow-x-auto bg-zinc-100 p-3 text-black dark:bg-zinc-800 sm:justify-center sm:p-8">
                     <div 
                         className={`pdf-wrapper bg-white shadow-xl relative shrink-0 transition-all duration-300 ${withBackground ? 'w-[210mm] min-h-[297mm]' : 'w-[220mm] min-h-[280mm]'}`} 
                         ref={printRef}

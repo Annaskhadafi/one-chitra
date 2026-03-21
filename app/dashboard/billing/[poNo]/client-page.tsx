@@ -30,11 +30,11 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                     icon={FileText}
                 />
 
-                <div className="flex items-center gap-2 mt-4">
-                    <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/billing')}>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => router.push('/dashboard/billing')}>
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto">
                         <Download className="mr-2 h-4 w-4" /> Export PDF
                     </Button>
                 </div>
@@ -51,7 +51,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                             <p className="text-sm font-medium text-muted-foreground">Customer Name</p>
                             <p className="font-medium mt-1">{data.customer}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Customer ID</p>
                                 <p className="font-medium mt-1">{data.custId || "-"}</p>
@@ -74,7 +74,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                         <CardTitle className="text-sm font-semibold">Logistics Details</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Plant</p>
                                 <p className="font-medium mt-1">{normalizedPlant || "-"}</p>
@@ -91,7 +91,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                                 <p className="text-sm font-medium text-muted-foreground">Tgl DO Faktur</p>
                                 <p className="font-medium mt-1">{data.tglDoFaktur ? new Date(data.tglDoFaktur).toLocaleDateString('id-ID') : "-"}</p>
                             </div>
-                            <div className="col-span-2">
+                            <div className="sm:col-span-2">
                                 <p className="text-sm font-medium text-muted-foreground">Sales Name</p>
                                 <p className="font-medium mt-1">{data.salesName || "-"}</p>
                             </div>
@@ -105,7 +105,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                         <CardTitle className="text-sm font-semibold">Invoice Details</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Date Invoice</p>
                                 <p className="font-medium mt-1">{data.dateInvoice ? new Date(data.dateInvoice).toLocaleDateString('id-ID') : "-"}</p>
@@ -114,7 +114,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                                 <p className="text-sm font-medium text-muted-foreground">Year / Month</p>
                                 <p className="font-medium mt-1">{data.year || "-"} / {data.month || "-"}</p>
                             </div>
-                            <div className="col-span-2">
+                            <div className="sm:col-span-2">
                                 <p className="text-sm font-medium text-muted-foreground">e-Faktur</p>
                                 <p className="font-medium mt-1">{data.eFaktur || "-"}</p>
                             </div>
@@ -128,11 +128,11 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
             </div>
 
             {/* Product Table */}
-            <Card>
+            <Card className="mx-4 md:mx-8">
                 <CardHeader className="pb-4 border-b">
-                    <CardTitle className="text-lg font-semibold flex items-center justify-between">
-                        Product Items
-                        <span className="text-sm font-normal text-muted-foreground bg-muted px-3 py-1 rounded-md">
+                    <CardTitle className="flex flex-col gap-2 text-lg font-semibold sm:flex-row sm:items-center sm:justify-between">
+                        <span>Product Items</span>
+                        <span className="w-fit rounded-md bg-muted px-3 py-1 text-sm font-normal text-muted-foreground">
                             Currency: <strong className="text-foreground">{data.curr || "IDR"}</strong>
                         </span>
                     </CardTitle>
@@ -176,7 +176,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
             </Card>
 
             {data.remaks && (
-                <Card>
+                <Card className="mx-4 md:mx-8">
                     <CardHeader className="pb-3 border-b">
                         <CardTitle className="text-sm font-semibold">Remarks</CardTitle>
                     </CardHeader>

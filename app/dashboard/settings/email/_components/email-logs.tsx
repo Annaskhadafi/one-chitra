@@ -115,7 +115,7 @@ export function EmailLogsTable({ logs }: Props) {
 
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <Card className="p-4 flex items-center gap-3">
                     <CheckCircle2 className="h-8 w-8 text-green-600" />
                     <div>
@@ -167,7 +167,7 @@ export function EmailLogsTable({ logs }: Props) {
                     </Button>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex gap-3 mb-4">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
@@ -178,7 +178,7 @@ export function EmailLogsTable({ logs }: Props) {
                             />
                         </div>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-36">
+                            <SelectTrigger className="w-full sm:w-36">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -258,7 +258,7 @@ export function EmailLogsTable({ logs }: Props) {
             </Card>
 
             <Dialog open={Boolean(selectedLog)} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-                <DialogContent className="h-[94vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] overflow-hidden p-4 sm:p-6 flex flex-col">
+                <DialogContent className="flex h-[94vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-4 sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Preview Email Log</DialogTitle>
                         <DialogDescription>
@@ -311,7 +311,7 @@ export function EmailLogsTable({ logs }: Props) {
                                 </div>
 
                                 <Tabs defaultValue={selectedLog.htmlContent ? "html" : "text"} className="min-h-0 flex flex-1 flex-col">
-                                    <TabsList className="self-start">
+                                    <TabsList className="grid w-full grid-cols-2 self-start sm:w-auto">
                                         <TabsTrigger value="html">HTML Preview</TabsTrigger>
                                         <TabsTrigger value="text">Text</TabsTrigger>
                                     </TabsList>

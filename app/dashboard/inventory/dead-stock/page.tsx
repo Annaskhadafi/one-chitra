@@ -273,16 +273,16 @@ export default function DeadStockPage() {
     }
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="space-y-6 p-4 sm:p-6">
             {/* Header */}
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Dead Stock Analysis</h1>
                     <p className="text-muted-foreground">Identify slow-moving inventory and stuck capital.</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <Select value={threshold} onValueChange={setThreshold}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="Select period" />
                         </SelectTrigger>
                         <SelectContent>
@@ -293,10 +293,10 @@ export default function DeadStockPage() {
                             <SelectItem value="365">Inactive &gt; 1 Year</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="icon" onClick={loadData} disabled={loading}>
+                    <Button variant="outline" size="icon" className="w-full sm:w-9" onClick={loadData} disabled={loading}>
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
-                    <Button variant="outline" onClick={handleExport} disabled={loading || items.length === 0}>
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={handleExport} disabled={loading || items.length === 0}>
                         <Download className="mr-2 h-4 w-4" />
                         Export Excel
                     </Button>
@@ -420,7 +420,7 @@ export default function DeadStockPage() {
                             />
                         </div>
                         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                            <SelectTrigger className="w-[180px]">
+                            <SelectTrigger className="w-full sm:w-[180px]">
                                 <SelectValue placeholder="All Categories" />
                             </SelectTrigger>
                             <SelectContent>
@@ -431,7 +431,7 @@ export default function DeadStockPage() {
                             </SelectContent>
                         </Select>
                         <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
-                            <SelectTrigger className="w-[220px]">
+                            <SelectTrigger className="w-full sm:w-[220px]">
                                 <SelectValue placeholder="All Warehouses" />
                             </SelectTrigger>
                             <SelectContent>
@@ -444,84 +444,143 @@ export default function DeadStockPage() {
                     </div>
 
                     {/* Table */}
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead
-                                    className="cursor-pointer select-none"
-                                    onClick={() => handleSort("productName")}
-                                >
-                                    Product <SortIcon field="productName" />
-                                </TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Warehouse</TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer select-none"
-                                    onClick={() => handleSort("quantity")}
-                                >
-                                    Qty <SortIcon field="quantity" />
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer select-none"
-                                    onClick={() => handleSort("value")}
-                                >
-                                    Est. Value <SortIcon field="value" />
-                                </TableHead>
-                                <TableHead>Last Movement</TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer select-none"
-                                    onClick={() => handleSort("daysInactive")}
-                                >
-                                    Days Inactive <SortIcon field="daysInactive" />
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
+                    <div className="hidden overflow-x-auto rounded-md border md:block">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-24 text-center">
-                                        Loading analysis...
-                                    </TableCell>
+                                    <TableHead
+                                        className="cursor-pointer select-none"
+                                        onClick={() => handleSort("productName")}
+                                    >
+                                        Product <SortIcon field="productName" />
+                                    </TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Warehouse</TableHead>
+                                    <TableHead
+                                        className="text-right cursor-pointer select-none"
+                                        onClick={() => handleSort("quantity")}
+                                    >
+                                        Qty <SortIcon field="quantity" />
+                                    </TableHead>
+                                    <TableHead
+                                        className="text-right cursor-pointer select-none"
+                                        onClick={() => handleSort("value")}
+                                    >
+                                        Est. Value <SortIcon field="value" />
+                                    </TableHead>
+                                    <TableHead>Last Movement</TableHead>
+                                    <TableHead
+                                        className="text-right cursor-pointer select-none"
+                                        onClick={() => handleSort("daysInactive")}
+                                    >
+                                        Days Inactive <SortIcon field="daysInactive" />
+                                    </TableHead>
                                 </TableRow>
-                            ) : filteredItems.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                        {items.length === 0
-                                            ? "No dead stock found for this period. Great job!"
-                                            : "No items match the current filters."}
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredItems.map((item) => {
-                                    const severity = getSeverity(item.daysInactive)
-                                    return (
-                                        <TableRow key={`${item.productId}-${item.warehouseName}`}>
-                                            <TableCell>
-                                                <div className="font-medium">{item.productName}</div>
-                                                <div className="text-xs text-muted-foreground">{item.sku}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className="text-xs">
-                                                    {item.category}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-sm">{item.warehouseName}</TableCell>
-                                            <TableCell className="text-right tabular-nums">{item.quantity.toLocaleString()}</TableCell>
-                                            <TableCell className="text-right tabular-nums">{formatCurrency(item.value)}</TableCell>
-                                            <TableCell>
-                                                {item.lastMovementDate ? new Date(item.lastMovementDate).toLocaleDateString() : "Never"}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Badge variant={severity.variant}>
-                                                    {item.daysInactive} days · {severity.label}
-                                                </Badge>
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center">
+                                            Loading analysis...
+                                        </TableCell>
+                                    </TableRow>
+                                ) : filteredItems.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            {items.length === 0
+                                                ? "No dead stock found for this period. Great job!"
+                                                : "No items match the current filters."}
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    filteredItems.map((item) => {
+                                        const severity = getSeverity(item.daysInactive)
+                                        return (
+                                            <TableRow key={`${item.productId}-${item.warehouseName}`}>
+                                                <TableCell>
+                                                    <div className="font-medium">{item.productName}</div>
+                                                    <div className="text-xs text-muted-foreground">{item.sku}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {item.category}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm">{item.warehouseName}</TableCell>
+                                                <TableCell className="text-right tabular-nums">{item.quantity.toLocaleString()}</TableCell>
+                                                <TableCell className="text-right tabular-nums">{formatCurrency(item.value)}</TableCell>
+                                                <TableCell>
+                                                    {item.lastMovementDate ? new Date(item.lastMovementDate).toLocaleDateString() : "Never"}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Badge variant={severity.variant}>
+                                                        {item.daysInactive} days · {severity.label}
+                                                    </Badge>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    <div className="space-y-3 md:hidden">
+                        {loading ? (
+                            <div className="rounded-md border px-4 py-10 text-center text-sm text-muted-foreground">
+                                Loading analysis...
+                            </div>
+                        ) : filteredItems.length === 0 ? (
+                            <div className="rounded-md border px-4 py-10 text-center text-sm text-muted-foreground">
+                                {items.length === 0
+                                    ? "No dead stock found for this period. Great job!"
+                                    : "No items match the current filters."}
+                            </div>
+                        ) : (
+                            filteredItems.map((item) => {
+                                const severity = getSeverity(item.daysInactive)
+                                return (
+                                    <div key={`${item.productId}-${item.warehouseName}`} className="rounded-lg border p-4 shadow-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="break-words font-medium">{item.productName}</div>
+                                                <div className="break-all text-xs text-muted-foreground">{item.sku}</div>
+                                            </div>
+                                            <Badge variant={severity.variant} className="shrink-0">
+                                                {severity.label}
+                                            </Badge>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Category</div>
+                                                <div>{item.category}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Warehouse</div>
+                                                <div>{item.warehouseName}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Qty</div>
+                                                <div>{item.quantity.toLocaleString()}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Est. Value</div>
+                                                <div>{formatCurrency(item.value)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Last Movement</div>
+                                                <div>{item.lastMovementDate ? new Date(item.lastMovementDate).toLocaleDateString() : "Never"}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">Inactive</div>
+                                                <div>{item.daysInactive} days</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
                 </CardContent>
             </Card>
         </div>

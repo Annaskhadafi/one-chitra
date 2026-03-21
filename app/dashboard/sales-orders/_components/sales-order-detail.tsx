@@ -6,12 +6,9 @@ import {
     DialogHeader,
     DialogTitle,
     DialogDescription,
-    DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     Table,
     TableBody,
@@ -22,7 +19,7 @@ import {
 } from "@/components/ui/table"
 import { format } from "date-fns"
 import Link from "next/link"
-import { Pencil, Printer, Download, MapPin, Mail, Phone, Calendar, FileText } from "lucide-react"
+import { Pencil, MapPin, Mail, FileText } from "lucide-react"
 import type { SalesOrderWithRelations } from "@/lib/types"
 
 
@@ -85,15 +82,16 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="!max-w-none !w-[92vw] h-[95vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl bg-white rounded-xl">
+            <DialogContent className="!max-w-none !w-[calc(100vw-1rem)] sm:!w-[92vw] h-[95vh] flex flex-col overflow-hidden rounded-xl border-none bg-white p-0 shadow-2xl">
                 <DialogHeader className="sr-only">
                     <DialogTitle>{order.invoiceNumber || "Sales Order Detail"}</DialogTitle>
                     <DialogDescription>Professional document view for Sales Order {order.invoiceNumber}</DialogDescription>
                 </DialogHeader>
 
                 {/* Refined Professional Header */}
-                <header className="px-10 py-5 shrink-0 bg-white border-b flex items-center justify-between">
-                    <div className="flex items-center gap-6">
+                <header className="shrink-0 border-b bg-white px-4 py-4 sm:px-10 sm:py-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
                         <div className="space-y-0.5">
                             <h2 className="text-xl font-bold tracking-tight text-slate-900">
                                 {order.invoiceNumber || "Draft Order"}
@@ -107,17 +105,18 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                     
                     <div className="flex items-center gap-4">
                         <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
-                            <Button variant="outline" className="h-9 px-5 rounded-lg border-slate-200 text-slate-700 bg-white hover:bg-slate-50 shadow-sm text-[10px] font-bold uppercase tracking-wider">
+                            <Button variant="outline" className="h-9 w-full rounded-lg border-slate-200 bg-white px-5 text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm hover:bg-slate-50 sm:w-auto">
                                 <Pencil className="h-3 w-3 mr-2" />
                                 Edit Order
                             </Button>
                         </Link>
                     </div>
+                    </div>
                 </header>
 
                 {/* Main Content Area - Balanced Professional Flow */}
                 <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 bg-slate-50/5">
-                    <div className="max-w-7xl mx-auto py-10 px-12 space-y-12 bg-white my-8 shadow-sm border border-slate-100 rounded-lg">
+                    <div className="mx-auto my-4 max-w-7xl space-y-12 rounded-lg border border-slate-100 bg-white px-4 py-6 shadow-sm sm:my-8 sm:px-12 sm:py-10">
                         
                         {/* Summary Section - Balanced spacing for broad canvas */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
@@ -191,38 +190,40 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                         {/* Items Section - Professional Table */}
                         <div className="space-y-5">
                             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 pb-2">Line Items Summary</h3>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="border-b-2 border-slate-100 hover:bg-transparent">
-                                        <TableHead className="pl-0 py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Product / Material Description</TableHead>
-                                        <TableHead className="text-center py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Qty</TableHead>
-                                        <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Unit Price</TableHead>
-                                        <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Discount</TableHead>
-                                        <TableHead className="text-right pr-0 py-3 text-[9px] font-bold uppercase text-slate-900 tracking-wider">Total (IDR)</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {order.items.map((item) => (
-                                        <TableRow key={item.id} className="border-b border-slate-50 last:border-0 group hover:bg-slate-50/20 transition-colors">
-                                            <TableCell className="pl-0 py-5">
-                                                <div className="space-y-1">
-                                                    <p className="font-bold text-slate-800 text-sm uppercase tracking-tight">{item.product?.materialDescription}</p>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-[9px] font-bold text-slate-500 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{item.product?.materialNumber}</span>
-                                                        {item.product?.oldMaterialNo && <span className="text-[9px] font-medium text-slate-400">| {item.product.oldMaterialNo}</span>}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-center font-bold text-slate-800 text-sm py-5">{item.quantity}</TableCell>
-                                            <TableCell className="text-right font-medium text-slate-500 text-[11px] py-5">{formatCurrency(Number(item.unitPrice))}</TableCell>
-                                            <TableCell className="text-right font-medium text-rose-500/80 text-[11px] py-5">{Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "—"}</TableCell>
-                                            <TableCell className="text-right pr-0 py-5 text-sm font-bold text-slate-900">
-                                                {formatCurrency((Number(item.quantity) * Number(item.unitPrice)) - Number(item.discount))}
-                                            </TableCell>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-b-2 border-slate-100 hover:bg-transparent">
+                                            <TableHead className="pl-0 py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Product / Material Description</TableHead>
+                                            <TableHead className="text-center py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Qty</TableHead>
+                                            <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Unit Price</TableHead>
+                                            <TableHead className="text-right py-3 text-[9px] font-bold uppercase text-slate-400 tracking-wider">Discount</TableHead>
+                                            <TableHead className="text-right pr-0 py-3 text-[9px] font-bold uppercase text-slate-900 tracking-wider">Total (IDR)</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {order.items.map((item) => (
+                                            <TableRow key={item.id} className="group border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/20">
+                                                <TableCell className="pl-0 py-5">
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-bold uppercase tracking-tight text-slate-800">{item.product?.materialDescription}</p>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="rounded border border-slate-100 bg-slate-50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-slate-500">{item.product?.materialNumber}</span>
+                                                            {item.product?.oldMaterialNo && <span className="text-[9px] font-medium text-slate-400">| {item.product.oldMaterialNo}</span>}
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-5 text-center text-sm font-bold text-slate-800">{item.quantity}</TableCell>
+                                                <TableCell className="py-5 text-right text-[11px] font-medium text-slate-500">{formatCurrency(Number(item.unitPrice))}</TableCell>
+                                                <TableCell className="py-5 text-right text-[11px] font-medium text-rose-500/80">{Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "—"}</TableCell>
+                                                <TableCell className="pr-0 py-5 text-right text-sm font-bold text-slate-900">
+                                                    {formatCurrency((Number(item.quantity) * Number(item.unitPrice)) - Number(item.discount))}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
 
                         {/* Totals Section */}
@@ -261,7 +262,7 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                 </div>
 
                 {/* Final Professional Footer */}
-                <footer className="px-10 py-5 border-t bg-slate-50/50 shrink-0 flex justify-center">
+                <footer className="flex shrink-0 justify-center border-t bg-slate-50/50 px-4 py-4 sm:px-10 sm:py-5">
                     <Button 
                         variant="link" 
                         onClick={() => onOpenChange(false)} 

@@ -117,7 +117,7 @@ export default async function ApprovalRequestDetailPage({
     )
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-6 p-4 sm:p-6">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -178,15 +178,15 @@ export default async function ApprovalRequestDetailPage({
                                         <iframe
                                             src={embedUrl}
                                             title={`Submitted ${detail.formKey} ${detail.entityId}`}
-                                            className="h-[70vh] w-full border-0"
+                                            className="h-[60vh] w-full border-0 sm:h-[70vh]"
                                             loading="lazy"
                                         />
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                         {candidateEmbedUrls.map((url) => (
-                                            <Button key={url} asChild size="sm" variant="outline">
+                                            <Button key={url} asChild size="sm" variant="outline" className="w-full justify-between sm:w-auto">
                                                 <Link href={url} target="_blank">
-                                                    Open {url}
+                                                    <span className="truncate">Open {url}</span>
                                                     <ExternalLink className="ml-1 h-4 w-4" />
                                                 </Link>
                                             </Button>

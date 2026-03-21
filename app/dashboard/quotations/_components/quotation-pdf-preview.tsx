@@ -8,7 +8,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Download, Printer, X, FileDown } from "lucide-react"
+import { Printer, X, FileDown } from "lucide-react"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 
@@ -83,7 +83,6 @@ function formatDate(date: Date) {
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
     const printRef = useRef<HTMLDivElement>(null)
-    const companyLogoSrc = "/brand/Chitra-Paratama.png"
 
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
         return sum + (item.quantity * Number(item.unitPrice))
@@ -214,19 +213,41 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-7xl max-h-[95vh] overflow-y-auto p-0 bg-slate-50">
-                <DialogHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 no-print">
-                    <div className="flex items-center justify-between">
-                        <DialogTitle className="text-lg">Quotation Preview</DialogTitle>
-                        <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={handlePrint} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+            <DialogContent className="max-h-[95vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto bg-slate-50 p-0 sm:max-w-7xl">
+                <DialogHeader className="no-print sticky top-0 z-10 border-b bg-background px-4 py-4 sm:px-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <DialogTitle className="pr-10 text-base sm:text-lg">Quotation Preview</DialogTitle>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <Button size="sm" onClick={handlePrint} className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
                             </Button>
                             <Button size="sm" onClick={async () => {
                                 const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-                                generateQuotationPdf(quotation as any)
-                            }} className="gap-2" variant="outline">
+                                await generateQuotationPdf({
+                                    quotationNumber: quotation.quotationNumber,
+                                    quotationDate: quotation.quotationDate,
+                                    validUntil: quotation.validUntil,
+                                    salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
+                                    attn: quotation.attn,
+                                    address: quotation.address,
+                                    customer: quotation.customer,
+                                    currency: quotation.currency,
+                                    discountType: quotation.discountType,
+                                    discount: quotation.discount,
+                                    tax: quotation.tax,
+                                    shipping: quotation.shipping,
+                                    termsConditions: quotation.termsConditions,
+                                    clientNote: quotation.clientNote,
+                                    items: quotation.items.map((item) => ({
+                                        product: item.product,
+                                        description: item.description,
+                                        longDescription: item.longDescription,
+                                        quantity: item.quantity,
+                                        unitPrice: item.unitPrice,
+                                    })),
+                                })
+                            }} className="w-full gap-2 sm:w-auto" variant="outline">
                                 <FileDown className="h-3.5 w-3.5" />
                                 Download PDF A4
                             </Button>
@@ -238,7 +259,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 </DialogHeader>
 
                 {/* PDF Content Area */}
-                <div className="flex justify-center p-8 bg-slate-50">
+                <div className="flex justify-start overflow-x-auto bg-slate-50 p-3 sm:justify-center sm:p-8">
                     <div className="bg-white shadow-2xl w-full max-w-[210mm] min-h-[297mm] ring-1 ring-slate-200 relative" ref={printRef}>
                         {/* Background injected for online preview */}
                         <div className="absolute inset-0 z-0 pointer-events-none opacity-100" style={{
