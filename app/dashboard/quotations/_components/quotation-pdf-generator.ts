@@ -50,8 +50,9 @@ function sanitizeFilenamePart(value: string | null | undefined) {
 }
 
 function inferMimeType(fileName: string, mimeType?: string | null) {
-    if (mimeType) {
-        return mimeType.toLowerCase()
+    const normalizedMimeType = mimeType?.toLowerCase().trim()
+    if (normalizedMimeType && normalizedMimeType !== "application/octet-stream" && normalizedMimeType !== "binary/octet-stream") {
+        return normalizedMimeType
     }
 
     const extension = fileName.split(".").pop()?.toLowerCase()

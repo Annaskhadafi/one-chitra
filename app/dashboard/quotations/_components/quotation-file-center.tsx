@@ -4,19 +4,19 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createQuotationAttachment, deleteQuotationAttachment, uploadQuotationCustomerPo } from "@/app/actions/quotation"
-import { getSalesDocuments } from "@/app/actions/sales-document"
+import { createSalesDocument, getSalesDocuments } from "@/app/actions/sales-document"
 import { uploadFile } from "@/app/actions/upload"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { BookOpen, FileStack, Loader2, Paperclip, Trash2, UploadCloud } from "lucide-react"
+import { BookOpen, FileStack, Loader2, Paperclip, Trash2, UploadCloud, X } from "lucide-react"
 
 type AttachmentEntry = {
     id: number
@@ -60,6 +60,31 @@ function formatFileSize(size: number) {
     return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
+function inferSalesDocumentFileType(fileName: string, fileType?: string | null) {
+    const normalizedType = (fileType || "").toLowerCase()
+    const extension = fileName.split(".").pop()?.toLowerCase()
+
+    if (normalizedType.includes("pdf") || extension === "pdf") return "PDF"
+    if (
+        normalizedType.includes("sheet") ||
+        normalizedType.includes("excel") ||
+        extension === "xls" ||
+        extension === "xlsx" ||
+        extension === "csv"
+    ) {
+        return "Excel"
+    }
+    if (
+        normalizedType.includes("image") ||
+        extension === "png" ||
+        extension === "jpg" ||
+        extension === "jpeg"
+    ) {
+        return "Image"
+    }
+    return "Document"
+}
+
 export function QuotationFileCenter({
     quotationId,
     quotationNumber,
@@ -72,7 +97,9 @@ export function QuotationFileCenter({
     const [attachmentTitle, setAttachmentTitle] = useState("")
     const [attachmentDescription, setAttachmentDescription] = useState("")
     const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
+    const [attachmentInputKey, setAttachmentInputKey] = useState(0)
     const [includeInPdf, setIncludeInPdf] = useState(true)
+    const [saveToSalesDocument, setSaveToSalesDocument] = useState(false)
     const [poNumber, setPoNumber] = useState(customerPoNumber || "")
     const [poFile, setPoFile] = useState<File | null>(null)
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
@@ -81,15 +108,27 @@ export function QuotationFileCenter({
     const [isAddingFromSalesDocument, setIsAddingFromSalesDocument] = useState(false)
     const [deletingId, setDeletingId] = useState<number | null>(null)
     const [salesDocuments, setSalesDocuments] = useState<SalesDocumentEntry[]>([])
-    const [selectedSalesDocumentId, setSelectedSalesDocumentId] = useState("")
+    const [selectedSalesDocumentIds, setSelectedSalesDocumentIds] = useState<string[]>([])
+    const [salesDocumentSearch, setSalesDocumentSearch] = useState("")
 
     const supportingAttachments = attachments.filter((attachment) => attachment.kind !== "customer_po")
     const poAttachments = attachments.filter((attachment) => attachment.kind === "customer_po")
-    const selectedSalesDocument = useMemo(
-        () => salesDocuments.find((document) => document.id === selectedSalesDocumentId) ?? null,
-        [salesDocuments, selectedSalesDocumentId]
+    const selectedSalesDocuments = useMemo(
+        () => salesDocuments.filter((document) => selectedSalesDocumentIds.includes(document.id)),
+        [salesDocuments, selectedSalesDocumentIds]
     )
+    const filteredSalesDocuments = useMemo(() => {
+        const query = salesDocumentSearch.trim().toLowerCase()
+        if (!query) {
+            return salesDocuments
+        }
 
+        return salesDocuments.filter((document) =>
+            document.title.toLowerCase().includes(query) ||
+            document.fileName.toLowerCase().includes(query) ||
+            (document.description || "").toLowerCase().includes(query)
+        )
+    }, [salesDocuments, salesDocumentSearch])
     useEffect(() => {
         let isMounted = true
 
@@ -100,9 +139,6 @@ export function QuotationFileCenter({
                     return
                 }
                 setSalesDocuments(documents)
-                if (documents.length > 0) {
-                    setSelectedSalesDocumentId((currentId) => currentId || documents[0].id)
-                }
             } catch (error) {
                 console.error("Failed to load sales documents", error)
                 if (isMounted) {
@@ -121,6 +157,42 @@ export function QuotationFileCenter({
             isMounted = false
         }
     }, [])
+
+    const resetAttachmentSelection = () => {
+        setAttachmentFiles([])
+        setAttachmentInputKey((current) => current + 1)
+    }
+
+    const handlePickAttachmentFiles = (files: FileList | null) => {
+        if (!files?.length) {
+            return
+        }
+
+        setAttachmentFiles((currentFiles) => {
+            const nextFiles = [...currentFiles]
+            const existingKeys = new Set(currentFiles.map((file) => `${file.name}-${file.size}-${file.lastModified}`))
+
+            for (const file of Array.from(files)) {
+                const fileKey = `${file.name}-${file.size}-${file.lastModified}`
+                if (!existingKeys.has(fileKey)) {
+                    nextFiles.push(file)
+                    existingKeys.add(fileKey)
+                }
+            }
+
+            return nextFiles
+        })
+        setAttachmentInputKey((current) => current + 1)
+    }
+
+    const handleRemoveAttachmentFile = (fileToRemove: File) => {
+        setAttachmentFiles((currentFiles) =>
+            currentFiles.filter(
+                (file) =>
+                    !(file.name === fileToRemove.name && file.size === fileToRemove.size && file.lastModified === fileToRemove.lastModified)
+            )
+        )
+    }
 
     const handleUploadAttachment = async () => {
         if (attachmentFiles.length === 0) {
@@ -159,13 +231,31 @@ export function QuotationFileCenter({
                 if (!saveResult.success) {
                     throw new Error(saveResult.error || `Attachment ${file.name} gagal disimpan`)
                 }
+
+                if (saveToSalesDocument) {
+                    const salesDocResult = await createSalesDocument({
+                        title: resolvedTitle,
+                        description: attachmentDescription.trim() || null,
+                        fileUrl: uploadResult.url,
+                        fileName: file.name,
+                        fileType: file.type || "application/octet-stream",
+                    })
+
+                    if (!salesDocResult.success) {
+                        throw new Error(salesDocResult.error || `Attachment ${file.name} gagal disimpan ke Sales Document`)
+                    }
+                }
             }
 
             toast.success(`${attachmentFiles.length} attachment quotation berhasil ditambahkan`)
             setAttachmentTitle("")
             setAttachmentDescription("")
-            setAttachmentFiles([])
+            resetAttachmentSelection()
             setIncludeInPdf(true)
+            setSaveToSalesDocument(false)
+            setSalesDocumentSearch("")
+            const documents = await getSalesDocuments()
+            setSalesDocuments(documents)
             router.refresh()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Attachment gagal diupload")
@@ -222,39 +312,44 @@ export function QuotationFileCenter({
     }
 
     const handleAttachSalesDocument = async () => {
-        if (!selectedSalesDocument) {
-            toast.error("Pilih Sales Document terlebih dahulu")
+        if (selectedSalesDocuments.length === 0) {
+            toast.error("Pilih minimal satu Sales Document terlebih dahulu")
             return
         }
 
-        const isDuplicateFile = supportingAttachments.some((attachment) => attachment.fileUrl === selectedSalesDocument.fileUrl)
-        if (isDuplicateFile) {
-            toast.error("Sales Document ini sudah terpasang pada quotation")
+        const duplicatedDocuments = selectedSalesDocuments.filter((document) =>
+            supportingAttachments.some((attachment) => attachment.fileUrl === document.fileUrl)
+        )
+        if (duplicatedDocuments.length > 0) {
+            toast.error(`Sudah terpasang: ${duplicatedDocuments.map((document) => document.title).join(", ")}`)
             return
         }
 
         setIsAddingFromSalesDocument(true)
         try {
-            const result = await createQuotationAttachment({
-                quotationId,
-                title: attachmentTitle.trim() || selectedSalesDocument.title,
-                fileUrl: selectedSalesDocument.fileUrl,
-                fileName: selectedSalesDocument.fileName,
-                mimeType: selectedSalesDocument.fileType || null,
-                fileSize: 0,
-                description: attachmentDescription.trim() || selectedSalesDocument.description || null,
-                includeInPdf,
-                kind: "supporting",
-            })
+            for (const document of selectedSalesDocuments) {
+                const result = await createQuotationAttachment({
+                    quotationId,
+                    title: attachmentTitle.trim() || document.title,
+                    fileUrl: document.fileUrl,
+                    fileName: document.fileName,
+                    mimeType: document.fileType || null,
+                    fileSize: 0,
+                    description: attachmentDescription.trim() || document.description || null,
+                    includeInPdf,
+                    kind: "supporting",
+                })
 
-            if (!result.success) {
-                throw new Error(result.error || "Sales Document gagal ditambahkan")
+                if (!result.success) {
+                    throw new Error(result.error || `Sales Document ${document.title} gagal ditambahkan`)
+                }
             }
 
-            toast.success("Sales Document berhasil ditambahkan ke quotation")
+            toast.success(`${selectedSalesDocuments.length} Sales Document berhasil ditambahkan ke quotation`)
             setAttachmentTitle("")
             setAttachmentDescription("")
-            setSelectedSalesDocumentId(selectedSalesDocument.id)
+            setSelectedSalesDocumentIds([])
+            setSalesDocumentSearch("")
             router.refresh()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Sales Document gagal ditambahkan")
@@ -277,6 +372,19 @@ export function QuotationFileCenter({
         } finally {
             setDeletingId(null)
         }
+    }
+
+    const toggleSalesDocumentSelection = (documentId: string, checked: boolean) => {
+        setSelectedSalesDocumentIds((currentIds) => {
+            if (checked) {
+                return currentIds.includes(documentId) ? currentIds : [...currentIds, documentId]
+            }
+            return currentIds.filter((id) => id !== documentId)
+        })
+    }
+
+    const clearSalesDocumentSelection = () => {
+        setSelectedSalesDocumentIds([])
     }
 
     return (
@@ -308,14 +416,41 @@ export function QuotationFileCenter({
                         <div className="space-y-2">
                             <Label>File</Label>
                             <Input
+                                key={attachmentInputKey}
                                 type="file"
                                 multiple
-                                onChange={(e) => setAttachmentFiles(Array.from(e.target.files || []))}
+                                onChange={(e) => handlePickAttachmentFiles(e.target.files)}
                             />
                             {attachmentFiles.length > 0 && (
-                                <p className="text-xs text-muted-foreground">
-                                    {attachmentFiles.length} file dipilih
-                                </p>
+                                <div className="space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-xs text-muted-foreground">
+                                            {attachmentFiles.length} file dipilih
+                                        </p>
+                                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={resetAttachmentSelection}>
+                                            Pilih Ulang
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                                        {attachmentFiles.map((file) => (
+                                            <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background px-3 py-2">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium">{file.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive"
+                                                    onClick={() => handleRemoveAttachmentFile(file)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
                         </div>
                         <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
@@ -324,6 +459,21 @@ export function QuotationFileCenter({
                                 <p className="text-xs text-muted-foreground">Dipakai saat quotation ditinjau bersama attachment.</p>
                             </div>
                             <Switch checked={includeInPdf} onCheckedChange={setIncludeInPdf} />
+                        </div>
+                        <div className="flex items-center gap-3 rounded-lg border border-dashed p-3">
+                            <Checkbox
+                                id={`save-to-sales-document-${quotationId}`}
+                                checked={saveToSalesDocument}
+                                onCheckedChange={(checked) => setSaveToSalesDocument(checked === true)}
+                            />
+                            <div>
+                                <Label htmlFor={`save-to-sales-document-${quotationId}`} className="text-sm font-medium">
+                                    Simpan juga ke Sales Document
+                                </Label>
+                                <p className="text-xs text-muted-foreground">
+                                    File upload quotation ini juga akan masuk ke library Sales Document.
+                                </p>
+                            </div>
                         </div>
                         <Button onClick={handleUploadAttachment} disabled={isUploadingAttachment} className="w-full gap-2">
                             {isUploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
@@ -334,44 +484,46 @@ export function QuotationFileCenter({
                             <div>
                                 <p className="font-medium">Pilih dari Sales Document</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Pakai file yang sudah tersimpan di library sales tanpa upload ulang.
+                                    Pakai satu atau beberapa file yang sudah tersimpan di library sales tanpa upload ulang.
                                 </p>
                             </div>
                             <div className="space-y-2">
-                                <Label>Sales Document</Label>
-                                <Select
-                                    value={selectedSalesDocumentId}
-                                    onValueChange={setSelectedSalesDocumentId}
+                                <Label>Cari Sales Document</Label>
+                                <Input
+                                    value={salesDocumentSearch}
+                                    onChange={(e) => setSalesDocumentSearch(e.target.value)}
+                                    placeholder={isLoadingSalesDocuments ? "Memuat Sales Document..." : "Cari title, deskripsi, atau filename"}
                                     disabled={isLoadingSalesDocuments || salesDocuments.length === 0}
-                                >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder={isLoadingSalesDocuments ? "Memuat Sales Document..." : "Pilih dokumen"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {salesDocuments.map((document) => (
-                                            <SelectItem key={document.id} value={document.id}>
-                                                {document.title}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                />
                             </div>
-                            {selectedSalesDocument && (
-                                <div className="rounded-lg border bg-background p-3 text-sm">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="secondary" className="gap-1">
-                                            <BookOpen className="h-3.5 w-3.5" />
-                                            Sales Document
-                                        </Badge>
-                                        <p className="font-medium">{selectedSalesDocument.title}</p>
+                            {selectedSalesDocuments.length > 0 && (
+                                <div className="space-y-2 rounded-lg border bg-background p-3 text-sm">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="font-medium">{selectedSalesDocuments.length} Sales Document dipilih</p>
+                                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={clearSalesDocumentSelection}>
+                                            Pilih Ulang
+                                        </Button>
                                     </div>
-                                    <p className="mt-1 text-muted-foreground">
-                                        {selectedSalesDocument.description || selectedSalesDocument.fileName}
-                                    </p>
-                                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                        <span>{selectedSalesDocument.fileName}</span>
-                                        <span>•</span>
-                                        <span>{selectedSalesDocument.fileType}</span>
+                                    <div className="space-y-2">
+                                        {selectedSalesDocuments.map((document) => (
+                                            <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-medium">{document.title}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {document.fileName} • {inferSalesDocumentFileType(document.fileName, document.fileType)}
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive"
+                                                    onClick={() => toggleSalesDocumentSelection(document.id, false)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}
@@ -380,22 +532,56 @@ export function QuotationFileCenter({
                                     Belum ada Sales Document yang bisa dipilih.
                                 </p>
                             )}
+                            {filteredSalesDocuments.length > 0 && (
+                                <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-background p-3">
+                                    {filteredSalesDocuments.map((document) => {
+                                        const checked = selectedSalesDocumentIds.includes(document.id)
+                                        const isAttached = supportingAttachments.some((attachment) => attachment.fileUrl === document.fileUrl)
+
+                                        return (
+                                            <div key={document.id} className="rounded-lg border p-3">
+                                                <div className="flex items-start gap-3">
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        disabled={isAttached}
+                                                        onCheckedChange={(value) => toggleSalesDocumentSelection(document.id, value === true)}
+                                                        className="mt-0.5"
+                                                    />
+                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <p className="truncate font-medium">{document.title}</p>
+                                                            <Badge variant="outline">{inferSalesDocumentFileType(document.fileName, document.fileType)}</Badge>
+                                                            {isAttached && <Badge variant="secondary">Sudah Dipasang</Badge>}
+                                                        </div>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {document.description || document.fileName}
+                                                        </p>
+                                                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                            <span>{document.fileName}</span>
+                                                            <span>•</span>
+                                                            <span>{document.uploadedBy?.name || "Unknown"}</span>
+                                                        </div>
+                                                        <Link href={document.fileUrl} target="_blank" className="inline-flex">
+                                                            <Button type="button" variant="link" className="h-auto p-0 text-xs">
+                                                                Open Document
+                                                            </Button>
+                                                        </Link>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
                             <div className="flex flex-col gap-2 sm:flex-row">
-                                {selectedSalesDocument && (
-                                    <Link href={selectedSalesDocument.fileUrl} target="_blank" className="sm:flex-1">
-                                        <Button variant="outline" className="w-full">
-                                            Open Document
-                                        </Button>
-                                    </Link>
-                                )}
                                 <Button
                                     onClick={handleAttachSalesDocument}
-                                    disabled={isLoadingSalesDocuments || salesDocuments.length === 0 || !selectedSalesDocument || isAddingFromSalesDocument}
+                                    disabled={isLoadingSalesDocuments || salesDocuments.length === 0 || selectedSalesDocuments.length === 0 || isAddingFromSalesDocument}
                                     className="w-full gap-2 sm:flex-1"
                                     variant="secondary"
                                 >
                                     {isAddingFromSalesDocument ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
-                                    Tambahkan dari Sales Document
+                                    Tambahkan Sales Document Terpilih
                                 </Button>
                             </div>
                         </div>
