@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import {
-    Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
+    Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -18,31 +18,19 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Mail, Play, Save, Loader2 } from "lucide-react"
 import { getRevenueReportConfig, saveRevenueReportConfig, sendManualRevenueReport } from "@/app/actions/dashboard-revenue"
+import type { RevenueReportConfig } from "@/lib/revenue-report-config"
 
 interface Props {
-    recipientUsers: Array<{
-        id: string
-        name: string
-        email: string
-        role: string
-    }>
     recipientRoles: string[]
 }
 
-export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props) {
-    const [config, setConfig] = useState<{
-        recipientRoles: string[]
-        recipientUserIds: string[]
-        customMessage: string
-        scheduleType: "immediate" | "daily" | "weekly" | "custom"
-        scheduleValue?: string
-        scheduleTime: string
-    }>({
+export function RevenueReportSettings({ recipientRoles }: Props) {
+    const [config, setConfig] = useState<RevenueReportConfig>({
         recipientRoles: ["admin"],
-        recipientUserIds: [],
         customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
         scheduleType: "daily",
-        scheduleTime: "08:00"
+        scheduleValue: "",
+        scheduleTime: "08:00",
     })
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -55,11 +43,10 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                 if (res.success && res.data) {
                     setConfig({
                         recipientRoles: res.data.recipientRoles || [],
-                        recipientUserIds: res.data.recipientUserIds || [],
                         customMessage: res.data.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
                         scheduleType: res.data.scheduleType || "daily",
                         scheduleValue: res.data.scheduleValue || "",
-                        scheduleTime: res.data.scheduleTime || "08:00"
+                        scheduleTime: res.data.scheduleTime || "08:00",
                     })
                 }
             } catch (error) {
@@ -110,7 +97,10 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
             <CardContent className="space-y-6">
                 <div className="space-y-4">
                     <Label className="text-base">Penerima Laporan (Roles)</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <p className="text-xs text-muted-foreground">
+                        Penerima email Revenue Report hanya diambil dari konfigurasi ini. Template `revenue_report` sekarang khusus untuk subject dan isi email.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                         {recipientRoles.map((role) => (
                             <div key={role} className="flex items-center space-x-2">
                                 <Checkbox
@@ -120,7 +110,7 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                                         const currentRoles = config.recipientRoles || []
                                         const newRoles = checked
                                             ? [...currentRoles, role]
-                                            : currentRoles.filter((r) => r !== role)
+                                            : currentRoles.filter((entry) => entry !== role)
                                         setConfig({ ...config, recipientRoles: newRoles })
                                     }}
                                 />
@@ -130,14 +120,14 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                     </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-4 border-t pt-4">
                     <Label className="text-base font-semibold">Jadwal Pengiriman (WIB / UTC+7)</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <div className="space-y-2">
                             <Label>Tipe Jadwal</Label>
-                            <Select 
-                                value={config.scheduleType} 
-                                onValueChange={(v: any) => setConfig({ ...config, scheduleType: v })}
+                            <Select
+                                value={config.scheduleType}
+                                onValueChange={(value) => setConfig({ ...config, scheduleType: value as RevenueReportConfig["scheduleType"] })}
                             >
                                 <SelectTrigger className="bg-white">
                                     <SelectValue />
@@ -152,9 +142,9 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                         </div>
                         <div className="space-y-2">
                             <Label>Waktu Pengiriman (HH:mm)</Label>
-                            <input 
-                                type="time" 
-                                value={config.scheduleTime} 
+                            <input
+                                type="time"
+                                value={config.scheduleTime}
                                 onChange={(e) => setConfig({ ...config, scheduleTime: e.target.value })}
                                 className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                             />
@@ -174,15 +164,15 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                                     { label: "Sab", val: "6" },
                                     { label: "Min", val: "0" },
                                 ].map((day) => (
-                                    <div key={day.val} className="flex items-center space-x-2 bg-white p-2 rounded-md border shadow-sm">
-                                        <Checkbox 
-                                            id={`day-${day.val}`} 
+                                    <div key={day.val} className="flex items-center space-x-2 rounded-md border bg-white p-2 shadow-sm">
+                                        <Checkbox
+                                            id={`day-${day.val}`}
                                             checked={config.scheduleValue?.split(",").includes(day.val) || false}
                                             onCheckedChange={(checked) => {
                                                 const currentDays = config.scheduleValue ? config.scheduleValue.split(",") : []
-                                                const newDays = checked 
-                                                    ? [...currentDays, day.val] 
-                                                    : currentDays.filter(d => d !== day.val)
+                                                const newDays = checked
+                                                    ? [...currentDays, day.val]
+                                                    : currentDays.filter((entry) => entry !== day.val)
                                                 setConfig({ ...config, scheduleValue: newDays.join(",") })
                                             }}
                                         />
@@ -194,7 +184,7 @@ export function RevenueReportSettings({ recipientUsers, recipientRoles }: Props)
                     )}
                 </div>
 
-                <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-4 border-t pt-4">
                     <Label className="text-base font-semibold">Pesan Custom (Email Body)</Label>
                     <Textarea
                         value={config.customMessage}

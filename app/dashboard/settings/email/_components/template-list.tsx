@@ -21,6 +21,7 @@ import {
     createEmailTemplate,
     updateEmailTemplate,
 } from "@/app/actions/email"
+import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
 import { TemplateEditorDialog } from "./template-editor"
 import type { emailTemplates } from "@/db/schema/email"
 
@@ -210,7 +211,9 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                                         </TableCell>
                                         <TableCell className="max-w-[220px]">
                                             <div className="flex gap-1 flex-wrap">
-                                                {((tmpl.ccEmails as string[]) ?? []).length > 0
+                                                {isRevenueReportTemplateManagedByAutomation(tmpl.code) ? (
+                                                    <span className="text-xs text-muted-foreground">Dikelola oleh automation</span>
+                                                ) : ((tmpl.ccEmails as string[]) ?? []).length > 0
                                                     ? (tmpl.ccEmails as string[]).map((email) => (
                                                         <Badge key={email} variant="outline" className="text-[11px]">
                                                             {email}
@@ -224,14 +227,18 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex gap-1 flex-wrap">
-                                                {((tmpl.recipientRoles as string[]) ?? []).length > 0
+                                                {isRevenueReportTemplateManagedByAutomation(tmpl.code) ? (
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        Revenue Report Automation
+                                                    </Badge>
+                                                ) : ((tmpl.recipientRoles as string[]) ?? []).length > 0
                                                     ? (tmpl.recipientRoles as string[]).map((r) => (
                                                         <Badge key={r} variant="outline" className="text-xs">
                                                             {r}
                                                         </Badge>
                                                     ))
                                                     : <span className="text-xs text-muted-foreground">—</span>}
-                                                {((tmpl.recipientUserIds as string[]) ?? []).map((userId) => {
+                                                {!isRevenueReportTemplateManagedByAutomation(tmpl.code) && ((tmpl.recipientUserIds as string[]) ?? []).map((userId) => {
                                                     const user = recipientUsers.find((entry) => entry.id === userId)
                                                     if (!user) return null
                                                     return (

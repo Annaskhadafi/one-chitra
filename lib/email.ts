@@ -11,6 +11,7 @@ import {
 } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
 import { toCanonicalAppUrl } from "@/lib/app-url"
+import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
 
 export type SmtpConfig = {
     host: string
@@ -411,7 +412,9 @@ export async function sendSystemTemplatedEmailByCode(args: {
     const subjectSource = args.customSubject ?? template.subject
     const htmlSource = template.htmlContent
     const textSource = template.textContent ?? undefined
-    const ccEmails = "ccEmails" in template ? (template.ccEmails ?? []) : []
+    const ccEmails = isRevenueReportTemplateManagedByAutomation(args.code)
+        ? []
+        : ("ccEmails" in template ? (template.ccEmails ?? []) : [])
     const templateRecipients = args.ignoreTemplateRecipients ? [] : await resolveUserEmailsFromRolesAndIds(
         ("recipientRoles" in template ? (template.recipientRoles ?? []) : []) as string[],
         ("recipientUserIds" in template ? (template.recipientUserIds ?? []) : []) as string[],

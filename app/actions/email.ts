@@ -9,6 +9,25 @@ import type { SmtpConfig } from "@/lib/email"
 import { ensureSystemEmailTemplates } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
 import { user } from "@/db/schema"
+import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
+
+function sanitizeTemplateRecipientSettings<T extends {
+    code?: string | null
+    recipientRoles?: string[]
+    recipientUserIds?: string[]
+    ccEmails?: string[]
+}>(data: T): T {
+    if (!isRevenueReportTemplateManagedByAutomation(data.code)) {
+        return data
+    }
+
+    return {
+        ...data,
+        recipientRoles: [],
+        recipientUserIds: [],
+        ccEmails: [],
+    }
+}
 
 // ─── SMTP ─────────────────────────────────────────────────────────────────────
 
@@ -137,9 +156,10 @@ export async function createEmailTemplate(data: {
 }) {
     try {
         await ensureEmailManagementSchema()
+        const sanitizedData = sanitizeTemplateRecipientSettings(data)
         const [created] = await db
             .insert(emailTemplates)
-            .values(data)
+            .values(sanitizedData)
             .returning()
 
         revalidatePath("/dashboard/settings/email")
@@ -170,9 +190,19 @@ export async function updateEmailTemplate(
 ) {
     try {
         await ensureEmailManagementSchema()
+        const current = await db
+            .select({ code: emailTemplates.code })
+            .from(emailTemplates)
+            .where(eq(emailTemplates.id, id))
+            .limit(1)
+
+        const sanitizedData = sanitizeTemplateRecipientSettings({
+            ...data,
+            code: data.code ?? current[0]?.code ?? null,
+        })
         await db
             .update(emailTemplates)
-            .set({ ...data, updatedAt: new Date() })
+            .set({ ...sanitizedData, updatedAt: new Date() })
             .where(eq(emailTemplates.id, id))
 
         revalidatePath("/dashboard/settings/email")

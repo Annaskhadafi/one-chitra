@@ -86,10 +86,7 @@ export function EmailSettingsClient({ smtpData, templates, logs, rules, recipien
                         recipientUsers={recipientUsers}
                         recipientRoles={recipientRoles}
                     />
-                    <RevenueReportSettings
-                        recipientUsers={recipientUsers}
-                        recipientRoles={recipientRoles}
-                    />
+                    <RevenueReportSettings recipientRoles={recipientRoles} />
                 </Suspense>
             </TabsContent>
 

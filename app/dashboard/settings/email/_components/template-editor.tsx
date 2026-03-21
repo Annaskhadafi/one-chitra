@@ -25,6 +25,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Check, ChevronsUpDown, X, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
 import type { emailTemplates } from "@/db/schema/email"
 
 type Template = typeof emailTemplates.$inferSelect
@@ -242,6 +243,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
     const [newCcEmail, setNewCcEmail] = useState("")
     const [preview, setPreview] = useState(false)
     const [userPickerOpen, setUserPickerOpen] = useState(false)
+    const isRevenueReportTemplate = isRevenueReportTemplateManagedByAutomation(template?.code)
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -344,9 +346,9 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
             ...values,
             code: values.code?.trim() || null,
             variables,
-            recipientRoles: selectedRecipientRoles,
-            recipientUserIds,
-            ccEmails,
+            recipientRoles: isRevenueReportTemplate ? [] : selectedRecipientRoles,
+            recipientUserIds: isRevenueReportTemplate ? [] : recipientUserIds,
+            ccEmails: isRevenueReportTemplate ? [] : ccEmails,
         } as Partial<Template> & { id?: string })
     }
 
@@ -451,137 +453,145 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                                     )}
                                 />
 
-                                {/* Recipient Roles */}
-                                <div>
-                                    <p className="text-sm font-medium mb-2">Recipient Email</p>
-                                    <p className="text-xs text-muted-foreground mb-2">
-                                        Pilih role atau beberapa user untuk email utama. Daftar ini akan digabung dengan recipient dinamis seperti Sales PIC bila ada.
-                                    </p>
-                                    <div className="space-y-3">
+                                {isRevenueReportTemplate ? (
+                                    <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                                        Penerima email untuk template <code className="rounded bg-white px-1 py-0.5 text-xs">revenue_report</code> dikelola penuh oleh kartu <strong>Revenue Report Automation</strong>.
+                                        Edit template ini hanya untuk subject dan isi email agar perilakunya konsisten saat manual run maupun cron.
+                                    </div>
+                                ) : (
+                                    <>
                                         <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">By Role</p>
-                                            <div className="flex gap-2 flex-wrap">
-                                                {availableRecipientRoles.map((role) => (
-                                                    <button
-                                                        key={role}
-                                                        type="button"
-                                                        onClick={() => toggleRole(role)}
-                                                        className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                                                            selectedRecipientRoles.includes(role)
-                                                                ? "bg-primary text-primary-foreground border-primary"
-                                                                : "bg-background text-muted-foreground border-input hover:bg-accent"
-                                                        }`}
+                                            <p className="text-sm font-medium mb-2">Recipient Email</p>
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Pilih role atau beberapa user untuk email utama. Daftar ini akan digabung dengan recipient dinamis seperti Sales PIC bila ada.
+                                            </p>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-2">By Role</p>
+                                                    <div className="flex gap-2 flex-wrap">
+                                                        {availableRecipientRoles.map((role) => (
+                                                            <button
+                                                                key={role}
+                                                                type="button"
+                                                                onClick={() => toggleRole(role)}
+                                                                className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                                                                    selectedRecipientRoles.includes(role)
+                                                                        ? "bg-primary text-primary-foreground border-primary"
+                                                                        : "bg-background text-muted-foreground border-input hover:bg-accent"
+                                                                }`}
+                                                            >
+                                                                {role}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground mb-2">By User</p>
+                                                    <div className="flex gap-2 flex-wrap mb-2">
+                                                        {recipientUserIds.length > 0 ? recipientUserIds.map((userId) => {
+                                                            const selectedUser = recipientUsers.find((user) => user.id === userId)
+                                                            if (!selectedUser) return null
+                                                            return (
+                                                                <span
+                                                                    key={userId}
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
+                                                                >
+                                                                    {selectedUser.name}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => toggleRecipientUser(userId)}
+                                                                        className="hover:text-destructive"
+                                                                    >
+                                                                        <X className="h-3 w-3" />
+                                                                    </button>
+                                                                </span>
+                                                            )
+                                                        }) : (
+                                                            <span className="text-xs text-muted-foreground">Belum ada user dipilih.</span>
+                                                        )}
+                                                    </div>
+                                                    <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="outline" role="combobox" className="w-full justify-between sm:w-[420px]">
+                                                                Pilih beberapa user
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
+                                                            <Command>
+                                                                <CommandInput placeholder="Cari nama atau email..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>User tidak ditemukan.</CommandEmpty>
+                                                                    <CommandGroup heading="Users">
+                                                                        {recipientUsers.map((user) => (
+                                                                            <CommandItem
+                                                                                key={user.id}
+                                                                                value={`${user.name} ${user.email} ${user.role}`}
+                                                                                onSelect={() => toggleRecipientUser(user.id)}
+                                                                                className="items-start"
+                                                                            >
+                                                                                <Checkbox checked={recipientUserIds.includes(user.id)} className="mt-0.5" />
+                                                                                <div className="flex flex-col gap-0.5">
+                                                                                    <span>{user.name}</span>
+                                                                                    <span className="text-xs text-muted-foreground">{user.email} • {user.role}</span>
+                                                                                </div>
+                                                                                <Check
+                                                                                    className={cn(
+                                                                                        "ml-auto h-4 w-4",
+                                                                                        recipientUserIds.includes(user.id) ? "opacity-100" : "opacity-0",
+                                                                                    )}
+                                                                                />
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-sm font-medium mb-2">CC Emails</p>
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Email di sini akan selalu di-CC setiap template ini dipakai.
+                                            </p>
+                                            <div className="flex gap-2 flex-wrap mb-2">
+                                                {ccEmails.map((email) => (
+                                                    <span
+                                                        key={email}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
                                                     >
-                                                        {role}
-                                                    </button>
+                                                        {email}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeCcEmail(email)}
+                                                            className="hover:text-destructive"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
                                                 ))}
                                             </div>
-                                        </div>
-
-                                        <div>
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">By User</p>
-                                            <div className="flex gap-2 flex-wrap mb-2">
-                                                {recipientUserIds.length > 0 ? recipientUserIds.map((userId) => {
-                                                    const selectedUser = recipientUsers.find((user) => user.id === userId)
-                                                    if (!selectedUser) return null
-                                                    return (
-                                                        <span
-                                                            key={userId}
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
-                                                        >
-                                                            {selectedUser.name}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleRecipientUser(userId)}
-                                                                className="hover:text-destructive"
-                                                            >
-                                                                <X className="h-3 w-3" />
-                                                            </button>
-                                                        </span>
-                                                    )
-                                                }) : (
-                                                    <span className="text-xs text-muted-foreground">Belum ada user dipilih.</span>
-                                                )}
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="email"
+                                                    placeholder="cc@example.com"
+                                                    value={newCcEmail}
+                                                    onChange={(e) => setNewCcEmail(e.target.value)}
+                                                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCcEmail() } }}
+                                                    className="h-8 text-sm"
+                                                />
+                                                <Button type="button" size="sm" variant="outline" onClick={addCcEmail} className="h-8 gap-1">
+                                                    <Plus className="h-3 w-3" />
+                                                    Add CC
+                                                </Button>
                                             </div>
-                                            <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
-                                                <PopoverTrigger asChild>
-                                                    <Button variant="outline" role="combobox" className="w-full justify-between sm:w-[420px]">
-                                                        Pilih beberapa user
-                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[min(420px,calc(100vw-3rem))] p-0" align="start">
-                                                    <Command>
-                                                        <CommandInput placeholder="Cari nama atau email..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>User tidak ditemukan.</CommandEmpty>
-                                                            <CommandGroup heading="Users">
-                                                                {recipientUsers.map((user) => (
-                                                                    <CommandItem
-                                                                        key={user.id}
-                                                                        value={`${user.name} ${user.email} ${user.role}`}
-                                                                        onSelect={() => toggleRecipientUser(user.id)}
-                                                                        className="items-start"
-                                                                    >
-                                                                        <Checkbox checked={recipientUserIds.includes(user.id)} className="mt-0.5" />
-                                                                        <div className="flex flex-col gap-0.5">
-                                                                            <span>{user.name}</span>
-                                                                            <span className="text-xs text-muted-foreground">{user.email} • {user.role}</span>
-                                                                        </div>
-                                                                        <Check
-                                                                            className={cn(
-                                                                                "ml-auto h-4 w-4",
-                                                                                recipientUserIds.includes(user.id) ? "opacity-100" : "opacity-0",
-                                                                            )}
-                                                                        />
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
                                         </div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="text-sm font-medium mb-2">CC Emails</p>
-                                    <p className="text-xs text-muted-foreground mb-2">
-                                        Email di sini akan selalu di-CC setiap template ini dipakai.
-                                    </p>
-                                    <div className="flex gap-2 flex-wrap mb-2">
-                                        {ccEmails.map((email) => (
-                                            <span
-                                                key={email}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs"
-                                            >
-                                                {email}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeCcEmail(email)}
-                                                    className="hover:text-destructive"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            type="email"
-                                            placeholder="cc@example.com"
-                                            value={newCcEmail}
-                                            onChange={(e) => setNewCcEmail(e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCcEmail() } }}
-                                            className="h-8 text-sm"
-                                        />
-                                        <Button type="button" size="sm" variant="outline" onClick={addCcEmail} className="h-8 gap-1">
-                                            <Plus className="h-3 w-3" />
-                                            Add CC
-                                        </Button>
-                                    </div>
-                                </div>
+                                    </>
+                                )}
 
                                 {/* Variables */}
                                 <div>

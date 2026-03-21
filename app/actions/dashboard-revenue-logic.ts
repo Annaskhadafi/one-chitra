@@ -3,22 +3,13 @@ import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
 import { settings } from "@/db/schema/settings"
+import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
 
 
 export interface DashboardRevenueFilters {
     period: string; // MM.YYYY or YYYY
     range?: "this-week" | "this-month" | "this-quarter";
 }
-
-export type RevenueReportConfig = {
-    recipientRoles: string[]
-    recipientUserIds: string[]
-    customMessage: string
-    scheduleType: "immediate" | "daily" | "weekly" | "custom"
-    scheduleValue?: string // e.g., "1,2,3,4,5" for weekdays (1=Mon, 0=Sun)
-    scheduleTime: string // HH:mm format (WIB/UTC+7)
-}
-
 
 function getRangeBounds(range: "this-week" | "this-month" | "this-quarter") {
     const now = new Date();
@@ -382,26 +373,12 @@ export async function fetchRevenueReportConfig() {
         if (result.length === 0) {
             return {
                 success: true,
-                data: {
-                    recipientRoles: ["admin"],
-                    recipientUserIds: [],
-                    customMessage: "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
-                    scheduleType: "daily",
-                    scheduleTime: "08:00"
-                } as RevenueReportConfig
+                data: normalizeRevenueReportConfig(null) as RevenueReportConfig,
             }
         }
 
         const rawData = JSON.parse(result[0].value)
-        
-        const data: RevenueReportConfig = {
-            recipientRoles: rawData.recipientRoles || [],
-            recipientUserIds: rawData.recipientUserIds || (rawData.recipients || []),
-            customMessage: rawData.customMessage || "Silakan periksa laporan pendapatan harian dalam lampiran PDF.",
-            scheduleType: rawData.scheduleType || "daily",
-            scheduleValue: rawData.scheduleValue || "",
-            scheduleTime: rawData.scheduleTime || "08:00"
-        }
+        const data = normalizeRevenueReportConfig(rawData)
 
         return {
             success: true,
@@ -412,4 +389,3 @@ export async function fetchRevenueReportConfig() {
         return { success: false, error: "Failed to fetch configuration" }
     }
 }
-

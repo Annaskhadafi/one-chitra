@@ -1,6 +1,5 @@
 "use server"
 import { db } from "@/db"
-import { salesRevenueSap } from "@/db/schema/sap"
 import { settings } from "@/db/schema/settings"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { eq } from "drizzle-orm"
@@ -10,8 +9,8 @@ import {
     fetchDashboardInventory,
     fetchAllSalesRevenueData,
     fetchRevenueReportConfig,
-    type RevenueReportConfig
 } from "./dashboard-revenue-logic"
+import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
 
 
 
@@ -24,9 +23,6 @@ export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
         return { success: false, error: "Failed to fetch sales revenue data" };
     }
 }
-
-import { sql } from "drizzle-orm"
-
 export async function getDashboardRevenueForecast(filters: DashboardRevenueFilters) {
     try {
         await getAuthenticatedSession("revenue-forecast", "view")
@@ -79,7 +75,7 @@ export async function sendManualRevenueReport(period: string) {
         const config = configRes.data!
 
         console.log(`[RevenueReport] Resolving recipients for roles: ${config.recipientRoles.join(', ')}`)
-        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, config.recipientUserIds)
+        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, [])
         
         if (recipients.length === 0) {
             console.warn("[RevenueReport] No recipients resolved.")
@@ -162,7 +158,7 @@ export async function saveRevenueReportConfig(config: RevenueReportConfig) {
     try {
         await getAuthenticatedSession("revenue-forecast", "edit")
         
-        const value = JSON.stringify(config)
+        const value = JSON.stringify(normalizeRevenueReportConfig(config))
         
         const existing = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
         

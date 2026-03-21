@@ -65,7 +65,7 @@ export async function GET(request: Request) {
         }
 
         // 4. Resolve Recipients
-        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, config.recipientUserIds)
+        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, [])
         
         if (recipients.length === 0) {
             console.log("[CRON] No recipients configured for revenue report. Skipping.")
