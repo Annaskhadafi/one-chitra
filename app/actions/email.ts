@@ -9,7 +9,7 @@ import type { SmtpConfig } from "@/lib/email"
 import { ensureSystemEmailTemplates } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
 import { user } from "@/db/schema"
-import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
+import { isRevenueReportTemplateManagedByAutomation, normalizeRecipientRoleNames } from "@/lib/revenue-report-config"
 
 function sanitizeTemplateRecipientSettings<T extends {
     code?: string | null
@@ -18,7 +18,10 @@ function sanitizeTemplateRecipientSettings<T extends {
     ccEmails?: string[]
 }>(data: T): T {
     if (!isRevenueReportTemplateManagedByAutomation(data.code)) {
-        return data
+        return {
+            ...data,
+            recipientRoles: data.recipientRoles ? normalizeRecipientRoleNames(data.recipientRoles) : data.recipientRoles,
+        }
     }
 
     return {

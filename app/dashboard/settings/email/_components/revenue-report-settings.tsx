@@ -18,7 +18,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Mail, Play, Save, Loader2 } from "lucide-react"
 import { getRevenueReportConfig, saveRevenueReportConfig, sendManualRevenueReport } from "@/app/actions/dashboard-revenue"
-import type { RevenueReportConfig } from "@/lib/revenue-report-config"
+import { normalizeRecipientRoleName, type RevenueReportConfig } from "@/lib/revenue-report-config"
 
 interface Props {
     recipientRoles: string[]
@@ -35,6 +35,7 @@ export function RevenueReportSettings({ recipientRoles }: Props) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [testing, setTesting] = useState(false)
+    const selectedRoleKeys = new Set((config.recipientRoles || []).map((role) => normalizeRecipientRoleName(role)))
 
     useEffect(() => {
         async function load() {
@@ -105,12 +106,13 @@ export function RevenueReportSettings({ recipientRoles }: Props) {
                             <div key={role} className="flex items-center space-x-2">
                                 <Checkbox
                                     id={`role-${role}`}
-                                    checked={config.recipientRoles?.includes(role) || false}
+                                    checked={selectedRoleKeys.has(normalizeRecipientRoleName(role))}
                                     onCheckedChange={(checked) => {
-                                        const currentRoles = config.recipientRoles || []
+                                        const roleKey = normalizeRecipientRoleName(role)
+                                        const currentRoles = Array.from(selectedRoleKeys)
                                         const newRoles = checked
-                                            ? [...currentRoles, role]
-                                            : currentRoles.filter((entry) => entry !== role)
+                                            ? Array.from(new Set([...currentRoles, roleKey]))
+                                            : currentRoles.filter((entry) => entry !== roleKey)
                                         setConfig({ ...config, recipientRoles: newRoles })
                                     }}
                                 />

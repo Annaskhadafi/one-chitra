@@ -1,6 +1,7 @@
 import {
     REVENUE_REPORT_TEMPLATE_CODE,
     isRevenueReportTemplateManagedByAutomation,
+    normalizeRecipientRoleNames,
     normalizeRevenueReportConfig,
 } from "@/lib/revenue-report-config"
 
@@ -36,6 +37,15 @@ describe("normalizeRevenueReportConfig", () => {
         expect(config.scheduleType).toBe("daily")
         expect(config.scheduleTime).toBe("08:00")
         expect(config.scheduleValue).toBe("")
+    })
+})
+
+describe("normalizeRecipientRoleNames", () => {
+    it("normalizes mixed-case role names into one canonical value", () => {
+        expect(normalizeRecipientRoleNames(["Admin", " admin ", "MANAGER", "manager"])).toEqual([
+            "admin",
+            "manager",
+        ])
     })
 })
 

@@ -4,6 +4,7 @@ import { roles } from "@/db/schema"
 import { asc } from "drizzle-orm"
 import { Mail } from "lucide-react"
 import { EmailSettingsClient } from "./_components/email-settings-client"
+import { normalizeRecipientRoleName } from "@/lib/revenue-report-config"
 
 export const metadata = {
     title: "Email Settings – One Chitra",
@@ -31,10 +32,24 @@ export default async function EmailSettingsPage() {
         (user): user is typeof users[number] & { email: string } => Boolean(user.email?.trim()),
     )
 
-    const recipientRoles = Array.from(new Set([
-        ...roleRows.map((role) => role.name?.trim()).filter(Boolean),
-        ...recipientUsers.map((user) => user.role?.trim()).filter(Boolean),
-    ])).sort((left, right) => left.localeCompare(right))
+    const roleLabelByKey = new Map<string, string>()
+
+    for (const roleName of [
+        ...roleRows.map((role) => role.name),
+        ...recipientUsers.map((currentUser) => currentUser.role),
+    ]) {
+        const label = roleName?.trim()
+        const key = normalizeRecipientRoleName(label)
+
+        if (!label || !key || roleLabelByKey.has(key)) {
+            continue
+        }
+
+        roleLabelByKey.set(key, label)
+    }
+
+    const recipientRoles = Array.from(roleLabelByKey.values())
+        .sort((left, right) => left.localeCompare(right))
 
     return (
         <div className="p-6 space-y-6">

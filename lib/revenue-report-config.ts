@@ -18,13 +18,17 @@ const DEFAULT_REVENUE_REPORT_CONFIG: RevenueReportConfig = {
     scheduleTime: "08:00",
 }
 
-function normalizeStringArray(value: unknown) {
+export function normalizeRecipientRoleName(value: unknown) {
+    return typeof value === "string" ? value.trim().toLowerCase() : ""
+}
+
+export function normalizeRecipientRoleNames(value: unknown) {
     if (!Array.isArray(value)) return [] as string[]
 
     return Array.from(
         new Set(
             value
-                .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+                .map((entry) => normalizeRecipientRoleName(entry))
                 .filter(Boolean),
         ),
     )
@@ -64,7 +68,7 @@ export function normalizeRevenueReportConfig(raw: unknown): RevenueReportConfig 
     const input = raw as Record<string, unknown>
     const scheduleType = normalizeScheduleType(input.scheduleType)
     const normalized: RevenueReportConfig = {
-        recipientRoles: normalizeStringArray(input.recipientRoles),
+        recipientRoles: normalizeRecipientRoleNames(input.recipientRoles),
         customMessage: typeof input.customMessage === "string" && input.customMessage.trim()
             ? input.customMessage
             : DEFAULT_REVENUE_REPORT_CONFIG.customMessage,

@@ -25,7 +25,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Check, ChevronsUpDown, X, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
+import { isRevenueReportTemplateManagedByAutomation, normalizeRecipientRoleName, normalizeRecipientRoleNames } from "@/lib/revenue-report-config"
 import type { emailTemplates } from "@/db/schema/email"
 
 type Template = typeof emailTemplates.$inferSelect
@@ -271,7 +271,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                 isActive: template.isActive,
             })
             setVariables((template.variables as string[]) ?? [])
-            setSelectedRecipientRoles((template.recipientRoles as string[]) ?? [])
+            setSelectedRecipientRoles(normalizeRecipientRoleNames((template.recipientRoles as string[]) ?? []))
             setRecipientUserIds((template.recipientUserIds as string[]) ?? [])
             setCcEmails((template.ccEmails as string[]) ?? [])
         } else {
@@ -329,8 +329,9 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
     }
 
     function toggleRole(role: string) {
+        const roleKey = normalizeRecipientRoleName(role)
         setSelectedRecipientRoles((prev) =>
-            prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+            prev.includes(roleKey) ? prev.filter((r) => r !== roleKey) : [...prev, roleKey]
         )
     }
 
@@ -346,7 +347,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
             ...values,
             code: values.code?.trim() || null,
             variables,
-            recipientRoles: isRevenueReportTemplate ? [] : selectedRecipientRoles,
+            recipientRoles: isRevenueReportTemplate ? [] : normalizeRecipientRoleNames(selectedRecipientRoles),
             recipientUserIds: isRevenueReportTemplate ? [] : recipientUserIds,
             ccEmails: isRevenueReportTemplate ? [] : ccEmails,
         } as Partial<Template> & { id?: string })
@@ -475,7 +476,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                                                                 type="button"
                                                                 onClick={() => toggleRole(role)}
                                                                 className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                                                                    selectedRecipientRoles.includes(role)
+                                                        selectedRecipientRoles.includes(normalizeRecipientRoleName(role))
                                                                         ? "bg-primary text-primary-foreground border-primary"
                                                                         : "bg-background text-muted-foreground border-input hover:bg-accent"
                                                                 }`}
