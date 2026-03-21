@@ -127,7 +127,7 @@ export async function sendManualRevenueReport(period: string) {
             attachments: [
                 {
                     filename: `Revenue_Report_${period}.pdf`,
-                    content: pdfContent,
+                    content: Buffer.from(pdfContent),
                     contentType: "application/pdf"
                 }
             ]

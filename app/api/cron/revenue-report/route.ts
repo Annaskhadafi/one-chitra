@@ -122,7 +122,7 @@ export async function GET(request: Request) {
             attachments: [
                 {
                     filename: `Revenue_Report_${period}.pdf`,
-                    content: pdfContent,
+                    content: Buffer.from(pdfContent),
                     contentType: "application/pdf"
                 }
             ]

@@ -90,6 +90,32 @@ crontab -e
 0 2 * * * tar -czf /backups/one-chitra-uploads-$(date +\%Y\%m\%d).tar.gz /mnt/data/one-chitra/uploads/
 ```
 
+## Revenue Report Cron
+
+Jika ingin menjalankan automation revenue report dari scheduler eksternal, gunakan endpoint:
+
+```bash
+https://yourdomain.com/api/cron/revenue-report
+```
+
+Header yang wajib dikirim:
+
+```bash
+Authorization: Bearer <CRON_SECRET>
+```
+
+Catatan penting:
+
+- Image runtime sekarang menyertakan `curl`, jadi command scheduler lama seperti `docker exec <container-id> sh -c 'curl -s -H "Authorization: Bearer ..."'` bisa jalan setelah redeploy.
+- Jika ingin menghindari dependensi `curl`, pakai command ini di scheduler:
+
+```bash
+docker exec <container-id> node -e "fetch('https://yourdomain.com/api/cron/revenue-report',{headers:{Authorization:'Bearer ' + process.env.CRON_SECRET}}).then(async(r)=>{const body=await r.text();console.log(body);if(!r.ok)process.exit(1)}).catch((err)=>{console.error(err);process.exit(1)})"
+```
+
+- Pastikan environment variable `CRON_SECRET` tersedia di container aplikasi.
+- Waktu schedule di UI revenue report disimpan dalam WIB (UTC+7).
+
 ## Contact
 
 Jika ada masalah, cek:

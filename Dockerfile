@@ -33,6 +33,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install system libraries for Chromium/Puppeteer
 RUN apt-get update && apt-get install -y \
+    curl \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \

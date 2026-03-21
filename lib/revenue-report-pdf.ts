@@ -1,10 +1,13 @@
-import puppeteer from 'puppeteer'
+import os from "node:os"
+import path from "node:path"
+import { promises as fs } from "node:fs"
+import puppeteer from "puppeteer"
 
 /**
  * Generates a high-fidelity PDF of the Revenue Dashboard by taking a screenshot 
  * of a dedicated snapshot page.
  */
-export async function generateRevenueReportPdf(data: { period: string }) {
+export async function generateRevenueReportPdf(data: { period: string; [key: string]: unknown }) {
     const { period } = data
     // Use a shared fallback for development if CRON_SECRET is missing
     const token = process.env.CRON_SECRET || "one-chitra-internal-secret-2026"
@@ -18,9 +21,24 @@ export async function generateRevenueReportPdf(data: { period: string }) {
 
     let browser;
     try {
+        const chromiumUserDataDir = path.join(os.tmpdir(), "one-chitra-chromium")
+        const chromiumCrashDir = path.join(chromiumUserDataDir, "crashpad")
+        await fs.mkdir(chromiumCrashDir, { recursive: true })
+
         browser = await puppeteer.launch({
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROMIUM_PATH || undefined,
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                `--user-data-dir=${chromiumUserDataDir}`,
+                `--crash-dumps-dir=${chromiumCrashDir}`,
+                "--disable-crash-reporter",
+                "--disable-crashpad",
+            ]
         })
 
         const page = await browser.newPage()
@@ -66,7 +84,7 @@ export async function generateRevenueReportPdf(data: { period: string }) {
         })
 
         console.log(`[Puppeteer] PDF generated successfully (${pdfBuffer.length} bytes)`)
-        return pdfBuffer
+        return Buffer.from(pdfBuffer)
 
     } catch (error) {
         console.error("[Puppeteer] Failed to generate PDF:", error)
