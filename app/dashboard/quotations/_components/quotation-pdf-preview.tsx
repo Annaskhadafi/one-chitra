@@ -437,11 +437,11 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             </div>
                         )}
 
-                        {quotation.attachments?.filter((attachment) => attachment.includeInPdf).length ? (
+                        {quotation.attachments?.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po").length ? (
                             <div className="terms-section" style={{ marginTop: 20, width: '100%', padding: '15px 20px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                                 <div className="terms-label" style={{ fontWeight: 800, marginBottom: 8, color: '#0f172a', fontSize: '8.5pt', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Attachment Package:</div>
                                 <div className="terms-content" style={{ fontSize: '9pt', color: '#475569', lineHeight: 1.6 }}>
-                                    {quotation.attachments.filter((attachment) => attachment.includeInPdf).map((attachment, index) => (
+                                    {quotation.attachments.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po").map((attachment, index) => (
                                         <div key={attachment.id}>{index + 1}. {attachment.title} ({attachment.fileName})</div>
                                     ))}
                                 </div>

@@ -453,7 +453,7 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
             finalY = termsY + (formattedTerms.length * 4) + 12
         }
 
-        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
+        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po") ?? []
         if (includedAttachments.length > 0) {
             let attachmentY = finalY
             if (attachmentY > 235) {

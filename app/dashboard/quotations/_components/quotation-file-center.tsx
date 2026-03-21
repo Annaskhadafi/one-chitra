@@ -67,7 +67,7 @@ export function QuotationFileCenter({
     const router = useRouter()
     const [attachmentTitle, setAttachmentTitle] = useState("")
     const [attachmentDescription, setAttachmentDescription] = useState("")
-    const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+    const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
     const [includeInPdf, setIncludeInPdf] = useState(true)
     const [poNumber, setPoNumber] = useState(customerPoNumber || "")
     const [poFile, setPoFile] = useState<File | null>(null)
@@ -79,41 +79,48 @@ export function QuotationFileCenter({
     const poAttachments = attachments.filter((attachment) => attachment.kind === "customer_po")
 
     const handleUploadAttachment = async () => {
-        if (!attachmentFile) {
-            toast.error("Pilih file attachment terlebih dahulu")
+        if (attachmentFiles.length === 0) {
+            toast.error("Pilih minimal satu file attachment terlebih dahulu")
             return
         }
 
         setIsUploadingAttachment(true)
         try {
-            const formData = new FormData()
-            formData.append("file", attachmentFile)
+            for (const file of attachmentFiles) {
+                const formData = new FormData()
+                formData.append("file", file)
 
-            const uploadResult = await uploadFile(formData)
-            if (!uploadResult.success || !uploadResult.url) {
-                throw new Error(uploadResult.error || "Upload attachment gagal")
+                const uploadResult = await uploadFile(formData)
+                if (!uploadResult.success || !uploadResult.url) {
+                    throw new Error(uploadResult.error || `Upload attachment ${file.name} gagal`)
+                }
+
+                const attachmentLabel = attachmentTitle.trim()
+                const resolvedTitle = attachmentFiles.length === 1
+                    ? (attachmentLabel || file.name)
+                    : (attachmentLabel ? `${attachmentLabel} - ${file.name}` : file.name)
+
+                const saveResult = await createQuotationAttachment({
+                    quotationId,
+                    title: resolvedTitle,
+                    fileUrl: uploadResult.url,
+                    fileName: file.name,
+                    mimeType: file.type || null,
+                    fileSize: file.size,
+                    description: attachmentDescription.trim() || null,
+                    includeInPdf,
+                    kind: "supporting",
+                })
+
+                if (!saveResult.success) {
+                    throw new Error(saveResult.error || `Attachment ${file.name} gagal disimpan`)
+                }
             }
 
-            const saveResult = await createQuotationAttachment({
-                quotationId,
-                title: attachmentTitle.trim() || attachmentFile.name,
-                fileUrl: uploadResult.url,
-                fileName: attachmentFile.name,
-                mimeType: attachmentFile.type || null,
-                fileSize: attachmentFile.size,
-                description: attachmentDescription.trim() || null,
-                includeInPdf,
-                kind: "supporting",
-            })
-
-            if (!saveResult.success) {
-                throw new Error(saveResult.error || "Attachment gagal disimpan")
-            }
-
-            toast.success("Attachment quotation berhasil ditambahkan")
+            toast.success(`${attachmentFiles.length} attachment quotation berhasil ditambahkan`)
             setAttachmentTitle("")
             setAttachmentDescription("")
-            setAttachmentFile(null)
+            setAttachmentFiles([])
             setIncludeInPdf(true)
             router.refresh()
         } catch (error) {
@@ -202,11 +209,11 @@ export function QuotationFileCenter({
                     <div className="space-y-4 rounded-xl border p-4">
                         <div>
                             <p className="font-medium">Supporting Attachment</p>
-                            <p className="text-sm text-muted-foreground">Spesifikasi, drawing, brosur, atau lampiran tender.</p>
+                            <p className="text-sm text-muted-foreground">Spesifikasi, drawing, brosur, atau lampiran tender. Bisa upload multi attachment sekaligus.</p>
                         </div>
                         <div className="space-y-2">
                             <Label>Judul Attachment</Label>
-                            <Input value={attachmentTitle} onChange={(e) => setAttachmentTitle(e.target.value)} placeholder="Mis. Drawing pump assembly" />
+                            <Input value={attachmentTitle} onChange={(e) => setAttachmentTitle(e.target.value)} placeholder="Opsional. Mis. Drawing pump assembly" />
                         </div>
                         <div className="space-y-2">
                             <Label>Deskripsi</Label>
@@ -214,7 +221,16 @@ export function QuotationFileCenter({
                         </div>
                         <div className="space-y-2">
                             <Label>File</Label>
-                            <Input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} />
+                            <Input
+                                type="file"
+                                multiple
+                                onChange={(e) => setAttachmentFiles(Array.from(e.target.files || []))}
+                            />
+                            {attachmentFiles.length > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    {attachmentFiles.length} file dipilih
+                                </p>
+                            )}
                         </div>
                         <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
                             <div>
@@ -251,6 +267,9 @@ export function QuotationFileCenter({
                                 <span>Setelah PO masuk, quotation akan auto-convert ke Sales Order draft dengan konteks komersial dari quotation.</span>
                             )}
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            File PO customer tidak ikut digabung ke paket attachment quotation.
+                        </p>
                         <Button onClick={handleUploadPo} disabled={isUploadingPo} className="w-full gap-2">
                             {isUploadingPo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                             Upload PO & Auto Convert

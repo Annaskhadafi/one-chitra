@@ -1280,7 +1280,7 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 mimeType: normalizeText(payload.mimeType),
                 fileSize: payload.fileSize,
                 description: "Customer PO uploaded from quotation detail",
-                includeInPdf: true,
+                includeInPdf: false,
                 uploadedBy: userId,
             })
 
