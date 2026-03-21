@@ -2,8 +2,12 @@ import { fetchDashboardRevenueForecast, fetchAllSalesRevenueData, fetchDashboard
 import { RevenueClient } from "@/app/dashboard/revenue-forecast/_components/revenue-client"
 import { SalesRevenueTable } from "@/app/dashboard/revenue-forecast/_components/sales-revenue-table"
 import { notFound } from "next/navigation"
+import type { ComponentProps } from "react"
 
 export const dynamic = "force-dynamic"
+
+type SnapshotRevenueData = ComponentProps<typeof RevenueClient>["initialData"]
+type SnapshotSalesRevenueData = ComponentProps<typeof SalesRevenueTable>["data"]
 
 export default async function RevenueSnapshotPage({
     searchParams,
@@ -31,7 +35,7 @@ export default async function RevenueSnapshotPage({
         fetchDashboardInventory()
     ])
 
-    const defaultData = {
+    const defaultData: SnapshotRevenueData = {
         period,
         isYearlyView: false,
         targets: {
@@ -56,21 +60,21 @@ export default async function RevenueSnapshotPage({
     }
 
     const data = response.success && response.data ? response.data : defaultData
-    const salesRevenueData = salesRevenueResponse.success && salesRevenueResponse.data ? salesRevenueResponse.data : []
+    const salesRevenueData: SnapshotSalesRevenueData = salesRevenueResponse.success && salesRevenueResponse.data ? salesRevenueResponse.data : []
     const salesRevenueTotal = salesRevenueResponse.success && salesRevenueResponse.total !== undefined ? salesRevenueResponse.total : 0
     const salesRevenueCount = salesRevenueResponse.success && salesRevenueResponse.count !== undefined ? salesRevenueResponse.count : 0
 
     return (
-        <div className="bg-white p-4 min-h-screen" style={{ width: "1280px" }}>
+        <div id="revenue-report-pdf-root" className="bg-white p-4" style={{ width: "1280px" }}>
             <div className="space-y-4">
                 <RevenueClient 
-                    initialData={data as any} 
+                    initialData={data} 
                     selectedPeriod={period} 
                     inventoryData={inventoryResponse.success && inventoryResponse.data ? inventoryResponse.data : null} 
                     isExporting={true}
                 />
                 <SalesRevenueTable 
-                    data={salesRevenueData as any} 
+                    data={salesRevenueData} 
                     total={salesRevenueTotal} 
                     count={salesRevenueCount}
                     period={period}
@@ -84,7 +88,7 @@ export default async function RevenueSnapshotPage({
             
             <style dangerouslySetInnerHTML={{ __html: `
                 .export-button-hide { display: none !important; }
-                body { background-color: white !important; overflow-x: hidden !important; width: 1280px !important; margin: 0 !important; padding: 0 !important; }
+                html, body { background-color: white !important; overflow-x: hidden !important; width: 1280px !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; height: auto !important; }
                 .p-4 { padding: 1rem !important; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             ` }} />

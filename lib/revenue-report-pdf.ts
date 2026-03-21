@@ -99,13 +99,16 @@ export async function generateRevenueReportPdf(data: { period: string; [key: str
 
         // 3. Calculate the actual content height to avoid splitting into A4 pages
         const height = await page.evaluate(() => {
-            const body = document.body;
-            const html = document.documentElement;
-            return Math.max(
-                body.scrollHeight, body.offsetHeight,
-                html.clientHeight, html.scrollHeight, html.offsetHeight
-            );
-        });
+            const root = document.getElementById("revenue-report-pdf-root")
+
+            if (root) {
+                const rect = root.getBoundingClientRect()
+                return Math.ceil(Math.max(root.scrollHeight, root.clientHeight, rect.height))
+            }
+
+            const body = document.body
+            return Math.ceil(Math.max(body.scrollHeight, body.offsetHeight))
+        })
 
         console.log(`[Puppeteer] Capturing PDF with height: ${height}px`)
 
