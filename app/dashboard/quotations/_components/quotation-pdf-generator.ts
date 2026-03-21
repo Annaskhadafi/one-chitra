@@ -3,6 +3,7 @@ import type { Customer, Product } from "@/lib/types"
 
 interface QuotationPdfData {
     quotationNumber: string | null
+    currentRevision?: number
     quotationDate: Date
     validUntil: Date | null
     salesPerson: { name: string | null } | null
@@ -23,6 +24,14 @@ interface QuotationPdfData {
         quantity: number
         unitPrice: string
     }[]
+    attachments?: {
+        title: string
+        fileName: string
+        fileUrl?: string
+        mimeType?: string | null
+        kind: string
+        includeInPdf: boolean
+    }[]
 }
 
 function formatCurrency(value: number, currency = "IDR") {
@@ -36,10 +45,56 @@ function formatDate(date: Date) {
     return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
 }
 
+function sanitizeFilenamePart(value: string | null | undefined) {
+    return (value || "Draft").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Draft"
+}
+
+function inferMimeType(fileName: string, mimeType?: string | null) {
+    if (mimeType) {
+        return mimeType.toLowerCase()
+    }
+
+    const extension = fileName.split(".").pop()?.toLowerCase()
+    switch (extension) {
+        case "pdf":
+            return "application/pdf"
+        case "png":
+            return "image/png"
+        case "jpg":
+        case "jpeg":
+            return "image/jpeg"
+        default:
+            return ""
+    }
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+}
+
 export async function generateQuotationPdf(quotation: QuotationPdfData) {
     try {
         const { default: jsPDF } = await import("jspdf")
         const autoTable = (await import("jspdf-autotable")).default
+        type AutoTableHookData = {
+            section: string
+            column: { index: number }
+            row: { index: number }
+            doc: InstanceType<typeof jsPDF>
+            cell: {
+                styles: { minCellHeight?: number }
+                text: string[]
+                x: number
+                y: number
+            }
+        }
 
         const doc = new jsPDF({
             orientation: "portrait",
@@ -70,7 +125,8 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
 
         // Override addPage to automatically add background to new pages
         const originalAddPage = doc.addPage.bind(doc)
-        ;(doc as any).addPage = function(...args: any[]) {
+        const mutableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } }
+        doc.addPage = (...args: Parameters<typeof originalAddPage>) => {
             originalAddPage(...args)
             if (base64data) {
                 doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
@@ -91,7 +147,12 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         
         doc.setFontSize(11)
         doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text(quotation.quotationNumber || "DRAFT", 195, 56, { align: "right" })
+        doc.text(
+            `${quotation.quotationNumber || "DRAFT"}${quotation.currentRevision ? `  |  Rev.${quotation.currentRevision}` : ""}`,
+            195,
+            56,
+            { align: "right" },
+        )
 
         // Company Info
         doc.setFontSize(14)
@@ -210,10 +271,8 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         // Items Table
         const tableBody = quotation.items.map((item, index) => {
             const lineTitle = item.product.materialDescription || item.product.materialNumber
-            const desc = item.longDescription ? `${item.description || ""}\n${item.longDescription}` : item.description || ""
-            
             // We just pass it simply to keep row data, we will wipe display and custom draw
-            const combinedContent = lineTitle;
+            const combinedContent = lineTitle
 
             const amount = item.quantity * Number(item.unitPrice)
             
@@ -259,7 +318,7 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
             // The critical part to avoid page cuts for descriptions
             pageBreak: 'auto',
             rowPageBreak: 'avoid', // Keep items together
-            didParseCell: (data: any) => {
+            didParseCell: (data: AutoTableHookData) => {
                 if (data.section === 'body' && data.column.index === 1) {
                     const item = quotation.items[data.row.index]
                     const doc = data.doc
@@ -279,12 +338,12 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     data.cell.styles.minCellHeight = totalHeight + 2
                 }
             },
-            willDrawCell: (data: any) => {
+            willDrawCell: (data: AutoTableHookData) => {
                 if (data.section === 'body' && data.column.index === 1) {
                     data.cell.text = []; // Clear text to prevent autoTable from rendering double text
                 }
             },
-            didDrawCell: (data: any) => {
+            didDrawCell: (data: AutoTableHookData) => {
                 // Custom drawn cell text for Item column
                 if (data.section === 'body' && data.column.index === 1) {
                     const item = quotation.items[data.row.index]
@@ -310,12 +369,12 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     }
                 }
             },
-            didDrawPage: (data: any) => {
+            didDrawPage: () => {
                 // Optionally add footer here
             }
         })
 
-        finalY = (doc as any).lastAutoTable.finalY + 10
+        finalY = (mutableDoc.lastAutoTable?.finalY ?? currentY) + 10
 
         // Subtotals
         const itemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice)), 0)
@@ -391,11 +450,124 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
             const termsText = [quotation.termsConditions, quotation.clientNote].filter(Boolean).join("\n\n")
             const formattedTerms = doc.splitTextToSize(termsText, 170)
             doc.text(formattedTerms, 20, termsY)
+            finalY = termsY + (formattedTerms.length * 4) + 12
         }
 
-        // Generate and save
-        doc.save(`Quotation_${quotation.quotationNumber || 'Draft'}.pdf`)
-        toast.success("PDF Downloaded successfully")
+        const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
+        if (includedAttachments.length > 0) {
+            let attachmentY = finalY
+            if (attachmentY > 235) {
+                doc.addPage()
+                attachmentY = 55
+            }
+
+            doc.setFillColor(248, 250, 252)
+            doc.rect(15, attachmentY - 5, 180, Math.max(18, includedAttachments.length * 7 + 12), 'F')
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(9)
+            doc.setTextColor(darkText[0], darkText[1], darkText[2])
+            doc.text("ATTACHMENT PACKAGE", 20, attachmentY + 2)
+
+            let lineY = attachmentY + 9
+            doc.setFont("helvetica", "normal")
+            doc.setFontSize(8.5)
+            doc.setTextColor(grayText[0], grayText[1], grayText[2])
+            includedAttachments.forEach((attachment, index) => {
+                doc.text(`${index + 1}. ${attachment.title} (${attachment.fileName})`, 20, lineY)
+                lineY += 6
+            })
+        }
+
+        const basePdfBytes = doc.output("arraybuffer")
+        const outputFilename = `Quotation_${sanitizeFilenamePart(quotation.quotationNumber)}.pdf`
+
+        if (includedAttachments.length === 0 || includedAttachments.every((attachment) => !attachment.fileUrl)) {
+            downloadBlob(new Blob([basePdfBytes], { type: "application/pdf" }), outputFilename)
+            toast.success("PDF quotation berhasil didownload")
+            return
+        }
+
+        const { PDFDocument } = await import("pdf-lib")
+        const mergedPdf = await PDFDocument.load(basePdfBytes)
+        const skippedAttachments: string[] = []
+        const A4_WIDTH = 595.28
+        const A4_HEIGHT = 841.89
+        const PAGE_MARGIN = 24
+        const TITLE_SPACE = 24
+
+        for (const attachment of includedAttachments) {
+            if (!attachment.fileUrl) {
+                skippedAttachments.push(`${attachment.title}: file URL tidak tersedia`)
+                continue
+            }
+
+            try {
+                const response = await fetch(attachment.fileUrl, { cache: "no-store" })
+                if (!response.ok) {
+                    skippedAttachments.push(`${attachment.title}: file tidak bisa diakses`)
+                    continue
+                }
+
+                const attachmentBytes = await response.arrayBuffer()
+                const detectedMimeType = inferMimeType(
+                    attachment.fileName,
+                    response.headers.get("content-type") || attachment.mimeType,
+                )
+
+                if (detectedMimeType.includes("pdf")) {
+                    const attachmentPdf = await PDFDocument.load(attachmentBytes)
+                    const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPdf.getPageIndices())
+                    copiedPages.forEach((page) => mergedPdf.addPage(page))
+                    continue
+                }
+
+                if (detectedMimeType.includes("png") || detectedMimeType.includes("jpeg") || detectedMimeType.includes("jpg")) {
+                    const image = detectedMimeType.includes("png")
+                        ? await mergedPdf.embedPng(attachmentBytes)
+                        : await mergedPdf.embedJpg(attachmentBytes)
+
+                    const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
+                    const availableWidth = A4_WIDTH - PAGE_MARGIN * 2
+                    const availableHeight = A4_HEIGHT - PAGE_MARGIN * 2 - TITLE_SPACE
+                    const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1)
+                    const imageWidth = image.width * scale
+                    const imageHeight = image.height * scale
+                    const x = (A4_WIDTH - imageWidth) / 2
+                    const y = PAGE_MARGIN + Math.max((availableHeight - imageHeight) / 2, 0)
+
+                    page.drawText(attachment.title || attachment.fileName, {
+                        x: PAGE_MARGIN,
+                        y: A4_HEIGHT - PAGE_MARGIN - 4,
+                        size: 12,
+                    })
+                    page.drawImage(image, {
+                        x,
+                        y,
+                        width: imageWidth,
+                        height: imageHeight,
+                    })
+                    continue
+                }
+
+                skippedAttachments.push(`${attachment.title}: format ${attachment.fileName.split(".").pop()?.toUpperCase() || "file"} belum didukung untuk merge`)
+            } catch (attachmentError) {
+                console.error(`Failed to merge attachment ${attachment.fileName}:`, attachmentError)
+                skippedAttachments.push(`${attachment.title}: gagal digabung`)
+            }
+        }
+
+        const mergedBytes = await mergedPdf.save()
+        const mergedBuffer = mergedBytes.buffer.slice(
+            mergedBytes.byteOffset,
+            mergedBytes.byteOffset + mergedBytes.byteLength,
+        ) as ArrayBuffer
+        downloadBlob(new Blob([mergedBuffer], { type: "application/pdf" }), outputFilename)
+
+        if (skippedAttachments.length > 0) {
+            toast.warning(`PDF quotation berhasil digabung. ${skippedAttachments.slice(0, 3).join("; ")}${skippedAttachments.length > 3 ? `; +${skippedAttachments.length - 3} lainnya` : ""}`)
+        } else {
+            toast.success("PDF quotation dan attachment berhasil digabung")
+        }
         
     } catch (error) {
         console.error("Failed to generate PDF:", error)

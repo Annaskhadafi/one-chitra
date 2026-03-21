@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
-import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus } from "@/app/actions/quotation"
+import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus, uploadQuotationCustomerPo } from "@/app/actions/quotation"
+import { uploadFile } from "@/app/actions/upload"
 import {
     Table,
     TableBody,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -36,7 +38,15 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download } from "lucide-react"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2 } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -59,7 +69,6 @@ import {
     flexRender,
     SortingState,
 } from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
 import * as XLSX from "xlsx"
 import { QuotationPdfPreview } from "./quotation-pdf-preview"
 
@@ -91,8 +100,33 @@ interface QuotationWithRelations {
     attn: string | null
     address: string | null
     discountType: string
+    customerPoNumber: string | null
+    customerPoDocument: string | null
     salesPerson: { id: string; name: string; email: string } | null
     createdByUser: { id: string; name: string; email: string } | null
+    relatedDeliveries: {
+        id: number
+        deliveryNumber: string | null
+        doSap: string | null
+        salesOrderId: number
+        scheduledDate: Date
+        deliveryDate: Date | null
+        status: string
+        deliveryType: string
+        driverName: string | null
+        vehicleNumber: string | null
+        warehouse: {
+            id: number
+            sloc: string | null
+            description: string | null
+        } | null
+        createdByUser: { id: string; name: string; email: string } | null
+        items: {
+            id: number
+            orderedQuantity: number
+            deliveredQuantity: number
+        }[]
+    }[]
     items: {
         id: number
         productId: number | null
@@ -185,6 +219,24 @@ const STATUS_LABELS: Record<string, string> = {
     converted: "Converted",
 }
 
+const DELIVERY_STATUS_LABELS: Record<string, string> = {
+    scheduled: "Scheduled",
+    ready: "Ready",
+    partial: "Partial",
+    in_transit: "In Transit",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+}
+
+const DELIVERY_STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
+    scheduled: "secondary",
+    ready: "warning",
+    partial: "warning",
+    in_transit: "default",
+    delivered: "success",
+    cancelled: "destructive",
+}
+
 const QUOTATION_TRANSITIONS = {
     draft: ["sent", "rejected", "expired"],
     sent: ["approved", "rejected", "expired"],
@@ -241,6 +293,23 @@ function calculateGrandTotal(quotation: QuotationWithRelations) {
 
 function formatDate(date: Date) {
     return new Date(date).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    })
+}
+
+function formatDateTime(value: Date | string | null | undefined) {
+    if (!value) {
+        return "-"
+    }
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        return "-"
+    }
+
+    return date.toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "short",
         year: "numeric",
@@ -393,6 +462,12 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [isDuplicating, setIsDuplicating] = useState<number | null>(null)
     const [isSearchFocused, setIsSearchFocused] = useState(false)
+    const [poDialogQuotation, setPoDialogQuotation] = useState<QuotationWithRelations | null>(null)
+    const [poNumber, setPoNumber] = useState("")
+    const [poFile, setPoFile] = useState<File | null>(null)
+    const [isUploadingPo, setIsUploadingPo] = useState(false)
+    const [deliveryDialogQuotation, setDeliveryDialogQuotation] = useState<QuotationWithRelations | null>(null)
+    const [expandedQuotationIds, setExpandedQuotationIds] = useState<number[]>([])
 
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
@@ -890,6 +965,74 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
     }
 
+    const closePoDialog = () => {
+        if (isUploadingPo) {
+            return
+        }
+
+        setPoDialogQuotation(null)
+        setPoNumber("")
+        setPoFile(null)
+    }
+
+    const handleUploadPoFromList = async () => {
+        if (!poDialogQuotation) {
+            return
+        }
+
+        if (!poNumber.trim()) {
+            toast.error("Nomor PO wajib diisi")
+            return
+        }
+
+        if (!poFile) {
+            toast.error("File PO wajib diupload")
+            return
+        }
+
+        setIsUploadingPo(true)
+
+        try {
+            const formData = new FormData()
+            formData.append("file", poFile)
+
+            const uploadResult = await uploadFile(formData)
+            if (!uploadResult.success || !uploadResult.url) {
+                throw new Error(uploadResult.error || "Upload PO gagal")
+            }
+
+            const result = await uploadQuotationCustomerPo({
+                quotationId: poDialogQuotation.id,
+                poNumber: poNumber.trim(),
+                fileUrl: uploadResult.url,
+                fileName: poFile.name,
+                mimeType: poFile.type || null,
+                fileSize: poFile.size,
+            })
+
+            if (!result.success) {
+                throw new Error(result.error || "PO gagal disimpan")
+            }
+
+            if ("autoConverted" in result && result.autoConverted) {
+                toast.success("PO tersimpan dan quotation otomatis dikonversi ke Sales Order")
+            } else if (result.salesOrderId) {
+                toast.success("PO berhasil diupdate dan tersinkron ke Sales Order")
+            } else {
+                toast.success("PO customer berhasil diupload")
+            }
+
+            setPoDialogQuotation(null)
+            setPoNumber("")
+            setPoFile(null)
+            await refetch()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Upload PO gagal")
+        } finally {
+            setIsUploadingPo(false)
+        }
+    }
+
     const sortedProductRows = useMemo(() => {
         return [...filteredProductRows].sort((left, right) => {
             const dateDiff = right.quotationDate.getTime() - left.quotationDate.getTime()
@@ -900,6 +1043,14 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             return left.productName.localeCompare(right.productName)
         })
     }, [filteredProductRows])
+
+    const toggleQuotationExpansion = (quotationId: number) => {
+        setExpandedQuotationIds((current) =>
+            current.includes(quotationId)
+                ? current.filter((id) => id !== quotationId)
+                : [...current, quotationId]
+        )
+    }
 
     const columns = useMemo<ColumnDef<QuotationWithRelations>[]>(() => [
         {
@@ -918,6 +1069,28 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     aria-label="Select row"
                 />
             ),
+            enableSorting: false,
+            enableHiding: false,
+        },
+        {
+            id: "expand",
+            header: "",
+            cell: ({ row }) => {
+                const isExpanded = expandedQuotationIds.includes(row.original.id)
+
+                return (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => toggleQuotationExpansion(row.original.id)}
+                        title={isExpanded ? "Collapse products" : "Expand products"}
+                    >
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </Button>
+                )
+            },
             enableSorting: false,
             enableHiding: false,
         },
@@ -1053,6 +1226,11 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             cell: ({ row }) => {
                 const isOwner = row.original.createdBy === currentUserId
                 const canDeleteRow = canDelete && isOwner
+                const canUploadPo = row.original.status !== "rejected"
+                const hasDeliveryContext = row.original.salesOrderId !== null || row.original.relatedDeliveries.length > 0
+                const uploadPoTitle = row.original.customerPoDocument
+                    ? "Update customer PO dan sinkronkan ke Sales Order"
+                    : "Upload customer PO dan auto convert ke Sales Order"
                 const deleteDisabledReason = !canDelete
                     ? "You do not have permission to delete quotations"
                     : "You can only delete quotations you created"
@@ -1069,6 +1247,54 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                             <Pencil className="h-3.5 w-3.5" />
                         </Button>
                     </Link>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-sky-600 hover:text-sky-700"
+                        title={canUploadPo ? uploadPoTitle : "Rejected quotation tidak bisa upload PO"}
+                        disabled={!canUploadPo}
+                        onClick={() => {
+                            setPoDialogQuotation(row.original)
+                            setPoNumber(row.original.customerPoNumber || "")
+                            setPoFile(null)
+                        }}
+                    >
+                        <FileUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-cyan-600 hover:text-cyan-700"
+                        title={hasDeliveryContext ? "Lihat delivery terkait quotation ini" : "Belum ada delivery terkait quotation ini"}
+                        disabled={!hasDeliveryContext}
+                        onClick={() => setDeliveryDialogQuotation(row.original)}
+                    >
+                        <Truck className="h-3.5 w-3.5" />
+                    </Button>
+                    {row.original.customerPoDocument && (
+                        <Link href={row.original.customerPoDocument} target="_blank">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-amber-600 hover:text-amber-700"
+                                title={row.original.customerPoNumber ? `Lihat file PO ${row.original.customerPoNumber}` : "Lihat file PO customer"}
+                            >
+                                <FileSearch className="h-3.5 w-3.5" />
+                            </Button>
+                        </Link>
+                    )}
+                    {row.original.salesOrderId && (
+                        <Link href={`/dashboard/sales-orders/${row.original.salesOrderId}/edit`}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
+                                title={`Buka Sales Order #${row.original.salesOrderId}`}
+                            >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                        </Link>
+                    )}
                     <Button
                         variant="ghost"
                         size="icon"
@@ -1151,7 +1377,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 </div >
             )},
         },
-    ], [refetch, isDuplicating, canEdit, canDelete, currentUserId, mounted])
+    ], [refetch, isDuplicating, canEdit, canDelete, currentUserId, mounted, expandedQuotationIds])
 
     const table = useReactTable({
         data: quotations,
@@ -1242,28 +1468,30 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         }
     }
 
-    // Virtualization
-    const parentRef = useRef<HTMLDivElement>(null)
     const { rows } = table.getRowModel()
+    const visibleQuotationIds = useMemo(
+        () => rows.map((row) => row.original.id),
+        [rows]
+    )
+    const isAllExpanded = visibleQuotationIds.length > 0 && visibleQuotationIds.every((id) => expandedQuotationIds.includes(id))
 
-    const rowVirtualizer = useVirtualizer({
-        count: rows.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 64,
-        overscan: 20,
-    })
+    const toggleAllExpanded = () => {
+        if (isAllExpanded) {
+            setExpandedQuotationIds((current) => current.filter((id) => !visibleQuotationIds.includes(id)))
+            return
+        }
 
-    const [before, after] = rowVirtualizer.getVirtualItems().length > 0
-        ? [
-            rowVirtualizer.getVirtualItems()[0].start,
-            rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end,
-        ]
-        : [0, 0]
+        setExpandedQuotationIds((current) => Array.from(new Set([...current, ...visibleQuotationIds])))
+    }
 
     // Use effect to handle filter changes correctly with TanStack table
     useEffect(() => {
         table.setGlobalFilter(globalFilter)
     }, [statusFilter, userFilter, monthFilter, yearFilter, customerFilter, globalFilter, table])
+
+    useEffect(() => {
+        setExpandedQuotationIds((current) => current.filter((id) => visibleQuotationIds.includes(id)))
+    }, [visibleQuotationIds])
 
     if (isLoading) {
         return (
@@ -1275,6 +1503,145 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
     return (
         <div className="space-y-6">
+            <Dialog open={Boolean(poDialogQuotation)} onOpenChange={(open) => !open && closePoDialog()}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Upload Customer PO</DialogTitle>
+                        <DialogDescription>
+                            Simpan PO customer langsung dari list quotation. Jika quotation belum punya Sales Order, sistem akan auto convert setelah PO masuk.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                            <p className="font-medium">{poDialogQuotation?.quotationNumber || (poDialogQuotation ? `QT-${poDialogQuotation.id}` : "-")}</p>
+                            <p className="text-muted-foreground">{poDialogQuotation?.customer.name || "-"}</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="quotation-list-po-number">Nomor PO Customer</Label>
+                            <Input
+                                id="quotation-list-po-number"
+                                value={poNumber}
+                                onChange={(event) => setPoNumber(event.target.value)}
+                                placeholder="Mis. PO-2026-0012"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="quotation-list-po-file">File PO</Label>
+                            <Input
+                                id="quotation-list-po-file"
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                                onChange={(event) => setPoFile(event.target.files?.[0] || null)}
+                            />
+                        </div>
+
+                        {(poDialogQuotation?.customerPoDocument || poDialogQuotation?.salesOrderId) && (
+                            <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                                {poDialogQuotation?.customerPoDocument && (
+                                    <Link href={poDialogQuotation.customerPoDocument} target="_blank" className="inline-flex items-center gap-2 font-medium underline underline-offset-4">
+                                        <FileSearch className="h-4 w-4" />
+                                        Lihat file PO yang sudah ada
+                                    </Link>
+                                )}
+                                {poDialogQuotation?.salesOrderId && (
+                                    <Link href={`/dashboard/sales-orders/${poDialogQuotation.salesOrderId}/edit`} className="inline-flex items-center gap-2 font-medium underline underline-offset-4">
+                                        <ExternalLink className="h-4 w-4" />
+                                        Buka Sales Order #{poDialogQuotation.salesOrderId}
+                                    </Link>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={closePoDialog} disabled={isUploadingPo}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleUploadPoFromList} disabled={isUploadingPo} className="gap-2">
+                            {isUploadingPo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+                            Upload PO & Auto Convert
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={Boolean(deliveryDialogQuotation)} onOpenChange={(open) => !open && setDeliveryDialogQuotation(null)}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>Delivery Terkait Quotation</DialogTitle>
+                        <DialogDescription>
+                            {deliveryDialogQuotation?.quotationNumber || (deliveryDialogQuotation ? `QT-${deliveryDialogQuotation.id}` : "-")} • {deliveryDialogQuotation?.customer.name || "-"}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {deliveryDialogQuotation && (
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap gap-2 text-xs">
+                                <Badge variant={statusVariants[deliveryDialogQuotation.status] || "secondary"}>
+                                    {STATUS_LABELS[deliveryDialogQuotation.status] || deliveryDialogQuotation.status}
+                                </Badge>
+                                {deliveryDialogQuotation.salesOrderId && (
+                                    <Badge variant="outline">SO #{deliveryDialogQuotation.salesOrderId}</Badge>
+                                )}
+                                <Badge variant="outline">Delivery {deliveryDialogQuotation.relatedDeliveries.length}</Badge>
+                            </div>
+
+                            {deliveryDialogQuotation.relatedDeliveries.length > 0 ? (
+                                <div className="space-y-3">
+                                    {deliveryDialogQuotation.relatedDeliveries.map((delivery) => {
+                                        const itemOrdered = delivery.items.reduce((sum, item) => sum + Number(item.orderedQuantity || 0), 0)
+                                        const itemDelivered = delivery.items.reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0)
+
+                                        return (
+                                            <div key={delivery.id} className="rounded-xl border p-4">
+                                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                    <div className="space-y-1">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-mono text-sm font-semibold text-primary">
+                                                                {delivery.deliveryNumber || `DO-${delivery.id}`}
+                                                            </span>
+                                                            <Badge variant={DELIVERY_STATUS_VARIANTS[delivery.status] || "secondary"}>
+                                                                {DELIVERY_STATUS_LABELS[delivery.status] || delivery.status}
+                                                            </Badge>
+                                                            <Badge variant="outline" className="capitalize">
+                                                                {delivery.deliveryType}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Jadwal {formatDateTime(delivery.scheduledDate)} • Terkirim {formatDateTime(delivery.deliveryDate)} • DO SAP {delivery.doSap || "-"}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Driver {delivery.driverName || "-"} • Kendaraan {delivery.vehicleNumber || "-"} • Warehouse {delivery.warehouse?.sloc || delivery.warehouse?.description || "-"}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <Badge variant="outline">Qty {itemDelivered}/{itemOrdered}</Badge>
+                                                        <Link href={`/dashboard/deliveries/${delivery.id}`}>
+                                                            <Button variant="outline" size="sm" className="gap-2">
+                                                                <Eye className="h-4 w-4" />
+                                                                Lihat Detail Delivery
+                                                            </Button>
+                                                        </Link>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                                    Belum ada delivery yang terelasi dengan quotation ini.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
             <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="analytics" className="border-none">
                     <AccordionTrigger className="flex items-center gap-2 rounded-xl border bg-card px-6 py-3 shadow-sm transition-all hover:bg-accent/40 hover:no-underline [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
@@ -1712,11 +2079,18 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         />
                     )}
 
+                    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+                        <div className="text-sm text-muted-foreground">
+                            Showing {filteredQuotations.length} of {quotations.length} quotations
+                        </div>
+                        <Button variant="outline" onClick={toggleAllExpanded} className="h-9 gap-2">
+                            {isAllExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                            {isAllExpanded ? "Collapse All Items" : "Expand All Items"}
+                        </Button>
+                    </div>
+
                     <div className="overflow-hidden rounded-lg border bg-card">
-                        <div
-                            ref={parentRef}
-                            className="relative h-[500px] overflow-auto scrollbar-thin scrollbar-thumb-accent"
-                        >
+                        <div className="relative h-[560px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                                     {table.getHeaderGroups().map((headerGroup) => (
@@ -1730,27 +2104,95 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                                     ))}
                                 </TableHeader>
                                 <TableBody>
-                                    {rowVirtualizer.getVirtualItems().length > 0 ? (
-                                        <>
-                                            <TableRow style={{ height: `${before}px` }} className="border-none">
-                                                <TableCell colSpan={columns.length} />
-                                            </TableRow>
-                                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                                const row = rows[virtualRow.index]
-                                                return (
+                                    {rows.length > 0 ? (
+                                        rows.map((row) => {
+                                            const quotation = row.original
+                                            const isExpanded = expandedQuotationIds.includes(quotation.id)
+
+                                            return (
+                                                [
                                                     <TableRow key={row.id} className="group transition-colors hover:bg-muted/50">
                                                         {row.getVisibleCells().map((cell) => (
                                                             <TableCell key={cell.id}>
                                                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                                             </TableCell>
                                                         ))}
-                                                    </TableRow>
-                                                )
-                                            })}
-                                            <TableRow style={{ height: `${after}px` }} className="border-none">
-                                                <TableCell colSpan={columns.length} />
-                                            </TableRow>
-                                        </>
+                                                    </TableRow>,
+                                                    isExpanded ? (
+                                                        <TableRow key={`${row.id}-items`} className="bg-muted/20">
+                                                            <TableCell colSpan={columns.length} className="p-0">
+                                                                <div className="space-y-4 p-4">
+                                                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                                        <div>
+                                                                            <p className="font-medium">Product quotation untuk {quotation.quotationNumber || `QT-${quotation.id}`}</p>
+                                                                            <p className="text-sm text-muted-foreground">
+                                                                                {quotation.customer.name} • {quotation.items.length} item
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="flex flex-wrap gap-2 text-xs">
+                                                                            <Badge variant="outline">Items {quotation.items.length}</Badge>
+                                                                            <Badge variant="outline">Grand Total {formatCurrency(calculateGrandTotal(quotation))}</Badge>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="overflow-x-auto rounded-lg border bg-background">
+                                                                        <Table>
+                                                                            <TableHeader>
+                                                                                <TableRow className="bg-muted/40">
+                                                                                    <TableHead className="w-[60px]">No</TableHead>
+                                                                                    <TableHead className="min-w-[140px]">Material No</TableHead>
+                                                                                    <TableHead className="min-w-[240px]">Product</TableHead>
+                                                                                    <TableHead className="min-w-[220px]">Description</TableHead>
+                                                                                    <TableHead className="text-right">Qty</TableHead>
+                                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                                    <TableHead className="text-right">Discount</TableHead>
+                                                                                    <TableHead className="text-right">Tax</TableHead>
+                                                                                    <TableHead className="text-right">Line Total</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {quotation.items.map((item, index) => {
+                                                                                    const productName =
+                                                                                        item.product?.materialDescription ||
+                                                                                        item.description ||
+                                                                                        item.longDescription ||
+                                                                                        "Unnamed product"
+                                                                                    const materialNumber =
+                                                                                        item.product?.materialNumber ||
+                                                                                        item.product?.materialNumberCk ||
+                                                                                        "-"
+                                                                                    const lineTotal = item.quantity * Number(item.unitPrice || 0) - Number(item.discount || 0) + Number(item.tax || 0)
+
+                                                                                    return (
+                                                                                        <TableRow key={item.id}>
+                                                                                            <TableCell>{index + 1}</TableCell>
+                                                                                            <TableCell className="font-mono text-xs">{materialNumber}</TableCell>
+                                                                                            <TableCell>
+                                                                                                <div className="space-y-1">
+                                                                                                    <p className="font-medium">{productName}</p>
+                                                                                                </div>
+                                                                                            </TableCell>
+                                                                                            <TableCell className="text-sm text-muted-foreground">
+                                                                                                {item.longDescription || item.description || "-"}
+                                                                                            </TableCell>
+                                                                                            <TableCell className="text-right">{item.quantity}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.unitPrice || 0))}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.discount || 0))}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(Number(item.tax || 0))}</TableCell>
+                                                                                            <TableCell className="text-right font-medium">{formatCurrency(lineTotal)}</TableCell>
+                                                                                        </TableRow>
+                                                                                    )
+                                                                                })}
+                                                                            </TableBody>
+                                                                        </Table>
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ) : null,
+                                                ]
+                                            )
+                                        })
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={columns.length} className="h-32 text-center">
@@ -1764,10 +2206,6 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                                 </TableBody>
                             </Table>
                         </div>
-                    </div>
-
-                    <div className="text-sm text-muted-foreground">
-                        Showing {filteredQuotations.length} of {quotations.length} quotations
                     </div>
                 </TabsContent>
 
@@ -2014,7 +2452,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
 
             {previewQuotation && (
                 <QuotationPdfPreview
-                    quotation={previewQuotation as Parameters<typeof QuotationPdfPreview>[0]['quotation']}
+                    quotation={previewQuotation as unknown as Parameters<typeof QuotationPdfPreview>[0]["quotation"]}
                     open={isPreviewOpen}
                     onClose={() => setIsPreviewOpen(false)}
                 />

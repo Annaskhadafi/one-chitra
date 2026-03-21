@@ -35,7 +35,16 @@ export {
 export { sapSyncLogs } from "./sap-sync";
 export * from "./sap";
 export { rfidScans } from "./rfid-scans";
-export { quotations, quotationItems, quotationsRelations, quotationItemsRelations } from "./quotations";
+export {
+    quotations,
+    quotationItems,
+    quotationAttachments,
+    quotationRevisions,
+    quotationsRelations,
+    quotationItemsRelations,
+    quotationAttachmentsRelations,
+    quotationRevisionsRelations,
+} from "./quotations";
 export { deliveries, deliveryItems, deliveriesRelations, deliveryItemsRelations } from "./deliveries";
 export { billingRecords } from "./billing";
 export { auditLogs } from "./audit-logs";

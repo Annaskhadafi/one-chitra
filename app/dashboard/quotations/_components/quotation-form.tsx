@@ -132,7 +132,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             ? new Date(initialData.validUntil).toISOString().split("T")[0]
             : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
     )
-    const [subject] = useState(initialData?.subject || "")
+    const [subject, setSubject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
     const [attn, setAttn] = useState(initialData?.attn || "")
     const [address, setAddress] = useState(initialData?.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612")
@@ -144,11 +144,11 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
     const [discountType, setDiscountType] = useState<"fixed" | "percent">(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
-    const [paymentTerms] = useState(initialData?.paymentTerms || "")
+    const [paymentTerms, setPaymentTerms] = useState(initialData?.paymentTerms || "")
     const [termsConditions, setTermsConditions] = useState(
         initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 – 000 – 00 – 17416"
     )
-    const [notes] = useState(initialData?.notes || "")
+    const [notes, setNotes] = useState(initialData?.notes || "")
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
@@ -198,7 +198,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             const bundleItems = await getBundleItemsForExpansion(product.id)
             if (bundleItems && bundleItems.length > 0) {
                 setItems(prev => {
-                    let nextItems = [...prev]
+                    const nextItems = [...prev]
                     bundleItems.forEach(bi => {
                         const childProduct = bi.childProduct as Product
                         const costSap = Number(childProduct.costSap || 0)
@@ -732,6 +732,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             />
                         </div>
 
+                        <div className="space-y-2">
+                            <Label className="font-semibold">Subject</Label>
+                            <Input
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                placeholder="Mis. Quotation pengadaan mechanical seal"
+                            />
+                        </div>
+
                         {/* From (Sales Person) & Discount Type */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -1148,6 +1157,24 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         rows={4}
                         value={clientNote}
                         onChange={(e) => setClientNote(e.target.value)}
+                        className="resize-none"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Payment Terms</Label>
+                    <Textarea
+                        rows={3}
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        className="resize-none"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Internal Notes</Label>
+                    <Textarea
+                        rows={3}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
                         className="resize-none"
                     />
                 </div>

@@ -17,6 +17,7 @@ type User = typeof user.$inferSelect
 interface QuotationPdfData {
     id: number
     quotationNumber: string | null
+    currentRevision: number
     customerId: number
     quotationDate: Date
     validUntil: Date | null
@@ -50,6 +51,15 @@ interface QuotationPdfData {
         discount: string
         tax: string
         product: Product
+    }[]
+    attachments?: {
+        id: number
+        title: string
+        fileName: string
+        fileUrl: string
+        mimeType: string | null
+        kind: string
+        includeInPdf: boolean
     }[]
 }
 
@@ -226,6 +236,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 const { generateQuotationPdf } = await import("./quotation-pdf-generator")
                                 await generateQuotationPdf({
                                     quotationNumber: quotation.quotationNumber,
+                                    currentRevision: quotation.currentRevision,
                                     quotationDate: quotation.quotationDate,
                                     validUntil: quotation.validUntil,
                                     salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
@@ -245,6 +256,14 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                         longDescription: item.longDescription,
                                         quantity: item.quantity,
                                         unitPrice: item.unitPrice,
+                                    })),
+                                    attachments: quotation.attachments?.map((attachment) => ({
+                                        title: attachment.title,
+                                        fileName: attachment.fileName,
+                                        fileUrl: attachment.fileUrl,
+                                        mimeType: attachment.mimeType,
+                                        kind: attachment.kind,
+                                        includeInPdf: attachment.includeInPdf,
                                     })),
                                 })
                             }} className="w-full gap-2 sm:w-auto" variant="outline">
@@ -280,7 +299,9 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             </div>
                             <div className="doc-title-container" style={{ textAlign: 'right' }}>
                                 <div className="doc-title" style={{ fontSize: '24pt', fontWeight: 900, color: '#2563eb', letterSpacing: '-0.03em', textTransform: 'uppercase' }}>QUOTATION</div>
-                                <div className="doc-number" style={{ fontSize: '11pt', color: '#64748b', fontWeight: 600 }}>{quotation.quotationNumber}</div>
+                                <div className="doc-number" style={{ fontSize: '11pt', color: '#64748b', fontWeight: 600 }}>
+                                    {quotation.quotationNumber} | Rev.{quotation.currentRevision}
+                                </div>
                             </div>
                         </div>
 
@@ -415,6 +436,17 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 </div>
                             </div>
                         )}
+
+                        {quotation.attachments?.filter((attachment) => attachment.includeInPdf).length ? (
+                            <div className="terms-section" style={{ marginTop: 20, width: '100%', padding: '15px 20px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                <div className="terms-label" style={{ fontWeight: 800, marginBottom: 8, color: '#0f172a', fontSize: '8.5pt', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Attachment Package:</div>
+                                <div className="terms-content" style={{ fontSize: '9pt', color: '#475569', lineHeight: 1.6 }}>
+                                    {quotation.attachments.filter((attachment) => attachment.includeInPdf).map((attachment, index) => (
+                                        <div key={attachment.id}>{index + 1}. {attachment.title} ({attachment.fileName})</div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
 
                         <div className="bank-info" style={{ marginTop: 30, paddingBottom: 20 }}>
                         </div>
