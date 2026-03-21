@@ -1814,28 +1814,14 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 payload.quotationId,
                 userId,
                 validationSummary.status === "full_match"
-                    ? "Customer PO OCR validated as full match"
+                    ? "Customer PO OCR validated and ready for Sales Order review"
                     : validationSummary.status === "partial_match"
-                        ? "Customer PO OCR detected partial match and requires review"
+                        ? "Customer PO OCR detected partial match and requires manual validation"
                         : validationSummary.status === "mismatch"
-                            ? "Customer PO OCR detected mismatch and blocked auto-convert"
+                            ? "Customer PO OCR detected mismatch and requires manual validation"
                             : "Customer PO OCR validation failed and requires manual review",
             )
         })
-
-        if (validationSummary.status !== "full_match") {
-            revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
-            revalidatePath("/dashboard/quotations")
-            return {
-                success: true as const,
-                validationStatus: validationSummary.status,
-                validationSummary,
-                ocrSessionId,
-                requiresManualReview: true,
-                salesOrderId: uploadResult.salesOrderId,
-                customerPoNumber: resolvedPoNumber,
-            }
-        }
 
         if (uploadResult.salesOrderId) {
             revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
@@ -1849,32 +1835,20 @@ export async function uploadQuotationCustomerPo(input: z.infer<typeof quotationC
                 validationStatus: validationSummary.status,
                 validationSummary,
                 ocrSessionId,
+                requiresManualReview: validationSummary.status !== "full_match",
                 customerPoNumber: resolvedPoNumber,
             }
         }
 
-        const convertResult = await convertToSalesOrder(payload.quotationId, {
-            triggeredBy: userId,
-            forceAuto: true,
-            customerPoNumber: resolvedPoNumber,
-            poDocument: payload.fileUrl,
-            poReceivedAt,
-        })
-
-        if (!convertResult.success) {
-            return {
-                success: false as const,
-                error: `PO uploaded, but automatic conversion failed: ${convertResult.error}`,
-            }
-        }
+        revalidatePath(`/dashboard/quotations/${payload.quotationId}`)
+        revalidatePath("/dashboard/quotations")
 
         return {
             success: true as const,
-            salesOrderId: convertResult.salesOrderId,
-            autoConverted: true,
             validationStatus: validationSummary.status,
             validationSummary,
             ocrSessionId,
+            requiresManualReview: validationSummary.status !== "full_match",
             customerPoNumber: resolvedPoNumber,
         }
     } catch (error) {
@@ -1907,7 +1881,7 @@ export async function finalizeQuotationOcrSalesOrderLink(input: {
                 salesOrderId: input.salesOrderId,
                 triggeredBy: userId,
                 sourceType: input.ocrSessionId ? "quotation_po_ocr" : "quotation_po_manual",
-                markAsConverted: existingQuotation?.poValidationStatus === "full_match",
+                markAsConverted: true,
             })
 
             if (!linked.success) {
@@ -1922,6 +1896,16 @@ export async function finalizeQuotationOcrSalesOrderLink(input: {
                     updatedAt: new Date(),
                 })
                 .where(eq(quotations.id, input.quotationId))
+
+            if (input.ocrSessionId) {
+                await tx.update(ocrPoSessions)
+                    .set({
+                        salesOrderId: input.salesOrderId,
+                        status: "validated",
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(ocrPoSessions.id, input.ocrSessionId))
+            }
 
             return { success: true as const }
         })

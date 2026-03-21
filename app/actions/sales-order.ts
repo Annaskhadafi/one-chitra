@@ -108,6 +108,28 @@ export async function getSalesOrders() {
             orderBy: [desc(salesOrders.createdAt)],
         })
 
+    const orderIds = orders.map((order) => order.id)
+    const relatedDeliveries = orderIds.length > 0
+        ? await db.query.deliveries.findMany({
+            where: inArray(deliveries.salesOrderId, orderIds),
+            columns: {
+                id: true,
+                salesOrderId: true,
+                status: true,
+                deliveryNumber: true,
+                createdAt: true,
+            },
+            orderBy: [desc(deliveries.createdAt)],
+        })
+        : []
+
+    const deliveryMap = new Map<number, typeof relatedDeliveries>()
+    for (const delivery of relatedDeliveries) {
+        const current = deliveryMap.get(delivery.salesOrderId) ?? []
+        current.push(delivery)
+        deliveryMap.set(delivery.salesOrderId, current)
+    }
+
     // Fetch items with products separately to avoid nested lateral join issues
     const ordersWithItems = await Promise.all(
         orders.map(async (order) => {
@@ -117,10 +139,49 @@ export async function getSalesOrders() {
                     product: true,
                 },
             })
+
+            const orderDeliveries = deliveryMap.get(order.id) ?? []
+            const activeDeliveries = orderDeliveries.filter((delivery) => delivery.status !== "cancelled")
+            const deliveredQuantities = new Map<number, number>()
+
+            if (items.length > 0) {
+                const salesOrderItemIds = items.map((item) => item.id)
+                const deliveredRows = await db.select({
+                    salesOrderItemId: deliveryItems.salesOrderItemId,
+                    totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+                })
+                    .from(deliveryItems)
+                    .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
+                    .where(and(
+                        inArray(deliveryItems.salesOrderItemId, salesOrderItemIds),
+                        sql`${deliveries.status} != 'cancelled'`,
+                    ))
+                    .groupBy(deliveryItems.salesOrderItemId)
+
+                for (const row of deliveredRows) {
+                    if (row.salesOrderItemId != null) {
+                        deliveredQuantities.set(row.salesOrderItemId, Number(row.totalDelivered))
+                    }
+                }
+            }
+
+            const hasOutstandingDeliveryItems = items.some((item) => {
+                const delivered = deliveredQuantities.get(item.id) ?? 0
+                return item.quantity - delivered > 0
+            })
+
             return {
                 ...order,
                 salesPerson: normalizeSalesPerson(order),
                 items,
+                deliverySummary: {
+                    totalCount: orderDeliveries.length,
+                    activeCount: activeDeliveries.length,
+                    cancelledCount: orderDeliveries.filter((delivery) => delivery.status === "cancelled").length,
+                    latestStatus: orderDeliveries[0]?.status ?? null,
+                    latestDeliveryNumber: orderDeliveries[0]?.deliveryNumber ?? null,
+                    hasOutstandingDeliveryItems,
+                },
             }
         })
     )

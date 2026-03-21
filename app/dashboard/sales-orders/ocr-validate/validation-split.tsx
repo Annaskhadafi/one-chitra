@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils"
 import { SalesOrderForm } from "../_components/sales-order-form"
 import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import type { CkMasterPriceReference } from "@/lib/ck-master-price"
+import type { QuotationPoValidationSummary } from "@/db/schema/quotations"
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 type ExtractedItem = {
@@ -68,6 +69,37 @@ type SessionData = {
     extractedData: ExtractedData | null
     mappedData: MappedData | null
     status: string
+}
+
+type QuotationValidationContext = {
+    id: number
+    quotationNumber: string | null
+    customerId: number
+    salesPersonId: string | null
+    createdBy: string
+    status: string
+    currentRevision: number
+    poValidationStatus: string | null
+    poValidationSummary: QuotationPoValidationSummary | null
+    customer: {
+        name: string
+        customerCode: string | null
+    }
+    createdByUser: {
+        id: string
+        name: string | null
+        email: string | null
+    } | null
+    items: Array<{
+        id: number
+        productId: number | null
+        description: string | null
+        quantity: number
+        unitPrice: string
+        discount: string
+        tax: string
+        product: Product | null
+    }>
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────── */
@@ -217,6 +249,7 @@ function ProductPickerCell({
 /* ─── Main Component ─────────────────────────────────────────────── */
 export default function ValidationSplit(props: {
     session: SessionData | null
+    quotation: QuotationValidationContext | null
     quotationId: number | null
     customers: Customer[]
     products: Product[]
@@ -224,12 +257,12 @@ export default function ValidationSplit(props: {
     users: Pick<User, "id" | "name" | "email" | "role">[]
     ckMasterPrices: CkMasterPriceReference[]
 }) {
-    const { session, quotationId, customers, products, warehouses, users, ckMasterPrices } = props
+    const { session, quotation, quotationId, customers, products, warehouses, users, ckMasterPrices } = props
     const extracted = session?.extractedData
     const mapped = session?.mappedData
 
     /* Customer picker state */
-    const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(mapped?.customerId ?? null)
+    const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(quotation?.customerId ?? mapped?.customerId ?? null)
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
 
     /* Product overrides: index → productId (manual override) */
@@ -245,6 +278,11 @@ export default function ValidationSplit(props: {
         () => customers.find(c => c.id === selectedCustomerId) ?? null,
         [customers, selectedCustomerId]
     )
+    const quotationPicUser = useMemo(
+        () => users.find((user) => user.id === quotation?.createdBy) ?? users.find((user) => user.id === quotation?.salesPersonId) ?? null,
+        [quotation?.createdBy, quotation?.salesPersonId, users]
+    )
+    const preferredSalesPersonId = quotationPicUser?.id ?? quotation?.createdByUser?.id ?? quotation?.createdBy ?? quotation?.salesPersonId ?? null
     const suggestions = useMemo(() => mapped?.customerSuggestions ?? [], [mapped?.customerSuggestions])
 
     const formatCurrency = (value: number) =>
@@ -269,6 +307,7 @@ export default function ValidationSplit(props: {
         if (!extracted) return undefined
 
         const resolvedCustomerId = selectedCustomerId
+            ?? quotation?.customerId
             ?? mapped?.customerId
             ?? customers.find(c => c.customerCode === extracted.customerCode)?.id
             ?? customers.find(c => c.name?.toLowerCase() === (extracted.customerName || "").toLowerCase())?.id
@@ -303,9 +342,9 @@ export default function ValidationSplit(props: {
         return {
             id: 0,
             invoiceNumber: null,
-            customerPo: extracted.documentNumber || mapped?.documentNumber || null,
+            customerPo: extracted.documentNumber || mapped?.documentNumber || quotation?.poValidationSummary?.documentNumber || null,
             customerId: resolvedCustomerId || customers[0]?.id || 0,
-            salesPersonId: null,
+            salesPersonId: preferredSalesPersonId,
             warehouseId: warehouses[0]?.id || null,
             salesDate: (() => {
                 const dateStr = extracted.documentDate || mapped?.documentDate || ""
@@ -324,7 +363,7 @@ export default function ValidationSplit(props: {
             shipping: String(0),
             items,
         }
-    }, [extracted, mapped, customers, products, warehouses, session, selectedCustomerId, productOverrides])
+    }, [customers, extracted, mapped, preferredSalesPersonId, products, productOverrides, quotation, selectedCustomerId, session, warehouses])
 
     /* Copy all OCR data */
     const ocrCopyText = useMemo(() => {
@@ -351,6 +390,15 @@ export default function ValidationSplit(props: {
             return !productOverrides[i] && (!m?.matchedProductId || m.matchConfidence < 0.5)
         }).length
     }, [extracted?.items, mapped?.items, productOverrides])
+    const quotationGrandTotal = useMemo(() => {
+        if (!quotation?.items?.length) return 0
+        return quotation.items.reduce((sum, item) => {
+            return sum + (item.quantity * Number(item.unitPrice || 0) - Number(item.discount || 0) + Number(item.tax || 0))
+        }, 0)
+    }, [quotation?.items])
+    const comparisonSummary = quotation?.poValidationSummary ?? null
+    const comparisonRows = comparisonSummary?.comparisons ?? []
+    const unmatchedQuotationItems = comparisonSummary?.unmatchedQuotationItems ?? []
 
     if (!session) {
         return (
@@ -576,6 +624,173 @@ export default function ValidationSplit(props: {
                                     </div>
                                 </div>
 
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {quotation && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <CardTitle className="text-lg">Komparasi Dengan Quotation</CardTitle>
+                                    {comparisonSummary?.status ? (
+                                        <Badge variant={comparisonSummary.status === "full_match" ? "default" : comparisonSummary.status === "partial_match" ? "secondary" : "destructive"}>
+                                            {comparisonSummary.status === "full_match"
+                                                ? "Full Match"
+                                                : comparisonSummary.status === "partial_match"
+                                                    ? "Partial Match"
+                                                    : comparisonSummary.status === "mismatch"
+                                                        ? "Mismatch"
+                                                        : "OCR Failed"}
+                                        </Badge>
+                                    ) : null}
+                                </div>
+                            </CardHeader>
+                            <CardContent className="space-y-5">
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-lg border p-3">
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Quotation</p>
+                                        <p className="mt-1 font-semibold">{quotation.quotationNumber || `QT-${quotation.id}`}</p>
+                                        <p className="text-xs text-muted-foreground">Rev.{quotation.currentRevision} • {quotation.status}</p>
+                                    </div>
+                                    <div className="rounded-lg border p-3">
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
+                                        <p className="mt-1 font-semibold">{quotation.customer.name}</p>
+                                        <p className="text-xs text-muted-foreground">{quotation.customer.customerCode || "-"}</p>
+                                    </div>
+                                    <div className="rounded-lg border p-3">
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">PIC Sales</p>
+                                        <p className="mt-1 font-semibold">{quotationPicUser?.name || quotation.createdByUser?.name || "-"}</p>
+                                        <p className="text-xs text-muted-foreground">Akan diprefill ke form SO</p>
+                                    </div>
+                                    <div className="rounded-lg border p-3">
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Nilai Quotation</p>
+                                        <p className="mt-1 font-semibold">{formatCurrency(quotationGrandTotal)}</p>
+                                        <p className="text-xs text-muted-foreground">{quotation.items.length} item quotation</p>
+                                    </div>
+                                </div>
+
+                                {comparisonSummary?.reasons?.length ? (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                        <p className="font-medium">Poin yang perlu divalidasi user</p>
+                                        <ul className="mt-2 space-y-1">
+                                            {comparisonSummary.reasons.map((reason, index) => (
+                                                <li key={`${reason}-${index}`}>• {reason}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                                        PO customer cocok dengan quotation. User tetap bisa review sebelum membuat Sales Order.
+                                    </div>
+                                )}
+
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                    <div className="flex items-start gap-2">
+                                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Pastikan Book Warehouse sesuai sebelum create Sales Order</p>
+                                            <p>
+                                                Sales Order hasil OCR quotation akan membooking stok ke warehouse yang dipilih di form.
+                                                Sebelum lanjut, pastikan warehouse tersebut memang sesuai dengan kebutuhan order dan rencana delivery.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {comparisonRows.length > 0 ? (
+                                    <div className="rounded-md border overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/40">
+                                                    <TableHead className="min-w-[120px]">Status</TableHead>
+                                                    <TableHead className="min-w-[220px]">Item PO OCR</TableHead>
+                                                    <TableHead className="min-w-[220px]">Item Quotation</TableHead>
+                                                    <TableHead className="text-right">Qty</TableHead>
+                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                    <TableHead className="min-w-[180px]">Catatan</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comparisonRows.map((row, index) => (
+                                                    <TableRow key={`${row.key}-${index}`}>
+                                                        <TableCell>
+                                                            <Badge variant={row.status === "matched" ? "default" : row.status === "partial_qty" ? "secondary" : "destructive"}>
+                                                                {row.status === "matched"
+                                                                    ? "Matched"
+                                                                    : row.status === "partial_qty"
+                                                                        ? "Partial Qty"
+                                                                        : row.status === "price_changed"
+                                                                            ? "Price Changed"
+                                                                            : row.status === "qty_exceeds"
+                                                                                ? "Qty Exceeds"
+                                                                                : "Unmatched OCR"}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="space-y-1">
+                                                                <p className="font-medium">{row.ocrName}</p>
+                                                                <p className="text-xs text-muted-foreground">{row.ocrCode || "-"}</p>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="space-y-1">
+                                                                <p className="font-medium">{row.quotationDescription || "-"}</p>
+                                                                <p className="text-xs text-muted-foreground">{row.quotationMaterialNumber || "-"}</p>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="space-y-1">
+                                                                <p>PO {row.ocrQuantity}</p>
+                                                                <p className="text-xs text-muted-foreground">QT {row.quotationQuantity ?? "-"}</p>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="space-y-1">
+                                                                <p>{formatCurrency(Number(row.ocrUnitPrice || 0))}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    QT {row.quotationUnitPrice ? formatCurrency(Number(row.quotationUnitPrice)) : "-"}
+                                                                </p>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">
+                                                            {row.status === "matched"
+                                                                ? "Siap divalidasi"
+                                                                : row.status === "partial_qty"
+                                                                    ? `PO lebih kecil ${Math.abs(row.quantityDelta || 0)}`
+                                                                    : row.status === "price_changed"
+                                                                        ? `${row.priceDeltaPercent != null ? `${row.priceDeltaPercent}%` : "Harga"} berbeda`
+                                                                        : row.status === "qty_exceeds"
+                                                                            ? `PO lebih besar ${row.quantityDelta || 0}`
+                                                                            : "Item PO belum ditemukan di quotation"}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                {unmatchedQuotationItems.map((item) => (
+                                                    <TableRow key={`quotation-only-${item.quotationItemId}`}>
+                                                        <TableCell>
+                                                            <Badge variant="secondary">Quotation Only</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground">-</TableCell>
+                                                        <TableCell>
+                                                            <div className="space-y-1">
+                                                                <p className="font-medium">{item.description || "-"}</p>
+                                                                <p className="text-xs text-muted-foreground">{item.materialNumber || "-"}</p>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">{item.quantity}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(Number(item.unitPrice || 0))}</TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">Item quotation ini tidak ada di PO customer</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                        Belum ada hasil komparasi otomatis. User tetap bisa review OCR dan quotation sebelum membuat Sales Order.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     )}

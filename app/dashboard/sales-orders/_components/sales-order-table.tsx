@@ -48,7 +48,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal, Printer } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, ShoppingCart, CheckCircle, Clock, User, Download, FileText, ChevronUp, ChevronDown, BarChart3, RefreshCcw, MoreHorizontal, Printer, Truck } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -419,6 +419,21 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             header: () => "Actions",
             cell: ({ row }) => {
                 const order = row.original
+                const deliverySummary = order.deliverySummary
+                const hasActiveDelivery = (deliverySummary?.activeCount ?? 0) > 0
+                const hasCancelledDeliveryOnly = (deliverySummary?.totalCount ?? 0) > 0 && !hasActiveDelivery
+                const canCreateDelivery =
+                    order.status === "confirmed" &&
+                    (deliverySummary?.hasOutstandingDeliveryItems ?? true)
+                const deliveryTitle = hasActiveDelivery
+                    ? `SO ini sudah punya ${deliverySummary?.activeCount ?? 0} delivery aktif${deliverySummary?.latestDeliveryNumber ? ` • terakhir ${deliverySummary.latestDeliveryNumber}` : ""}`
+                    : hasCancelledDeliveryOnly
+                        ? "SO ini pernah punya delivery, tetapi semuanya dibatalkan"
+                        : canCreateDelivery
+                            ? "Belum ada delivery. Klik untuk buat Delivery Order"
+                            : order.status !== "confirmed"
+                                ? "Sales Order harus berstatus confirmed sebelum dibuat delivery"
+                                : "Semua item pada Sales Order ini sudah habis terkirim"
                 return (
                     <div className="flex justify-start gap-1">
                         <Button
@@ -435,6 +450,38 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                         >
                             <FileText className="h-4 w-4" />
                         </Button>
+                        {canCreateDelivery ? (
+                            <Link href={`/dashboard/deliveries/create?so=${order.id}`}>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className={cn(
+                                        "h-8 w-8 p-0",
+                                        hasActiveDelivery
+                                            ? "text-emerald-600 hover:text-emerald-700"
+                                            : hasCancelledDeliveryOnly
+                                                ? "text-amber-600 hover:text-amber-700"
+                                                : "text-cyan-600 hover:text-cyan-700"
+                                    )}
+                                    title={deliveryTitle}
+                                >
+                                    <Truck className="h-4 w-4" />
+                                </Button>
+                            </Link>
+                        ) : (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className={cn(
+                                    "h-8 w-8 p-0",
+                                    hasCancelledDeliveryOnly ? "text-amber-600" : "text-muted-foreground"
+                                )}
+                                title={deliveryTitle}
+                                disabled
+                            >
+                                <Truck className="h-4 w-4" />
+                            </Button>
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -475,6 +522,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                     <Printer className="mr-2 h-4 w-4" />
                                     Cetak Proforma Invoice
                                 </DropdownMenuItem>
+                                {canCreateDelivery && (
+                                    <Link href={`/dashboard/deliveries/create?so=${order.id}`}>
+                                        <DropdownMenuItem>
+                                            <Truck className="mr-2 h-4 w-4" />
+                                            {hasActiveDelivery ? "Tambah Delivery Order" : "Jadikan Delivery Order"}
+                                        </DropdownMenuItem>
+                                    </Link>
+                                )}
                                 {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
                                     <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
                                         <DropdownMenuItem>

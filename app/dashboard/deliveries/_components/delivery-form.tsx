@@ -47,7 +47,6 @@ import {
     CardTitle,
     CardDescription,
 } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     Table,
     TableBody,
@@ -103,6 +102,8 @@ interface DeliveryFormItem {
     deliveredQuantity: number
     serialNumbers: string[]
 }
+
+type StockListItem = Awaited<ReturnType<typeof getStocks>>[number]
 
 interface StockResult {
     productId: number
@@ -363,7 +364,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
 
     // Stock view dialog
     const [stockViewOpen, setStockViewOpen] = useState(false)
-    const [allStocks, setAllStocks] = useState<any[]>([])
+    const [allStocks, setAllStocks] = useState<StockListItem[]>([])
     const [loadingStocks, setLoadingStocks] = useState(false)
     const [stockFilter, setStockFilter] = useState("")
     const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false)
@@ -440,7 +441,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         }
 
         setDraftHydrated(true)
-    }, [isEdit])
+    }, [defaultSalesOrderId, isEdit])
 
     useEffect(() => {
         if (isEdit || !draftHydrated || generatedDeliveryNumber) {
@@ -621,6 +622,34 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             setDeliveryType(hasPartialItems ? "partial" : "full")
         }
     }, [salesOrders])
+
+    useEffect(() => {
+        if (isEdit || !draftHydrated || !defaultSalesOrderId || !defaultSO) {
+            return
+        }
+
+        const shouldHydrateFromDefaultSo =
+            salesOrderId !== defaultSalesOrderId ||
+            items.length === 0 ||
+            !warehouseId ||
+            !shippingAddress.trim()
+
+        if (!shouldHydrateFromDefaultSo) {
+            return
+        }
+
+        handleSOChange(defaultSalesOrderId)
+    }, [
+        defaultSO,
+        defaultSalesOrderId,
+        draftHydrated,
+        handleSOChange,
+        isEdit,
+        items.length,
+        salesOrderId,
+        shippingAddress,
+        warehouseId,
+    ])
 
     // Update item qty
     const updateItemQty = useCallback((index: number, qty: number) => {

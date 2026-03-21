@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
@@ -58,7 +59,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Area, AreaChart, BarChart, Bar, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSession } from "@/lib/auth-client"
 import {
     useReactTable,
@@ -418,6 +419,8 @@ function downloadExcelFile(rows: Record<string, string | number>[], filename: st
 }
 
 export function QuotationTable({ data: initialData }: QuotationTableProps) {
+    const queryClient = useQueryClient()
+    const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id
 
@@ -432,10 +435,80 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             return result as QuotationWithRelations[]
         },
         initialData,
-        staleTime: 60 * 1000,
+        initialDataUpdatedAt: 0,
+        staleTime: 0,
+        refetchOnMount: true,
+        refetchOnWindowFocus: true,
         refetchInterval: 15_000,
         refetchIntervalInBackground: true,
     })
+    const refreshToken = searchParams.get("refresh")
+    const focusId = useMemo(() => {
+        const rawId = searchParams.get("focusId")
+        if (!rawId) return null
+
+        const parsedId = Number.parseInt(rawId, 10)
+        return Number.isFinite(parsedId) ? parsedId : null
+    }, [searchParams])
+
+    useEffect(() => {
+        const queryState = queryClient.getQueryState<QuotationWithRelations[]>(["quotations"])
+
+        if ((queryState?.dataUpdatedAt ?? 0) > 0) {
+            return
+        }
+
+        queryClient.setQueryData<QuotationWithRelations[]>(["quotations"], initialData)
+    }, [initialData, queryClient])
+
+    useEffect(() => {
+        if (!refreshToken) return
+
+        let cancelled = false
+
+        const clearRefreshParams = () => {
+            if (typeof window === "undefined") {
+                return
+            }
+
+            const nextUrl = new URL(window.location.href)
+            nextUrl.searchParams.delete("refresh")
+            nextUrl.searchParams.delete("focusId")
+            window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+        }
+
+        const syncSavedQuotation = async () => {
+            const minimumAttempts = 2
+            const maximumAttempts = focusId ? 5 : minimumAttempts
+
+            for (let attempt = 0; attempt < maximumAttempts && !cancelled; attempt++) {
+                const result = await refetch()
+                const latestQuotations =
+                    result.data ??
+                    queryClient.getQueryData<QuotationWithRelations[]>(["quotations"]) ??
+                    []
+                const hasFocusedQuotation = focusId
+                    ? latestQuotations.some((quotation) => quotation.id === focusId)
+                    : true
+
+                if (attempt + 1 >= minimumAttempts && hasFocusedQuotation) {
+                    break
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 700))
+            }
+
+            if (!cancelled) {
+                clearRefreshParams()
+            }
+        }
+
+        void syncSavedQuotation()
+
+        return () => {
+            cancelled = true
+        }
+    }, [focusId, queryClient, refetch, refreshToken])
 
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('quotations', 'edit')
@@ -1006,17 +1079,36 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 throw new Error(result.error || "PO gagal disimpan")
             }
 
-            if ("autoConverted" in result && result.autoConverted) {
-                toast.success("PO tersimpan dan quotation otomatis dikonversi ke Sales Order")
-            } else if (result.salesOrderId) {
+            setPoDialogQuotation(null)
+            setPoFile(null)
+
+            if ("ocrSessionId" in result && result.ocrSessionId) {
+                if ("validationStatus" in result && result.validationStatus === "partial_match") {
+                    toast.warning("PO hanya mengambil sebagian item quotation. Lanjutkan ke validasi OCR.")
+                } else if ("validationStatus" in result && result.validationStatus === "mismatch") {
+                    toast.warning("PO customer berbeda dengan quotation. Lanjutkan ke validasi OCR.")
+                } else if ("validationStatus" in result && result.validationStatus === "ocr_failed") {
+                    toast.warning("OCR PO belum berhasil dibaca penuh. Lanjutkan ke validasi OCR.")
+                } else {
+                    toast.success("PO berhasil diupload. Lanjutkan review OCR sebelum membuat Sales Order.")
+                }
+
+                const targetUrl = `/dashboard/sales-orders/ocr-validate?session=${result.ocrSessionId}&quotation=${poDialogQuotation.id}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(targetUrl)
+                    return
+                }
+                router.push(targetUrl)
+                return
+            }
+
+            await refetch()
+
+            if (result.salesOrderId) {
                 toast.success("PO berhasil diupdate dan tersinkron ke Sales Order")
             } else {
                 toast.success("PO customer berhasil diupload")
             }
-
-            setPoDialogQuotation(null)
-            setPoFile(null)
-            await refetch()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Upload PO gagal")
         } finally {
@@ -1539,7 +1631,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                             {poDialogQuotation?.salesOrderId ? (
                                 <span>Sistem akan membaca nomor PO dari OCR lalu mensinkronkan hasilnya ke Sales Order yang sudah ada.</span>
                             ) : (
-                                <span>Sistem akan membaca nomor PO dari OCR dan membandingkan item PO vs quotation. Hanya full match yang auto-convert.</span>
+                                <span>Sistem akan membaca nomor PO dari OCR dan membandingkan item PO vs quotation. Setelah itu user review dulu di halaman validasi sebelum membuat Sales Order.</span>
                             )}
                         </div>
                     </div>

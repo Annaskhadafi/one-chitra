@@ -299,11 +299,24 @@ export function QuotationFileCenter({
             }
 
             setPoFile(null)
-            router.refresh()
 
-            if ("autoConverted" in result && result.autoConverted && result.salesOrderId) {
-                toast.success("PO tervalidasi OCR dan quotation otomatis dikonversi ke Sales Order")
-                router.push(`/dashboard/sales-orders/${result.salesOrderId}/edit`)
+            if ("ocrSessionId" in result && result.ocrSessionId) {
+                const validationStatus = "validationStatus" in result ? result.validationStatus : null
+                if (validationStatus === "partial_match") {
+                    toast.warning("PO hanya mengambil sebagian item quotation. Lanjutkan ke validasi OCR.")
+                } else if (validationStatus === "mismatch") {
+                    toast.warning("PO customer berbeda dengan quotation. Lanjutkan ke validasi OCR.")
+                } else if (validationStatus === "ocr_failed") {
+                    toast.warning("OCR PO belum berhasil dibaca penuh. Lanjutkan ke validasi OCR.")
+                } else {
+                    toast.success("PO berhasil diupload. Lanjutkan review OCR sebelum membuat Sales Order.")
+                }
+                const targetUrl = `/dashboard/sales-orders/ocr-validate?session=${result.ocrSessionId}&quotation=${quotationId}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(targetUrl)
+                    return
+                }
+                router.push(targetUrl)
                 return
             }
 
@@ -317,18 +330,16 @@ export function QuotationFileCenter({
                             : "OCR PO gagal diverifikasi otomatis. Silakan validasi manual."
                 )
 
-                if ("ocrSessionId" in result && result.ocrSessionId) {
-                    router.push(`/dashboard/sales-orders/ocr-validate?session=${result.ocrSessionId}&quotation=${quotationId}`)
-                    return
-                }
+                return
             }
 
             if (result.salesOrderId) {
-                toast.success("PO berhasil diupload")
+                toast.success("PO berhasil diupload dan tersinkron ke Sales Order")
                 router.push(`/dashboard/sales-orders/${result.salesOrderId}/edit`)
                 return
             }
 
+            router.refresh()
             toast.success("PO berhasil diupload")
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Upload PO gagal")
@@ -421,7 +432,7 @@ export function QuotationFileCenter({
                     Attachment & Customer PO
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                    Upload attachment pendukung quotation, lalu upload PO customer untuk auto-convert ke Sales Order.
+                    Upload attachment pendukung quotation, lalu upload PO customer untuk review OCR dan pembuatan Sales Order berbasis quotation.
                 </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -628,7 +639,7 @@ export function QuotationFileCenter({
                             {salesOrderId ? (
                                 <span>Quotation ini sudah punya Sales Order. Sistem akan baca nomor PO dari OCR lalu mensinkronkan PO ke Sales Order yang sudah ada.</span>
                             ) : (
-                                <span>Setelah PO masuk, sistem akan cek OCR PO vs quotation. Hanya full match yang auto-convert; partial, mismatch, atau OCR yang belum lengkap akan diarahkan ke validasi OCR.</span>
+                                <span>Setelah PO masuk, sistem akan cek OCR PO vs quotation lalu membuka halaman validasi. User review dulu sebelum membuat Sales Order.</span>
                             )}
                         </div>
                         <p className="text-xs text-muted-foreground">

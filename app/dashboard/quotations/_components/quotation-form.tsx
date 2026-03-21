@@ -383,7 +383,19 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
-                router.push("/dashboard/quotations")
+                const savedId = isEdit ? initialData!.id : ("id" in result && typeof result.id === "number" ? result.id : null)
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/quotations?${listParams.toString()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.push(listUrl)
             } else {
                 toast.error("error" in result ? result.error : "Something went wrong")
             }

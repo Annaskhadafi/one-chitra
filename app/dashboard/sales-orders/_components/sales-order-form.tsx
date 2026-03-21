@@ -471,6 +471,9 @@ export function SalesOrderForm({
         if (items.length === 0) {
             errors.push("Belum ada produk - Tambahkan minimal 1 produk")
         }
+        if (!warehouseId) {
+            errors.push("Book Warehouse belum dipilih")
+        }
         if (customerPo && customerPo.length > 100) {
             errors.push("Customer PO maksimal 100 karakter")
         }
@@ -492,6 +495,24 @@ export function SalesOrderForm({
             console.log("❌ Validation failed", errors)
             showSaveBlockedToast("Sales Order belum bisa disimpan", errors)
             return
+        }
+
+        if (quotationContext && !isEdit && typeof window !== "undefined") {
+            const warehouseLabel = selectedWarehouse
+                ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}`
+                : "Belum dipilih"
+            const defaultWarehouseNote =
+                defaultWarehouse && selectedWarehouse && selectedWarehouse.id !== defaultWarehouse.id
+                    ? `\n\nCatatan: warehouse default saat ini adalah ${defaultWarehouse.sloc} - ${defaultWarehouse.description}, tetapi Anda memilih warehouse yang berbeda.`
+                    : ""
+
+            const confirmed = window.confirm(
+                `Pastikan Book Warehouse sudah sesuai sebelum membuat Sales Order.\n\nBook Warehouse: ${warehouseLabel}\n\nStok akan dibooking ke warehouse ini dan delivery akan mengikuti Sales Order tersebut.${defaultWarehouseNote}\n\nLanjut simpan Sales Order?`
+            )
+
+            if (!confirmed) {
+                return
+            }
         }
 
         console.log("✅ Validation passed, submitting...")
@@ -683,6 +704,17 @@ export function SalesOrderForm({
                     <AlertDescription>{submitAlert}</AlertDescription>
                 </Alert>
             )}
+
+            {quotationContext ? (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+                    <AlertTriangle className="h-4 w-4 text-amber-700" />
+                    <AlertTitle>Periksa Book Warehouse Sebelum Create Sales Order</AlertTitle>
+                    <AlertDescription>
+                        Sales Order ini dibuat dari flow quotation OCR. Pastikan <span className="font-semibold">Warehouse (Book Stock)</span> sudah sesuai
+                        karena stok akan dibooking ke warehouse tersebut dan relasi ke delivery akan mengikuti Sales Order ini.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
 
             {/* Order Header Fields */}
             <Card>
@@ -884,6 +916,13 @@ export function SalesOrderForm({
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                            {quotationContext ? (
+                                <p className="text-xs text-amber-700">
+                                    Pastikan book warehouse sesuai dengan rencana pengiriman. Saat ini:
+                                    {" "}
+                                    <span className="font-semibold">{selectedWarehouse ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}` : "belum dipilih"}</span>.
+                                </p>
+                            ) : null}
                         </div>
 
                         {/* No PO Customer */}
