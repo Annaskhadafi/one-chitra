@@ -4,6 +4,7 @@ export const products = pgTable("products", {
     id: serial("id").primaryKey(),
     category: varchar("category", { length: 100 }).notNull(), // ACC, FLAP, IMT PART, Material Consumable, SPM, TUBE, TYRE, WHEEL & RIM
     materialNumber: varchar("material_number", { length: 100 }).notNull(),
+    materialNumberCk: varchar("material_number_ck", { length: 100 }),
     oldMaterialNo: text("old_material_no"),
     materialDescription: text("material_description"),
     brand: varchar("brand", { length: 100 }),
@@ -13,7 +14,14 @@ export const products = pgTable("products", {
     slocDescription: text("sloc_description"),
     typeWarehouse: varchar("type_warehouse", { length: 50 }),
     imageUrl: text("image_url"),
+    isBundle: boolean("is_bundle").default(false).notNull(),
     isConsignment: boolean("is_consignment").default(false).notNull(),
+    defaultTrackingMode: varchar("default_tracking_mode", { length: 20 }).default("manual_only").notNull(),
+    serialRequired: boolean("serial_required").default(false).notNull(),
+    rfidCapable: boolean("rfid_capable").default(false).notNull(),
+    allowTagReuse: boolean("allow_tag_reuse").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+    unqMaterialSloc: unique("unq_material_sloc").on(table.materialNumber, table.sloc),
+}));

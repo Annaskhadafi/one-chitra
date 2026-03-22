@@ -7,8 +7,12 @@ import { QuotationForm } from "../../_components/quotation-form"
 
 export default async function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
+    if (!/^\d+$/.test(id)) {
+        notFound()
+    }
+
     const [quotation, customers, products, users] = await Promise.all([
-        getQuotation(Number(id)),
+        getQuotation(id),
         getCustomers(),
         getProducts(),
         getUsers(),
@@ -18,5 +22,12 @@ export default async function EditQuotationPage({ params }: { params: Promise<{ 
         notFound()
     }
 
-    return <QuotationForm customers={customers} products={products} users={users} initialData={quotation} />
+    return (
+        <QuotationForm
+            customers={customers}
+            products={products}
+            users={users}
+            initialData={quotation as Parameters<typeof QuotationForm>[0]["initialData"]}
+        />
+    )
 }

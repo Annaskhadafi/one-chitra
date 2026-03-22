@@ -63,6 +63,14 @@ export const approvalDefinitionSteps = pgTable("approval_definition_steps", {
     minApprovals: integer("min_approvals").notNull().default(1),
     conditionJson: jsonb("condition_json").$type<Record<string, unknown>>().default({}),
     isRequired: boolean("is_required").notNull().default(true),
+    // Email notification config
+    notifyOnAssign: boolean("notify_on_assign").notNull().default(true),
+    notifyOnComplete: boolean("notify_on_complete").notNull().default(false),
+    ccEmails: text("cc_emails"),
+    slaDays: integer("sla_days"),
+    // Visual canvas position
+    nodePositionX: integer("node_position_x").default(0),
+    nodePositionY: integer("node_position_y").default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [

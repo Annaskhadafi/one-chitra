@@ -16,15 +16,139 @@ import { toast } from "sonner"
 import Papa from "papaparse"
 import { importCustomers } from "@/app/actions/customer"
 import { NewCustomer } from "@/lib/types"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 type RawCustomerData = Record<string, string>
 type CustomerData = NewCustomer
+type MappableField = "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5"
+
+const COLUMN_CANDIDATES: Record<keyof Pick<CustomerData, "customerCode" | "name" | "contactName" | "email" | "birthday" | "address1" | "address2" | "address3" | "address4" | "address5">, string[]> = {
+    customerCode: ["customercode", "customer_code", "customerid", "code", "kode", "kodepelanggan", "idcustomer", "customer", "kodecustomer", "codecustomer", "customer_no", "customerno", "custcode", "sapcode"],
+    name: ["name", "customername", "customer_name", "nama", "namapelanggan", "custname"],
+    contactName: ["contactname", "contact_name", "contact", "kontak", "cp", "pic"],
+    email: ["email", "mail", "surel"],
+    birthday: ["birthday", "birthdate", "dateofbirth", "tanggal_lahir", "tanggallahir", "dob"],
+    address1: ["address1", "address_1", "address", "alamat1", "alamat"],
+    address2: ["address2", "address_2", "alamat2"],
+    address3: ["address3", "address_3", "alamat3", "city", "kota"],
+    address4: ["address4", "address_4", "alamat4", "state", "provinsi"],
+    address5: ["address5", "address_5", "alamat5", "postalcode", "zip", "kodepos"],
+}
+
+const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const isHeaderMatch = (header: string, candidate: string) => {
+    const normalizedHeader = normalizeKey(header)
+    const normalizedCandidate = normalizeKey(candidate)
+
+    return normalizedHeader === normalizedCandidate
+        || normalizedHeader.includes(normalizedCandidate)
+        || normalizedCandidate.includes(normalizedHeader)
+}
+
+const normalizeText = (value: unknown) => {
+    const trimmed = value?.toString().trim()
+    return trimmed ? trimmed : null
+}
+
+const normalizeBirthday = (value: unknown) => {
+    const text = value?.toString().trim()
+    if (!text) return null
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return text
+    }
+
+    const dateParts = text.split(/[\/\-\.]/)
+    if (dateParts.length === 3) {
+        const [first, second, third] = dateParts
+        if (first.length === 2 && second.length === 2 && third.length === 4) {
+            return `${third}-${second}-${first}`
+        }
+    }
+
+    return null
+}
+
+const MAPPING_FIELDS: { key: MappableField; label: string; required?: boolean }[] = [
+    { key: "customerCode", label: "Customer Code", required: true },
+    { key: "name", label: "Name", required: true },
+    { key: "contactName", label: "Contact Name" },
+    { key: "email", label: "Email" },
+    { key: "birthday", label: "Birthday" },
+    { key: "address1", label: "Address 1" },
+    { key: "address2", label: "Address 2" },
+    { key: "address3", label: "Address 3" },
+    { key: "address4", label: "Address 4" },
+    { key: "address5", label: "Address 5" },
+]
 
 export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
     const [file, setFile] = useState<File | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [preview, setPreview] = useState<CustomerData[]>([])
     const [isOpen, setIsOpen] = useState(false)
+    const [rawData, setRawData] = useState<RawCustomerData[]>([])
+    const [headers, setHeaders] = useState<string[]>([])
+    const [manualMapping, setManualMapping] = useState<Record<MappableField, string>>({
+        customerCode: "",
+        name: "",
+        contactName: "",
+        email: "",
+        birthday: "",
+        address1: "",
+        address2: "",
+        address3: "",
+        address4: "",
+        address5: "",
+    })
+    const [showManualMapping, setShowManualMapping] = useState(false)
+
+    const parseRowsWithMapping = (data: RawCustomerData[], resolver: (item: RawCustomerData, field: MappableField) => string | null) => {
+        return data.map((item) => {
+            const mappedCustomerCode = normalizeText(resolver(item, "customerCode"))
+            const mappedName = normalizeText(resolver(item, "name"))
+
+            if (!mappedCustomerCode || !mappedName) {
+                return null
+            }
+
+            return {
+                customerCode: mappedCustomerCode,
+                name: mappedName,
+                contactName: normalizeText(resolver(item, "contactName")),
+                email: normalizeText(resolver(item, "email")),
+                birthday: normalizeBirthday(resolver(item, "birthday")),
+                address1: normalizeText(resolver(item, "address1")),
+                address2: normalizeText(resolver(item, "address2")),
+                address3: normalizeText(resolver(item, "address3")),
+                address4: normalizeText(resolver(item, "address4")),
+                address5: normalizeText(resolver(item, "address5")),
+                id: undefined,
+                createdAt: undefined,
+                updatedAt: undefined,
+            } as CustomerData
+        }).filter(Boolean) as CustomerData[]
+    }
+
+    const buildInitialManualMapping = (detectedHeaders: string[]) => {
+        const next = { ...manualMapping }
+
+        MAPPING_FIELDS.forEach((field) => {
+            const detected = detectedHeaders.find((header) =>
+                COLUMN_CANDIDATES[field.key].some((candidate) => isHeaderMatch(header, candidate))
+            )
+            next[field.key] = detected || ""
+        })
+
+        setManualMapping(next)
+    }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
@@ -40,58 +164,31 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
             skipEmptyLines: true,
             complete: (results) => {
                 const data = results.data as RawCustomerData[]
+                const detectedHeaders = (results.meta.fields && results.meta.fields.length > 0)
+                    ? results.meta.fields
+                    : (data[0] ? Object.keys(data[0]) : [])
 
-                // Helper to find key case-insensitively and ignoring special chars
-                const findKey = (obj: Record<string, string>, candidates: string[]) => {
-                    const keys = Object.keys(obj)
-                    return keys.find(k => {
-                        const normalizedKey = k.toLowerCase().replace(/[^a-z0-9]/g, "")
-                        return candidates.some(c => normalizedKey === c.replace(/[^a-z0-9]/g, ""))
-                    })
-                }
+                setRawData(data)
+                setHeaders(detectedHeaders)
+                buildInitialManualMapping(detectedHeaders)
 
-                const normalized = data.map(item => {
-                    // Extended candidate list for flexibility
-                    const codeKey = findKey(item, [
-                        "customercode", "customerid", "code", "id", "kode", "kodepelanggan", "no", "nomor", "customer"
-                    ])
-                    const nameKey = findKey(item, [
-                        "customername", "name", "nama", "namapelanggan", "custname"
-                    ])
-                    const contactKey = findKey(item, ["contactname", "contact", "kontak", "cp"])
-                    const emailKey = findKey(item, ["email", "mail", "surel"])
-
-                    // Address fields
-                    const addr1Key = findKey(item, ["address1", "address", "alamat1", "alamat"])
-                    const addr2Key = findKey(item, ["address2", "alamat2"])
-                    const addr3Key = findKey(item, ["address3", "alamat3"])
-                    const addr4Key = findKey(item, ["address4", "alamat4"])
-                    const addr5Key = findKey(item, ["address5", "alamat5"])
-
-                    // Only return if we found at least one meaningful field, 
-                    // relying on loose matching for the import to be useful.
-                    // However, we MUST have at least a Name or Code to create a customer.
-                    if (!codeKey && !nameKey) return null;
-
-                    return {
-                        customerCode: codeKey ? item[codeKey].toString() : `GEN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`, // Fallback if needed, though usually required
-                        name: nameKey ? item[nameKey].toString() : (codeKey ? item[codeKey].toString() : "Unknown"),
-                        contactName: contactKey ? item[contactKey].toString() : null,
-                        email: emailKey ? item[emailKey].toString() : null,
-                        address1: addr1Key ? item[addr1Key].toString() : null,
-                        address2: addr2Key ? item[addr2Key].toString() : null,
-                        address3: addr3Key ? item[addr3Key].toString() : null,
-                        address4: addr4Key ? item[addr4Key].toString() : null,
-                        address5: addr5Key ? item[addr5Key].toString() : null,
-                    }
-                }).filter(Boolean) as CustomerData[]
+                const normalized = parseRowsWithMapping(data, (item, field) => {
+                    const keys = Object.keys(item)
+                    const keyFound = keys.find((keyName) =>
+                        COLUMN_CANDIDATES[field].some((candidate) => isHeaderMatch(keyName, candidate))
+                    )
+                    return keyFound ? item[keyFound] : null
+                })
 
                 if (normalized.length === 0 && data.length > 0) {
-                    // Diagnostic: Check what headers were actually found
-                    const firstRowHeaders = Object.keys(data[0]).join(", ")
-                    toast.error(`No valid rows found. Detected headers: ${firstRowHeaders}. Expected 'Name' or 'Customer Code'.`)
+                    setShowManualMapping(true)
+                    const firstRowHeaders = detectedHeaders.join(", ")
+                    toast.error(`Auto mapping gagal. Silakan manual mapping. Detected headers: ${firstRowHeaders}`)
                 } else if (normalized.length === 0) {
+                    setShowManualMapping(false)
                     toast.error("File appears to be empty or could not be parsed.")
+                } else {
+                    setShowManualMapping(false)
                 }
 
                 setPreview(normalized)
@@ -122,6 +219,28 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
         } finally {
             setIsUploading(false)
         }
+    }
+
+    const applyManualMapping = () => {
+        if (rawData.length === 0) return
+        if (!manualMapping.customerCode || !manualMapping.name) {
+            toast.error("Manual mapping wajib memilih Customer Code dan Name")
+            return
+        }
+
+        const normalized = parseRowsWithMapping(rawData, (item, field) => {
+            const selectedHeader = manualMapping[field]
+            return selectedHeader ? item[selectedHeader] ?? null : null
+        })
+
+        setPreview(normalized)
+
+        if (normalized.length === 0) {
+            toast.error("Tidak ada row valid setelah manual mapping")
+            return
+        }
+
+        toast.success(`Manual mapping berhasil: ${normalized.length} valid rows`)
     }
 
     return (
@@ -157,7 +276,7 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                 <FileUp className="h-12 w-12 text-muted-foreground mb-4" />
                                 <span className="text-sm font-medium">Click to upload CSV</span>
                                 <span className="text-xs text-muted-foreground mt-1">
-                                    Must include Customer Code and Name columns
+                                    Must include Customer Code and Name (other fields can be auto-mapped)
                                 </span>
                             </label>
                         </div>
@@ -177,11 +296,55 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     onClick={() => {
                                         setFile(null)
                                         setPreview([])
+                                        setRawData([])
+                                        setHeaders([])
+                                        setShowManualMapping(false)
                                     }}
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
+
+                            {showManualMapping && headers.length > 0 && (
+                                <div className="border rounded-lg p-3 space-y-3">
+                                    <div className="text-sm font-medium">Manual Mapping CSV</div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {MAPPING_FIELDS.map((field) => (
+                                            <div key={field.key} className="space-y-1">
+                                                <div className="text-xs text-muted-foreground">
+                                                    {field.label}{field.required ? " *" : ""}
+                                                </div>
+                                                <Select
+                                                    value={manualMapping[field.key] || "__none__"}
+                                                    onValueChange={(value) => {
+                                                        setManualMapping((prev) => ({
+                                                            ...prev,
+                                                            [field.key]: value === "__none__" ? "" : value,
+                                                        }))
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder="Pilih kolom CSV" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">(Tidak dipakai)</SelectItem>
+                                                        {headers.map((header) => (
+                                                            <SelectItem key={`${field.key}-${header}`} value={header}>
+                                                                {header}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <Button type="button" variant="secondary" onClick={applyManualMapping}>
+                                            Apply Mapping
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
 
                             {preview.length > 0 && (
                                 <div className="max-h-[300px] overflow-auto border rounded-lg">
@@ -219,6 +382,9 @@ export function CustomerCSVUpload({ onSuccess }: { onSuccess?: () => void }) {
                                     onClick={() => {
                                         setFile(null)
                                         setPreview([])
+                                        setRawData([])
+                                        setHeaders([])
+                                        setShowManualMapping(false)
                                     }}
                                 >
                                     Reset

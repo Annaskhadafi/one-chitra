@@ -38,6 +38,7 @@ import type { Product, Warehouse, Customer } from "@/lib/types"
 interface DeliveryWithRelations {
     id: number
     deliveryNumber: string | null
+    doSap: string | null
     salesOrderId: number
     scheduledDate: Date
     deliveryDate: Date | null
@@ -48,7 +49,22 @@ interface DeliveryWithRelations {
     vehicleType: string | null
     warehouseId: number | null
     shippingAddress: string | null
+    isExternal: boolean
+    vendorName: string | null
+    awbNumber: string | null
     notes: string | null
+    tripDestination: string | null
+    costGasoline: string | number | null
+    costToll: string | number | null
+    costParking: string | number | null
+    costMeals: string | number | null
+    costMaintenance: string | number | null
+    costOthers: string | number | null
+    costRapidTest: string | number | null
+    costFerry: string | number | null
+    costPortal: string | number | null
+    costWashing: string | number | null
+    costEscort: string | number | null
     createdAt: Date
     salesOrder: {
         id: number
@@ -100,13 +116,20 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+            <SheetContent className="w-full sm:max-w-5xl p-0 flex flex-col h-full bg-slate-50 dark:bg-slate-950">
                 <SheetHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
                     <div className="flex items-center justify-between gap-4 pr-8">
                         <div className="flex flex-col gap-1">
                             <SheetTitle className="text-xl font-bold flex items-center gap-2">
                                 <Truck className="h-5 w-5 text-primary" />
-                                {delivery.deliveryNumber || "New Delivery"}
+                                {delivery.doSap ? (
+                                    <div className="flex flex-col">
+                                        <span>{delivery.doSap}</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">Ref: {delivery.deliveryNumber}</span>
+                                    </div>
+                                ) : (
+                                    delivery.deliveryNumber || "New Delivery"
+                                )}
                             </SheetTitle>
                             <SheetDescription className="flex items-center gap-2">
                                 <Badge variant={statusVariants[delivery.status] || "secondary"} className="uppercase text-[10px] tracking-wider">
@@ -131,7 +154,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                     </div>
                 </SheetHeader>
 
-                <ScrollArea className="flex-1 bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex-1 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50">
                     <div className="max-w-[21cm] mx-auto my-8 space-y-8 p-8 bg-white dark:bg-slate-950 shadow-xl border min-h-[29.7cm] rounded-sm">
                         {/* Key Details Grid */}
                         <div className="grid grid-cols-2 gap-6">
@@ -206,12 +229,59 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                                     <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Originator</label>
                                     <p className="text-sm font-semibold">{delivery.createdByUser?.name || "System"}</p>
                                 </div>
-                                {delivery.shippingAddress && (
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Shipping Destination</label>
+                                    <p className="text-sm leading-relaxed font-medium">{delivery.shippingAddress}</p>
+                                </div>
+                                {delivery.tripDestination && (
                                     <div className="col-span-2 space-y-1">
-                                        <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Shipping Destination</label>
-                                        <p className="text-sm leading-relaxed font-medium">{delivery.shippingAddress}</p>
+                                        <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Trip Destination (Tujuan)</label>
+                                        <p className="text-sm leading-relaxed font-medium">{delivery.tripDestination}</p>
                                     </div>
                                 )}
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Operational Cost Breakdown */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-bold flex items-center gap-2 text-primary uppercase tracking-wider">
+                                <FileText className="h-4 w-4" />
+                                Operational Cost Details
+                            </h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-6 px-4">
+                                <CostDetail label="BBM (Gasoline)" value={delivery.costGasoline} />
+                                <CostDetail label="Toll" value={delivery.costToll} />
+                                <CostDetail label="Parking/Retribusi" value={delivery.costParking} />
+                                <CostDetail label="Meals (Uang Makan)" value={delivery.costMeals} />
+                                <CostDetail label="Maintenance" value={delivery.costMaintenance} />
+                                <CostDetail label="Rapid Test" value={delivery.costRapidTest} />
+                                <CostDetail label="Ferry Ticket" value={delivery.costFerry} />
+                                <CostDetail label="Portal/Kawal" value={delivery.costPortal} />
+                                <CostDetail label="Washing" value={delivery.costWashing} />
+                                <CostDetail label="Escort" value={delivery.costEscort} />
+                                <CostDetail label="Others" value={delivery.costOthers} />
+                                <div className="col-span-full pt-2">
+                                    <div className="bg-primary/5 p-3 rounded-md flex justify-between items-center border border-primary/10">
+                                        <span className="text-xs font-bold uppercase tracking-wider text-primary">Total Internal Cost</span>
+                                        <span className="text-sm font-bold font-mono">
+                                            {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(
+                                                Number(delivery.costGasoline || 0) +
+                                                Number(delivery.costToll || 0) +
+                                                Number(delivery.costParking || 0) +
+                                                Number(delivery.costMeals || 0) +
+                                                Number(delivery.costMaintenance || 0) +
+                                                Number(delivery.costOthers || 0) +
+                                                Number(delivery.costRapidTest || 0) +
+                                                Number(delivery.costFerry || 0) +
+                                                Number(delivery.costPortal || 0) +
+                                                Number(delivery.costWashing || 0) +
+                                                Number(delivery.costEscort || 0)
+                                            )}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -266,7 +336,7 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                             </div>
                         )}
                     </div>
-                </ScrollArea>
+                </div>
 
                 <div className="p-4 border-t bg-background mt-auto flex sm:hidden">
                     <Link href={`/dashboard/deliveries/${delivery.id}`} className="w-full" onClick={() => onOpenChange(false)}>
@@ -286,5 +356,17 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                 />
             )}
         </Sheet>
+    )
+}
+
+function CostDetail({ label, value }: { label: string, value: string | number | null }) {
+    if (!value || Number(value) === 0) return null;
+    return (
+        <div className="space-y-1">
+            <label className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight">{label}</label>
+            <p className="text-xs font-mono font-medium">
+                {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value))}
+            </p>
+        </div>
     )
 }

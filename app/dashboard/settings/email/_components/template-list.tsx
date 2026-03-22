@@ -21,6 +21,7 @@ import {
     createEmailTemplate,
     updateEmailTemplate,
 } from "@/app/actions/email"
+import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
 import { TemplateEditorDialog } from "./template-editor"
 import type { emailTemplates } from "@/db/schema/email"
 
@@ -48,9 +49,16 @@ const TYPE_LABELS: Record<string, string> = {
 
 interface Props {
     initialTemplates: Template[]
+    recipientUsers: Array<{
+        id: string
+        name: string
+        email: string
+        role: string
+    }>
+    recipientRoles: string[]
 }
 
-export function TemplateList({ initialTemplates }: Props) {
+export function TemplateList({ initialTemplates, recipientUsers, recipientRoles }: Props) {
     const [templates, setTemplates] = useState<Template[]>(initialTemplates)
     const [editorOpen, setEditorOpen] = useState(false)
     const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
@@ -80,12 +88,15 @@ export function TemplateList({ initialTemplates }: Props) {
     async function handleDuplicate(template: Template) {
         const res = await createEmailTemplate({
             name: `${template.name} (copy)`,
+            code: null,
             type: template.type,
             subject: template.subject,
             htmlContent: template.htmlContent,
             textContent: template.textContent ?? undefined,
             variables: (template.variables as string[]) ?? [],
             recipientRoles: (template.recipientRoles as string[]) ?? [],
+            recipientUserIds: (template.recipientUserIds as string[]) ?? [],
+            ccEmails: (template.ccEmails as string[]) ?? [],
             isActive: false,
         })
         if (res.success && res.template) {
@@ -97,18 +108,23 @@ export function TemplateList({ initialTemplates }: Props) {
     }
 
     async function handleSave(data: Partial<Template> & { id?: string }) {
+        const normalizedData = {
+            ...data,
+            code: typeof data.code === "string" ? (data.code.trim() || null) : (data.code ?? null),
+        }
+
         if (data.id) {
-            const res = await updateEmailTemplate(data.id, data as Parameters<typeof updateEmailTemplate>[1])
+            const res = await updateEmailTemplate(data.id, normalizedData as Parameters<typeof updateEmailTemplate>[1])
             if (res.success) {
                 setTemplates((prev) =>
-                    prev.map((t) => (t.id === data.id ? { ...t, ...data, updatedAt: new Date() } : t))
+                    prev.map((t) => (t.id === data.id ? { ...t, ...normalizedData, updatedAt: new Date() } : t))
                 )
                 toast.success("Template updated")
             } else {
                 toast.error(res.error ?? "Failed to update")
             }
         } else {
-            const res = await createEmailTemplate(data as Parameters<typeof createEmailTemplate>[0])
+            const res = await createEmailTemplate(normalizedData as Parameters<typeof createEmailTemplate>[0])
             if (res.success && res.template) {
                 setTemplates((prev) => [...prev, res.template!])
                 toast.success("Template created")
@@ -159,11 +175,14 @@ export function TemplateList({ initialTemplates }: Props) {
                     </div>
                 ) : (
                     <div className="rounded-md border">
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Type</TableHead>
+                                    <TableHead>Code</TableHead>
+                                    <TableHead>CC</TableHead>
                                     <TableHead>Subject</TableHead>
                                     <TableHead>Recipients</TableHead>
                                     <TableHead>Active</TableHead>
@@ -181,18 +200,53 @@ export function TemplateList({ initialTemplates }: Props) {
                                                 {TYPE_LABELS[tmpl.type] ?? tmpl.type}
                                             </span>
                                         </TableCell>
+                                        <TableCell className="max-w-[180px]">
+                                            {tmpl.code ? (
+                                                <Badge variant="secondary" className="font-mono text-[11px]">
+                                                    {tmpl.code}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="max-w-[220px]">
+                                            <div className="flex gap-1 flex-wrap">
+                                                {isRevenueReportTemplateManagedByAutomation(tmpl.code) ? (
+                                                    <span className="text-xs text-muted-foreground">Dikelola oleh automation</span>
+                                                ) : ((tmpl.ccEmails as string[]) ?? []).length > 0
+                                                    ? (tmpl.ccEmails as string[]).map((email) => (
+                                                        <Badge key={email} variant="outline" className="text-[11px]">
+                                                            {email}
+                                                        </Badge>
+                                                    ))
+                                                    : <span className="text-xs text-muted-foreground">—</span>}
+                                            </div>
+                                        </TableCell>
                                         <TableCell className="max-w-[240px] truncate text-sm text-muted-foreground">
                                             {tmpl.subject}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex gap-1 flex-wrap">
-                                                {((tmpl.recipientRoles as string[]) ?? []).length > 0
+                                                {isRevenueReportTemplateManagedByAutomation(tmpl.code) ? (
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        Revenue Report Automation
+                                                    </Badge>
+                                                ) : ((tmpl.recipientRoles as string[]) ?? []).length > 0
                                                     ? (tmpl.recipientRoles as string[]).map((r) => (
                                                         <Badge key={r} variant="outline" className="text-xs">
                                                             {r}
                                                         </Badge>
                                                     ))
                                                     : <span className="text-xs text-muted-foreground">—</span>}
+                                                {!isRevenueReportTemplateManagedByAutomation(tmpl.code) && ((tmpl.recipientUserIds as string[]) ?? []).map((userId) => {
+                                                    const user = recipientUsers.find((entry) => entry.id === userId)
+                                                    if (!user) return null
+                                                    return (
+                                                        <Badge key={userId} variant="secondary" className="text-xs">
+                                                            {user.name}
+                                                        </Badge>
+                                                    )
+                                                })}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -231,6 +285,7 @@ export function TemplateList({ initialTemplates }: Props) {
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     </div>
                 )}
             </CardContent>
@@ -240,6 +295,8 @@ export function TemplateList({ initialTemplates }: Props) {
                 onOpenChange={(v) => { setEditorOpen(v); if (!v) setEditingTemplate(null) }}
                 template={editingTemplate}
                 onSave={handleSave}
+                recipientUsers={recipientUsers}
+                recipientRoles={recipientRoles}
             />
         </Card>
     )

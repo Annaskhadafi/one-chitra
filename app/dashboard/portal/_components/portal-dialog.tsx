@@ -175,7 +175,7 @@ export function PortalDialog({ open, onOpenChange, item, onSuccess }: PortalDial
                                 </SelectTrigger>
                                 <SelectContent>
                                     {COMMON_ICONS.map(icon => {
-                                        const Icon = (LucideIcons as Record<string, React.ComponentType<{ size?: number }>>)[icon]
+                                        const Icon = ((LucideIcons as unknown) as Record<string, React.ComponentType<{ size?: number }>>)[icon]
                                         return (
                                             <SelectItem key={icon} value={icon}>
                                                 <div className="flex items-center gap-2">

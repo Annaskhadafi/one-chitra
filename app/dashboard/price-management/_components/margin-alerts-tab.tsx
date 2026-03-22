@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, Search, TrendingDown } from "lucide-react"
 import type { getMarginAlerts } from "@/app/actions/price-management"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 type MarginAlert = Awaited<ReturnType<typeof getMarginAlerts>>[number]
 
@@ -71,6 +72,48 @@ export function MarginAlertsTab({ alerts }: Props) {
 
             {filtered.length > 0 && (
                 <div className="rounded-xl border overflow-hidden">
+                    <ResponsiveTableWrapper
+                        className="rounded-none"
+                        mobileView={
+                            <div className="space-y-3 p-3">
+                                {filtered.map((a) => {
+                                    const isCritical = a.shortfall > 5
+                                    return (
+                                        <div key={a.priceListItemId} className={`rounded-md border p-3 ${isCritical ? 'bg-red-50/50 dark:bg-red-950/10' : 'bg-amber-50/50 dark:bg-amber-950/10'}`}>
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <div className="font-medium text-xs">{a.materialNumber}</div>
+                                                    <div className="text-[11px] text-muted-foreground line-clamp-2">{a.materialDescription}</div>
+                                                </div>
+                                                <span className={isCritical ? 'text-red-700 text-xs font-bold' : 'text-amber-700 text-xs font-bold'}>
+                                                    -{fmtNum.format(a.shortfall)}%
+                                                </span>
+                                            </div>
+                                            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                                                <div>
+                                                    <div className="text-muted-foreground">Eff. Price</div>
+                                                    <div className="font-medium">{fmt.format(a.effectivePrice)}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-muted-foreground">HPP (SAP)</div>
+                                                    <div>{fmt.format(a.costSap)}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-muted-foreground">Price List</div>
+                                                    <div>{a.priceListName}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-muted-foreground">Margin</div>
+                                                    <div className={`${a.currentMarginPct < 0 ? 'text-red-700' : 'text-amber-600'} font-bold`}>{fmtNum.format(a.currentMarginPct)}%</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        }
+                    >
+                    <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-muted/50">
                             <tr>
@@ -132,6 +175,8 @@ export function MarginAlertsTab({ alerts }: Props) {
                             })}
                         </tbody>
                     </table>
+                    </div>
+                    </ResponsiveTableWrapper>
                 </div>
             )}
         </div>

@@ -3,6 +3,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createSalesOrder, updateSalesOrder, getSalesOrderCategories } from "@/app/actions/sales-order"
+import { finalizeQuotationOcrSalesOrderLink } from "@/app/actions/quotation"
+import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,12 +40,15 @@ import {
 } from "@/components/ui/popover"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, Upload, ExternalLink, AlertTriangle, XCircle } from "lucide-react"
+import { Search, Package, Plus, Check, Save, Trash2, ArrowLeft, AlertTriangle, XCircle, ChevronsUpDown, ExternalLink } from "lucide-react"
 import Link from "next/link"
+import { findCkDefaultMasterPriceSuggestion, getCkMasterPriceLabel, isCkCustomer, type CkMasterPriceReference } from "@/lib/ck-master-price"
 import { cn } from "@/lib/utils"
-import type { Customer, Product, Warehouse } from "@/lib/types"
+import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import { QuickAddProductDialog } from "./quick-add-product-dialog"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface OrderItem {
     id?: number
@@ -59,11 +64,18 @@ interface SalesOrderFormProps {
     customers: Customer[]
     products: Product[]
     warehouses: Warehouse[]
+    users: Pick<User, "id" | "name" | "email" | "role">[]
+    ckMasterPrices: CkMasterPriceReference[]
+    quotationContext?: {
+        quotationId: number
+        ocrSessionId?: number | null
+    }
     initialData?: {
         id: number
         invoiceNumber: string | null
         customerPo: string | null
         customerId: number
+        salesPersonId?: string | null
         warehouseId?: number | null
         salesDate: Date
         poReceive?: Date | null
@@ -95,24 +107,42 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
-export function SalesOrderForm({ customers, products, warehouses, initialData }: SalesOrderFormProps) {
+function formatDateForInput(date: Date | string | null | undefined): string {
+    if (!date) return ""
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ""
+    try {
+        return d.toISOString().split("T")[0]
+    } catch {
+        return ""
+    }
+}
+
+export function SalesOrderForm({
+    customers,
+    products,
+    warehouses,
+    users,
+    ckMasterPrices,
+    quotationContext,
+    initialData,
+}: SalesOrderFormProps) {
     const router = useRouter()
-    const isEdit = !!initialData
+    const isEdit = !!initialData && initialData.id > 0
 
     // Form State
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
     const [customerPo, setCustomerPo] = useState(initialData?.customerPo || "")
     const [customerId, setCustomerId] = useState<number | undefined>(initialData?.customerId || undefined)
+    const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || "")
     const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
     const [salesDate, setSalesDate] = useState(
-        initialData
-            ? new Date(initialData.salesDate).toISOString().split("T")[0]
-            : new Date().toISOString().split("T")[0]
+        initialData?.salesDate
+            ? formatDateForInput(initialData.salesDate)
+            : formatDateForInput(new Date())
     )
     const [poReceive, setPoReceive] = useState(
-        initialData?.poReceive
-            ? new Date(initialData.poReceive).toISOString().split("T")[0]
-            : ""
+        formatDateForInput(initialData?.poReceive)
     )
     const [categoryPo, setCategoryPo] = useState(initialData?.categoryPo || "Normal")
     const [categoryProduct, setCategoryProduct] = useState(initialData?.categoryProduct || "Prime Product")
@@ -155,20 +185,77 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     // Customer search popover
     const [customerOpen, setCustomerOpen] = useState(false)
     const [whOpen, setWhOpen] = useState(false)
+    const [salesPicOpen, setSalesPicOpen] = useState(false)
     // Product search popover
     const [productOpen, setProductOpen] = useState(false)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitAlert, setSubmitAlert] = useState<string | null>(null)
+    const [customerPoError, setCustomerPoError] = useState<string | null>(null)
+
+    const uniqueProducts = useMemo(() => {
+        const seen = new Set()
+        return products.filter(p => {
+            const key = p.materialNumber
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+    }, [products])
+
+    const productById = useMemo(
+        () => new Map(products.map((product) => [product.id, product])),
+        [products]
+    )
 
     const selectedCustomer = useMemo(
         () => customers.find(c => c.id === customerId),
         [customers, customerId]
+    )
+    const selectedSalesPerson = useMemo(
+        () => users.find((user) => user.id === salesPersonId),
+        [salesPersonId, users]
+    )
+    const isSelectedCkCustomer = useMemo(
+        () => isCkCustomer(selectedCustomer),
+        [selectedCustomer]
+    )
+    const salesRoleUsers = useMemo(
+        () => users.filter((user) => user.role.toLowerCase().includes("sales")),
+        [users]
+    )
+    const otherPicUsers = useMemo(
+        () => users.filter((user) => !user.role.toLowerCase().includes("sales")),
+        [users]
     )
 
     const selectedWarehouse = useMemo(
         () => warehouses.find(w => w.id === warehouseId),
         [warehouses, warehouseId]
     )
+    const defaultWarehouse = useMemo(
+        () => warehouses.find((warehouse) => warehouse.sloc === "101"),
+        [warehouses]
+    )
+    const ckPriceSuggestionLabel = useMemo(
+        () => getCkMasterPriceLabel("default"),
+        []
+    )
+    const getSuggestedCkUnitPrice = useCallback((product: Product) => {
+        if (!isSelectedCkCustomer) {
+            return null
+        }
+
+        const suggestion = findCkDefaultMasterPriceSuggestion({
+            product: {
+                materialNumber: product.materialNumber,
+                materialNumberCk: product.materialNumberCk,
+            },
+            masterPrices: ckMasterPrices,
+        })
+
+        return suggestion?.unitPrice ?? null
+    }, [ckMasterPrices, isSelectedCkCustomer])
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -229,7 +316,51 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
     }
 
     // Add product to order
-    const addProduct = useCallback((product: Product) => {
+    const addProduct = useCallback(async (product: Product) => {
+        if (product.isBundle) {
+            const bundleItems = await getBundleItemsForExpansion(product.id)
+            if (bundleItems && bundleItems.length > 0) {
+                // We use localized variable to avoid closure issues with state
+                setItems(prev => {
+                    const nextItems = [...prev]
+                    bundleItems.forEach(bi => {
+                        const childProduct = bi.childProduct as Product
+                        
+                        // User requested: unit price for bundle components should be empty (0)
+                        const unitPrice = 0
+                        
+                        const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
+                        if (existingIdx > -1) {
+                            nextItems[existingIdx] = {
+                                ...nextItems[existingIdx],
+                                quantity: nextItems[existingIdx].quantity + bi.quantity,
+                                unitPrice: unitPrice // Reset to 0 when bundle is added/merged? 
+                                // Actually, usually better to just add quantity but if user says "biarkan kosong", 
+                                // maybe they want it 0 for all items coming from bundle.
+                            }
+                        } else {
+                            nextItems.push({
+                                productId: bi.childProductId,
+                                productName: childProduct.materialDescription || childProduct.materialNumber,
+                                quantity: bi.quantity,
+                                unitPrice: unitPrice,
+                                discount: 0,
+                                tax: 0,
+                            })
+                        }
+                    })
+                    return nextItems
+                })
+                toast.success(`Bundle ${product.materialNumber} exploded into ${bundleItems.length} items`)
+            } else {
+                toast.error("Bundle has no components")
+            }
+            setProductOpen(false)
+            return
+        }
+
+        const suggestedUnitPrice = getSuggestedCkUnitPrice(product) ?? 0
+
         // Check if already exists
         const existing = items.find(i => i.productId === product.id)
         if (existing) {
@@ -241,13 +372,56 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 quantity: 1,
-                unitPrice: 0,
+                unitPrice: suggestedUnitPrice,
                 discount: 0,
                 tax: 0,
             }])
         }
         setProductOpen(false)
-    }, [items])
+    }, [getSuggestedCkUnitPrice, items])
+
+    useEffect(() => {
+        if (initialData || warehouseId || !defaultWarehouse) {
+            return
+        }
+
+        setWarehouseId(defaultWarehouse.id)
+    }, [defaultWarehouse, initialData, warehouseId])
+
+    useEffect(() => {
+        if (!isSelectedCkCustomer || items.length === 0) {
+            return
+        }
+
+        setItems((previousItems) => {
+            let hasChanges = false
+
+            const nextItems = previousItems.map((item) => {
+                if (item.unitPrice > 0) {
+                    return item
+                }
+
+                const product = productById.get(item.productId)
+                if (!product) {
+                    return item
+                }
+
+                const suggestedUnitPrice = getSuggestedCkUnitPrice(product)
+                if (suggestedUnitPrice == null || suggestedUnitPrice <= 0) {
+                    return item
+                }
+
+                hasChanges = true
+
+                return {
+                    ...item,
+                    unitPrice: suggestedUnitPrice,
+                }
+            })
+
+            return hasChanges ? nextItems : previousItems
+        })
+    }, [getSuggestedCkUnitPrice, isSelectedCkCustomer, items.length, productById])
 
     const removeItem = (index: number) => {
         setItems(prev => prev.filter((_, i) => i !== index))
@@ -268,20 +442,77 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
         return subTotal - discount + shipping
     }, [subTotal, discount, shipping])
 
+    const showSaveBlockedToast = useCallback((title: string, errors: string[]) => {
+        const uniqueErrors = Array.from(new Set(errors))
+        toast.error(title, {
+            description: (
+                <ul className="list-disc pl-4">
+                    {uniqueErrors.map((error, index) => (
+                        <li key={`${error}-${index}`}>{error}</li>
+                    ))}
+                </ul>
+            )
+        })
+    }, [])
+
     const handleSubmit = async () => {
         console.log("🔍 SO Submit clicked")
         console.log("customerId:", customerId)
         console.log("items:", items)
+        setSubmitAlert(null)
+        setCustomerPoError(null)
+
+        // Validation
+        const errors: string[] = []
 
         if (!customerId) {
-            console.log("❌ No customer selected")
-            toast.error("Please select a customer")
-            return
+            errors.push("Customer belum dipilih")
         }
         if (items.length === 0) {
-            console.log("❌ No items")
-            toast.error("Please add at least one product")
+            errors.push("Belum ada produk - Tambahkan minimal 1 produk")
+        }
+        if (!warehouseId) {
+            errors.push("Book Warehouse belum dipilih")
+        }
+        if (customerPo && customerPo.length > 100) {
+            errors.push("Customer PO maksimal 100 karakter")
+        }
+        if (poDocument && poDocument.length > 255) {
+            errors.push("URL Dokumen PO terlalu panjang (maksimal 255 karakter)")
+        }
+        if (poReceive && isNaN(new Date(poReceive).getTime())) {
+            errors.push("Format tanggal PO Receive tidak valid")
+        }
+        
+        // Validate Items
+        items.forEach((item, index) => {
+            if (item.quantity <= 0) {
+                errors.push(`Produk #${index + 1} (${item.productName}) harus memiliki jumlah lebih dari 0`)
+            }
+        })
+
+        if (errors.length > 0) {
+            console.log("❌ Validation failed", errors)
+            showSaveBlockedToast("Sales Order belum bisa disimpan", errors)
             return
+        }
+
+        if (quotationContext && !isEdit && typeof window !== "undefined") {
+            const warehouseLabel = selectedWarehouse
+                ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}`
+                : "Belum dipilih"
+            const defaultWarehouseNote =
+                defaultWarehouse && selectedWarehouse && selectedWarehouse.id !== defaultWarehouse.id
+                    ? `\n\nCatatan: warehouse default saat ini adalah ${defaultWarehouse.sloc} - ${defaultWarehouse.description}, tetapi Anda memilih warehouse yang berbeda.`
+                    : ""
+
+            const confirmed = window.confirm(
+                `Pastikan Book Warehouse sudah sesuai sebelum membuat Sales Order.\n\nBook Warehouse: ${warehouseLabel}\n\nStok akan dibooking ke warehouse ini dan delivery akan mengikuti Sales Order tersebut.${defaultWarehouseNote}\n\nLanjut simpan Sales Order?`
+            )
+
+            if (!confirmed) {
+                return
+            }
         }
 
         console.log("✅ Validation passed, submitting...")
@@ -290,7 +521,8 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
             const payload = {
                 invoiceNumber: invoiceNumber || undefined,
                 customerPo: customerPo || undefined,
-                customerId,
+                customerId: customerId as number,
+                salesPersonId: salesPersonId || undefined,
                 warehouseId,
                 salesDate,
                 poReceive: poReceive || undefined,
@@ -322,14 +554,89 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
 
             if (result.success) {
                 toast.success(`Sales order ${isEdit ? "updated" : "created"} successfully`)
-                router.refresh()
-                router.push("/dashboard/sales-orders")
+                const savedId =
+                    ("id" in result && typeof result.id === "number")
+                        ? result.id
+                        : initialData?.id
+
+                if (!isEdit && savedId && quotationContext?.quotationId) {
+                    const linkResult = await finalizeQuotationOcrSalesOrderLink({
+                        quotationId: quotationContext.quotationId,
+                        salesOrderId: savedId,
+                        ocrSessionId: quotationContext.ocrSessionId,
+                    })
+
+                    if (!linkResult.success) {
+                        toast.warning("Sales Order tersimpan, tapi belum berhasil terhubung ke quotation")
+                    }
+                }
+
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (status === "draft" || status === "ocr") {
+                    listParams.set("tab", "ocr")
+                } else if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/sales-orders?${listParams.toString()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.replace(listUrl)
             } else {
-                // @ts-expect-error - result type union doesn't always have error
-                toast.error(result.error || "Something went wrong")
+                const serverDetailErrors: string[] = []
+                const fieldErrors =
+                    "fieldErrors" in result && result.fieldErrors
+                        ? result.fieldErrors
+                        : null
+
+                if (fieldErrors && typeof fieldErrors === "object") {
+                    for (const value of Object.values(fieldErrors as Record<string, unknown>)) {
+                        if (typeof value === "string" && value.trim()) {
+                            serverDetailErrors.push(value)
+                        } else if (Array.isArray(value)) {
+                            for (const message of value) {
+                                if (typeof message === "string" && message.trim()) {
+                                    serverDetailErrors.push(message)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                const customerPoFieldError =
+                    fieldErrors &&
+                        typeof fieldErrors === "object" &&
+                        "customerPo" in fieldErrors &&
+                        typeof (fieldErrors as Record<string, unknown>).customerPo === "string"
+                        ? (fieldErrors as Record<string, string>).customerPo
+                        : null
+
+                if (customerPoFieldError) {
+                    setCustomerPoError(customerPoFieldError)
+                    setSubmitAlert(customerPoFieldError)
+                }
+
+                // Check if result has error property (type guard)
+                if ('error' in result && result.error) {
+                    if (serverDetailErrors.length > 0) {
+                        showSaveBlockedToast(result.error, serverDetailErrors)
+                    } else {
+                        toast.error(result.error)
+                    }
+                } else {
+                    if (serverDetailErrors.length > 0) {
+                        showSaveBlockedToast("Sales Order belum bisa disimpan", serverDetailErrors)
+                    } else {
+                        toast.error("Terjadi kesalahan yang tidak diketahui")
+                    }
+                }
             }
-        } catch {
-            toast.error("Failed to save sales order")
+        } catch (err) {
+            console.error("Submit exception:", err)
+            toast.error("Gagal menyimpan sales order. Periksa koneksi internet anda.")
         } finally {
             setIsSubmitting(false)
         }
@@ -390,6 +697,25 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                 </Card>
             )}
 
+            {submitAlert && (
+                <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>No PO Customer Sudah Pernah Diinput</AlertTitle>
+                    <AlertDescription>{submitAlert}</AlertDescription>
+                </Alert>
+            )}
+
+            {quotationContext ? (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+                    <AlertTriangle className="h-4 w-4 text-amber-700" />
+                    <AlertTitle>Periksa Book Warehouse Sebelum Create Sales Order</AlertTitle>
+                    <AlertDescription>
+                        Sales Order ini dibuat dari flow quotation OCR. Pastikan <span className="font-semibold">Warehouse (Book Stock)</span> sudah sesuai
+                        karena stok akan dibooking ke warehouse tersebut dan relasi ke delivery akan mengikuti Sales Order ini.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
             {/* Order Header Fields */}
             <Card>
                 <CardContent className="p-6">
@@ -449,6 +775,103 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                            {isSelectedCkCustomer ? (
+                                <p className="text-xs text-emerald-700">
+                                    {ckPriceSuggestionLabel}: Unit Price akan otomatis diambil dari Master Price CK.
+                                </p>
+                            ) : null}
+                        </div>
+
+                        {/* PIC Sales */}
+                        <div className="space-y-2">
+                            <Label className="font-semibold">PIC Sales</Label>
+                            <Popover open={salesPicOpen} onOpenChange={setSalesPicOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={salesPicOpen}
+                                        className="w-full justify-between font-normal"
+                                    >
+                                        {selectedSalesPerson ? (
+                                            <div className="flex min-w-0 flex-col items-start text-left">
+                                                <span className="truncate">{selectedSalesPerson.name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {selectedSalesPerson.role}
+                                                </span>
+                                            </div>
+                                        ) : "Select PIC Sales..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[360px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Search PIC by name, email, or role..." />
+                                        <CommandList>
+                                            <CommandEmpty>PIC Sales tidak ditemukan.</CommandEmpty>
+                                            <CommandGroup heading="Pilihan">
+                                                <CommandItem
+                                                    value="tanpa pic sales kosong clear"
+                                                    onSelect={() => {
+                                                        setSalesPersonId("")
+                                                        setSalesPicOpen(false)
+                                                    }}
+                                                >
+                                                    <Check className={cn("mr-2 h-4 w-4", !salesPersonId ? "opacity-100" : "opacity-0")} />
+                                                    <div className="flex flex-col">
+                                                        <span>Tanpa PIC Sales</span>
+                                                        <span className="text-xs text-muted-foreground">Kosongkan pilihan</span>
+                                                    </div>
+                                                </CommandItem>
+                                            </CommandGroup>
+                                            {salesRoleUsers.length > 0 ? (
+                                                <CommandGroup heading="Role Sales">
+                                                    {salesRoleUsers.map((salesUser) => (
+                                                        <CommandItem
+                                                            key={salesUser.id}
+                                                            value={`${salesUser.name} ${salesUser.email} ${salesUser.role}`}
+                                                            onSelect={() => {
+                                                                setSalesPersonId(salesUser.id)
+                                                                setSalesPicOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", salesPersonId === salesUser.id ? "opacity-100" : "opacity-0")} />
+                                                            <div className="flex min-w-0 flex-col">
+                                                                <span className="truncate font-medium">{salesUser.name}</span>
+                                                                <span className="truncate text-xs text-muted-foreground">
+                                                                    {salesUser.role} · {salesUser.email}
+                                                                </span>
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            ) : null}
+                                            {otherPicUsers.length > 0 ? (
+                                                <CommandGroup heading="Role Lainnya">
+                                                    {otherPicUsers.map((otherUser) => (
+                                                        <CommandItem
+                                                            key={otherUser.id}
+                                                            value={`${otherUser.name} ${otherUser.email} ${otherUser.role}`}
+                                                            onSelect={() => {
+                                                                setSalesPersonId(otherUser.id)
+                                                                setSalesPicOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", salesPersonId === otherUser.id ? "opacity-100" : "opacity-0")} />
+                                                            <div className="flex min-w-0 flex-col">
+                                                                <span className="truncate font-medium">{otherUser.name}</span>
+                                                                <span className="truncate text-xs text-muted-foreground">
+                                                                    {otherUser.role} · {otherUser.email}
+                                                                </span>
+                                                            </div>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            ) : null}
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         {/* Warehouse */}
@@ -493,6 +916,13 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
+                            {quotationContext ? (
+                                <p className="text-xs text-amber-700">
+                                    Pastikan book warehouse sesuai dengan rencana pengiriman. Saat ini:
+                                    {" "}
+                                    <span className="font-semibold">{selectedWarehouse ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}` : "belum dipilih"}</span>.
+                                </p>
+                            ) : null}
                         </div>
 
                         {/* No PO Customer */}
@@ -501,8 +931,20 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                             <Input
                                 placeholder="Enter Customer PO Number"
                                 value={customerPo}
-                                onChange={(e) => setCustomerPo(e.target.value)}
+                                onChange={(e) => {
+                                    setCustomerPo(e.target.value)
+                                    if (customerPoError) {
+                                        setCustomerPoError(null)
+                                    }
+                                    if (submitAlert) {
+                                        setSubmitAlert(null)
+                                    }
+                                }}
+                                className={cn(customerPoError && "border-red-500 focus-visible:ring-red-500")}
                             />
+                            {customerPoError && (
+                                <p className="text-sm font-medium text-red-600">{customerPoError}</p>
+                            )}
                         </div>
 
 
@@ -566,7 +1008,9 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                         size="icon"
                                         onClick={(e) => {
                                             e.preventDefault()
-                                            window.open(poDocument, "_blank")
+                                            const previewUrl = resolveUploadDocumentUrl(poDocument)
+                                            if (!previewUrl) return
+                                            window.open(previewUrl, "_blank")
                                         }}
                                         title="Preview PDF"
                                     >
@@ -673,7 +1117,7 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                         <CommandList>
                                             <CommandEmpty>No product found.</CommandEmpty>
                                             <CommandGroup>
-                                                {products.map(product => (
+                                                {uniqueProducts.map(product => (
                                                     <CommandItem
                                                         key={product.id}
                                                         value={`${product.materialNumber} ${product.materialDescription}`}
@@ -681,7 +1125,10 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                                     >
                                                         <Package className="mr-2 h-4 w-4 text-muted-foreground" />
                                                         <div>
-                                                            <p className="font-medium">{product.materialNumber}</p>
+                                                            <p className="font-medium">
+                                                                {product.materialNumber} 
+                                                                {product.materialNumberCk && <span className="text-orange-600 ml-2">| CK: {product.materialNumberCk}</span>}
+                                                            </p>
                                                             <p className="text-xs text-muted-foreground">{product.materialDescription}</p>
                                                         </div>
                                                     </CommandItem>
@@ -691,13 +1138,6 @@ export function SalesOrderForm({ customers, products, warehouses, initialData }:
                                     </Command>
                                 </PopoverContent>
                             </Popover>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setProductOpen(true)}
-                            >
-                                <Plus className="h-4 w-4" />
-                            </Button>
                             <QuickAddProductDialog
                                 warehouses={warehouses}
                                 onProductCreated={(product) => {

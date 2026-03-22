@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useForm } from "react-hook-form"
+import { useState } from "react"
+import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Loader2, Plus } from "lucide-react"
@@ -59,7 +59,7 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const form = useForm<QuickAddFormValues>({
-        resolver: zodResolver(quickAddSchema),
+        resolver: zodResolver(quickAddSchema) as Resolver<QuickAddFormValues>,
         defaultValues: {
             category: "",
             materialNumber: "",
@@ -89,15 +89,17 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
                 imageUrl: data.imageUrl,
             })
 
-            if (!productResult.success || !productResult.id) {
+            if (!productResult.success || !("id" in productResult)) {
                 toast.error(productResult.error || "Failed to create product")
                 return
             }
 
+            const createdProductId = Number(productResult.id)
+
             // 2. Add Stock if requested
             if (data.addStock && data.warehouseId && data.initialStock !== undefined) {
                 const stockResult = await upsertStock({
-                    productId: productResult.id,
+                    productId: createdProductId,
                     warehouseId: data.warehouseId,
                     totalStock: data.initialStock,
                     minStock: 0,
@@ -113,18 +115,25 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
             // We need to fetch it or construct it. For now, construct a basic one.
             // Ideally we should fetch the full product, but we have enough info.
             const newProduct: Product = {
-                id: productResult.id,
+                id: createdProductId,
                 category: data.category,
                 materialNumber: data.materialNumber,
-                materialDescription: data.materialDescription,
-                oldMaterialNo: data.oldMaterialNo || null,
-                brand: data.brand || null,
-                costSap: data.costSap || null,
-                plant: data.plant || null,
-                sloc: data.sloc || null,
-                slocDescription: data.slocDescription || null,
-                typeWarehouse: data.typeWarehouse || null,
-                imageUrl: data.imageUrl || null,
+                materialNumberCk: null,
+                materialDescription: data.materialDescription ?? null,
+                oldMaterialNo: data.oldMaterialNo ?? null,
+                brand: data.brand ?? null,
+                costSap: data.costSap ?? null,
+                plant: data.plant ?? null,
+                sloc: data.sloc ?? null,
+                slocDescription: data.slocDescription ?? null,
+                typeWarehouse: data.typeWarehouse ?? null,
+                imageUrl: data.imageUrl ?? null,
+                isBundle: false,
+                isConsignment: false,
+                defaultTrackingMode: data.defaultTrackingMode ?? "manual_only",
+                serialRequired: data.serialRequired ?? false,
+                rfidCapable: data.rfidCapable ?? false,
+                allowTagReuse: data.allowTagReuse ?? false,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }

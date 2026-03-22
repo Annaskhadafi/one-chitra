@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, CheckCircle2, AlertTriangle, Loader2, X, FileText, Upload, Paperclip, Download } from "lucide-react"
 import { toast } from "sonner"
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
 import { Button } from "@/components/ui/button"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -39,15 +41,26 @@ import {
     updateOpnameItemCount,
     closeStockOpnameSession,
     cancelStockOpnameSession,
+    updateStockOpnameDocument,
+    type OpnameSourceType,
 } from "@/app/actions/stock-opname"
 import { uploadFile } from "@/app/actions/upload"
 import type { StockOpnameSession } from "@/lib/types"
+import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface OpnameDetailViewProps {
     session: StockOpnameSession
+    basePath?: string
+    sourceType?: OpnameSourceType
 }
 
-export function OpnameDetailView({ session }: OpnameDetailViewProps) {
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
+
+export function OpnameDetailView({
+    session,
+    basePath = "/dashboard/stock-opname",
+    sourceType = "sap",
+}: OpnameDetailViewProps) {
     const router = useRouter()
     const isOpen = session.status === "open"
 
@@ -61,6 +74,34 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     const [closing, setClosing] = useState(false)
     const [applyAdjustments, setApplyAdjustments] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<number, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
+    const orderedSignatures = useMemo(
+        () => [...(session.signatures ?? [])].sort((a, b) => a.order - b.order),
+        [session.signatures]
+    )
+    const trackedProductIds = useMemo(
+        () => Array.from(new Set(items.map((item) => item.productId).filter((productId) => productId > 0))).sort((a, b) => a - b),
+        [items],
+    )
+    const trackedProductIdsKey = useMemo(() => trackedProductIds.join(","), [trackedProductIds])
+    const trackedItemCount = useMemo(
+        () => Object.values(trackingDecisions).filter((decision) => decision.trackingMode !== "manual_only").length,
+        [trackingDecisions],
+    )
+    const documentUrl = resolveUploadDocumentUrl(session.documentUrl)
+    const documentFileName =
+        session.documentFileName?.trim() ||
+        extractUploadFilename(session.documentUrl) ||
+        "document"
+
+    const formattedOpnameDate = session.opnameDate
+        ? new Date(session.opnameDate).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        })
+        : "-"
 
     async function handlePrintPdf(mode: 'checklist' | 'report' = 'report') {
         if (mode === 'report' && session.status !== "closed") {
@@ -69,7 +110,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         }
 
         // Open PDF in new window
-        window.open(`/dashboard/stock-opname/${session.id}/pdf?mode=${mode}`, '_blank')
+        window.open(`${basePath}/${session.id}/pdf?mode=${mode}`, '_blank')
     }
 
     async function handleUploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
@@ -83,12 +124,24 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
         try {
             const uploadResult = await uploadFile(formData)
             if (uploadResult.success && uploadResult.url) {
-                toast.success("Dokumen hasil audit berhasil diunggah")
-                router.refresh()
+                const saveResult = await updateStockOpnameDocument(session.id, {
+                    url: uploadResult.url,
+                    originalFileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size,
+                    title: "Dokumen Hasil Audit Lapangan",
+                })
+
+                if (saveResult.success) {
+                    toast.success("Dokumen hasil audit berhasil diunggah")
+                    router.refresh()
+                } else {
+                    toast.error(saveResult.error || "Gagal menyimpan metadata dokumen")
+                }
             } else {
                 toast.error(uploadResult.error || "Gagal mengunggah file")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan saat mengunggah")
         } finally {
             setIsUploading(false)
@@ -110,6 +163,51 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
             return matchSearch && matchStatus
         })
     }, [items, search, filterStatus])
+
+    useEffect(() => {
+        let cancelled = false
+        const productIds = trackedProductIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+
+        if (!session.warehouseId || productIds.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        getTrackingDecisionPreview(session.warehouseId, productIds)
+            .then((decisions) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(
+                    Object.fromEntries(decisions.map((decision) => [decision.productId, decision])),
+                )
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load opname tracking decisions:", error)
+                setTrackingDecisions({})
+                toast.error("Gagal memuat aturan tracking untuk sesi opname ini")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [session.warehouseId, trackedProductIdsKey])
 
     function startEdit(itemId: number, currentCountedQty: number | null, currentNotes: string | null) {
         if (!isOpen) return
@@ -148,11 +246,17 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
 
     async function handleClose() {
         setClosing(true)
-        const result = await closeStockOpnameSession(session.id, applyAdjustments)
+        const result = await closeStockOpnameSession(session.id, applyAdjustments, sourceType)
         setClosing(false)
         if (result.success) {
             toast.success("Sesi opname berhasil ditutup")
-            router.push("/dashboard/stock-opname")
+            if (sourceType === "actual" && result.notification && !result.notification.sent) {
+                toast.warning(`Email notifikasi belum terkirim: ${result.notification.reason || "cek konfigurasi SMTP / penerima"}`)
+            }
+            if (sourceType === "actual" && result.notification?.sent) {
+                toast.success(`Email notifikasi terkirim ke ${result.notification.recipientCount ?? 0} penerima`)
+            }
+            router.push(basePath)
             router.refresh()
         } else {
             toast.error(result.error ?? "Gagal menutup sesi")
@@ -160,10 +264,10 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
     }
 
     async function handleCancel() {
-        const result = await cancelStockOpnameSession(session.id)
+        const result = await cancelStockOpnameSession(session.id, sourceType)
         if (result.success) {
             toast.success("Sesi dibatalkan")
-            router.push("/dashboard/stock-opname")
+            router.push(basePath)
             router.refresh()
         } else {
             toast.error(result.error ?? "Gagal membatalkan")
@@ -172,6 +276,53 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
 
     return (
         <div className="flex flex-col gap-4">
+            {/* Session Information */}
+            <Card>
+                <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium">Detail Form Stock Opname</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Tanggal Opname</p>
+                            <p className="text-sm font-semibold mt-1">{formattedOpnameDate}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Waktu</p>
+                            <p className="text-sm font-semibold mt-1">{session.opnameTime ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Lokasi</p>
+                            <p className="text-sm font-semibold mt-1">{session.location ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-[11px] text-muted-foreground">Dibuat Oleh</p>
+                            <p className="text-sm font-semibold mt-1">{session.createdBy?.name ?? "-"}</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <p className="text-[11px] text-muted-foreground">Peserta / Tanda Tangan</p>
+                        {orderedSignatures.length === 0 ? (
+                            <p className="text-sm mt-1 text-muted-foreground">Belum ada data peserta</p>
+                        ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {orderedSignatures.map((sig) => (
+                                    <Badge key={sig.id} variant="secondary" className="text-xs font-normal">
+                                        {sig.name} ({sig.position})
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <p className="text-[11px] text-muted-foreground">Catatan Form</p>
+                        <p className="text-sm mt-1">{session.notes?.trim() || "-"}</p>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Toolbar */}
             <div className="flex flex-wrap items-center gap-3 justify-between">
                 <div className="flex flex-wrap gap-3 flex-1">
@@ -203,7 +354,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                         <Button 
                             variant="outline" 
                             size="sm" 
-                            onClick={() => window.open(`/dashboard/stock-opname/${session.id}/print-checklist`, '_blank')}
+                            onClick={() => window.open(`${basePath}/${session.id}/print-checklist`, '_blank')}
                         >
                             <FileText className="h-4 w-4 mr-1" />
                             Cetak Checklist
@@ -305,6 +456,17 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                 </div>
             )}
 
+            {trackedItemCount > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    {trackedItemCount} item pada sesi opname ini termasuk pilot RFID di warehouse terkait. Penghitungan manual tetap bisa dilakukan, dan saat sesi ditutup sistem akan membuat follow-up exception RFID untuk item yang belum dihitung atau masih selisih.
+                </div>
+            )}
+            {loadingTrackingDecisions && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    Menyelaraskan aturan tracking warehouse untuk sesi opname...
+                </div>
+            )}
+
             {/* Document Upload Section */}
             <Card className="mt-2">
                 <CardHeader className="py-3">
@@ -315,12 +477,12 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                 </CardHeader>
                 <CardContent className="py-3">
                     <div className="flex items-center gap-4">
-                        {session.documentUrl ? (
+                        {documentUrl ? (
                             <div className="flex items-center gap-2 bg-green-50 text-green-700 p-2 rounded-md border border-green-200 flex-1">
                                 <Paperclip className="h-4 w-4" />
-                                <span className="text-xs truncate flex-1">{session.documentUrl.split('/').pop()}</span>
+                                <span className="text-xs truncate flex-1">{documentFileName}</span>
                                 <Button variant="ghost" size="sm" className="h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-100" asChild>
-                                    <a href={session.documentUrl} target="_blank" rel="noopener noreferrer">
+                                    <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                         <Download className="h-3 w-3 mr-1" />
                                         Lihat
                                     </a>
@@ -365,6 +527,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
 
             {/* Table */}
             <div className="rounded-xl border overflow-hidden">
+                <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/40">
@@ -372,7 +535,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                             <TableHead>Material No.</TableHead>
                             <TableHead>Deskripsi</TableHead>
                             <TableHead>Kategori</TableHead>
-                            <TableHead className="text-right">Qty SAP</TableHead>
+                            <TableHead className="text-right">{sourceType === "actual" ? "Qty Aktual Sistem" : "Qty SAP"}</TableHead>
                             <TableHead className="text-right">Qty Fisik</TableHead>
                             <TableHead className="text-right">Selisih</TableHead>
                             <TableHead>Catatan</TableHead>
@@ -391,6 +554,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                                 const isEditing = editingId === item.id
                                 const hasVariance = item.variance !== null && item.variance !== 0
                                 const isCounted = item.countedQty !== null
+                                const trackingDecision = trackingDecisions[item.productId]
 
                                 return (
                                     <TableRow
@@ -405,9 +569,19 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                                             {item.product?.materialDescription ?? "-"}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="text-xs">
-                                                {item.product?.category ?? "-"}
-                                            </Badge>
+                                            <div className="flex flex-col gap-2">
+                                                <Badge variant="outline" className="w-fit text-xs">
+                                                    {item.product?.category ?? "-"}
+                                                </Badge>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <TrackingModeBadge mode={trackingDecision?.trackingMode ?? "manual_only"} />
+                                                    {trackingDecision?.serialRequired && (
+                                                        <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                                                            Serial / Tag Follow-up
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-right font-medium">{item.systemQty}</TableCell>
                                         <TableCell className="text-right">
@@ -500,6 +674,7 @@ export function OpnameDetailView({ session }: OpnameDetailViewProps) {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </div>
             <p className="text-xs text-muted-foreground">
                 Menampilkan {filtered.length} dari {items.length} item ·{" "}

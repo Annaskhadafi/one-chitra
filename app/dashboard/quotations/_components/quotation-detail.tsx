@@ -59,6 +59,9 @@ import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { QuotationPdfPreview } from "./quotation-pdf-preview"
 import { ProductHistoryPopover } from "./product-history-popover"
+import { QuotationFileCenter } from "./quotation-file-center"
+import { QuotationHistoryPanel } from "./quotation-history-panel"
+import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
 
 type User = typeof user.$inferSelect
 
@@ -71,14 +74,19 @@ interface QuotationDetailData {
     subject: string | null
     salesPersonId: string | null
     attn: string | null
+    address: string | null
     salesPerson: User | null
     status: string
+    currentRevision: number
     paymentTerms: string | null
     termsConditions: string | null
     notes: string | null
     discount: string
     tax: string
     shipping: string
+    currency: string
+    discountType: string
+    clientNote: string | null
     salesOrderId: number | null
     createdAt: Date
     updatedAt: Date
@@ -87,11 +95,40 @@ interface QuotationDetailData {
     rejectedAt: Date | null
     rejectedBy: string | null
     rejectionReason: string | null
+    customerPoNumber: string | null
+    customerPoDocument: string | null
+    customerPoUploadedAt: Date | null
+    poValidationStatus: string | null
+    poValidationCheckedAt: Date | null
+    poValidationOcrSessionId: number | null
+    poValidationSummary: QuotationPoValidationSummary | null
     customer: Customer
+    attachments: {
+        id: number
+        kind: string
+        title: string
+        fileUrl: string
+        fileName: string
+        mimeType: string | null
+        fileSize: number
+        description: string | null
+        includeInPdf: boolean
+        createdAt: Date
+        uploadedByUser?: User | null
+    }[]
+    revisions: {
+        id: number
+        revisionNumber: number
+        changeSummary: string | null
+        createdAt: Date
+        snapshot: QuotationRevisionSnapshot
+        createdByUser?: User | null
+    }[]
     items: {
         id: number
         productId: number
         description: string | null
+        longDescription: string | null
         quantity: number
         unitPrice: string
         discount: string
@@ -160,7 +197,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     const isExpired = quotation.validUntil && new Date(quotation.validUntil) < new Date()
     const canApprove = ["draft", "sent"].includes(quotation.status)
     const canReject = ["draft", "sent"].includes(quotation.status)
-    const canConvert = quotation.status === "approved"
+    const poRequiresOcrReview = Boolean(
+        quotation.customerPoNumber &&
+        quotation.poValidationStatus &&
+        quotation.poValidationStatus !== "full_match"
+    )
+    const canConvert = !poRequiresOcrReview && (quotation.status === "approved" || Boolean(quotation.customerPoNumber))
     const canEdit = ["draft", "sent"].includes(quotation.status)
 
     // Calculations
@@ -266,8 +308,46 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         </Link>
                     )}
                     <Button variant="outline" className="gap-2" onClick={() => setPdfOpen(true)}>
+                        <FileText className="h-4 w-4" />
+                        Preview
+                    </Button>
+                    <Button onClick={async () => {
+                        const { generateQuotationPdf } = await import("./quotation-pdf-generator")
+                        await generateQuotationPdf({
+                            quotationNumber: quotation.quotationNumber,
+                            currentRevision: quotation.currentRevision,
+                            quotationDate: quotation.quotationDate,
+                            validUntil: quotation.validUntil,
+                            salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
+                            attn: quotation.attn,
+                            address: quotation.address,
+                            customer: quotation.customer,
+                            currency: quotation.currency,
+                            discountType: quotation.discountType,
+                            discount: quotation.discount,
+                            tax: quotation.tax,
+                            shipping: quotation.shipping,
+                            termsConditions: quotation.termsConditions,
+                            clientNote: quotation.clientNote,
+                            items: quotation.items.map((item) => ({
+                                product: item.product,
+                                description: item.description,
+                                longDescription: item.longDescription,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                            })),
+                            attachments: quotation.attachments.map((attachment) => ({
+                                title: attachment.title,
+                                fileName: attachment.fileName,
+                                fileUrl: attachment.fileUrl,
+                                mimeType: attachment.mimeType,
+                                kind: attachment.kind,
+                                includeInPdf: attachment.includeInPdf,
+                            })),
+                        })
+                    }} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
                         <FileDown className="h-4 w-4" />
-                        Preview PDF
+                        Download PDF
                     </Button>
                     {canApprove && (
                         <AlertDialog>
@@ -334,9 +414,9 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                             <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Convert to Sales Order?</AlertDialogTitle>
-                                    <AlertDialogDescription>
+                                <AlertDialogDescription>
                                         This will create a new Sales Order from quotation {quotation.quotationNumber} with all its items and details. The quotation status will be changed to &quot;Converted&quot;.
-                                    </AlertDialogDescription>
+                                </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -346,6 +426,14 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
+                    )}
+                    {!canConvert && quotation.poValidationOcrSessionId && (
+                        <Link href={`/dashboard/sales-orders/ocr-validate?session=${quotation.poValidationOcrSessionId}&quotation=${quotation.id}`}>
+                            <Button className="gap-2 bg-amber-600 hover:bg-amber-700">
+                                <ArrowRightLeft className="h-4 w-4" />
+                                Review OCR Before Convert
+                            </Button>
+                        </Link>
                     )}
                 </div>
             </div>
@@ -427,6 +515,16 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                             </div>
                         )}
                         <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Current Revision</span>
+                            <span className="font-medium">Rev.{quotation.currentRevision}</span>
+                        </div>
+                        {quotation.customerPoNumber && (
+                            <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Customer PO</span>
+                                <span className="font-medium">{quotation.customerPoNumber}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Created</span>
                             <span className="font-medium">{formatDateTime(quotation.createdAt)}</span>
                         </div>
@@ -481,9 +579,72 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                 </Link>
                             </div>
                         )}
+                        {quotation.customerPoDocument && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">PO File</span>
+                                <Link
+                                    href={quotation.customerPoDocument}
+                                    target="_blank"
+                                    className="flex items-center gap-1 text-primary font-medium hover:underline"
+                                >
+                                    Open PO
+                                    <ExternalLink className="h-3 w-3" />
+                                </Link>
+                            </div>
+                        )}
+                        {quotation.poValidationStatus && (
+                            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                                <div className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="text-muted-foreground">PO OCR Validation</span>
+                                    <Badge
+                                        variant={
+                                            quotation.poValidationStatus === "full_match"
+                                                ? "default"
+                                                : quotation.poValidationStatus === "partial_match"
+                                                    ? "secondary"
+                                                    : "destructive"
+                                        }
+                                    >
+                                        {quotation.poValidationStatus === "full_match"
+                                            ? "Full Match"
+                                            : quotation.poValidationStatus === "partial_match"
+                                                ? "Partial Match"
+                                                : quotation.poValidationStatus === "mismatch"
+                                                    ? "Mismatch"
+                                                    : "OCR Failed"}
+                                    </Badge>
+                                </div>
+                                {quotation.poValidationSummary?.reasons?.length ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        {quotation.poValidationSummary.reasons[0]}
+                                    </p>
+                                ) : null}
+                                {quotation.poValidationOcrSessionId && (
+                                    <Link
+                                        href={`/dashboard/sales-orders/ocr-validate?session=${quotation.poValidationOcrSessionId}&quotation=${quotation.id}`}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                    >
+                                        Review OCR Validation
+                                        <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
+
+            <QuotationFileCenter
+                quotationId={quotation.id}
+                quotationNumber={quotation.quotationNumber}
+                salesOrderId={quotation.salesOrderId}
+                customerPoNumber={quotation.customerPoNumber}
+                customerPoDocument={quotation.customerPoDocument}
+                poValidationStatus={quotation.poValidationStatus}
+                poValidationSummary={quotation.poValidationSummary}
+                poValidationOcrSessionId={quotation.poValidationOcrSessionId}
+                attachments={quotation.attachments}
+            />
 
             {/* Items Table */}
             <Card>
@@ -605,9 +766,11 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                 </Card>
             </div>
 
+            <QuotationHistoryPanel revisions={quotation.revisions} />
+
             {/* PDF Preview Dialog */}
             <QuotationPdfPreview
-                quotation={quotation}
+                quotation={quotation as unknown as Parameters<typeof QuotationPdfPreview>[0]["quotation"]}
                 open={pdfOpen}
                 onClose={() => setPdfOpen(false)}
             />

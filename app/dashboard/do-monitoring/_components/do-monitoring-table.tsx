@@ -6,6 +6,7 @@ import { ScanDoPreview } from "./scan-do-preview"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
 import { deleteDelivery, updateDoMonitoringFields, getDeliveries } from "@/app/actions/delivery"
+import { batchSyncInvoiceFromBilling } from "@/app/actions/billing"
 import {
     Table,
     TableBody,
@@ -33,6 +34,12 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -43,7 +50,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText } from "lucide-react"
+import { Search, MoreHorizontal, FileEdit, Trash2, Eye, Download, ChevronUp, ChevronDown, FileText, RefreshCw, Calendar as CalendarIcon, X } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -58,23 +65,94 @@ import {
     SortingState,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product } from "@/lib/types"
+import type { DateRange } from "react-day-picker"
+import type { Delivery, SalesOrder, Customer, User, Warehouse, DeliveryItem, Product, SalesOrderItem } from "@/lib/types"
 
 export interface DeliveryWithRelations extends Delivery {
-    salesOrder: (SalesOrder & { customer: Customer }) | null
+    salesOrder: (SalesOrder & { customer: Customer, items: SalesOrderItem[] }) | null
     warehouse: Warehouse | null
     createdByUser: User | null
     items: (DeliveryItem & { product: Product })[]
 }
 
+function getWarehouseLabel(warehouse: Warehouse | null | undefined) {
+    if (!warehouse) return "-"
+    return warehouse.description || warehouse.sloc || "-"
+}
+
+function calculateGrandTotal(salesOrder: SalesOrder & { items: SalesOrderItem[] } | null) {
+    if (!salesOrder || !salesOrder.items) return 0
+    const subtotal = salesOrder.items.reduce((sum, item) => {
+        const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+        return sum + lineTotal
+    }, 0)
+    return subtotal - Number(salesOrder.discount) + Number(salesOrder.shipping)
+}
+
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(value)
+}
+
+// Helper functions for date range presets
+function getDateRangePreset(preset: string): { from: Date; to: Date } | null {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    switch (preset) {
+        case "this-week": {
+            const dayOfWeek = today.getDay()
+            const monday = new Date(today)
+            monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+            return { from: monday, to: today }
+        }
+        case "last-week": {
+            const dayOfWeek = today.getDay()
+            const lastMonday = new Date(today)
+            lastMonday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) - 7)
+            const lastSunday = new Date(lastMonday)
+            lastSunday.setDate(lastMonday.getDate() + 6)
+            return { from: lastMonday, to: lastSunday }
+        }
+        case "this-month": {
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+            return { from: firstDay, to: today }
+        }
+        case "last-month": {
+            const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+            const lastDay = new Date(today.getFullYear(), today.getMonth(), 0)
+            return { from: firstDay, to: lastDay }
+        }
+        case "this-quarter": {
+            const quarter = Math.floor(today.getMonth() / 3)
+            const firstDay = new Date(today.getFullYear(), quarter * 3, 1)
+            return { from: firstDay, to: today }
+        }
+        case "last-quarter": {
+            const quarter = Math.floor(today.getMonth() / 3)
+            const lastQuarter = quarter === 0 ? 3 : quarter - 1
+            const year = quarter === 0 ? today.getFullYear() - 1 : today.getFullYear()
+            const firstDay = new Date(year, lastQuarter * 3, 1)
+            const lastDay = new Date(year, lastQuarter * 3 + 3, 0)
+            return { from: firstDay, to: lastDay }
+        }
+        default:
+            return null
+    }
+}
+
 export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRelations[] }) {
-    const queryClient = useQueryClient()
     const { data = initialData } = useQuery({
         queryKey: ["deliveries"],
-        queryFn: getDeliveries,
-        initialData,
+        queryFn: () => getDeliveries(),
+        initialData: initialData,
         staleTime: 60 * 1000,
     })
+
+    const queryClient = useQueryClient()
 
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('deliveries', 'edit')
@@ -82,7 +160,12 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [globalFilter, setGlobalFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [invoiceFilter, setInvoiceFilter] = useState("all")
+    const [warehouseFilter, setWarehouseFilter] = useState("all")
     const [sorting, setSorting] = useState<SortingState>([{ id: "deliveryDate", desc: true }])
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+    const [datePreset, setDatePreset] = useState<string>("all")
+
 
     const [editDelivery, setEditDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isEditOpen, setIsEditOpen] = useState(false)
@@ -96,6 +179,24 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
+    const [isSyncingInvoice, setIsSyncingInvoice] = useState(false)
+
+    const uniqueWarehouses = useMemo(() => {
+        if (!data) return []
+        const warehouses = data
+            .map(d => d.warehouse)
+            .filter((w): w is Warehouse => w !== null && w !== undefined)
+        
+        const unique = []
+        const map = new Map()
+        for (const item of warehouses) {
+            if (!map.has(item.id)) {
+                map.set(item.id, true)
+                unique.push(item)
+            }
+        }
+        return unique.sort((a, b) => getWarehouseLabel(a).localeCompare(getWarehouseLabel(b)))
+    }, [data])
 
     // Mutations
     const updateStatusMutation = useMutation({
@@ -180,6 +281,11 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                                 <FileText className="h-4 w-4" />
                             </Button>
                         </div>
+                        {row.original.doSap && (
+                            <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 font-mono">
+                                DO SAP: {row.original.doSap}
+                            </div>
+                        )}
                         <div className="text-xs text-muted-foreground">
                             SO: {row.original.salesOrder?.invoiceNumber || "-"}
                         </div>
@@ -271,7 +377,41 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         {
             accessorKey: "invoiceNumber",
             header: "Invoice No",
-            cell: ({ row }) => <span className="font-mono text-sm">{row.original.invoiceNumber || "-"}</span>,
+            cell: ({ row }) => {
+                const invoiceNumber = row.original.invoiceNumber
+                const deliveryType = row.original.deliveryType
+                const doSap = row.original.doSap
+                const isPartial = deliveryType === 'partial'
+                const invoiceList = invoiceNumber
+                    ? invoiceNumber.split('|').map(s => s.trim()).filter(Boolean)
+                    : []
+
+                if (!invoiceNumber) {
+                    return <span className="text-muted-foreground text-xs italic">-</span>
+                }
+
+                return (
+                    <div
+                        className="flex flex-col gap-1 min-w-[120px]"
+                        title={doSap ? `Invoice dari DO SAP: ${doSap}` : undefined}
+                    >
+                        {isPartial && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 w-fit border border-amber-200 dark:border-amber-800">
+                                ▲ PARSIAL
+                            </span>
+                        )}
+                        <div className="flex flex-col gap-0.5">
+                            {invoiceList.length > 1 ? (
+                                invoiceList.map((inv) => (
+                                    <span key={inv} className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted border border-border/50">{inv}</span>
+                                ))
+                            ) : (
+                                <span className="font-mono text-sm">{invoiceList[0] || invoiceNumber}</span>
+                            )}
+                        </div>
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "invoiceDate",
@@ -279,10 +419,37 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             cell: ({ row }) => row.original.invoiceDate ? new Date(row.original.invoiceDate).toLocaleDateString("id-ID") : "-",
         },
         {
+            id: "warehouseName",
+            accessorFn: (row) => getWarehouseLabel(row.warehouse),
+            header: "Warehouse",
+            cell: ({ row }) => {
+                const whName = getWarehouseLabel(row.original.warehouse)
+                return (
+                    <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-xs truncate max-w-[120px]" title={whName}>
+                            {whName}
+                        </span>
+                    </div>
+                )
+            },
+        },
+        {
             id: "customerName",
             accessorFn: (row) => row.salesOrder?.customer?.name,
             header: "Customer",
             cell: ({ row }) => row.original.salesOrder?.customer?.name || "-",
+        },
+        {
+            id: "grandOrder",
+            header: "Grand Order",
+            cell: ({ row }) => {
+                const grandTotal = calculateGrandTotal(row.original.salesOrder)
+                return (
+                    <span className="font-medium text-sm">
+                        {grandTotal > 0 ? formatCurrency(grandTotal) : "-"}
+                    </span>
+                )
+            },
         },
         {
             accessorKey: "remark",
@@ -371,30 +538,66 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         },
     ], [canEdit, canDelete, deleting])
 
-    const table = useReactTable({
-        data,
-        columns,
-        state: {
-            sorting,
-            globalFilter,
-        },
-        onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        globalFilterFn: (row, _columnId, filterValue): boolean => {
-            const term = (filterValue as string).toLowerCase()
-            const d = row.original
-            const matchesSearch = !!(
-                d.deliveryNumber?.toLowerCase().includes(term) ||
-                d.salesOrder?.customer?.name?.toLowerCase().includes(term) ||
-                d.invoiceNumber?.toLowerCase().includes(term)
+    const filteredData = useMemo(() => {
+        const term = globalFilter.toLowerCase().trim()
+        return (data || []).filter(d => {
+            const dateFrom = dateRange?.from
+            const dateTo = dateRange?.to
+            const matchesSearch = !term || (
+                (d.deliveryNumber?.toLowerCase().includes(term)) ||
+                (d.doSap?.toLowerCase().includes(term)) ||
+                (d.salesOrder?.customer?.name?.toLowerCase().includes(term)) ||
+                (d.invoiceNumber?.toLowerCase().includes(term)) ||
+                (d.salesOrder?.customerPo?.toLowerCase().includes(term))
             )
 
             const matchesStatus = statusFilter === "all" || (d.doStatus || "Pending") === statusFilter
-            return !!(matchesSearch && matchesStatus)
+            const matchesInvoice = invoiceFilter === "all" ||
+                (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
+                (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== "")) ||
+                (invoiceFilter === "partial-invoiced" && d.deliveryType === 'partial' && !!(d.invoiceNumber && d.invoiceNumber.trim() !== ""))
+            
+            const wh = d.warehouse
+            const matchesWarehouse = warehouseFilter === "all" || wh?.id?.toString() === warehouseFilter
+
+            // Date range filtering
+            let matchesDateRange = true
+            if (dateFrom || dateTo) {
+                const deliveryDate = d.deliveryDate ? new Date(d.deliveryDate) : null
+                if (deliveryDate) {
+                    if (dateFrom && dateTo) {
+                        const from = new Date(dateFrom)
+                        const to = new Date(dateTo)
+                        from.setHours(0, 0, 0, 0)
+                        to.setHours(23, 59, 59, 999)
+                        matchesDateRange = deliveryDate >= from && deliveryDate <= to
+                    } else if (dateFrom) {
+                        const from = new Date(dateFrom)
+                        from.setHours(0, 0, 0, 0)
+                        matchesDateRange = deliveryDate >= from
+                    } else if (dateTo) {
+                        const to = new Date(dateTo)
+                        to.setHours(23, 59, 59, 999)
+                        matchesDateRange = deliveryDate <= to
+                    }
+                } else {
+                    matchesDateRange = false
+                }
+            }
+
+            return matchesSearch && matchesStatus && matchesInvoice && matchesWarehouse && matchesDateRange
+        })
+    }, [data, globalFilter, statusFilter, invoiceFilter, warehouseFilter, dateRange])
+
+    const table = useReactTable({
+        data: filteredData,
+        columns,
+        state: {
+            sorting,
         },
+        onSortingChange: setSorting,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
     })
 
     // Virtualization
@@ -416,11 +619,12 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Delivery No", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Customer", "Remark"]
+        const headers = ["Delivery No", "DO SAP", "SO No", "Customer PO", "Tgl Pengiriman", "Return Date", "DO Status", "Scan DO URL", "Invoice No", "Invoice Date", "Warehouse", "Customer", "Remark"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const d = row.original
             return [
                 d.deliveryNumber || "",
+                d.doSap || "",
                 d.salesOrder?.invoiceNumber || "",
                 d.salesOrder?.customerPo || "",
                 d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
@@ -429,6 +633,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
+                getWarehouseLabel(d.warehouse),
                 d.salesOrder?.customer?.name || "",
                 d.remark || ""
             ]
@@ -462,12 +667,56 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
         })
     }
 
-    // Effect to trigger search when status filter changes
-    useEffect(() => {
-        table.setGlobalFilter(globalFilter)
-    }, [statusFilter, globalFilter, table])
+    const handleSyncInvoiceFromSap = async () => {
+        setIsSyncingInvoice(true)
+        try {
+            const result = await batchSyncInvoiceFromBilling()
+            if (result.success) {
+                queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+                if (result.updated > 0) {
+                    const partialInfo = result.partialMatched > 0
+                        ? ` (${result.partialMatched} parsial via DO SAP)`
+                        : ''
+                    toast.success(`${result.updated} invoice berhasil diperbarui${partialInfo}`, {
+                        description: result.notFound > 0
+                            ? `${result.notFound} DO tidak ada match di Billing (total diperiksa: ${result.total})`
+                            : `Semua ${result.total} DO berhasil dicocokkan dari Billing`,
+                        duration: 6000,
+                    })
+                } else {
+                    toast.info("Tidak ada invoice baru dari Billing", {
+                        description: `${result.total} DO diperiksa — tidak ada PO yang cocok dengan data Billing`,
+                        duration: 6000,
+                    })
+                }
+            } else {
+                toast.error(result.error || "Gagal sync invoice dari Billing")
+            }
+        } finally {
+            setIsSyncingInvoice(false)
+        }
+    }
+
+    const handleDatePresetChange = (preset: string) => {
+        setDatePreset(preset)
+        if (preset === "all") {
+            setDateRange({ from: undefined, to: undefined })
+        } else {
+            const range = getDateRangePreset(preset)
+            if (range) {
+                setDateRange(range)
+            }
+        }
+    }
+
+    const clearDateRange = () => {
+        setDateRange({ from: undefined, to: undefined })
+        setDatePreset("all")
+    }
+
 
     return (
+
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-sm">
@@ -479,13 +728,22 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         className="pl-10"
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <Button variant="outline" onClick={handleExport}>
                         <Download className="mr-2 h-4 w-4" />
                         Export CSV
                     </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleSyncInvoiceFromSap}
+                        disabled={isSyncingInvoice}
+                        title="Refresh / Sync Invoice dari data Billing & SAP"
+                    >
+                        <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingInvoice ? 'animate-spin' : ''}`} />
+                        {isSyncingInvoice ? "Syncing..." : "Refresh Invoice"}
+                    </Button>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[160px]">
+                        <SelectTrigger className="w-[150px]">
                             <SelectValue placeholder="DO Status" />
                         </SelectTrigger>
                         <SelectContent>
@@ -495,7 +753,80 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                             <SelectItem value="Lost">Lost</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
+                        <SelectTrigger className="w-[170px]">
+                            <SelectValue placeholder="Invoice Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Invoice</SelectItem>
+                            <SelectItem value="uninvoice">Belum Invoice</SelectItem>
+                            <SelectItem value="invoiced">Invoice</SelectItem>
+                            <SelectItem value="partial-invoiced">Partial Invoice</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                        <SelectTrigger className="w-[170px]">
+                            <SelectValue placeholder="Semua Warehouse" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua Warehouse</SelectItem>
+                            {uniqueWarehouses.map(w => (
+                                <SelectItem key={w.id} value={w.id.toString()}>{getWarehouseLabel(w)}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={datePreset} onValueChange={handleDatePresetChange}>
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="Pilih Periode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Semua Tanggal</SelectItem>
+                            <SelectItem value="this-week">Minggu Ini</SelectItem>
+                            <SelectItem value="last-week">Minggu Lalu</SelectItem>
+                            <SelectItem value="this-month">Bulan Ini</SelectItem>
+                            <SelectItem value="last-month">Bulan Lalu</SelectItem>
+                            <SelectItem value="this-quarter">Quartal Ini</SelectItem>
+                            <SelectItem value="last-quarter">Quartal Lalu</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-[280px] justify-start text-left font-normal">
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dateRange?.from ? (
+                                    dateRange.to ? (
+                                        <>
+                                            {dateRange.from.toLocaleDateString("id-ID")} - {dateRange.to.toLocaleDateString("id-ID")}
+                                        </>
+                                    ) : (
+                                        dateRange.from.toLocaleDateString("id-ID")
+                                    )
+                                ) : (
+                                    <span>Pilih tanggal</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="range"
+                                selected={dateRange}
+                                onSelect={(range) => {
+                                    setDateRange(range)
+                                    setDatePreset("all")
+                                }}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {(dateRange?.from || dateRange?.to) && (
+                        <Button variant="ghost" size="icon" onClick={clearDateRange} title="Clear date filter">
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
+
             </div>
 
             <div className="rounded-md border overflow-hidden">

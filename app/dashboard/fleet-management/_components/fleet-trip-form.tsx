@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -90,12 +90,19 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
             date: new Date(),
             status: "scheduled",
             notes: "",
-            costGasoline: 0,
+            costGasolineDexlite: 0,
+            costGasolineBio: 0,
             costToll: 0,
             costParking: 0,
             costMeals: 0,
             costMaintenance: 0,
             costOthers: 0,
+            costRapidTest: 0,
+            costFerry: 0,
+            costPortal: 0,
+            costWashing: 0,
+            costEscort: 0,
+            tripDestination: "",
             salesOrderIds: [],
         },
     })
@@ -129,6 +136,16 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
         } else {
             form.setValue("salesOrderIds", [...current, id])
         }
+    }
+
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) {
+        return <div className="min-h-[500px]" />
     }
 
     return (
@@ -326,6 +343,24 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                         </FormItem>
                                     )}
                                 />
+
+                                <FormField
+                                    control={form.control}
+                                    name="tripDestination"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Trip Destination</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="e.g. Jakarta Pusat, Bandung..."
+                                                    {...field}
+                                                    value={field.value || ""}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </CardContent>
                         </Card>
 
@@ -338,10 +373,28 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                 <div className="grid grid-cols-2 gap-4">
                                     <FormField
                                         control={form.control}
-                                        name="costGasoline"
+                                        name="costGasolineDexlite"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Gasoline</FormLabel>
+                                                <FormLabel>Gasoline (Dexlite)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costGasolineBio"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Gasoline (Bio Solar)</FormLabel>
                                                 <FormControl>
                                                     <Input
                                                         type="number"
@@ -444,6 +497,96 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                             </FormItem>
                                         )}
                                     />
+                                    <FormField
+                                        control={form.control}
+                                        name="costRapidTest"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Rapid Test</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costFerry"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Ferry Ticket</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costPortal"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Portal (Gate)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costWashing"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Car Washing</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="costEscort"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Escort (Pengawalan)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        {...field}
+                                                        onChange={e => field.onChange(Number(e.target.value))}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                 </div>
                             </CardContent>
                         </Card>
@@ -456,62 +599,66 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                                 <CardTitle>Deliver Orders</CardTitle>
                             </CardHeader>
                             <CardContent className="flex-1 overflow-auto max-h-[600px]">
-                                <FormField
-                                    control={form.control}
-                                    name="salesOrderIds"
-                                    render={() => (
-                                        <FormItem>
-                                            <div className="rounded-md border">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead className="w-[50px]"></TableHead>
-                                                            <TableHead>SO Number</TableHead>
-                                                            <TableHead>Customer</TableHead>
-                                                            <TableHead className="text-right">Items</TableHead>
+                                <div className="space-y-4">
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-[50px]"></TableHead>
+                                                    <TableHead>SO Number</TableHead>
+                                                    <TableHead>Customer</TableHead>
+                                                    <TableHead className="text-right">Items</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {salesOrders.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                                                            No pending orders available.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    salesOrders.map((so) => (
+                                                        <TableRow
+                                                            key={so.id}
+                                                            className="cursor-pointer hover:bg-muted/50"
+                                                            onClick={(e) => {
+                                                                if ((e.target as HTMLElement).closest('button')) return;
+                                                                handleToggleSalesOrder(so.id);
+                                                            }}
+                                                        >
+                                                            <TableCell>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="size-4 rounded-sm border-input shadow-sm accent-primary cursor-pointer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    checked={selectedSalesOrderIds.includes(so.id)}
+                                                                    onChange={() => handleToggleSalesOrder(so.id)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="font-mono">
+                                                                {so.invoiceNumber || so.customerPo || "SO-" + so.id}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {so.customer.name}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Badge variant="outline">
+                                                                    {so.items.length} Items
+                                                                </Badge>
+                                                            </TableCell>
                                                         </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {salesOrders.length === 0 ? (
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
-                                                                    No pending orders available.
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ) : (
-                                                            salesOrders.map((so) => (
-                                                                <TableRow
-                                                                    key={so.id}
-                                                                    className="cursor-pointer hover:bg-muted/50"
-                                                                    onClick={() => handleToggleSalesOrder(so.id)}
-                                                                >
-                                                                    <TableCell>
-                                                                        <Checkbox
-                                                                            checked={selectedSalesOrderIds.includes(so.id)}
-                                                                            onCheckedChange={() => handleToggleSalesOrder(so.id)}
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell className="font-mono">
-                                                                        {so.invoiceNumber || so.customerPo || "SO-" + so.id}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        {so.customer.name}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right">
-                                                                        <Badge variant="outline">
-                                                                            {so.items.length} Items
-                                                                        </Badge>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                    {form.formState.errors.salesOrderIds && (
+                                        <p className="text-[0.8rem] font-medium text-destructive">
+                                            {form.formState.errors.salesOrderIds.message}
+                                        </p>
                                     )}
-                                />
+                                </div>
                             </CardContent>
                         </Card>
                     </div>

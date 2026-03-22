@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createQuotation, updateQuotation } from "@/app/actions/quotation"
+import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +47,7 @@ import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { ProductHistoryPopover } from "./product-history-popover"
+import { StockCheckPopover } from "./stock-check-popover"
 
 type User = typeof user.$inferSelect
 
@@ -128,9 +130,9 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [validUntil, setValidUntil] = useState(
         initialData?.validUntil
             ? new Date(initialData.validUntil).toISOString().split("T")[0]
-            : ""
+            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
     )
-    const [subject] = useState(initialData?.subject || "")
+    const [subject, setSubject] = useState(initialData?.subject || "")
     const [salesPersonId, setSalesPersonId] = useState(initialData?.salesPersonId || currentUserId || "")
     const [attn, setAttn] = useState(initialData?.attn || "")
     const [address, setAddress] = useState(initialData?.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612")
@@ -142,11 +144,11 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [clientNote, setClientNote] = useState(initialData?.clientNote || "")
     const [discountType, setDiscountType] = useState<"fixed" | "percent">(initialData?.discountType === "percent" ? "percent" : "fixed")
     const [status, setStatus] = useState(initialData?.status || "draft")
-    const [paymentTerms] = useState(initialData?.paymentTerms || "")
+    const [paymentTerms, setPaymentTerms] = useState(initialData?.paymentTerms || "")
     const [termsConditions, setTermsConditions] = useState(
         initialData?.termsConditions || "Payment Terms : 30 days after Date Invoice\nStock :\nDDP :\nExclude Tax\n\nPT. CHITRA PARATAMA\nBANK MANDIRI\nBranch Cilandak KKO, Jakarta Selatan 12560\nIDR A/C NO:127 – 000 – 00 – 17416"
     )
-    const [notes] = useState(initialData?.notes || "")
+    const [notes, setNotes] = useState(initialData?.notes || "")
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
@@ -191,7 +193,55 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const ceilToThousand = (val: number) => Math.ceil(val / 1000) * 1000
 
     // Add product
-    const addProduct = useCallback((product: Product) => {
+    const addProduct = useCallback(async (product: Product) => {
+        if (product.isBundle) {
+            const bundleItems = await getBundleItemsForExpansion(product.id)
+            if (bundleItems && bundleItems.length > 0) {
+                setItems(prev => {
+                    const nextItems = [...prev]
+                    bundleItems.forEach(bi => {
+                        const childProduct = bi.childProduct as Product
+                        const costSap = Number(childProduct.costSap || 0)
+                        const costIdr = costSap * exchangeRate
+                        
+                        let unitPrice = costIdr
+                        if (globalMargin > 0) {
+                            unitPrice = costIdr + (costIdr * globalMargin / 100)
+                        }
+                        unitPrice = ceilToThousand(unitPrice)
+
+                        const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
+                        if (existingIdx > -1) {
+                            nextItems[existingIdx] = {
+                                ...nextItems[existingIdx],
+                                quantity: nextItems[existingIdx].quantity + bi.quantity
+                            }
+                        } else {
+                            nextItems.push({
+                                productId: bi.childProductId,
+                                productName: childProduct.materialDescription || childProduct.materialNumber,
+                                description: childProduct.materialDescription || "",
+                                longDescription: childProduct.materialNumber || "",
+                                quantity: bi.quantity,
+                                unitPrice: unitPrice,
+                                discount: 0,
+                                tax: 0,
+                                costIdr: costIdr,
+                                costSap: costSap,
+                                materialNumber: childProduct.materialNumber,
+                            })
+                        }
+                    })
+                    return nextItems
+                })
+                toast.success(`Bundle ${product.materialNumber} exploded into ${bundleItems.length} items`)
+            } else {
+                toast.error("Bundle has no components")
+            }
+            setProductOpen(false)
+            return
+        }
+
         const existing = items.find(i => i.productId === product.id)
         const costSap = Number(product.costSap || 0)
         const costIdr = costSap * exchangeRate
@@ -213,7 +263,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 productId: product.id,
                 productName: product.materialDescription || product.materialNumber,
                 description: product.materialDescription || "",
-                longDescription: "",
+                longDescription: product.materialNumber || "",
                 quantity: 1,
                 unitPrice: unitPrice,
                 discount: 0,
@@ -333,7 +383,19 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
-                router.push("/dashboard/quotations")
+                const savedId = isEdit ? initialData!.id : ("id" in result && typeof result.id === "number" ? result.id : null)
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/quotations?${listParams.toString()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.push(listUrl)
             } else {
                 toast.error("error" in result ? result.error : "Something went wrong")
             }
@@ -400,6 +462,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             if (result.success) {
                 toast.success(`Quotation ${isEdit ? "updated" : "created"} successfully`)
                 const qId = isEdit ? initialData!.id : (result as { id: number }).id
+                router.refresh()
                 router.push(`/dashboard/quotations/${qId}?pdf=true`)
             } else {
                 toast.error("error" in result ? result.error : "Something went wrong")
@@ -414,7 +477,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     return (
         <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 mx-auto w-full">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div className="flex items-center gap-4">
                     <Link href="/dashboard/quotations">
                         <Button variant="ghost" size="icon">
@@ -430,7 +493,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                     <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2">
                         <Save className="h-4 w-4" />
                         {isSubmitting ? "Saving..." : "Save"}
@@ -548,7 +611,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </div>
 
                         {/* Dates */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-destructive font-semibold">* Quo Date</Label>
                                 <Input
@@ -643,7 +706,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         </div>
 
                         {/* Currency & Status */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-destructive font-semibold">* Currency</Label>
                                 <Select value={currency} onValueChange={setCurrency}>
@@ -681,8 +744,17 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             />
                         </div>
 
+                        <div className="space-y-2">
+                            <Label className="font-semibold">Subject</Label>
+                            <Input
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                placeholder="Mis. Quotation pengadaan mechanical seal"
+                            />
+                        </div>
+
                         {/* From (Sales Person) & Discount Type */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="font-semibold">From</Label>
                                 <Select value={salesPersonId} onValueChange={setSalesPersonId}>
@@ -727,8 +799,8 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Product Search + Add */}
-            <div className="flex items-center justify-between mb-2 px-2">
-                <div className="flex items-center gap-4 bg-muted/30 p-2 rounded-lg border border-blue-100">
+            <div className="mb-2 flex flex-col gap-2 px-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex w-full flex-wrap items-center gap-4 rounded-lg border border-blue-100 bg-muted/30 p-2 sm:w-auto">
                     <div className="flex items-center gap-2">
                         <Label htmlFor="margin-input" className="text-xs font-bold text-blue-700 whitespace-nowrap">Margin (%)</Label>
                         <Input
@@ -751,7 +823,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 <Button
                     onClick={addEmptyRow}
                     variant="outline"
-                    className="h-8 border-blue-600 text-blue-600 hover:bg-blue-50 border-dashed border-2 font-bold"
+                    className="h-8 w-full border-2 border-dashed border-blue-600 font-bold text-blue-600 hover:bg-blue-50 sm:w-auto"
                 >
                     <Plus className="h-4 w-4 mr-1" /> TAMBAH BARIS
                 </Button>
@@ -761,15 +833,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 <CardContent className="p-6">
                     <div className="space-y-4">
                         <Label className="font-semibold">Product</Label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 w-full">
                             <Popover open={productOpen} onOpenChange={setProductOpen}>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start font-normal text-muted-foreground">
-                                        <Search className="mr-2 h-4 w-4" />
-                                        Search Product Name / Item Code / Scan bar code
+                                    <Button variant="outline" className="flex-1 justify-start font-normal text-muted-foreground overflow-hidden">
+                                        <Search className="mr-2 h-4 w-4 shrink-0" />
+                                        <span className="truncate">Search Product Name / Item Code / Scan bar code</span>
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[500px] p-0" align="start">
+                                <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[500px] p-0" align="start">
                                     <Command>
                                         <CommandInput placeholder="Search products..." />
                                         <CommandList>
@@ -781,16 +853,16 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         value={`${product.materialNumber} ${product.materialDescription}`}
                                                         onSelect={() => addProduct(product)}
                                                     >
-                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground mt-1" />
-                                                        <div className="flex-1">
-                                                            <div className="flex justify-between items-start">
-                                                                <p className="font-bold text-blue-700">{product.materialNumber}</p>
-                                                                <p className="text-[10px] font-mono bg-blue-50 px-1 rounded border">Cost: {formatCurrency(Number(product.costSap || 0) * exchangeRate)}</p>
+                                                        <Package className="mr-2 h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                                        <div className="flex-1 overflow-hidden">
+                                                            <div className="flex justify-between items-start gap-2">
+                                                                <p className="font-bold text-blue-700 truncate">{product.materialNumber}</p>
+                                                                <p className="text-[10px] font-mono bg-blue-50 px-1 rounded border shrink-0">Cost: {formatCurrency(Number(product.costSap || 0) * exchangeRate)}</p>
                                                             </div>
                                                             <p className="text-xs text-muted-foreground line-clamp-1">{product.materialDescription}</p>
                                                             <div className="flex gap-2 mt-1">
-                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">WH: {product.slocDescription || product.sloc || "-"}</span>
-                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500">Stock: {product.totalStock ?? 0}</span>
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500 whitespace-nowrap">WH: {product.slocDescription || product.sloc || "-"}</span>
+                                                                <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-500 whitespace-nowrap">Stock: {product.totalStock ?? 0}</span>
                                                             </div>
                                                         </div>
                                                     </CommandItem>
@@ -805,6 +877,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                     <Button
                                         variant="outline"
                                         size="icon"
+                                        className="shrink-0"
                                     >
                                         <Plus className="h-4 w-4" />
                                     </Button>
@@ -813,8 +886,111 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             />
                         </div>
 
-                        {/* Items Table */}
-                        <div className="rounded-md border overflow-hidden">
+                        {/* Mobile Items View */}
+                        <div className="md:hidden space-y-4">
+                            {items.length === 0 ? (
+                                <div className="flex flex-col items-center gap-2 text-muted-foreground p-8 border rounded-lg border-dashed">
+                                    <Package className="h-10 w-10 opacity-30" />
+                                    <p>No data</p>
+                                </div>
+                            ) : (
+                                items.map((item, index) => {
+                                    const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
+                                    return (
+                                        <Card key={index} className="overflow-hidden border-blue-100 shadow-sm relative group">
+                                            <div className="bg-blue-600 px-4 py-2 flex justify-between items-center text-white">
+                                                <span className="font-bold text-sm">Item #{index + 1}</span>
+                                                <div className="flex items-center space-x-2">
+                                                    {item.materialNumber && (
+                                                        <div className="flex items-center">
+                                                            <ProductHistoryPopover
+                                                                materialNo={item.materialNumber}
+                                                                costSap={item.costSap || 0}
+                                                            />
+                                                            <StockCheckPopover
+                                                                materialNo={item.materialNumber}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-white hover:text-white hover:bg-red-500/50"
+                                                        onClick={() => removeItem(index)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <CardContent className="p-4 space-y-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs text-muted-foreground">Description</Label>
+                                                    <Textarea
+                                                        placeholder="Description"
+                                                        value={item.description}
+                                                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                                                        className="min-h-[60px] font-bold text-sm"
+                                                    />
+                                                    <Textarea
+                                                        placeholder="Long description"
+                                                        value={item.longDescription}
+                                                        onChange={(e) => updateItem(index, "longDescription", e.target.value)}
+                                                        className="min-h-[80px] text-xs"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                type="number"
+                                                                min={1}
+                                                                value={item.quantity}
+                                                                onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                                className="h-9"
+                                                            />
+                                                            <p className="text-[10px] text-muted-foreground italic">Unit</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Price</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            placeholder="Rate"
+                                                            value={item.unitPrice}
+                                                            onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
+                                                            className="h-9"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4 items-center border-t pt-3 mt-1">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Tax</Label>
+                                                        <Select value={item.tax > 0 ? "11" : "0"} onValueChange={(v) => updateItem(index, "tax", v === "11" ? (item.quantity * item.unitPrice * 0.11) : 0)}>
+                                                            <SelectTrigger className="h-9">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="0">No Tax</SelectItem>
+                                                                <SelectItem value="11">11.00%</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-1 text-right">
+                                                        <Label className="text-xs text-muted-foreground block">Amount</Label>
+                                                        <span className="font-bold text-blue-700 text-sm block">{formatCurrency(lineSubtotal)}</span>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })
+                            )}
+                        </div>
+
+                        {/* Desktop Items Table */}
+                        <div className="hidden md:block rounded-md border overflow-hidden">
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader>
@@ -846,10 +1022,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                         <TableCell className="font-mono text-muted-foreground">                                                            <div className="flex flex-col items-center gap-1">
                                                             {index + 1}
                                                             {item.materialNumber && (
-                                                                <ProductHistoryPopover
-                                                                    materialNo={item.materialNumber}
-                                                                    costSap={item.costSap || 0}
-                                                                />
+                                                                <>
+                                                                    <ProductHistoryPopover
+                                                                        materialNo={item.materialNumber}
+                                                                        costSap={item.costSap || 0}
+                                                                    />
+                                                                    <StockCheckPopover
+                                                                        materialNo={item.materialNumber}
+                                                                    />
+                                                                </>
                                                             )}
                                                         </div></TableCell>
                                                         <TableCell>
@@ -928,48 +1109,51 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                             </div>
 
                             {/* Totals Summary */}
-                            <div className="mt-4 flex flex-col items-end gap-1 border-t pt-4 pe-4 pb-4">
-                                <div className="flex items-center justify-end w-[400px] gap-4">
+                            <div className="mt-6 flex flex-col items-end gap-2 border-t pt-4 md:pe-4 pb-4 w-full">
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-sm font-medium text-muted-foreground">Sub Total :</span>
-                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(subTotal)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(subTotal)}</span>
                                 </div>
-                                <div className="flex items-center justify-end w-[400px] gap-4 mt-2">
-                                    <span className="text-sm font-medium text-muted-foreground">Discount :</span>
-                                    <div className="flex items-center gap-1">
-                                        <Input
-                                            type="number"
-                                            value={discount}
-                                            onChange={(e) => setDiscount(Number(e.target.value))}
-                                            className="w-20 h-8 text-right font-mono text-xs"
-                                        />
-                                        <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
-                                            <SelectTrigger className="w-14 h-8 text-xs">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="percent">%</SelectItem>
-                                                <SelectItem value="fixed">Rp</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-2">
+                                    <span className="text-sm font-medium text-muted-foreground hidden md:inline">Discount :</span>
+                                    <div className="flex items-center justify-between md:justify-end w-full md:w-auto flex-1 gap-2">
+                                        <span className="text-sm font-medium text-muted-foreground md:hidden w-16">Disc :</span>
+                                        <div className="flex items-center gap-1 flex-1 md:flex-none justify-end md:justify-start">
+                                            <Input
+                                                type="number"
+                                                value={discount}
+                                                onChange={(e) => setDiscount(Number(e.target.value))}
+                                                className="w-20 md:w-20 h-8 text-right font-mono text-xs"
+                                            />
+                                            <Select value={discountType} onValueChange={(v) => setDiscountType(v as "percent" | "fixed")}>
+                                                <SelectTrigger className="w-16 h-8 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="percent">%</SelectItem>
+                                                    <SelectItem value="fixed">Rp</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                     </div>
-                                    <span className="text-sm font-bold w-32 text-right text-destructive">
+                                    <span className="text-sm font-bold md:w-32 text-right text-destructive shrink-0 overflow-hidden text-ellipsis">
                                         -{formatCurrency(discountType === "percent" ? (subTotal * discount) / 100 : discount)}
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-end w-[400px] gap-4 mt-1">
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4 mt-1">
                                     <span className="text-sm font-medium text-muted-foreground">Delivery :</span>
                                     <Input
                                         type="number"
                                         value={shipping}
                                         onChange={(e) => setShipping(Number(e.target.value))}
-                                        className="w-20 h-8 text-right font-mono text-xs"
+                                        className="w-24 md:w-20 h-8 text-right font-mono text-xs"
                                     />
-                                    <span className="text-sm font-bold w-32 text-right">{formatCurrency(shipping)}</span>
+                                    <span className="text-sm font-bold md:w-32 text-right">{formatCurrency(shipping)}</span>
                                 </div>
-                                <Separator className="my-2 w-[400px]" />
-                                <div className="flex items-center justify-end w-[400px] gap-4">
+                                <Separator className="my-2 w-full md:w-[400px]" />
+                                <div className="flex items-center justify-between md:justify-end w-full md:w-[400px] gap-4">
                                     <span className="text-base font-black text-blue-700">TOTAL :</span>
-                                    <span className="text-lg font-black w-32 text-right text-blue-700">{formatCurrency(grandTotal)}</span>
+                                    <span className="text-lg font-black md:w-32 text-right text-blue-700">{formatCurrency(grandTotal)}</span>
                                 </div>
                             </div>
                         </div>
@@ -989,6 +1173,24 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     />
                 </div>
                 <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Payment Terms</Label>
+                    <Textarea
+                        rows={3}
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        className="resize-none"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-sm font-medium text-blue-600">Internal Notes</Label>
+                    <Textarea
+                        rows={3}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="resize-none"
+                    />
+                </div>
+                <div className="space-y-2">
                     <Label className="text-sm font-medium text-blue-600">Terms & Conditions</Label>
                     <Textarea
                         rows={6}
@@ -1004,7 +1206,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             </div>
 
             {/* Bottom Save Buttons */}
-            <div className="flex justify-center gap-3 pb-6">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pb-6 px-4">
                 <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="w-full max-w-xs gap-2">
                     <Save className="h-4 w-4" />
                     {isSubmitting ? "Saving..." : "Save"}

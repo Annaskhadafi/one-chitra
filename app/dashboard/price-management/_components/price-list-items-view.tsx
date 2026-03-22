@@ -72,6 +72,7 @@ export function PriceListItemsView({ priceList }: Props) {
             </div>
 
             <div className="rounded-xl border overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                         <tr>
@@ -170,6 +171,7 @@ export function PriceListItemsView({ priceList }: Props) {
                         })}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {/* Add Item Dialog */}

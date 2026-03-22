@@ -1,9 +1,12 @@
 "use server"
 
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
-import { sql, and, isNotNull, ne, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
+import { salesRevenueSap } from "@/db/schema/sap"
+import { sql, and, isNotNull, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
 import { type SQL } from "drizzle-orm"
+
+const ACTIVE_SALESMAN_BILLING_START = '2026-01-01';
+const ACTIVE_SALESMAN_BILLING_END = '2027-01-01';
 
 export interface R49DashboardFilters {
     years?: string[];
@@ -19,45 +22,45 @@ export interface R49DashboardFilters {
 export async function getR49DashboardFilters() {
     try {
         const baseWhere = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
-            ilike(historyOrders.revType, '%Trading%'),
-            ilike(historyOrders.matGrpDesc, '%EARTHMOVER TIRES R49%'),
+            isNotNull(salesRevenueSap.billingDate),
+            ilike(salesRevenueSap.revType, '%Trading%'),
+            ilike(salesRevenueSap.matGrpDesc, '%EARTHMOVER TIRES R49%'),
             or(
-                sql`${historyOrders.customerName} IS NULL`,
+                sql`${salesRevenueSap.customerName} IS NULL`,
                 and(
-                    notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                    notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%')
+                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                    notIlike(salesRevenueSap.customerName, '%PT. CHITRA PARATAMA%')
                 )
             )
         );
 
+        const salesmanFilterWhere = and(
+            baseWhere,
+            sql`${salesRevenueSap.billingDate} >= ${ACTIVE_SALESMAN_BILLING_START}::date`,
+            sql`${salesRevenueSap.billingDate} < ${ACTIVE_SALESMAN_BILLING_END}::date`,
+            sql`NULLIF(BTRIM(${salesRevenueSap.salesman}), '') IS NOT NULL`
+        );
+
         const [customers, salesmen] = await Promise.all([
-            db.selectDistinct({ v: historyOrders.customerName }).from(historyOrders).where(baseWhere).orderBy(historyOrders.customerName),
-            db.selectDistinct({ v: historyOrders.salesman }).from(historyOrders).where(baseWhere).orderBy(historyOrders.salesman),
+            db.selectDistinct({ v: salesRevenueSap.customerName }).from(salesRevenueSap).where(baseWhere).orderBy(salesRevenueSap.customerName),
+            db.selectDistinct({ v: sql<string>`BTRIM(${salesRevenueSap.salesman})` })
+                .from(salesRevenueSap)
+                .where(salesmanFilterWhere)
+                .orderBy(sql`BTRIM(${salesRevenueSap.salesman})`),
         ]);
 
-        const dates = await db.selectDistinct({ date: historyOrders.billingDate }).from(historyOrders).where(baseWhere);
-        const years = new Set<string>();
-        const months = new Set<string>();
-
-        dates.forEach(d => {
-            if (d.date) {
-                const parts = d.date.split('/');
-                if (parts.length === 3) {
-                    years.add(parts[2]);
-                    months.add(parts[0].padStart(2, '0'));
-                }
-            }
-        });
+        const [yearsResult, monthsResult] = await Promise.all([
+            db.selectDistinct({ v: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')` }).from(salesRevenueSap).where(baseWhere),
+            db.selectDistinct({ v: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM')` }).from(salesRevenueSap).where(baseWhere),
+        ]);
 
         return {
             success: true,
             data: {
                 customers: customers.map(c => c.v).filter(Boolean),
                 salesmen: salesmen.map(s => s.v).filter(Boolean),
-                years: Array.from(years).sort().reverse(),
-                months: Array.from(months).sort(),
+                years: yearsResult.map(y => y.v).filter(Boolean).sort().reverse(),
+                months: monthsResult.map(m => m.v).filter(Boolean).sort(),
             }
         };
     } catch (error) {
@@ -68,7 +71,6 @@ export async function getR49DashboardFilters() {
 
 
 export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
-    let topCustomersQuery: ReturnType<typeof db.select> | null = null;
     try {
         const {
             years = [],
@@ -85,119 +87,116 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
 
         const filterArray: (SQL | undefined)[] = [
             and(
-                isNotNull(historyOrders.billingDate),
-                ne(historyOrders.billingDate, ""),
-                ilike(historyOrders.revType, '%Trading%'),
-                ilike(historyOrders.matGrpDesc, '%EARTHMOVER TIRES R49%'),
+                isNotNull(salesRevenueSap.billingDate),
+                ilike(salesRevenueSap.revType, '%Trading%'),
+                ilike(salesRevenueSap.matGrpDesc, '%EARTHMOVER TIRES R49%'),
                 or(
-                    sql`${historyOrders.customerName} IS NULL`,
+                    sql`${salesRevenueSap.customerName} IS NULL`,
                     and(
-                        notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%'),
-                        notIlike(historyOrders.customerName, '%PT. CHITRA PARATAMA%')
+                        notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                        notIlike(salesRevenueSap.customerName, '%PT. CHITRA PARATAMA%')
                     )
                 )
             )
         ];
 
-        if (customers.length > 0) filterArray.push(inArray(historyOrders.customerName, customers));
-        if (salesman.length > 0) filterArray.push(inArray(historyOrders.salesman, salesman));
+        if (customers.length > 0) filterArray.push(inArray(salesRevenueSap.customerName, customers));
+        if (salesman.length > 0) filterArray.push(inArray(sql<string>`BTRIM(${salesRevenueSap.salesman})`, salesman));
 
         if (years.length > 0) {
-            filterArray.push(inArray(sql`split_part(${historyOrders.billingDate}, '/', 3)`, years));
+            filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`, years));
         }
         if (months.length > 0) {
             const monthList = months.flatMap(m => [m.padStart(2, '0'), parseInt(m).toString()]);
-            const uniqueMonthList = Array.from(new Set(monthList));
-            filterArray.push(inArray(sql`split_part(${historyOrders.billingDate}, '/', 1)`, uniqueMonthList));
+            const uniqueMonthList = Array.from(new Set(monthList.map(m => m.padStart(2, '0'))));
+            filterArray.push(inArray(sql`to_char(${salesRevenueSap.billingDate}, 'MM')`, uniqueMonthList));
         }
 
         const finalWhere = and(...filterArray);
 
         const orderExpr = sortByYear
-            ? sql`SUM(CASE WHEN split_part(${historyOrders.billingDate}, '/', 3) = ${sortByYear} THEN COALESCE(${historyOrders.revenueInDocCurr}, 0) ELSE 0 END)`
-            : sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`;
+            ? sql`SUM(CASE WHEN to_char(${salesRevenueSap.billingDate}, 'YYYY') = ${sortByYear} THEN COALESCE(${salesRevenueSap.revenueInDocCurr}, 0) ELSE 0 END)`
+            : sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`;
 
-        topCustomersQuery = db.select({
-            customerName: historyOrders.customerName,
-            totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+        const paginatedCustomers = await db.select({
+            customerName: salesRevenueSap.customerName,
+            totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.customerName)
+            .groupBy(salesRevenueSap.customerName)
             .orderBy(sortOrder === 'desc' ? desc(orderExpr) : asc(orderExpr))
             .limit(pageSize)
             .offset(offset);
-
-        const paginatedCustomers = await topCustomersQuery;
-        const totalCustomersCountResult = await db.select({ count: sql<number>`COUNT(DISTINCT ${historyOrders.customerName})` })
-            .from(historyOrders)
+        const totalCustomersCountResult = await db.select({ count: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})` })
+            .from(salesRevenueSap)
             .where(finalWhere);
         const totalCount = Number(totalCustomersCountResult[0].count);
 
         const customerNames = paginatedCustomers.map((c: { customerName: string | null }) => c.customerName).filter(Boolean) as string[];
 
         const pivotDataRaw = customerNames.length > 0 ? await db.select({
-            customerName: historyOrders.customerName,
-            materialDescription: historyOrders.materialDescription,
-            year: sql<string>`split_part(${historyOrders.billingDate}, '/', 3)`,
-            qty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`,
-            revenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            customerName: salesRevenueSap.customerName,
+            materialDescription: salesRevenueSap.materialDescription,
+            year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
-            .where(and(finalWhere, inArray(historyOrders.customerName, customerNames)))
-            .groupBy(historyOrders.customerName, historyOrders.materialDescription, sql`split_part(${historyOrders.billingDate}, '/', 3)`) : [];
+            .from(salesRevenueSap)
+            .where(and(finalWhere, inArray(salesRevenueSap.customerName, customerNames)))
+            .groupBy(salesRevenueSap.customerName, salesRevenueSap.materialDescription, sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`) : [];
 
         const top5Customers = await db.select({
-            label: historyOrders.customerName,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            label: salesRevenueSap.customerName,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.customerName)
-            .orderBy(desc(sql`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`))
+            .groupBy(salesRevenueSap.customerName)
+            .orderBy(desc(sql`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`))
             .limit(5);
 
         const monthlyTrend = await db.select({
-            month: sql<string>`split_part(${historyOrders.billingDate}, '/', 1)`,
-            year: sql<string>`split_part(${historyOrders.billingDate}, '/', 3)`,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'MM')`,
+            year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(sql`split_part(${historyOrders.billingDate}, '/', 1)`, sql`split_part(${historyOrders.billingDate}, '/', 3)`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'MM')`, sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`);
 
         const materialBreakdown = await db.select({
-            label: historyOrders.materialDescription,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            label: salesRevenueSap.materialDescription,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.materialDescription);
+            .groupBy(salesRevenueSap.materialDescription);
 
         const avgPriceTrend = await db.select({
-            year: sql<string>`split_part(${historyOrders.billingDate}, '/', 3)`,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0)) / NULLIF(SUM(COALESCE(${historyOrders.qty}, 0)), 0)`
+            year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) / NULLIF(SUM(COALESCE(${salesRevenueSap.qty}, 0)), 0)`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(sql`split_part(${historyOrders.billingDate}, '/', 3)`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`);
 
         const revByOrg = await db.select({
-            label: historyOrders.plant,
-            value: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`
+            label: salesRevenueSap.plant,
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(historyOrders.plant);
+            .groupBy(salesRevenueSap.plant);
 
         const qtyVsRev = await db.select({
-            label: sql<string>`split_part(${historyOrders.billingDate}, '/', 3)`,
-            rev: sql<number>`SUM(COALESCE(${historyOrders.revenueInDocCurr}, 0))`,
-            qty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`
+            label: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
+            rev: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
+            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
         })
-            .from(historyOrders)
+            .from(salesRevenueSap)
             .where(finalWhere)
-            .groupBy(sql`split_part(${historyOrders.billingDate}, '/', 3)`);
+            .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY')`);
 
         return {
             success: true,
@@ -217,10 +216,6 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
         };
     } catch (error: unknown) {
         console.error("Failed to fetch R49 dashboard data:", error);
-        if (topCustomersQuery) {
-            // Error logging preserved for telemetry in production if needed, or removed
-            // console.log("Failed SQL:", topCustomersQuery.toSQL().sql);
-        }
         return { success: false, error: "Failed to fetch data" };
     }
 }

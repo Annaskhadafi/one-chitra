@@ -28,6 +28,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 
 interface PriceCompetitor {
     id: string | number
@@ -287,61 +288,113 @@ export function PriceCompetitorTab({ initialData = [] }: { initialData?: PriceCo
             <Card className="border-none shadow-sm bg-card/50 backdrop-blur-sm">
                 <CardContent className="p-0">
                     <div className="rounded-md border overflow-hidden">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-muted/50">
-                                    <TableHead className="text-xs">Date</TableHead>
-                                    <TableHead className="text-xs">Consultant</TableHead>
-                                    <TableHead className="text-xs">Customer</TableHead>
-                                    <TableHead className="text-xs">Size/Product</TableHead>
-                                    <TableHead className="text-xs">Category</TableHead>
-                                    <TableHead className="text-xs">Brand</TableHead>
-                                    <TableHead className="text-xs">Price</TableHead>
-                                    <TableHead className="text-xs">Remark</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isLoading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                                                <span className="text-xs">Loading data...</span>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : filteredData.length > 0 ? (
-                                    filteredData.map((item) => (
-                                        <TableRow key={item.id} className="hover:bg-muted/30 transition-colors group">
-                                            <TableCell className="text-xs font-medium">
-                                                {format(new Date(item.infoDate), "dd MMM yyyy")}
-                                            </TableCell>
-                                            <TableCell className="text-xs">{item.consultantName || item.businessConsultant?.name || "-"}</TableCell>
-                                            <TableCell className="text-xs font-semibold">{item.customerName}</TableCell>
-                                            <TableCell className="text-xs">{item.productSize}</TableCell>
-                                            <TableCell>
-                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
-                                                    {item.category}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-xs">{item.brand}</TableCell>
-                                            <TableCell className="text-xs font-bold text-primary">
-                                                {item.currency} {item.price}
-                                            </TableCell>
-                                            <TableCell className="max-w-[150px] truncate text-[10px] text-muted-foreground italic">
-                                                {item.remark || "-"}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                        <ResponsiveTableWrapper
+                            className="rounded-none"
+                            mobileView={
+                                isLoading ? (
+                                    <div className="text-xs text-muted-foreground text-center py-6">Loading data...</div>
+                                ) : filteredData.length === 0 ? (
+                                    <div className="text-xs text-muted-foreground text-center py-6">No records found.</div>
                                 ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground text-xs">
-                                            No records found.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                                    <div className="space-y-3 p-3">
+                                        {filteredData.map((item) => (
+                                            <div key={item.id} className="rounded-md border p-3 bg-card">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="text-xs">
+                                                        <div className="font-semibold">{item.customerName}</div>
+                                                        <div className="text-muted-foreground">{format(new Date(item.infoDate), "dd MMM yyyy")}</div>
+                                                    </div>
+                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
+                                                        {item.category}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                                                    <div>
+                                                        <div className="text-muted-foreground">Size</div>
+                                                        <div className="font-medium">{item.productSize}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-muted-foreground">Brand</div>
+                                                        <div className="font-medium">{item.brand}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-muted-foreground">Consultant</div>
+                                                        <div>{item.consultantName || item.businessConsultant?.name || "-"}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-muted-foreground">Price</div>
+                                                        <div className="font-bold text-primary">{item.currency} {item.price}</div>
+                                                    </div>
+                                                </div>
+                                                {item.remark && (
+                                                    <div className="mt-2 text-[11px] text-muted-foreground italic">
+                                                        {item.remark}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            }
+                        >
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50">
+                                            <TableHead className="text-xs">Date</TableHead>
+                                            <TableHead className="text-xs">Consultant</TableHead>
+                                            <TableHead className="text-xs">Customer</TableHead>
+                                            <TableHead className="text-xs">Size/Product</TableHead>
+                                            <TableHead className="text-xs">Category</TableHead>
+                                            <TableHead className="text-xs">Brand</TableHead>
+                                            <TableHead className="text-xs">Price</TableHead>
+                                            <TableHead className="text-xs">Remark</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {isLoading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                                        <span className="text-xs">Loading data...</span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredData.length > 0 ? (
+                                            filteredData.map((item) => (
+                                                <TableRow key={item.id} className="hover:bg-muted/30 transition-colors group">
+                                                    <TableCell className="text-xs font-medium">
+                                                        {format(new Date(item.infoDate), "dd MMM yyyy")}
+                                                    </TableCell>
+                                                    <TableCell className="text-xs">{item.consultantName || item.businessConsultant?.name || "-"}</TableCell>
+                                                    <TableCell className="text-xs font-semibold">{item.customerName}</TableCell>
+                                                    <TableCell className="text-xs">{item.productSize}</TableCell>
+                                                    <TableCell>
+                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-primary/10 text-primary border border-primary/20">
+                                                            {item.category}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-xs">{item.brand}</TableCell>
+                                                    <TableCell className="text-xs font-bold text-primary">
+                                                        {item.currency} {item.price}
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[150px] truncate text-[10px] text-muted-foreground italic">
+                                                        {item.remark || "-"}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground text-xs">
+                                                    No records found.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </ResponsiveTableWrapper>
                     </div>
                 </CardContent>
             </Card>

@@ -1,3 +1,4 @@
+import "server-only"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { db } from "@/db"
@@ -11,10 +12,11 @@ export async function checkPermission(resource: string, action: 'view' | 'create
             headers: await headers()
         })
     } catch (e) {
-        // If we're running in a script (npm run ...) then 'headers()' will throw.
-        // We allow this if not in a request context.
-        console.log("Permission check skipped: No request context detected (running in script)");
-        return true;
+        if (process.env.NODE_ENV !== "production") {
+            console.log("Permission check skipped: No request context detected (running in script)");
+            return true;
+        }
+        throw new Error("Failed to get session context");
     }
 
     if (!session?.user?.id) {
@@ -59,10 +61,11 @@ export async function getAuthenticatedSession(resource?: string, action?: 'view'
             headers: await headers()
         })
     } catch (e) {
-        // Fallback for scripts if no session is available via headers
-        console.log("Session lookup skipped: No request context detected (running in script)");
-        // In a real script, we might want to mock a session here if needed
-        return { user: { id: "QtRav31w2URDoLREkWt1DSzj3hXuFnh0" } } as { user: { id: string } }; // Admin ID from earlier check
+        if (process.env.NODE_ENV !== "production") {
+            console.log("Session lookup fallback for build/scripts");
+            return { user: { id: "QtRav31w2URDoLREkWt1DSzj3hXuFnh0" } } as { user: { id: string, name: string, email: string } };
+        }
+        throw new Error("Failed to get session context");
     }
 
     if (!session?.user?.id) {

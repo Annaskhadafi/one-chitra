@@ -17,7 +17,7 @@ import {
 
 import { navigationConfig } from "@/lib/navigation"
 
-export const NAVBAR_MENU_SETTING_KEY = "navbar_menu_config_v1"
+export const NAVBAR_MENU_SETTING_KEY = "navbar_menu_config_v2"
 
 export const NAVBAR_ICON_OPTIONS = [
     "Circle",
@@ -130,6 +130,66 @@ const slugify = (value: string) =>
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
+
+const dedupeIdsInList = <T extends { id: string; title: string }>(
+    items: T[],
+    parentId: string,
+    prefix: string,
+): T[] => {
+    const occurrences = new Map<string, number>()
+
+    return items.map((item, index) => {
+        const rawId = item.id?.trim() || `${prefix}-${slugify(item.title) || index}`
+        const count = occurrences.get(rawId) ?? 0
+        occurrences.set(rawId, count + 1)
+
+        if (count === 0) {
+            return {
+                ...item,
+                id: rawId,
+            }
+        }
+
+        return {
+            ...item,
+            id: `${parentId}-${prefix}-${slugify(item.title) || index}-${count}`,
+        }
+    })
+}
+
+const uniqueById = <T extends { id: string }>(items: T[]): T[] => {
+    const seen = new Set<string>()
+
+    return items.filter((item) => {
+        const normalizedId = item.id?.trim()
+        if (!normalizedId) {
+            return true
+        }
+
+        if (seen.has(normalizedId)) {
+            return false
+        }
+
+        seen.add(normalizedId)
+        return true
+    })
+}
+
+const dedupeEditableNavigationConfig = (sections: EditableNavSection[]): EditableNavSection[] => {
+    const normalizedSections = dedupeIdsInList(uniqueById(sections), "root", "section")
+
+    return normalizedSections.map((section) => {
+        const normalizedItems = dedupeIdsInList(uniqueById(section.items), section.id, "item").map((item) => ({
+            ...item,
+            items: dedupeIdsInList(uniqueById(item.items), item.id, "sub"),
+        }))
+
+        return {
+            ...section,
+            items: normalizedItems,
+        }
+    })
+}
 
 const buildCustomResource = (id: string, title: string) => {
     const idPart = slugify(id).replace(/-/g, "").slice(-22)
@@ -319,7 +379,7 @@ export const normalizeEditableNavigationConfig = (rawConfig: unknown): EditableN
         return getDefaultEditableNavigationConfig()
     }
 
-    return normalizedSections
+    return dedupeEditableNavigationConfig(normalizedSections)
 }
 
 const buildIframeUrl = (id: string) => {
@@ -421,10 +481,15 @@ const resolveRuntimeLink = (entry: {
 }
 
 export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]): RuntimeNavSection[] => {
-    return editableConfig.map((section) => ({
-        id: section.id,
-        title: section.title,
-        items: section.items.map((item) => {
+    // Ensure unique IDs deterministically among siblings
+    const ensureUniqueIds = <T extends { id: string; title: string }>(items: T[], parentId: string, prefix: string): T[] =>
+        dedupeIdsInList(items, parentId, prefix)
+
+    return editableConfig.map((section, sectionIdx) => {
+        // Ensure section id is unique (not strictly needed, but for completeness)
+        const sectionId = section.id || `section-${sectionIdx}`;
+        // Ensure unique item ids
+        const items: RuntimeNavItem[] = ensureUniqueIds(section.items, sectionId, "item").map((item) => {
             const runtimeLink = resolveRuntimeLink({
                 id: item.id,
                 title: item.title,
@@ -432,8 +497,30 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                 linkType: item.linkType,
                 externalOpenMode: item.externalOpenMode,
                 openInNewTab: item.openInNewTab,
-            })
-
+            });
+            // Ensure unique subitem ids
+            const subItems: RuntimeNavSubItem[] = ensureUniqueIds(item.items || [], item.id, "sub").map((subItem) => {
+                const subRuntimeLink = resolveRuntimeLink({
+                    id: subItem.id,
+                    title: subItem.title,
+                    url: subItem.url,
+                    linkType: subItem.linkType,
+                    externalOpenMode: subItem.externalOpenMode,
+                    openInNewTab: subItem.openInNewTab,
+                });
+                return {
+                    id: subItem.id,
+                    title: subItem.title,
+                    url: subRuntimeLink.url,
+                    resource: subItem.resource ?? undefined,
+                    hidden: subItem.hidden,
+                    openInNewTab: subRuntimeLink.openInNewTab,
+                    isCustom: subItem.isCustom,
+                    linkType: subItem.linkType,
+                    externalOpenMode: subItem.externalOpenMode,
+                    iframeManualEnabled: subItem.iframeManualEnabled,
+                };
+            });
             return {
                 id: item.id,
                 title: item.title,
@@ -446,32 +533,73 @@ export const toRuntimeNavigationConfig = (editableConfig: EditableNavSection[]):
                 linkType: item.linkType,
                 externalOpenMode: item.externalOpenMode,
                 iframeManualEnabled: item.iframeManualEnabled,
-                items: item.items.map((subItem) => {
-                    const subRuntimeLink = resolveRuntimeLink({
-                        id: subItem.id,
-                        title: subItem.title,
-                        url: subItem.url,
-                        linkType: subItem.linkType,
-                        externalOpenMode: subItem.externalOpenMode,
-                        openInNewTab: subItem.openInNewTab,
-                    })
+                items: subItems,
+            };
+        });
+        return {
+            id: sectionId,
+            title: section.title,
+            items,
+        };
+    });
+}
 
-                    return {
-                        id: subItem.id,
-                        title: subItem.title,
-                        url: subRuntimeLink.url,
-                        resource: subItem.resource ?? undefined,
-                        hidden: subItem.hidden,
-                        openInNewTab: subRuntimeLink.openInNewTab,
-                        isCustom: subItem.isCustom,
-                        linkType: subItem.linkType,
-                        externalOpenMode: subItem.externalOpenMode,
-                        iframeManualEnabled: subItem.iframeManualEnabled,
-                    }
-                }),
+const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): EditableNavSection[] => {
+    const defaults = getDefaultEditableNavigationConfig()
+    const merged = dedupeEditableNavigationConfig([...config])
+
+    for (const defaultSection of defaults) {
+        const existingSectionIndex = merged.findIndex((section) => section.id === defaultSection.id || section.title === defaultSection.title)
+
+        if (existingSectionIndex === -1) {
+            merged.push(defaultSection)
+            continue
+        }
+
+        const existingSection = merged[existingSectionIndex]
+        const sectionItems = [...existingSection.items]
+
+        for (const defaultItem of defaultSection.items) {
+            const existingItemIndex = sectionItems.findIndex(
+                (item) =>
+                    item.id === defaultItem.id ||
+                    item.title === defaultItem.title ||
+                    (item.url === defaultItem.url && defaultItem.url !== "#" && defaultItem.url !== ""),
+            )
+
+            if (existingItemIndex === -1) {
+                sectionItems.push(defaultItem)
+                continue
             }
-        }),
-    }))
+
+            const existingItem = sectionItems[existingItemIndex]
+            const subItems = [...existingItem.items]
+
+            for (const defaultSubItem of defaultItem.items) {
+                const hasSubItem = subItems.some(
+                    (subItem) =>
+                        subItem.id === defaultSubItem.id ||
+                        subItem.title === defaultSubItem.title ||
+                        (subItem.url === defaultSubItem.url && defaultSubItem.url !== "#" && defaultSubItem.url !== ""),
+                )
+                if (!hasSubItem) {
+                    subItems.push(defaultSubItem)
+                }
+            }
+
+            sectionItems[existingItemIndex] = {
+                ...existingItem,
+                items: subItems,
+            }
+        }
+
+        merged[existingSectionIndex] = {
+            ...existingSection,
+            items: sectionItems,
+        }
+    }
+
+    return dedupeEditableNavigationConfig(merged)
 }
 
 export const parseNavigationConfigFromSetting = (rawSetting: string | null): EditableNavSection[] => {
@@ -481,7 +609,8 @@ export const parseNavigationConfigFromSetting = (rawSetting: string | null): Edi
 
     try {
         const parsed = JSON.parse(rawSetting) as unknown
-        return normalizeEditableNavigationConfig(parsed)
+        const normalized = normalizeEditableNavigationConfig(parsed)
+        return mergeWithDefaultNavigationConfig(normalized)
     } catch {
         return getDefaultEditableNavigationConfig()
     }

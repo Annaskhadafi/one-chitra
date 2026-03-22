@@ -1,5 +1,12 @@
 import { z } from "zod"
 
+export const trackingModeSchema = z.enum(["manual_only", "optional_rfid", "required_rfid"])
+export const trackingScopeTypeSchema = z.enum(["category", "product"])
+export const rfidTagStatusSchema = z.enum(["blank", "active", "damaged", "lost", "retired", "locked"])
+export const rfidWriteOperationSchema = z.enum(["register", "replace", "unbind", "reset", "verify"])
+export const rfidBindingOperationSchema = z.enum(["bind", "replace", "unbind"])
+export const rfidExceptionStatusSchema = z.enum(["open", "investigating", "resolved", "ignored"])
+
 export const customerSchema = z.object({
     customerCode: z.string().min(1, "Customer Code is required"),
     name: z.string().min(1, "Customer Name is required"),
@@ -24,12 +31,121 @@ export const productSchema = z.object({
     slocDescription: z.string().optional(),
     typeWarehouse: z.string().optional(),
     imageUrl: z.string().optional(),
+    defaultTrackingMode: trackingModeSchema.optional(),
+    serialRequired: z.boolean().optional(),
+    rfidCapable: z.boolean().optional(),
+    allowTagReuse: z.boolean().optional(),
 })
 
 export const warehouseSchema = z.object({
     sloc: z.string().min(1, "Sloc is required"),
     description: z.string().optional(),
     type: z.string().optional(),
+})
+
+export const warehouseRfidSettingSchema = z.object({
+    warehouseId: z.number().min(1, "Warehouse is required"),
+    isEnabled: z.boolean().default(false),
+    defaultTrackingMode: trackingModeSchema.default("manual_only"),
+    allowManualFallback: z.boolean().default(true),
+    requireInboundValidation: z.boolean().default(false),
+    requireOutboundValidation: z.boolean().default(false),
+    pilotNotes: z.string().optional().nullable(),
+})
+
+export const warehouseTrackingPolicySchema = z.object({
+    warehouseId: z.number().min(1, "Warehouse is required"),
+    scopeType: trackingScopeTypeSchema,
+    productId: z.number().optional().nullable(),
+    category: z.string().optional().nullable(),
+    trackingMode: trackingModeSchema.default("optional_rfid"),
+    allowManualFallback: z.boolean().default(true),
+    serialRequired: z.boolean().default(false),
+    isActive: z.boolean().default(true),
+    notes: z.string().optional().nullable(),
+}).superRefine((value, ctx) => {
+    if (value.scopeType === "product" && !value.productId) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Product wajib diisi untuk policy per produk",
+            path: ["productId"],
+        })
+    }
+
+    if (value.scopeType === "category" && !value.category?.trim()) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Category wajib diisi untuk policy per kategori",
+            path: ["category"],
+        })
+    }
+})
+
+export const rfidMonitoringTagSchema = z.object({
+    rfidTagId: z.number().optional().nullable(),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    deviceId: z.number().optional().nullable(),
+    epc: z.string().trim().min(1, "EPC wajib diisi"),
+    tid: z.string().trim().optional().nullable(),
+    tagSerial: z.string().trim().optional().nullable(),
+    tagType: z.string().trim().min(1, "Tag type wajib diisi").default("label"),
+    status: rfidTagStatusSchema.default("active"),
+    isReusable: z.boolean().default(false),
+    materialNumber: z.string().trim().optional().nullable(),
+    serialNumber: z.string().trim().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+})
+
+export const rfidReaderResetSchema = z.object({
+    rfidTagId: z.number().min(1, "RFID tag wajib dipilih"),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    deviceId: z.number().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+})
+
+export const rfidScanEventDeletionSchema = z.object({
+    scanEventId: z.number().min(1, "Scan event wajib dipilih"),
+})
+
+export const rfidExceptionStatusUpdateSchema = z.object({
+    exceptionId: z.number().min(1, "Exception wajib dipilih"),
+    status: rfidExceptionStatusSchema,
+    reviewNote: z.string().trim().optional().nullable(),
+})
+
+export const rfidTraceabilitySearchSchema = z.object({
+    query: z.string().trim().min(1, "Kata kunci pencarian wajib diisi"),
+    warehouseId: z.number().optional().nullable(),
+})
+
+export const rfidTagUnitBindingSchema = z.object({
+    operation: rfidBindingOperationSchema,
+    rfidTagId: z.number().min(1, "RFID tag wajib dipilih"),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    productId: z.number().optional().nullable(),
+    serialNumber: z.string().trim().optional().nullable(),
+    deviceId: z.number().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+}).superRefine((value, ctx) => {
+    if (value.operation === "unbind") {
+        return
+    }
+
+    if (!value.productId) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Product wajib dipilih",
+            path: ["productId"],
+        })
+    }
+
+    if (!value.serialNumber?.trim()) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Serial number / unit ID wajib diisi",
+            path: ["serialNumber"],
+        })
+    }
 })
 
 export const stockSchema = z.object({
@@ -53,6 +169,7 @@ export const salesOrderSchema = z.object({
     invoiceNumber: z.string().optional(),
     customerPo: z.string().optional(),
     customerId: z.number().min(1, "Customer is required"),
+    salesPersonId: z.string().optional().nullable(),
     warehouseId: z.number().optional(),
     salesDate: z.string().or(z.date()),
     poReceive: z.string().or(z.date()).optional().nullable(),
@@ -71,12 +188,13 @@ export const deliveryItemSchema = z.object({
     salesOrderItemId: z.number().optional(),
     productId: z.number().min(1, "Product is required"),
     orderedQuantity: z.number().min(0).default(0),
-    deliveredQuantity: z.number().min(1, "Delivered quantity must be at least 1"),
+    deliveredQuantity: z.number().min(0, "Delivered quantity must be at least 0"),
     serialNumbers: z.array(z.string()).optional(),
 })
 
 export const deliverySchema = z.object({
     deliveryNumber: z.string().optional(),
+    doSap: z.string().optional().nullable(),
     salesOrderId: z.number().min(1, "Sales Order is required"),
     scheduledDate: z.string().or(z.date()),
     deliveryDate: z.string().or(z.date()).optional().nullable(),
@@ -91,12 +209,19 @@ export const deliverySchema = z.object({
     awbNumber: z.string().optional().nullable(),
     shippingCost: z.number().min(0).default(0),
     // Internal Cost Breakdown
-    costGasoline: z.number().min(0).default(0),
+    tripDestination: z.string().optional().nullable(),
+    costGasolineDexlite: z.number().min(0).default(0),
+    costGasolineBio: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),
     costMaintenance: z.number().min(0).default(0),
     costOthers: z.number().min(0).default(0),
+    costRapidTest: z.number().min(0).default(0),
+    costFerry: z.number().min(0).default(0),
+    costPortal: z.number().min(0).default(0),
+    costWashing: z.number().min(0).default(0),
+    costEscort: z.number().min(0).default(0),
 
     warehouseId: z.number().min(1, "Warehouse is required"),
     warehouseToId: z.number().optional().nullable(),
@@ -149,15 +274,65 @@ export const fleetTripSchema = z.object({
     date: z.string().or(z.date()),
     notes: z.string().optional().nullable(),
     // Costs
-    costGasoline: z.number().min(0).default(0),
+    tripDestination: z.string().optional().nullable(),
+    costGasolineDexlite: z.number().min(0).default(0),
+    costGasolineBio: z.number().min(0).default(0),
     costToll: z.number().min(0).default(0),
     costParking: z.number().min(0).default(0),
     costMeals: z.number().min(0).default(0),
     costMaintenance: z.number().min(0).default(0),
     costOthers: z.number().min(0).default(0),
+    costRapidTest: z.number().min(0).default(0),
+    costFerry: z.number().min(0).default(0),
+    costPortal: z.number().min(0).default(0),
+    costWashing: z.number().min(0).default(0),
+    costEscort: z.number().min(0).default(0),
     // Linked Deliveries (Sales Orders to deliver)
     salesOrderIds: z.array(z.number()).min(1, "At least one Sales Order is required"),
 })
+
+export const costSettlementItemSchema = z.object({
+    id: z.number().optional(),
+    costCategory: z.enum(["gasoline", "toll", "parking", "meals", "maintenance", "others", "rapid_test", "ferry", "portal", "washing", "escort"]),
+    description: z.string().optional().or(z.literal("")),
+    amount: z.number().min(0.01, "Jumlah harus lebih dari 0"),
+    receiptDate: z.string().or(z.date()),
+    vendorName: z.string().optional().nullable(),
+    deliveryItemId: z.number().optional().nullable(),
+    sortOrder: z.number().int().min(0).default(0),
+})
+
+export const costSettlementReceiptSchema = z.object({
+    id: z.number().optional(),
+    settlementItemId: z.number().optional(),
+    fileUrl: z.string().min(1, "File URL is required"),
+    originalFileName: z.string().min(1, "Original filename is required"),
+    fileSize: z.number().int().min(0).default(0),
+})
+
+export const costSettlementSignatorySchema = z.object({
+    id: z.number().optional(),
+    signatoryName: z.string().optional().or(z.literal("")),
+    signatoryPosition: z.string().optional().or(z.literal("")),
+    signatoryRole: z.string().optional().or(z.literal("")),
+    sortOrder: z.number().int().min(0).default(0),
+})
+
+export const costSettlementSchema = z.object({
+    settlementNumber: z.string().optional(),
+    settlementType: z.enum(["trip", "delivery"]),
+    fleetTripId: z.number().optional().nullable(),
+    deliveryId: z.number().optional().nullable(),
+    settlementDate: z.string().or(z.date()),
+    remarks: z.string().optional().nullable(),
+    items: z.array(costSettlementItemSchema).min(1, "At least one settlement item is required"),
+    signatories: z.array(costSettlementSignatorySchema).default([]),
+}) // Removed .superRefine required trip/delivery logic
+
+export type CostSettlementInput = z.infer<typeof costSettlementSchema>
+export type CostSettlementItemInput = z.infer<typeof costSettlementItemSchema>
+export type CostSettlementReceiptInput = z.infer<typeof costSettlementReceiptSchema>
+export type CostSettlementSignatoryInput = z.infer<typeof costSettlementSignatorySchema>
 
 // ─── Price Management ─────────────────────────────────────────────────────────
 
@@ -220,3 +395,17 @@ export const calendarEventSchema = z.object({
     emailReminderAt: z.date().optional().nullable(),
     emailReminderTo: z.string().email().optional().nullable().or(z.literal("")),
 })
+export const productBundleItemSchema = z.object({
+    childProductId: z.number().min(1, "Product is required"),
+    quantity: z.number().min(1, "Quantity must be at least 1"),
+})
+
+export const productBundleSchema = z.object({
+    materialNumber: z.string().min(1, "Material Number is required"),
+    materialDescription: z.string().min(1, "Description is required"),
+    category: z.string().min(1, "Category is required"),
+    items: z.array(productBundleItemSchema).min(1, "At least one component is required"),
+})
+
+export type ProductBundleInput = z.infer<typeof productBundleSchema>
+export type ProductBundleItemInput = z.infer<typeof productBundleItemSchema>

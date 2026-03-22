@@ -13,7 +13,7 @@ export default async function StockOpnameDetailPage({ params }: Props) {
 
     if (isNaN(sessionId)) notFound()
 
-    const session = await getStockOpnameSession(sessionId)
+    const session = await getStockOpnameSession(sessionId, "sap")
     if (!session) notFound()
 
     const totalItems = session.items?.length ?? 0
@@ -63,7 +63,7 @@ export default async function StockOpnameDetailPage({ params }: Props) {
                 </div>
             </div>
 
-            <OpnameDetailView session={session} />
+            <OpnameDetailView session={session} sourceType="sap" />
         </div>
     )
 }

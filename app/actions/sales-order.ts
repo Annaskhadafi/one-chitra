@@ -1,23 +1,134 @@
 "use server"
 
 import { db } from "@/db"
-import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers } from "@/db/schema"
-import { eq, desc, inArray, sql, and, isNotNull } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { salesOrders, salesOrderItems, stockLevels, deliveries, deliveryItems, stockTransfers, user } from "@/db/schema"
+import { eq, desc, inArray, sql, and, isNotNull, like } from "drizzle-orm"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
+import { sendEmail } from "@/lib/email"
+
+let hasSalesPersonColumnCache: boolean | null = null
+type SalesPersonRecord = typeof user.$inferSelect
+const DUPLICATE_CUSTOMER_PO_ERROR = "No PO Customer ini sudah pernah diinput. Gunakan nomor PO Customer yang berbeda."
+
+function normalizeSalesPerson(order: unknown): SalesPersonRecord | null {
+    if (typeof order === "object" && order !== null && "salesPerson" in order) {
+        return (order as { salesPerson?: SalesPersonRecord | null }).salesPerson ?? null
+    }
+
+    return null
+}
+
+function normalizeCustomerPo(customerPo?: string | null) {
+    return customerPo?.trim() ?? ""
+}
+
+async function findExistingSalesOrderByCustomerPo(customerPo?: string | null, excludeId?: number) {
+    const normalizedCustomerPo = normalizeCustomerPo(customerPo)
+
+    if (!normalizedCustomerPo) {
+        return null
+    }
+
+    const duplicateCondition = excludeId === undefined
+        ? sql`${salesOrders.customerPo} is not null and lower(trim(${salesOrders.customerPo})) = ${normalizedCustomerPo.toLowerCase()}`
+        : sql`${salesOrders.customerPo} is not null and lower(trim(${salesOrders.customerPo})) = ${normalizedCustomerPo.toLowerCase()} and ${salesOrders.id} <> ${excludeId}`
+
+    const [existingOrder] = await db
+        .select({
+            id: salesOrders.id,
+            invoiceNumber: salesOrders.invoiceNumber,
+        })
+        .from(salesOrders)
+        .where(duplicateCondition)
+        .limit(1)
+
+    return existingOrder ?? null
+}
+
+function duplicateCustomerPoResult(existingOrder?: { invoiceNumber: string | null } | null) {
+    const message = existingOrder?.invoiceNumber
+        ? `No PO Customer ini sudah pernah diinput pada Sales Order ${existingOrder.invoiceNumber}. Gunakan nomor PO Customer yang berbeda.`
+        : DUPLICATE_CUSTOMER_PO_ERROR
+
+    return {
+        success: false as const,
+        error: message,
+        fieldErrors: {
+            customerPo: message,
+        },
+    }
+}
+
+async function hasSalesPersonColumn() {
+    if (hasSalesPersonColumnCache !== null) {
+        return hasSalesPersonColumnCache
+    }
+
+    try {
+        const result = await db.execute(sql`
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'sales_orders'
+              AND column_name = 'sales_person_id'
+            LIMIT 1
+        `)
+
+        hasSalesPersonColumnCache = result.rows.length > 0
+        return hasSalesPersonColumnCache
+    } catch {
+        hasSalesPersonColumnCache = false
+        return false
+    }
+}
 
 export async function getSalesOrders() {
+    noStore()
+    const hasPicColumn = await hasSalesPersonColumn()
+
     // Fetch orders with customer and createdByUser first
-    const orders = await db.query.salesOrders.findMany({
-        with: {
-            customer: true,
-            createdByUser: true,
-        },
-        orderBy: [desc(salesOrders.createdAt)],
-    })
+    const orders = hasPicColumn
+        ? await db.query.salesOrders.findMany({
+            with: {
+                customer: true,
+                createdByUser: true,
+                salesPerson: true,
+            },
+            orderBy: [desc(salesOrders.createdAt)],
+        })
+        : await db.query.salesOrders.findMany({
+            with: {
+                customer: true,
+                createdByUser: true,
+            },
+            orderBy: [desc(salesOrders.createdAt)],
+        })
+
+    const orderIds = orders.map((order) => order.id)
+    const relatedDeliveries = orderIds.length > 0
+        ? await db.query.deliveries.findMany({
+            where: inArray(deliveries.salesOrderId, orderIds),
+            columns: {
+                id: true,
+                salesOrderId: true,
+                status: true,
+                deliveryNumber: true,
+                createdAt: true,
+            },
+            orderBy: [desc(deliveries.createdAt)],
+        })
+        : []
+
+    const deliveryMap = new Map<number, typeof relatedDeliveries>()
+    for (const delivery of relatedDeliveries) {
+        const current = deliveryMap.get(delivery.salesOrderId) ?? []
+        current.push(delivery)
+        deliveryMap.set(delivery.salesOrderId, current)
+    }
 
     // Fetch items with products separately to avoid nested lateral join issues
     const ordersWithItems = await Promise.all(
@@ -28,7 +139,50 @@ export async function getSalesOrders() {
                     product: true,
                 },
             })
-            return { ...order, items }
+
+            const orderDeliveries = deliveryMap.get(order.id) ?? []
+            const activeDeliveries = orderDeliveries.filter((delivery) => delivery.status !== "cancelled")
+            const deliveredQuantities = new Map<number, number>()
+
+            if (items.length > 0) {
+                const salesOrderItemIds = items.map((item) => item.id)
+                const deliveredRows = await db.select({
+                    salesOrderItemId: deliveryItems.salesOrderItemId,
+                    totalDelivered: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+                })
+                    .from(deliveryItems)
+                    .innerJoin(deliveries, eq(deliveryItems.deliveryId, deliveries.id))
+                    .where(and(
+                        inArray(deliveryItems.salesOrderItemId, salesOrderItemIds),
+                        sql`${deliveries.status} != 'cancelled'`,
+                    ))
+                    .groupBy(deliveryItems.salesOrderItemId)
+
+                for (const row of deliveredRows) {
+                    if (row.salesOrderItemId != null) {
+                        deliveredQuantities.set(row.salesOrderItemId, Number(row.totalDelivered))
+                    }
+                }
+            }
+
+            const hasOutstandingDeliveryItems = items.some((item) => {
+                const delivered = deliveredQuantities.get(item.id) ?? 0
+                return item.quantity - delivered > 0
+            })
+
+            return {
+                ...order,
+                salesPerson: normalizeSalesPerson(order),
+                items,
+                deliverySummary: {
+                    totalCount: orderDeliveries.length,
+                    activeCount: activeDeliveries.length,
+                    cancelledCount: orderDeliveries.filter((delivery) => delivery.status === "cancelled").length,
+                    latestStatus: orderDeliveries[0]?.status ?? null,
+                    latestDeliveryNumber: orderDeliveries[0]?.deliveryNumber ?? null,
+                    hasOutstandingDeliveryItems,
+                },
+            }
         })
     )
 
@@ -47,13 +201,24 @@ export async function getSalesOrderCategories() {
 
 
 export async function getSalesOrder(id: number) {
+    noStore()
+    const hasPicColumn = await hasSalesPersonColumn()
+
     // Fetch order with customer first
-    const order = await db.query.salesOrders.findFirst({
-        where: eq(salesOrders.id, id),
-        with: {
-            customer: true,
-        },
-    })
+    const order = hasPicColumn
+        ? await db.query.salesOrders.findFirst({
+            where: eq(salesOrders.id, id),
+            with: {
+                customer: true,
+                salesPerson: true,
+            },
+        })
+        : await db.query.salesOrders.findFirst({
+            where: eq(salesOrders.id, id),
+            with: {
+                customer: true,
+            },
+        })
 
     if (!order) return undefined
 
@@ -65,37 +230,77 @@ export async function getSalesOrder(id: number) {
         },
     })
 
-    return { ...order, items }
+    return {
+        ...order,
+        salesPerson: normalizeSalesPerson(order),
+        items,
+    }
 }
 
 export async function generateInvoiceNumber() {
-    const now = new Date()
-    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+    const date = new Date()
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`
+    const prefix = `SO-${dateStr}`
 
+    // Count today's orders efficiently using like query
+    // We look for the highest number used today to avoid gaps/duplicates
+    const result = await db
+        .select({ invoiceNumber: salesOrders.invoiceNumber })
+        .from(salesOrders)
+        .where(like(salesOrders.invoiceNumber, `${prefix}%`))
+        .orderBy(desc(salesOrders.invoiceNumber))
+        .limit(1)
 
+    let nextNum = 1
+    if (result.length > 0 && result[0].invoiceNumber) {
+        const lastInvoice = result[0].invoiceNumber
+        const lastNumStr = lastInvoice.split("-").pop()
+        if (lastNumStr && !isNaN(parseInt(lastNumStr))) {
+            nextNum = parseInt(lastNumStr) + 1
+        }
+    }
 
-    // Count today's orders
-    const allOrders = await db.select({ invoiceNumber: salesOrders.invoiceNumber }).from(salesOrders)
-    const todayOrders = allOrders.filter(o => o.invoiceNumber?.startsWith(`SO-${dateStr}`))
-    const nextNum = todayOrders.length + 1
-
-    return `SO-${dateStr}-${String(nextNum).padStart(4, "0")}`
+    return `${prefix}-${String(nextNum).padStart(4, "0")}`
 }
 
 export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
     try {
+        const hasPicColumn = await hasSalesPersonColumn()
         const session = await getAuthenticatedSession('sales-orders', 'create')
         const userId = session.user.id
-        const invoiceNumber = data.invoiceNumber || await generateInvoiceNumber()
+        const normalizedCustomerPo = normalizeCustomerPo(data.customerPo)
+
+        const existingCustomerPo = await findExistingSalesOrderByCustomerPo(normalizedCustomerPo)
+        if (existingCustomerPo) {
+            return duplicateCustomerPoResult(existingCustomerPo)
+        }
+        
+        // Ensure invoice number is unique (retry if collision happens)
+        let invoiceNumber = data.invoiceNumber
+        if (!invoiceNumber) {
+            invoiceNumber = await generateInvoiceNumber()
+            
+            // Double check if generated number exists (race condition mitigation)
+            const existing = await db.query.salesOrders.findFirst({
+                where: eq(salesOrders.invoiceNumber, invoiceNumber)
+            })
+            
+            if (existing) {
+                // Regenerate if exists
+                const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+                invoiceNumber = `${invoiceNumber}-${randomSuffix}`
+            }
+        }
 
         // Start transaction
         return await db.transaction(async (tx) => {
             const [newOrder] = await tx.insert(salesOrders)
                 .values({
-                    invoiceNumber,
-                    customerPo: data.customerPo || null,
+                    invoiceNumber: invoiceNumber!,
+                    customerPo: normalizedCustomerPo || null,
                     createdBy: userId,
                     customerId: data.customerId,
+                    ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
@@ -178,19 +383,34 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
     } catch (error: unknown) {
         console.error("Failed to create sales order:", error)
         const message = error instanceof Error ? error.message : String(error)
-        return { success: false, error: `Failed to create sales order: ${message}` }
+        
+        // Check for specific database errors
+        if (message.includes("duplicate key value violates unique constraint")) {
+             return { success: false, error: "Nomor Invoice sudah ada. Silakan coba lagi atau gunakan nomor yang berbeda." }
+        }
+        
+        return { success: false, error: `Gagal membuat Sales Order: ${message}` }
     }
 }
 
 export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrderSchema>) {
     try {
+        const hasPicColumn = await hasSalesPersonColumn()
         await checkPermission('sales-orders', 'edit')
+        const normalizedCustomerPo = normalizeCustomerPo(data.customerPo)
+
+        const existingCustomerPo = await findExistingSalesOrderByCustomerPo(normalizedCustomerPo, id)
+        if (existingCustomerPo) {
+            return duplicateCustomerPoResult(existingCustomerPo)
+        }
+
         return await db.transaction(async (tx) => {
             // Get original order to see if items changed
             const originalOrder = await tx.query.salesOrders.findFirst({
@@ -235,8 +455,9 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             await tx.update(salesOrders)
                 .set({
                     invoiceNumber: data.invoiceNumber || undefined,
-                    customerPo: data.customerPo || null,
+                    customerPo: normalizedCustomerPo || null,
                     customerId: data.customerId,
+                    ...(hasPicColumn ? { salesPersonId: data.salesPersonId || null } : {}),
                     warehouseId: data.warehouseId,
                     salesDate: new Date(data.salesDate),
                     poReceive: data.poReceive ? new Date(data.poReceive) : null,
@@ -280,7 +501,7 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             // Insert new items
-            if (data.items.length > 0) {
+            if (itemsToInsert.length > 0) {
                 await tx.insert(salesOrderItems)
                     .values(itemsToInsert.map(item => ({
                         salesOrderId: id,
@@ -355,12 +576,38 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             }
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
         console.error("Failed to update sales order:", error)
-        return { success: false, error: "Failed to update sales order" }
+        const message = error instanceof Error ? error.message : String(error)
+
+        // Check for specific database errors
+        if (message.includes("duplicate key value violates unique constraint")) {
+             return { success: false, error: "Nomor Invoice sudah ada. Silakan gunakan nomor yang berbeda." }
+        }
+
+        return { success: false, error: `Gagal mengupdate Sales Order: ${message}` }
     }
+}
+
+export async function getSalesOrderPicUsers() {
+    noStore()
+    await getAuthenticatedSession()
+    return await db
+        .select({ id: user.id, name: user.name, email: user.email, role: user.role })
+        .from(user)
+        .orderBy(
+            sql`CASE
+                WHEN lower(${user.role}) = 'sales' THEN 0
+                WHEN lower(${user.role}) LIKE '%sales%' THEN 1
+                ELSE 2
+            END`,
+            user.role,
+            user.name
+        )
 }
 
 export async function deleteSalesOrder(id: number) {
@@ -462,6 +709,7 @@ export async function deleteSalesOrder(id: number) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -556,6 +804,7 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -614,6 +863,8 @@ export async function bulkUpdateSalesOrderStatus(ids: number[], status: string) 
             }
 
             revalidatePath("/dashboard/sales-orders")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true }
         })
     } catch (error) {
@@ -666,10 +917,54 @@ export async function releaseExpiredDraftBookings() {
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/inventory")
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/deliveries/create")
             return { success: true, released: expiredDrafts.length }
         })
     } catch (error) {
         console.error("Failed to release expired draft bookings:", error)
         return { success: false, error: "Failed to release expired draft bookings" }
+    }
+}
+
+export async function sendProformaInvoiceEmail(recipientEmail: string, pdfBase64: string, invoiceNumber: string) {
+    try {
+        await checkPermission('sales-orders', 'view')
+        
+        // Remove any data URI prefix if present
+        const base64Data = pdfBase64.includes(",") ? pdfBase64.split(",")[1] : pdfBase64
+        const buffer = Buffer.from(base64Data, 'base64')
+
+        const result = await sendEmail({
+            to: recipientEmail,
+            subject: `Proforma Invoice - ${invoiceNumber}`,
+            html: `
+                <div style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #334155;">
+                    <div style="margin-bottom: 20px;">
+                        <img src="https://onechitra.dokploy.annaskhadafi.com/logo.png" alt="One Chitra" style="height: 40px;" />
+                    </div>
+                    <h2 style="color: #0f172a; margin-bottom: 16px;">Proforma Invoice Attachment</h2>
+                    <p>Halo,</p>
+                    <p>Terlampir dokumen Proforma Invoice untuk pesanan <strong>${invoiceNumber}</strong>.</p>
+                    <p>Silakan tinjau lampiran PDF yang tersedia pada email ini.</p>
+                    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">
+                        Pesan ini dikirim secara otomatis melalui sistem One Chitra.<br/>
+                        &copy; ${new Date().getFullYear()} One Chitra. All rights reserved.
+                    </div>
+                </div>
+            `,
+            attachments: [
+                {
+                    filename: `Proforma_Invoice_${invoiceNumber}.pdf`,
+                    content: buffer,
+                    contentType: 'application/pdf'
+                }
+            ]
+        })
+
+        return result
+    } catch (error) {
+        console.error("Failed to send Proforma Invoice email:", error)
+        return { success: false, error: "Gagal mengirim email: " + (error instanceof Error ? error.message : String(error)) }
     }
 }

@@ -1,0 +1,135 @@
+
+> codeguide-starter-fullstack@0.1.0 test
+> vitest --run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/[01] PROJECT/one chitra[39m
+
+ [32mΓ£ô[39m app/actions/__tests__/approval-engine.unit.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+stderr | app/actions/__tests__/approval-engine.integration.test.ts > approval decision concurrency > allows only one atomic decision for same assignment
+Failed to submit approval decision: Error: Assignment already processed or request no longer pending
+    at D:/[01] PROJECT/one chitra/app/actions/approval.ts:1315:23
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NodePgSession.transaction (file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/node-postgres/session.js:185:22)
+    at Module.submitApprovalDecision (D:/[01] PROJECT/one chitra/app/actions/approval.ts:1281:9)
+    at async Promise.all (index 1)
+    at D:/[01] PROJECT/one chitra/app/actions/__tests__/approval-engine.integration.test.ts:137:20
+    at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/@vitest/runner/dist/index.js:915:20
+
+ [32mΓ£ô[39m app/actions/__tests__/approval-engine.integration.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1945[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m allows only one atomic decision for same assignment [33m 659[2mms[22m[39m
+stderr | app/actions/__tests__/stock-opname.unit.test.ts > createStockOpnameSession - Unit Tests > Transaction rollback > should rollback transaction on database error
+Create opname session error: DrizzleQueryError: Failed query: insert into "stock_opname_sessions" ("id", "name", "warehouse_id", "status", "notes", "opname_date", "opname_time", "location", "document_url", "document_title", "document_file_name", "document_file_type", "document_file_size", "document_uploaded_at", "document_uploaded_by", "created_by_id", "closed_by_id", "closed_at", "created_at", "updated_at") values (default, $1, $2, $3, $4, $5, $6, $7, default, default, default, default, default, default, default, $8, default, default, default, default) returning "id", "name", "warehouse_id", "status", "notes", "opname_date", "opname_time", "location", "document_url", "document_title", "document_file_name", "document_file_type", "document_file_size", "document_uploaded_at", "document_uploaded_by", "created_by_id", "closed_by_id", "closed_at", "created_at", "updated_at"
+params: Test Session Rollback 1772527691801,999999,open,Test notes,2024-06-15T00:00:00.000Z,14:30,Warehouse A - Section 1,test-user-unit
+    at NodePgPreparedQuery.queryWithCache (file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/pg-core/session.js:41:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/node-postgres/session.js:117:22
+    ... 4 lines matching cause stack trace ...
+    at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/@vitest/runner/dist/index.js:915:20 {
+  query: 'insert into "stock_opname_sessions" ("id", "name", "warehouse_id", "status", "notes", "opname_date", "opname_time", "location", "document_url", "document_title", "document_file_name", "document_file_type", "document_file_size", "document_uploaded_at", "document_uploaded_by", "created_by_id", "closed_by_id", "closed_at", "created_at", "updated_at") values (default, $1, $2, $3, $4, $5, $6, $7, default, default, default, default, default, default, default, $8, default, default, default, default) returning "id", "name", "warehouse_id", "status", "notes", "opname_date", "opname_time", "location", "document_url", "document_title", "document_file_name", "document_file_type", "document_file_size", "document_uploaded_at", "document_uploaded_by", "created_by_id", "closed_by_id", "closed_at", "created_at", "updated_at"',
+  params: [
+    'Test Session Rollback 1772527691801',
+    999999,
+    'open',
+    'Test notes',
+    '2024-06-15T00:00:00.000Z',
+    '14:30',
+    'Warehouse A - Section 1',
+    'test-user-unit'
+  ],
+  cause: error: insert or update on table "stock_opname_sessions" violates foreign key constraint "stock_opname_sessions_warehouse_id_fkey"
+      at D:\[01] PROJECT\one chitra\node_modules\pg\lib\client.js:545:17
+      at processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/node-postgres/session.js:124:18
+      at NodePgPreparedQuery.queryWithCache (file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/pg-core/session.js:39:16)
+      at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/node-postgres/session.js:117:22
+      at D:/[01] PROJECT/one chitra/app/actions/stock-opname.ts:132:34
+      at NodePgSession.transaction (file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/drizzle-orm/node-postgres/session.js:185:22)
+      at Module.createStockOpnameSession (D:/[01] PROJECT/one chitra/app/actions/stock-opname.ts:130:24)
+      at D:/[01] PROJECT/one chitra/app/actions/__tests__/stock-opname.unit.test.ts:382:22
+      at file:///D:/%5B01%5D%20PROJECT/one%20chitra/node_modules/@vitest/runner/dist/index.js:915:20 {
+    length: 331,
+    severity: 'ERROR',
+    code: '23503',
+    detail: 'Key (warehouse_id)=(999999) is not present in table "warehouses".',
+    hint: undefined,
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: 'public',
+    table: 'stock_opname_sessions',
+    column: undefined,
+    dataType: undefined,
+    constraint: 'stock_opname_sessions_warehouse_id_fkey',
+    file: 'ri_triggers.c',
+    line: '2772',
+    routine: 'ri_ReportViolation'
+  }
+}
+
+ [31mΓ¥»[39m app/actions/__tests__/stock-opname.unit.test.ts [2m([22m[2m26 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 9630[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should create session with valid data and return success [33m 759[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should create session with all signature entries in correct order [33m 380[2mms[22m[39m
+[31m       [31m├ù[31m should populate stock items from warehouse inventory[39m[33m 395[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle optional notes field [33m 662[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should set createdById to authenticated user [33m 345[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with empty name[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with missing location[32m 0[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with invalid time format[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with zero signatures[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with signature missing name[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with signature missing position[32m 0[2mms[22m[39m
+       [32mΓ£ô[39m should reject session with invalid warehouse ID[32m 0[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should rollback transaction on database error [33m 411[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should call getAuthenticatedSession with correct parameters [33m 301[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle single signature entry [33m 338[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle maximum signature entries (20) [33m 336[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle special characters in text fields [33m 334[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle valid time formats at boundaries [33m 1215[2mms[22m[39m
+[31m       [31m├ù[31m should retrieve PDF data for closed session with all required relations[39m[33m 474[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should include closure metadata in PDF data [33m 499[2mms[22m[39m
+       [32mΓ£ô[39m should return error for non-existent session[32m 43[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should return error for open session [33m 330[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should return error for cancelled session [33m 382[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should load all required relations for PDF generation [33m 549[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should include all stock items in PDF data [33m 501[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should call getAuthenticatedSession with correct parameters [33m 456[2mms[22m[39m
+ [32mΓ£ô[39m app/actions/__tests__/stock-opname.property.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 11037[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m Property 1: Session data persists correctly through save/retrieve cycle [33m 2986[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m Property 2: Multiple signatures are stored and retrieved in correct order [33m 2585[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m Property 9: PDF data only includes items from specified session [33m 2386[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m Property 11: Open and cancelled sessions are rejected for PDF generation [33m 2616[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 2 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  app/actions/__tests__/stock-opname.unit.test.ts > createStockOpnameSession - Unit Tests > Successful session creation > should populate stock items from warehouse inventory
+AssertionError: expected 0 to be greater than 0
+ Γ¥» app/actions/__tests__/stock-opname.unit.test.ts:226:30
+    224|         
+    225|         // Should have at least one item from the test product
+    226|         expect(items.length).toBeGreaterThan(0)
+       |                              ^
+    227|         
+    228|         const testItem = items.find(item => item.productId === testProΓÇª
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/2]ΓÄ»
+
+ FAIL  app/actions/__tests__/stock-opname.unit.test.ts > getOpnamePdfReportData - Unit Tests > Successful data retrieval > should retrieve PDF data for closed session with all required relations
+AssertionError: expected 0 to be greater than 0
+ Γ¥» app/actions/__tests__/stock-opname.unit.test.ts:575:45
+    573|         // Verify items are loaded with product relations
+    574|         expect(pdfResult.data.items).toBeDefined()
+    575|         expect(pdfResult.data.items.length).toBeGreaterThan(0)
+       |                                             ^
+    576|         expect(pdfResult.data.items[0].product).toBeDefined()
+    577|         expect(pdfResult.data.items[0].product.id).toBeDefined()
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/2]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m41 passed[39m[22m[90m (43)[39m
+[2m   Start at [22m 16:48:07
+[2m   Duration [22m 12.10s[2m (transform 1.02s, setup 113ms, import 5.13s, tests 22.62s, environment 1ms)[22m
+

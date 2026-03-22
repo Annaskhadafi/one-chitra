@@ -54,7 +54,8 @@ import { ProgressLoading } from "@/components/ui/progress-loading"
 import { getFleetList } from "@/app/actions/fleet"
 import { useQuery } from "@tanstack/react-query"
 import Fuse from "fuse.js"
-import { FleetDetailSheet } from "./fleet-detail-sheet"
+import { FleetDetailSheet, type FleetItem } from "./fleet-detail-sheet"
+import { CustomerHistorySheet } from "./customer-history-sheet"
 
 // --- Konfigurasi Segmen ---
 const SEGMENT_CONFIG: Record<string, { color: string; description: string }> = {
@@ -99,8 +100,12 @@ export function CustomerSegmentationClient() {
     const [endDate, setEndDate] = useState('2025-12-31');
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [selectedFleetData, setSelectedFleetData] = useState<Array<{ customer: string; [key: string]: unknown }>>([]);
+    const [selectedFleetData, setSelectedFleetData] = useState<FleetItem[]>([]);
     const [fleetSheetOpen, setFleetSheetOpen] = useState(false);
+
+    // History Sheet States
+    const [historySheetOpen, setHistorySheetOpen] = useState(false);
+    const [historyCustomerName, setHistoryCustomerName] = useState("");
 
     // Fetch fleet data
     const { data: fleetData = [] } = useQuery({
@@ -276,6 +281,11 @@ export function CustomerSegmentationClient() {
         }
     }, [getMatchingFleets])
 
+    const handleHistoryClick = React.useCallback((customerName: string) => {
+        setHistoryCustomerName(customerName)
+        setHistorySheetOpen(true)
+    }, [])
+
     // --- TanStack Table ---
     const columns = useMemo<ColumnDef<CustomerData>[]>(() => [
         {
@@ -326,6 +336,23 @@ export function CustomerSegmentationClient() {
             }
         },
         {
+            id: "history",
+            header: "History",
+            cell: ({ row }) => {
+                const cust = row.original
+                return (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleHistoryClick(cust.name)}
+                        className="h-7 text-xs"
+                    >
+                        Cek History
+                    </Button>
+                )
+            }
+        },
+        {
             id: "rfm",
             header: () => <div className="text-center">Skor RFM</div>,
             cell: ({ row }) => {
@@ -366,7 +393,7 @@ export function CustomerSegmentationClient() {
                 return rowA.original.monetary - rowB.original.monetary
             }
         }
-    ], [getMatchingFleets, handleFleetClick])
+    ], [getMatchingFleets, handleFleetClick, handleHistoryClick])
 
     const filteredData = useMemo(() => {
         const data = filterSegment === 'All' ? rfmData : rfmData.filter(d => d.segment === filterSegment);
@@ -669,6 +696,12 @@ export function CustomerSegmentationClient() {
                 open={fleetSheetOpen}
                 onOpenChange={setFleetSheetOpen}
                 fleetData={selectedFleetData}
+            />
+
+            <CustomerHistorySheet
+                open={historySheetOpen}
+                onOpenChange={setHistorySheetOpen}
+                customerName={historyCustomerName}
             />
         </div>
     );

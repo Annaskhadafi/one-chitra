@@ -30,7 +30,7 @@ import { adminResetPassword } from "@/app/actions/users"
 const resetPasswordSchema = z.object({
     password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string().min(1, "Please confirm the password"),
-}).refine((data: ResetPasswordValues) => data.password === data.confirmPassword, {
+}).refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
 })

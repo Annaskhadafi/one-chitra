@@ -19,13 +19,15 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { AddUserDialog } from "../../users/_components/add-user-dialog"
 
 import { PermissionGroup } from "./role-dialog"
+import { type WarehouseOption } from "@/components/warehouse-access-fieldset"
 
 interface RoleListProps {
     roles: RoleWithPermissions[]
     allPermissions: PermissionGroup
+    warehouses: WarehouseOption[]
 }
 
-export function RoleList({ roles, allPermissions }: RoleListProps) {
+export function RoleList({ roles, allPermissions, warehouses }: RoleListProps) {
     const { hasResourcePermission } = usePermissions()
     const canEdit = hasResourcePermission('roles', 'edit')
     const canDelete = hasResourcePermission('roles', 'delete')
@@ -43,63 +45,66 @@ export function RoleList({ roles, allPermissions }: RoleListProps) {
 
     return (
         <div className="border rounded-md">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Role Name</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Permissions Count</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {roles.map((role) => (
-                        <TableRow key={role.id}>
-                            <TableCell className="font-medium">{role.name}</TableCell>
-                            <TableCell>{role.description}</TableCell>
-                            <TableCell>
-                                <Badge variant="secondary">
-                                    {role.permissions?.length || 0} permissions
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
-                                    <AddUserDialog
-                                        roles={roles.map(r => ({ id: r.id, name: r.name }))}
-                                        defaultRole={role.name}
-                                        trigger={
-                                            <Button variant="ghost" size="icon" title={`Add user to ${role.name}`}>
-                                                <UserPlus className="h-4 w-4" />
-                                            </Button>
-                                        }
-                                    />
-                                    {canEdit && (
-                                        <RoleDialog
-                                            role={role}
-                                            allPermissions={allPermissions}
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Role Name</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Permissions Count</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {roles.map((role) => (
+                            <TableRow key={role.id}>
+                                <TableCell className="font-medium">{role.name}</TableCell>
+                                <TableCell>{role.description}</TableCell>
+                                <TableCell>
+                                    <Badge variant="secondary">
+                                        {role.permissions?.length || 0} permissions
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <AddUserDialog
+                                            roles={roles.map(r => ({ id: r.id, name: r.name }))}
+                                            warehouses={warehouses}
+                                            defaultRole={role.name}
                                             trigger={
-                                                <Button variant="ghost" size="icon">
-                                                    <Pencil className="h-4 w-4" />
+                                                <Button variant="ghost" size="icon" title={`Add user to ${role.name}`}>
+                                                    <UserPlus className="h-4 w-4" />
                                                 </Button>
                                             }
                                         />
-                                    )}
-                                    {canDelete && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-destructive hover:text-destructive"
-                                            onClick={() => handleDelete(role.id)}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                                        {canEdit && (
+                                            <RoleDialog
+                                                role={role}
+                                                allPermissions={allPermissions}
+                                                trigger={
+                                                    <Button variant="ghost" size="icon">
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                }
+                                            />
+                                        )}
+                                        {canDelete && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-destructive hover:text-destructive"
+                                                onClick={() => handleDelete(role.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
         </div>
     )
 }

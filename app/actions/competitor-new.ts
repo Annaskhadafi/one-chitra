@@ -32,7 +32,7 @@ export async function getCompetitorPrices() {
     }
 }
 
-export async function createCompetitorPrice(data: InferInsertModel<typeof competitorPrices>) {
+export async function createCompetitorPrice(data: Omit<InferInsertModel<typeof competitorPrices>, "createdById">) {
     console.log("Creating competitor price...", data)
     try {
         const session = await auth.api.getSession({ headers: await headers() })

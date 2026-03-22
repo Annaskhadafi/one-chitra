@@ -74,8 +74,13 @@ export function TransferDialog({ warehouses, products }: TransferDialogProps) {
             const result = await createStockTransfer({
                 sourceWarehouseId: parseInt(values.sourceWarehouseId),
                 destinationWarehouseId: parseInt(values.destinationWarehouseId),
-                productId: parseInt(values.productId),
-                quantity: parseInt(values.quantity),
+                items: [
+                    {
+                        productId: parseInt(values.productId),
+                        quantity: parseInt(values.quantity),
+                    }
+                ],
+                transferDate: new Date(),
                 notes: values.notes,
             })
 

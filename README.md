@@ -95,9 +95,16 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 
 # Authentication
-BETTER_AUTH_SECRET=your_secret_key_here
+# Generate with:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+BETTER_AUTH_SECRET=replace_with_64_hex_chars_generated_secret
 BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
+
+# Mistral Document AI (OCR)
+# Set via environment, do not hard-code keys
+MISTRAL_API_KEY=replace_with_your_mistral_key
+MISTRAL_OCR_ENDPOINT=https://api.mistral.ai/v1/ocr
 ```
 
 ## Features
@@ -112,6 +119,26 @@ NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
 - 🔒 Modern authentication patterns
 - 🐳 Full Docker support with multi-stage builds
 - 🚀 Production-ready deployment configuration
+- 🧾 OCR-based Sales Order Automation (Upload → OCR → Mapping → Draft → Confirm)
+
+### OCR-based Sales Order Automation
+- Halaman unggah multi-format dengan drag-drop/browse, progress bar, validasi ukuran 10 MB, dan preview thumbnail: [ocr-upload](file:///d:/[01]%20PROJECT/one%20chitra/app/dashboard/sales-orders/ocr-upload/page.tsx)
+- Ekstraksi OCR menggunakan Mistral Document AI dengan output JSON terstruktur dan bbox: [ocr-extract endpoint](file:///d:/[01]%20PROJECT/one%20chitra/app/api/ocr-extract/route.ts)
+- Mapping cerdas ke master customer & produk dengan confidence score, dan koreksi manual: [map-products endpoint](file:///d:/[01]%20PROJECT/one%20chitra/app/api/map-products/route.ts)
+- Halaman validasi admin split-view (PDF/gambar di kiri, form draft SO di kanan) + tombol “Tambah Baris”, “Hapus Baris”, “Cari Produk”: [ocr-validate](file:///d:/[01]%20PROJECT/one%20chitra/app/dashboard/sales-orders/ocr-validate/page.tsx)
+- Preview PDF bawah yang meng-generate PDF dari draft saat ini: [sales-order-pdf-preview](file:///d:/[01]%20PROJECT/one%20chitra/app/dashboard/sales-orders/_components/sales-order-pdf-preview.tsx)
+- Status dokumen: “OCR – Draft – Tervalidasi – Dibatalkan”; konfirmasi menyimpan ke sales_orders dan sales_order_items serta menulis audit trail: [confirm-so endpoint](file:///d:/[01]%20PROJECT/one%20chitra/app/api/confirm-so/route.ts)
+
+### Internal API
+- POST /api/ocr-extract
+- POST /api/map-products
+- POST /api/draft-so, PUT /api/draft-so
+- POST /api/confirm-so
+
+Catatan:
+- Simpan API key Mistral di environment variable (MISTRAL_API_KEY). Jangan hard-code di kode.
+- Endpoint Mistral (MISTRAL_OCR_ENDPOINT) wajib di-set sesuai dokumentasi resmi Mistral Document AI.
+- Untuk pengujian, sediakan dokumen PO nyata di `public/uploads/test-po/` agar 20 test case berjalan tanpa dummy data.
 
 ## Project Structure
 
@@ -288,7 +315,7 @@ npm run db:dev
 ```env
 # Required for production
 DATABASE_URL=postgresql://user:password@host:port/database
-BETTER_AUTH_SECRET=generate-a-very-secure-32-character-key
+BETTER_AUTH_SECRET=replace_with_64_hex_chars_generated_secret
 BETTER_AUTH_URL=https://yourdomain.com
 
 # Optional optimizations
@@ -298,7 +325,7 @@ NODE_ENV=production
 ### Production Considerations
 
 - **Database**: Use managed PostgreSQL (AWS RDS, Google Cloud SQL, etc.)
-- **Security**: Generate strong secrets, use HTTPS
+- **Security**: Use a high-entropy `BETTER_AUTH_SECRET` (>= 32 chars), never use placeholders, and enforce HTTPS
 - **Performance**: Enable Next.js output: 'standalone' for smaller containers
 - **Monitoring**: Add logging and health checks
 - **Backup**: Regular database backups

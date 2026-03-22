@@ -7,6 +7,18 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { normalizeSlocFields } from "@/lib/sloc"
+import {
+    clearStockTransferRfidArtifacts,
+    syncStockTransferRfidLedger,
+} from "@/lib/rfid-transfer"
+
+type StockTransferTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+type TransferReceiptSyncItem = {
+    productId: number
+    quantity: number
+}
 
 const stockTransferItemSchema = z.object({
     productId: z.number(),
@@ -22,7 +34,7 @@ const stockTransferSchema = z.object({
 })
 
 export async function getStockTransfers() {
-    return await db.query.stockTransfers.findMany({
+    const rows = await db.query.stockTransfers.findMany({
         with: {
             fromWarehouse: true,
             toWarehouse: true,
@@ -43,11 +55,15 @@ export async function getStockTransfers() {
         },
         orderBy: [desc(stockTransfers.createdAt)],
     })
+
+    return normalizeSlocFields(rows)
 }
 
 export async function createStockTransfer(data: z.infer<typeof stockTransferSchema>) {
     try {
-        if (data.sourceWarehouseId === data.destinationWarehouseId) {
+        const parsedData = stockTransferSchema.parse(data)
+
+        if (parsedData.sourceWarehouseId === parsedData.destinationWarehouseId) {
             return { success: false, error: "Source and destination warehouses must be different" }
         }
 
@@ -57,10 +73,10 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
 
         return await db.transaction(async (tx) => {
             // 1. Validate all items and their stock
-            for (const item of data.items) {
+            for (const item of parsedData.items) {
                 const sourceStock = await tx.query.stockLevels.findFirst({
                     where: and(
-                        eq(stockLevels.warehouseId, data.sourceWarehouseId),
+                        eq(stockLevels.warehouseId, parsedData.sourceWarehouseId),
                         eq(stockLevels.productId, item.productId)
                     )
                 })
@@ -73,20 +89,20 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
             // 2. Create Header
             const [transfer] = await tx.insert(stockTransfers).values({
                 referenceNumber,
-                fromWarehouseId: data.sourceWarehouseId,
-                toWarehouseId: data.destinationWarehouseId,
+                fromWarehouseId: parsedData.sourceWarehouseId,
+                toWarehouseId: parsedData.destinationWarehouseId,
                 status: "completed",
                 receivedStatus: "Received", // Manual creation defaults to Received for now, or we can make it an option
-                notes: data.notes,
-                transferDate: data.transferDate,
+                notes: parsedData.notes,
+                transferDate: parsedData.transferDate,
             }).returning()
 
             // 3. Process Items and Stock Movements
-            for (const item of data.items) {
+            for (const item of parsedData.items) {
                 // Deduct from source
                 const sourceStock = await tx.query.stockLevels.findFirst({
                     where: and(
-                        eq(stockLevels.warehouseId, data.sourceWarehouseId),
+                        eq(stockLevels.warehouseId, parsedData.sourceWarehouseId),
                         eq(stockLevels.productId, item.productId)
                     )
                 })
@@ -129,7 +145,7 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                 // Record Source Movement (Out)
                 await recordStockMovement(tx, {
                     productId: item.productId,
-                    warehouseId: data.sourceWarehouseId,
+                    warehouseId: parsedData.sourceWarehouseId,
                     quantity: -item.quantity,
                     type: "TRANSFER_OUT",
                     referenceNumber,
@@ -139,7 +155,7 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                 // Record Destination Movement (In)
                 await recordStockMovement(tx, {
                     productId: item.productId,
-                    warehouseId: data.destinationWarehouseId,
+                    warehouseId: parsedData.destinationWarehouseId,
                     quantity: item.quantity,
                     type: "TRANSFER_IN",
                     referenceNumber,
@@ -154,6 +170,25 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                 })
             }
 
+            try {
+                await syncStockTransferRfidLedger(tx, {
+                    transferId: transfer.id,
+                    referenceNumber,
+                    fromWarehouseId: parsedData.sourceWarehouseId,
+                    toWarehouseId: parsedData.destinationWarehouseId,
+                    status: "completed",
+                    receivedStatus: "Received",
+                    userId,
+                    items: parsedData.items,
+                    captureMethod: "manual",
+                    notes: parsedData.notes,
+                    createTransferOut: true,
+                    createTransferIn: true,
+                })
+            } catch (rfidError) {
+                console.error("[CREATE STOCK TRANSFER] RFID sync skipped:", rfidError)
+            }
+
             return { success: true }
         })
     } catch (error: unknown) {
@@ -163,7 +198,157 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
         revalidatePath("/dashboard/stock-transfers")
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/warehouse")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
     }
+}
+
+export async function syncStockTransferReceipt(
+    tx: StockTransferTx,
+    data: {
+        transferId: number
+        userId: string
+        receivedItems?: TransferReceiptSyncItem[]
+    }
+) {
+    const transfer = await tx.query.stockTransfers.findFirst({
+        where: eq(stockTransfers.id, data.transferId),
+        with: {
+            items: true,
+        },
+    })
+
+    if (!transfer) {
+        throw new Error("Transfer not found")
+    }
+
+    if (transfer.receivedStatus === "Received") {
+        return { success: true, alreadyReceived: true, transfer }
+    }
+
+    const isAutomated = transfer.deliveryId !== null
+    const referenceNumber = transfer.referenceNumber as string
+    const receivedQtyByProduct = new Map<number, number>()
+
+    for (const item of data.receivedItems || []) {
+        receivedQtyByProduct.set(
+            item.productId,
+            (receivedQtyByProduct.get(item.productId) || 0) + Math.max(0, item.quantity)
+        )
+    }
+
+    for (const item of transfer.items) {
+        const receivedQty = receivedQtyByProduct.has(item.productId)
+            ? (receivedQtyByProduct.get(item.productId) || 0)
+            : item.quantity
+
+        if (receivedQty <= 0) {
+            continue
+        }
+
+        if (!isAutomated) {
+            const sourceStock = await tx.query.stockLevels.findFirst({
+                where: and(
+                    eq(stockLevels.warehouseId, transfer.fromWarehouseId),
+                    eq(stockLevels.productId, item.productId)
+                )
+            })
+
+            if (!sourceStock || sourceStock.totalStock < receivedQty) {
+                throw new Error(`Insufficient stock for product ID ${item.productId} in source warehouse`)
+            }
+
+            await tx.update(stockLevels)
+                .set({
+                    totalStock: sourceStock.totalStock - receivedQty,
+                    updatedAt: new Date()
+                })
+                .where(eq(stockLevels.id, sourceStock.id))
+
+            await recordStockMovement(tx, {
+                productId: item.productId,
+                warehouseId: transfer.fromWarehouseId,
+                quantity: -receivedQty,
+                type: "TRANSFER_OUT",
+                referenceNumber,
+                recordedBy: data.userId,
+                fromWarehouseId: transfer.fromWarehouseId,
+                toWarehouseId: transfer.toWarehouseId,
+            })
+        }
+
+        const destStock = await tx.query.stockLevels.findFirst({
+            where: and(
+                eq(stockLevels.warehouseId, transfer.toWarehouseId),
+                eq(stockLevels.productId, item.productId)
+            )
+        })
+
+        if (destStock) {
+            await tx.update(stockLevels)
+                .set({
+                    totalStock: destStock.totalStock + receivedQty,
+                    updatedAt: new Date()
+                })
+                .where(eq(stockLevels.id, destStock.id))
+        } else {
+            await tx.insert(stockLevels).values({
+                warehouseId: transfer.toWarehouseId,
+                productId: item.productId,
+                totalStock: receivedQty,
+                minStock: 0,
+                valuationValue: '0',
+            })
+        }
+
+        await recordStockMovement(tx, {
+            productId: item.productId,
+            warehouseId: transfer.toWarehouseId,
+            quantity: receivedQty,
+            type: "TRANSFER_IN",
+            referenceNumber,
+            recordedBy: data.userId,
+            fromWarehouseId: transfer.fromWarehouseId,
+            toWarehouseId: transfer.toWarehouseId,
+        })
+    }
+
+    await tx.update(stockTransfers)
+        .set({
+            receivedStatus: "Received",
+            status: "completed",
+            updatedAt: new Date(),
+        })
+        .where(eq(stockTransfers.id, transfer.id))
+
+    try {
+        await syncStockTransferRfidLedger(tx, {
+            transferId: transfer.id,
+            referenceNumber,
+            fromWarehouseId: transfer.fromWarehouseId,
+            toWarehouseId: transfer.toWarehouseId,
+            status: "completed",
+            receivedStatus: "Received",
+            userId: data.userId,
+            items: transfer.items.map((item) => ({
+                productId: item.productId,
+                quantity: receivedQtyByProduct.has(item.productId)
+                    ? (receivedQtyByProduct.get(item.productId) || 0)
+                    : item.quantity,
+                stockTransferItemId: item.id,
+            })),
+            captureMethod: "manual",
+            notes: transfer.notes,
+            createTransferOut: !isAutomated,
+            createTransferIn: true,
+        })
+    } catch (rfidError) {
+        console.error("[SYNC STOCK TRANSFER RECEIPT] RFID sync skipped:", rfidError)
+    }
+
+    return { success: true, alreadyReceived: false, transfer }
 }
 
 export async function checkTransferStockAvailability(warehouseId: number, items: { productId: number; quantity: number }[]) {
@@ -209,6 +394,7 @@ export async function updateStockTransferStatus(id: number, data: {
 
             const oldStatus = transfer.receivedStatus
             const newStatus = data.receivedStatus ?? oldStatus
+            const shouldSyncReceipt = oldStatus !== "Received" && newStatus === "Received"
 
             // Safeguard: Once Received, cannot go back
             if (oldStatus === "Received" && newStatus !== "Received") {
@@ -218,95 +404,34 @@ export async function updateStockTransferStatus(id: number, data: {
             // Update internal fields and status
             await tx.update(stockTransfers)
                 .set({
-                    receivedStatus: newStatus,
+                    ...(shouldSyncReceipt
+                        ? {}
+                        : {
+                            receivedStatus: newStatus,
+                            status: newStatus === "Received" ? "completed" : transfer.status,
+                        }),
                     postingDocumentNo: data.postingDocumentNo ?? transfer.postingDocumentNo,
                     batchNo: data.batchNo ?? transfer.batchNo,
                     notes: data.notes ?? transfer.notes,
-                    status: newStatus === "Received" ? "completed" : transfer.status,
                     updatedAt: new Date(),
                 })
                 .where(eq(stockTransfers.id, id))
 
-            const isAutomated = transfer.deliveryId !== null
-            const referenceNumber = transfer.referenceNumber as string
-
             // === RECEIVED: Transition to Received ===
-            if (oldStatus !== "Received" && newStatus === "Received") {
-                for (const item of transfer.items) {
-                    // 1. Deduct from source ONLY if manual
-                    if (!isAutomated) {
-                        const sourceStock = await tx.query.stockLevels.findFirst({
-                            where: and(
-                                eq(stockLevels.warehouseId, transfer.fromWarehouseId),
-                                eq(stockLevels.productId, item.productId)
-                            )
-                        })
-
-                        if (!sourceStock || sourceStock.totalStock < item.quantity) {
-                            throw new Error(`Insufficient stock for product ID ${item.productId} in source warehouse`)
-                        }
-
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: sourceStock.totalStock - item.quantity,
-                                updatedAt: new Date()
-                            })
-                            .where(eq(stockLevels.id, sourceStock.id))
-
-                        // Record TRANSFER_OUT
-                        await recordStockMovement(tx, {
-                            productId: item.productId,
-                            warehouseId: transfer.fromWarehouseId,
-                            quantity: -item.quantity,
-                            type: "TRANSFER_OUT",
-                            referenceNumber,
-                            recordedBy: userId,
-                            fromWarehouseId: transfer.fromWarehouseId,
-                            toWarehouseId: transfer.toWarehouseId,
-                        })
-                    }
-
-                    // 2. Add to destination
-                    const destStock = await tx.query.stockLevels.findFirst({
-                        where: and(
-                            eq(stockLevels.warehouseId, transfer.toWarehouseId),
-                            eq(stockLevels.productId, item.productId)
-                        )
-                    })
-
-                    if (destStock) {
-                        await tx.update(stockLevels)
-                            .set({
-                                totalStock: destStock.totalStock + item.quantity,
-                                updatedAt: new Date()
-                            })
-                            .where(eq(stockLevels.id, destStock.id))
-                    } else {
-                        await tx.insert(stockLevels).values({
-                            warehouseId: transfer.toWarehouseId,
-                            productId: item.productId,
-                            totalStock: item.quantity,
-                            minStock: 0,
-                            valuationValue: '0',
-                        })
-                    }
-
-                    // 3. Record TRANSFER_IN
-                    await recordStockMovement(tx, {
+            if (shouldSyncReceipt) {
+                await syncStockTransferReceipt(tx, {
+                    transferId: transfer.id,
+                    userId,
+                    receivedItems: transfer.items.map((item) => ({
                         productId: item.productId,
-                        warehouseId: transfer.toWarehouseId,
                         quantity: item.quantity,
-                        type: "TRANSFER_IN",
-                        referenceNumber,
-                        recordedBy: userId,
-                        fromWarehouseId: transfer.fromWarehouseId,
-                        toWarehouseId: transfer.toWarehouseId,
-                    })
-                }
+                    })),
+                })
             }
 
             // === REJECTED: Transition to Rejected (only from Scheduled) ===
             if (oldStatus === "Scheduled" && newStatus === "Rejected") {
+                const referenceNumber = transfer.referenceNumber as string
                 for (const item of transfer.items) {
                     const sourceStock = await tx.query.stockLevels.findFirst({
                         where: and(
@@ -345,6 +470,12 @@ export async function updateStockTransferStatus(id: number, data: {
                         notes: `Revert stok karena transfer ${referenceNumber} ditolak`,
                     })
                 }
+
+                try {
+                    await clearStockTransferRfidArtifacts(tx, transfer.id)
+                } catch (rfidError) {
+                    console.error("[UPDATE STOCK TRANSFER STATUS] RFID cleanup skipped:", rfidError)
+                }
             }
 
             return { success: true }
@@ -357,7 +488,11 @@ export async function updateStockTransferStatus(id: number, data: {
         try {
             revalidatePath("/dashboard/stock-transfers")
             revalidatePath("/dashboard/inventory")
-        } catch (e) { }
+            revalidatePath("/dashboard/rfid-monitoring")
+            revalidatePath("/dashboard/rfid-exceptions")
+            revalidatePath("/dashboard/rfid-traceability")
+            revalidatePath("/dashboard/rfid-tagged-units")
+        } catch (_e) { }
     }
 }
 

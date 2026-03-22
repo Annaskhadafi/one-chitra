@@ -8,7 +8,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, X } from "lucide-react"
+import { Printer, X, FileDown } from "lucide-react"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 
@@ -17,6 +17,7 @@ type User = typeof user.$inferSelect
 interface QuotationPdfData {
     id: number
     quotationNumber: string | null
+    currentRevision: number
     customerId: number
     quotationDate: Date
     validUntil: Date | null
@@ -51,6 +52,15 @@ interface QuotationPdfData {
         tax: string
         product: Product
     }[]
+    attachments?: {
+        id: number
+        title: string
+        fileName: string
+        fileUrl: string
+        mimeType: string | null
+        kind: string
+        includeInPdf: boolean
+    }[]
 }
 
 interface QuotationPdfPreviewProps {
@@ -83,7 +93,6 @@ function formatDate(date: Date) {
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
     const printRef = useRef<HTMLDivElement>(null)
-    const companyLogoSrc = "/brand/Chitra-Paratama.png"
 
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
         return sum + (item.quantity * Number(item.unitPrice))
@@ -144,17 +153,20 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                     th.text-right { text-align: right; }
                     
                     td { padding: 14px 15px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-size: 10pt; }
+                    tr { page-break-inside: avoid; break-inside: avoid; }
                     tr:last-child td { border-bottom: none; }
-                    .item-name { font-weight: 800; margin-bottom: 6px; text-transform: uppercase; color: #0f172a; font-size: 10.5pt; }
-                    .item-desc { color: #64748b; white-space: pre-wrap; line-height: 1.5; font-size: 9.5pt; }
+                    .index-col { width: 30px; font-weight: bold; color: #64748b; }
+                    .item-name { font-weight: 800; margin-bottom: 4px; text-transform: uppercase; color: #0f172a; font-size: 10.5pt; }
+                    .item-desc { font-weight: bold; color: #334155; white-space: pre-wrap; line-height: 1.4; font-size: 9.5pt; margin-bottom: 4px; }
+                    .item-longdesc { font-style: italic; color: #64748b; white-space: pre-wrap; line-height: 1.4; font-size: 8.5pt; }
                     
                     .totals-section { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 40px; }
                     .total-row { display: flex; justify-content: space-between; width: 320px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
                     .total-label { font-weight: 600; color: #64748b; font-size: 10pt; }
                     .total-value { text-align: right; color: #0f172a; font-weight: 700; font-size: 10pt; }
-                    .grand-total-row { background: #2563eb; padding: 12px 15px; border-radius: 6px; margin-top: 10px; border: none; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); }
+                    .grand-total-row { background: #2563eb; padding: 12px 15px; border-radius: 4px; border: 1px solid #1d4ed8; margin-top: 10px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255,255,255,0.2); }
                     .grand-total-label { font-weight: 800; font-size: 13pt; color: white; text-transform: uppercase; letter-spacing: 0.05em; }
-                    .grand-total-value { font-weight: 800; font-size: 13pt; color: white; }
+                    .grand-total-value { font-weight: 800; font-size: 13pt; color: white; border-left: 1px solid rgba(255,255,255,0.2); padding-left: 15px; text-align: right; width: 120px; }
 
                     .terms-section { margin-top: 25px; width: 100%; padding: 15px 20px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
                     .terms-label { font-weight: 800; margin-bottom: 8px; color: #0f172a; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -211,14 +223,52 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-7xl max-h-[95vh] overflow-y-auto p-0 bg-slate-50">
-                <DialogHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 no-print">
-                    <div className="flex items-center justify-between">
-                        <DialogTitle className="text-lg">Quotation Preview</DialogTitle>
-                        <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={handlePrint} className="gap-2">
+            <DialogContent className="max-h-[95vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto bg-slate-50 p-0 sm:max-w-7xl">
+                <DialogHeader className="no-print sticky top-0 z-10 border-b bg-background px-4 py-4 sm:px-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <DialogTitle className="pr-10 text-base sm:text-lg">Quotation Preview</DialogTitle>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <Button size="sm" onClick={handlePrint} className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                                 <Printer className="h-3.5 w-3.5" />
-                                Print / Download PDF
+                                Browser Print
+                            </Button>
+                            <Button size="sm" onClick={async () => {
+                                const { generateQuotationPdf } = await import("./quotation-pdf-generator")
+                                await generateQuotationPdf({
+                                    quotationNumber: quotation.quotationNumber,
+                                    currentRevision: quotation.currentRevision,
+                                    quotationDate: quotation.quotationDate,
+                                    validUntil: quotation.validUntil,
+                                    salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
+                                    attn: quotation.attn,
+                                    address: quotation.address,
+                                    customer: quotation.customer,
+                                    currency: quotation.currency,
+                                    discountType: quotation.discountType,
+                                    discount: quotation.discount,
+                                    tax: quotation.tax,
+                                    shipping: quotation.shipping,
+                                    termsConditions: quotation.termsConditions,
+                                    clientNote: quotation.clientNote,
+                                    items: quotation.items.map((item) => ({
+                                        product: item.product,
+                                        description: item.description,
+                                        longDescription: item.longDescription,
+                                        quantity: item.quantity,
+                                        unitPrice: item.unitPrice,
+                                    })),
+                                    attachments: quotation.attachments?.map((attachment) => ({
+                                        title: attachment.title,
+                                        fileName: attachment.fileName,
+                                        fileUrl: attachment.fileUrl,
+                                        mimeType: attachment.mimeType,
+                                        kind: attachment.kind,
+                                        includeInPdf: attachment.includeInPdf,
+                                    })),
+                                })
+                            }} className="w-full gap-2 sm:w-auto" variant="outline">
+                                <FileDown className="h-3.5 w-3.5" />
+                                Download PDF A4
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
                                 <X className="h-4 w-4" />
@@ -228,23 +278,30 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 </DialogHeader>
 
                 {/* PDF Content Area */}
-                <div className="flex justify-center p-8">
-                    <div className="bg-white shadow-2xl w-full max-w-[210mm] p-[15mm] min-h-[297mm] ring-1 ring-slate-200" ref={printRef}>
+                <div className="flex justify-start overflow-x-auto bg-slate-50 p-3 sm:justify-center sm:p-8">
+                    <div className="bg-white shadow-2xl w-full max-w-[210mm] min-h-[297mm] ring-1 ring-slate-200 relative" ref={printRef}>
+                        {/* Background injected for online preview */}
+                        <div className="absolute inset-0 z-0 pointer-events-none opacity-100" style={{
+                            backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
+                            backgroundSize: "cover",
+                            backgroundRepeat: "no-repeat"
+                        }}></div>
+                        
+                        {/* Content Wrap to clear background headers */}
+                        <div className="relative z-10 pt-[50mm] pb-[30mm] px-[15mm]">
                         <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, borderBottom: '2px solid #2563eb', paddingBottom: 12 }}>
-                            <div className="logo-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div className="logo-container">
-                                    <img src={companyLogoSrc} alt="Logo" style={{ height: 90, width: 'auto' }} />
-                                </div>
-                                <div className="company-info" style={{ marginTop: 8 }}>
-                                    <div className="company-name" style={{ fontSize: '13pt', fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>PT Chitra Paratama</div>
-                                    <div className="company-address" style={{ fontSize: '9.5pt', color: '#475569', width: '85%', lineHeight: '1.5' }}>
-                                        {quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612"}
-                                    </div>
+                            <div className="logo-section" style={{ display: 'none' }}></div>
+                            <div className="company-info" style={{ marginTop: 8 }}>
+                                <div className="company-name" style={{ fontSize: '13pt', fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>PT Chitra Paratama</div>
+                                <div className="company-address" style={{ fontSize: '9.5pt', color: '#475569', width: '85%', lineHeight: '1.5' }}>
+                                    {quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara | Kota Balikpapan Kalimantan Timur 7612"}
                                 </div>
                             </div>
                             <div className="doc-title-container" style={{ textAlign: 'right' }}>
                                 <div className="doc-title" style={{ fontSize: '24pt', fontWeight: 900, color: '#2563eb', letterSpacing: '-0.03em', textTransform: 'uppercase' }}>QUOTATION</div>
-                                <div className="doc-number" style={{ fontSize: '11pt', color: '#64748b', fontWeight: 600 }}>{quotation.quotationNumber}</div>
+                                <div className="doc-number" style={{ fontSize: '11pt', color: '#64748b', fontWeight: 600 }}>
+                                    {quotation.quotationNumber} | Rev.{quotation.currentRevision}
+                                </div>
                             </div>
                         </div>
 
@@ -285,57 +342,89 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 30, border: '1px solid #e2e8f0' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>#</th>
+                                    <th style={{ width: '45px', background: '#3b5998', color: 'white', padding: '12px 10px', fontSize: '9pt', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, borderLeft: '1px solid #2a437a', borderTop: '1px solid #2a437a' }}>#</th>
                                     <th style={{ background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Item</th>
-                                    <th style={{ background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Qty</th>
-                                    <th style={{ background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Price</th>
-                                    <th style={{ background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Amount</th>
+                                    <th style={{ width: '70px', background: '#3b5998', color: 'white', padding: '12px 10px', fontSize: '9pt', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, borderTop: '1px solid #2a437a' }}>Qty</th>
+                                    <th style={{ width: '100px', background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, borderTop: '1px solid #2a437a' }}>Price</th>
+                                    <th style={{ width: '120px', background: '#3b5998', color: 'white', padding: '12px 15px', fontSize: '9pt', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, borderRight: '1px solid #2a437a', borderTop: '1px solid #2a437a' }}>Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {quotation.items.map((item, index) => {
+                                {quotation.items.slice(0, -1).map((item, index) => {
                                     const lineAmount = item.quantity * Number(item.unitPrice)
                                     return (
                                         <tr key={item.id}>
-                                            <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', color: '#64748b' }}>{index + 1}</td>
+                                            <td style={{ width: '45px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', color: '#64748b', textAlign: 'center', fontWeight: 'bold' }}>{index + 1}</td>
                                             <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt' }}>
-                                                <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>{item.product.materialDescription || item.product.materialNumber}</div>
-                                                <div className="item-desc" style={{ color: '#475569', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                                                    {item.longDescription || item.description}
+                                                <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>
+                                                    {item.description || item.product.materialDescription || item.product.materialNumber}
                                                 </div>
+                                                {item.longDescription && (
+                                                    <div className="item-longdesc" style={{ fontStyle: 'italic', color: '#64748b', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                                        {item.longDescription}
+                                                    </div>
+                                                )}
                                             </td>
-                                            <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
-                                            <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 600 }}>{Number(item.unitPrice).toLocaleString()}</td>
-                                            <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{lineAmount.toLocaleString()}</td>
+                                            <td style={{ width: '70px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
+                                            <td style={{ width: '100px', padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 600 }}>{Number(item.unitPrice).toLocaleString()}</td>
+                                            <td style={{ width: '120px', padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{lineAmount.toLocaleString()}</td>
                                         </tr>
                                     )
                                 })}
                             </tbody>
+                            {quotation.items.length > 0 && (
+                            <tbody style={{ pageBreakInside: 'avoid' }}>
+                                {quotation.items.slice(-1).map((item) => {
+                                    const index = quotation.items.length - 1
+                                    const lineAmount = item.quantity * Number(item.unitPrice)
+                                    return (
+                                        <tr key={item.id}>
+                                            <td style={{ width: '45px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', color: '#64748b', textAlign: 'center', fontWeight: 'bold' }}>{index + 1}</td>
+                                            <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt' }}>
+                                                <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>
+                                                    {item.description || item.product.materialDescription || item.product.materialNumber}
+                                                </div>
+                                                {item.longDescription && (
+                                                    <div className="item-longdesc" style={{ fontStyle: 'italic', color: '#64748b', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                                        {item.longDescription}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td style={{ width: '70px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
+                                            <td style={{ width: '100px', padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 600 }}>{Number(item.unitPrice).toLocaleString()}</td>
+                                            <td style={{ width: '120px', padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{lineAmount.toLocaleString()}</td>
+                                        </tr>
+                                    )
+                                })}
+                                <tr>
+                                    <td colSpan={5} style={{ padding: 0, border: 'none' }}>
+                                        <div className="totals-section" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: 10, paddingBottom: 10 }}>
+                                            <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                                                <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>Sub Total</span>
+                                                <span className="total-value" style={{ textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{formatCurrency(itemsSubtotal, quotation.currency)}</span>
+                                            </div>
+                                            {discountAmount > 0 && (
+                                                <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                                                    <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>Discount {quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}</span>
+                                                    <span className="total-value" style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>-{formatCurrency(discountAmount, quotation.currency)}</span>
+                                                </div>
+                                            )}
+                                            {taxAmount > 0 && (
+                                                <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                                                    <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>PPn (11%)</span>
+                                                    <span className="total-value" style={{ textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{formatCurrency(taxAmount, quotation.currency)}</span>
+                                                </div>
+                                            )}
+                                            <div className="total-row grand-total-row" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: 350, padding: '12px 15px', background: '#2563eb', borderRadius: 4, marginTop: 10, border: '1px solid #1d4ed8', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)' }}>
+                                                <span className="grand-total-label" style={{ fontWeight: 800, fontSize: '13pt', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</span>
+                                                <span className="grand-total-value" style={{ fontWeight: 800, fontSize: '13pt', color: 'white', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: 15, textAlign: 'right', width: 140 }}>{formatCurrency(grandTotal, quotation.currency)}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            )}
                         </table>
-
-                        {/* Totals Section */}
-                        <div className="totals-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginBottom: 40 }}>
-                            <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                                <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>Sub Total</span>
-                                <span className="total-value" style={{ textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{formatCurrency(itemsSubtotal, quotation.currency)}</span>
-                            </div>
-                            {discountAmount > 0 && (
-                                <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                                    <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>Discount {quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}</span>
-                                    <span className="total-value" style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>-{formatCurrency(discountAmount, quotation.currency)}</span>
-                                </div>
-                            )}
-                            {taxAmount > 0 && (
-                                <div className="total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 300, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                                    <span className="total-label" style={{ fontWeight: 600, color: '#64748b' }}>PPn (11%)</span>
-                                    <span className="total-value" style={{ textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{formatCurrency(taxAmount, quotation.currency)}</span>
-                                </div>
-                            )}
-                            <div className="total-row grand-total-row" style={{ display: 'flex', justifyContent: 'space-between', width: 320, padding: '12px 15px', background: '#2563eb', borderRadius: 6, marginTop: 10 }}>
-                                <span className="grand-total-label" style={{ fontWeight: 800, fontSize: '13pt', color: 'white' }}>Total</span>
-                                <span className="grand-total-value" style={{ fontWeight: 800, fontSize: '13pt', color: 'white' }}>{formatCurrency(grandTotal, quotation.currency)}</span>
-                            </div>
-                        </div>
 
                         {/* Terms section */}
                         {(quotation.termsConditions || quotation.clientNote) && (
@@ -348,7 +437,19 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             </div>
                         )}
 
+                        {quotation.attachments?.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po").length ? (
+                            <div className="terms-section" style={{ marginTop: 20, width: '100%', padding: '15px 20px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                <div className="terms-label" style={{ fontWeight: 800, marginBottom: 8, color: '#0f172a', fontSize: '8.5pt', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Attachment Package:</div>
+                                <div className="terms-content" style={{ fontSize: '9pt', color: '#475569', lineHeight: 1.6 }}>
+                                    {quotation.attachments.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po").map((attachment, index) => (
+                                        <div key={attachment.id}>{index + 1}. {attachment.title} ({attachment.fileName})</div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
                         <div className="bank-info" style={{ marginTop: 30, paddingBottom: 20 }}>
+                        </div>
                         </div>
                     </div>
                 </div>

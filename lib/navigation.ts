@@ -63,6 +63,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "products",
                     },
                     {
+                        title: "Product Bundling",
+                        url: "/dashboard/bundling",
+                        resource: "bundling",
+                    },
+                    {
                         title: "Warehouse",
                         url: "/dashboard/warehouse",
                         resource: "warehouses",
@@ -123,6 +128,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/stock-transfers",
                         resource: "stock-transfers",
                     },
+                    {
+                        title: "E-VHS",
+                        url: "/dashboard/evhs",
+                        resource: "evhs",
+                    },
                 ],
             },
             {
@@ -142,6 +152,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "stocks",
                     },
                     {
+                        title: "Stock Card",
+                        url: "/dashboard/stock-card",
+                        resource: "stocks",
+                    },
+                    {
                         title: "Stock SAP New",
                         url: "/dashboard/stocks-sap-new",
                         resource: "stocks-sap",
@@ -150,6 +165,11 @@ export const navigationConfig: NavSection[] = [
                         title: "Stock Opname",
                         url: "/dashboard/stock-opname",
                         resource: "stock-opname",
+                    },
+                    {
+                        title: "Stock Opname Aktual",
+                        url: "/dashboard/stock-opname-aktual",
+                        resource: "stock-opname-aktual",
                     },
                     {
                         title: "Stock Movement Log",
@@ -161,13 +181,40 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/stock-alerts",
                         resource: "stock-alerts",
                     },
+                    {
+                        title: "Dead Stock Analysis",
+                        url: "/dashboard/inventory/dead-stock",
+                        resource: "inventory",
+                    },
+                    {
+                        title: "Dynamic Safety Stock",
+                        url: "/dashboard/inventory-ml",
+                        resource: "inventory",
+                    },
                 ],
             },
             {
                 title: "Logistics & Cost",
-                url: "/dashboard/logistics-costs",
+                url: "#",
                 icon: BarChart3,
                 resource: "logistics-costs",
+                items: [
+                    {
+                        title: "Logistics Cost Log",
+                        url: "/dashboard/logistics-costs",
+                        resource: "logistics-costs",
+                    },
+                    {
+                        title: "Cost Settlement",
+                        url: "/dashboard/cost-settlements",
+                        resource: "cost-settlements",
+                    },
+                    {
+                        title: "Request Cost Delivery",
+                        url: "/dashboard/delivery-cost-request",
+                        resource: "delivery-cost-request",
+                    },
+                ],
             },
         ],
     },
@@ -175,36 +222,34 @@ export const navigationConfig: NavSection[] = [
         title: "Business & Analytics",
         items: [
             {
-                title: "Sales & Marketing",
+                title: "Marketing",
                 url: "#",
-                icon: ShoppingCart,
-                resource: "sales-marketing",
+                icon: LayoutGrid,
+                resource: "marketing",
                 items: [
+                    {
+                        title: "Campaign Manager",
+                        url: "/dashboard/marketing/campaigns",
+                        resource: "marketing",
+                    },
+                    {
+                        title: "Contact & Grup Email",
+                        url: "/dashboard/marketing/email-lists",
+                        resource: "marketing",
+                    },
                     {
                         title: "Marketing Calendar",
                         url: "/dashboard/calendar",
                         resource: "calendar-events",
                     },
-                    {
-                        title: "Competitor Info New",
-                        url: "/dashboard/competitor-info-new",
-                        resource: "competitor-info-new",
-                    },
-                    {
-                        title: "Segmentasi Customer",
-                        url: "/dashboard/customer-segmentation",
-                        resource: "customer-segmentation",
-                    },
-                    {
-                        title: "Customers",
-                        url: "/dashboard/customers",
-                        resource: "customers",
-                    },
-                    {
-                        title: "Price Management",
-                        url: "/dashboard/price-management",
-                        resource: "price-management",
-                    },
+                ],
+            },
+            {
+                title: "Sales Preview",
+                url: "#",
+                icon: ShoppingCart,
+                resource: "sales",
+                items: [
                     {
                         title: "Quotations",
                         url: "/dashboard/quotations",
@@ -224,11 +269,6 @@ export const navigationConfig: NavSection[] = [
                         title: "History Order",
                         url: "/dashboard/history-order",
                         resource: "history-order",
-                    },
-                    {
-                        title: "Master Data Forecast",
-                        url: "/dashboard/forecasts",
-                        resource: "forecast-management",
                     },
                 ],
             },
@@ -254,6 +294,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "revenue-forecast",
                     },
                     {
+                        title: "ML Revenue Forecast",
+                        url: "/dashboard/revenue-ml",
+                        resource: "revenue-forecast",
+                    },
+                    {
                         title: "Reports Hub",
                         url: "/dashboard/reports",
                         resource: "reports",
@@ -262,6 +307,11 @@ export const navigationConfig: NavSection[] = [
                         title: "ABC Analysis",
                         url: "/dashboard/abc-analysis",
                         resource: "abc-analysis",
+                    },
+                    {
+                        title: "Quotation Analysis",
+                        url: "/dashboard/quotation-analysis",
+                        resource: "quotation-analysis",
                     },
                 ],
             },
@@ -328,6 +378,34 @@ export const navigationConfig: NavSection[] = [
                         title: "Sessions",
                         url: "/dashboard/security/sessions",
                         resource: "security",
+                    },
+                ],
+            },
+            {
+                title: "Integration & Sync",
+                url: "#",
+                icon: Database,
+                resource: "admin",
+                items: [
+                    {
+                        title: "SAP Stock Feed (PostgreSQL)",
+                        url: "/dashboard/stocks-sap-new",
+                        resource: "stocks-sap",
+                    },
+                    {
+                        title: "SAP Stock Feed (Live API)",
+                        url: "/dashboard/stocks-sap",
+                        resource: "stocks-sap",
+                    },
+                    {
+                        title: "SAP Sync Report",
+                        url: "/dashboard/reports/sap",
+                        resource: "reports",
+                    },
+                    {
+                        title: "Email Delivery Logs",
+                        url: "/dashboard/settings/email",
+                        resource: "email-settings",
                     },
                 ],
             },

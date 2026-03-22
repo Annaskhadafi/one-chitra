@@ -2,8 +2,13 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
+import { getCustomerAddresses } from "@/app/actions/customer"
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
+import { getStocks } from "@/app/actions/stock"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,6 +35,14 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog"
+import {
     Card,
     CardContent,
     CardHeader,
@@ -47,10 +60,12 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus } from "lucide-react"
+import { ArrowLeft, Save, ChevronsUpDown, Check, Package, Truck, MapPin, CheckCircle2, AlertTriangle, XCircle, Plus, Info, Eye, X, Search, Loader2, RefreshCcw, BarChart3, TrendingDown, AlertCircle, Copy, ClipboardPaste } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
+import { formatWarehouseLabel } from "@/lib/sloc"
+import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface SOItemWithRemaining {
     id: number
@@ -90,10 +105,16 @@ interface DeliveryFormItem {
     serialNumbers: string[]
 }
 
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
+
+type StockListItem = Awaited<ReturnType<typeof getStocks>>[number]
+
 interface StockResult {
     productId: number
     requested: number
     available: number
+    remainingAfterDelivery: number
+    shortage: number
     sufficient: boolean
     alternativeIds?: { id: number; stock: number; description: string }[]
     otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
@@ -105,6 +126,7 @@ interface DeliveryFormProps {
     initialData?: {
         id: number
         deliveryNumber: string | null
+        doSap: string | null
         salesOrderId: number
         scheduledDate: Date
         deliveryDate: Date | null
@@ -118,12 +140,19 @@ interface DeliveryFormProps {
         shippingAddress: string | null
         notes: string | null
         // Internal Cost Breakdown
-        costGasoline: number | string | null
+        tripDestination?: string | null
+        costGasolineDexlite: number | string | null
+        costGasolineBio: number | string | null
         costToll: number | string | null
         costParking: number | string | null
         costMeals: number | string | null
         costMaintenance: number | string | null
         costOthers: number | string | null
+        costRapidTest?: number | string | null
+        costFerry?: number | string | null
+        costPortal?: number | string | null
+        costWashing?: number | string | null
+        costEscort?: number | string | null
         // External fields
         isExternal: boolean | null
         vendorName: string | null
@@ -157,27 +186,77 @@ interface DeliveryFormProps {
             product: Product
         }[]
     }
+    defaultSalesOrderId?: number
 }
 
-export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryFormProps) {
+const DELIVERY_FORM_DRAFT_KEY = "delivery-form-draft-v1"
+const DELIVERY_FORM_RELOAD_REASON_KEY = "delivery-form-reload-reason-v1"
+
+interface DeliveryFormDraft {
+    generatedDeliveryNumber: string
+    doSap: string
+    salesOrderId?: number
+    scheduledDate: string
+    deliveryDate: string
+    status: string
+    deliveryType: string
+    driverName: string
+    vehicleNumber: string
+    vehicleType: string
+    warehouseId?: number
+    warehouseToId?: number
+    shippingAddress: string
+    notes: string
+    tripDestination: string
+    costGasolineDexlite: string
+    costGasolineBio: string
+    costToll: string
+    costParking: string
+    costMeals: string
+    costMaintenance: string
+    costOthers: string
+    costRapidTest: string
+    costFerry: string
+    costPortal: string
+    costWashing: string
+    costEscort: string
+    isExternal: boolean
+    vendorName: string
+    awbNumber: string
+    shippingCost: string
+    items: DeliveryFormItem[]
+}
+
+function isTyreCategory(category: string | null | undefined) {
+    return category?.trim().toUpperCase() === "TYRE"
+}
+
+function requiresSerialNumbers(
+    item: Pick<DeliveryFormItem, "productCategory">,
+    trackingDecision?: TrackingDecisionPreviewItem,
+) {
+    return Boolean(trackingDecision?.serialRequired ?? isTyreCategory(item.productCategory))
+}
+
+function isStaleServerActionError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.includes("UnrecognizedActionError") || message.includes("was not found on the server")
+}
+
+export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSalesOrderId }: DeliveryFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
 
     // Fleet Data State
     const [drivers, setDrivers] = useState<{ id: number, name: string }[]>([])
     const [vehicles, setVehicles] = useState<{ id: number, policeNumber: string, type: string }[]>([])
-    const [loadingFleet, setLoadingFleet] = useState(false)
+    const [, setLoadingFleet] = useState(false)
     const [driverSearch, setDriverSearch] = useState("")
     const [vehicleSearch, setVehicleSearch] = useState("")
 
     // Delivery Number
     const [generatedDeliveryNumber, setGeneratedDeliveryNumber] = useState(initialData?.deliveryNumber || "")
-
-    useEffect(() => {
-        if (!isEdit) {
-            generateDeliveryNumber().then(num => setGeneratedDeliveryNumber(num))
-        }
-    }, [isEdit])
+    const [doSap, setDoSap] = useState(initialData?.doSap || "")
 
     // Load fleet data on mount
     useEffect(() => {
@@ -192,7 +271,9 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     }, [])
 
     // Form state
-    const [salesOrderId, setSalesOrderId] = useState<number | undefined>(initialData?.salesOrderId || undefined)
+    const defaultSO = useMemo(() => defaultSalesOrderId ? salesOrders.find(s => s.id === defaultSalesOrderId) : undefined, [salesOrders, defaultSalesOrderId])
+
+    const [salesOrderId, setSalesOrderId] = useState<number | undefined>(initialData?.salesOrderId || defaultSalesOrderId || undefined)
     const [scheduledDate, setScheduledDate] = useState(
         initialData?.scheduledDate
             ? new Date(initialData.scheduledDate).toISOString().slice(0, 10)
@@ -208,18 +289,27 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [driverName, setDriverName] = useState(initialData?.driverName || "")
     const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || "")
     const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || "")
-    const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || undefined)
+    const [warehouseId, setWarehouseId] = useState<number | undefined>(initialData?.warehouseId || defaultSO?.warehouseId || undefined)
     const [warehouseToId, setWarehouseToId] = useState<number | undefined>(initialData?.warehouseToId || undefined)
-    const [shippingAddress, setShippingAddress] = useState(initialData?.shippingAddress || "")
+    const [shippingAddress, setShippingAddress] = useState(
+        initialData?.shippingAddress || (defaultSO ? [defaultSO.customer.address1, defaultSO.customer.address2, defaultSO.customer.address3, defaultSO.customer.address4, defaultSO.customer.address5].filter(Boolean).join(", ") : "")
+    )
     const [notes, setNotes] = useState(initialData?.notes || "")
 
     // Internal Cost Breakdown State
-    const [costGasoline, setCostGasoline] = useState(initialData?.costGasoline ? String(initialData.costGasoline) : "0")
+    const [tripDestination, setTripDestination] = useState(initialData?.tripDestination || "")
+    const [costGasolineDexlite, setCostGasolineDexlite] = useState(initialData?.costGasolineDexlite ? String(initialData.costGasolineDexlite) : "0")
+    const [costGasolineBio, setCostGasolineBio] = useState(initialData?.costGasolineBio ? String(initialData.costGasolineBio) : "0")
     const [costToll, setCostToll] = useState(initialData?.costToll ? String(initialData.costToll) : "0")
     const [costParking, setCostParking] = useState(initialData?.costParking ? String(initialData.costParking) : "0")
     const [costMeals, setCostMeals] = useState(initialData?.costMeals ? String(initialData.costMeals) : "0")
     const [costMaintenance, setCostMaintenance] = useState(initialData?.costMaintenance ? String(initialData.costMaintenance) : "0")
     const [costOthers, setCostOthers] = useState(initialData?.costOthers ? String(initialData.costOthers) : "0")
+    const [costRapidTest, setCostRapidTest] = useState(initialData?.costRapidTest ? String(initialData.costRapidTest) : "0")
+    const [costFerry, setCostFerry] = useState(initialData?.costFerry ? String(initialData.costFerry) : "0")
+    const [costPortal, setCostPortal] = useState(initialData?.costPortal ? String(initialData.costPortal) : "0")
+    const [costWashing, setCostWashing] = useState(initialData?.costWashing ? String(initialData.costWashing) : "0")
+    const [costEscort, setCostEscort] = useState(initialData?.costEscort ? String(initialData.costEscort) : "0")
 
     // External Delivery State
     const [isExternal, setIsExternal] = useState(initialData?.isExternal || false)
@@ -229,14 +319,20 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     // Calculate Total Internal Cost
     const totalInternalCost = useMemo(() => {
-        const gasoline = Number(costGasoline) || 0
+        const dexlite = Number(costGasolineDexlite) || 0
+        const bio = Number(costGasolineBio) || 0
         const toll = Number(costToll) || 0
         const parking = Number(costParking) || 0
         const meals = Number(costMeals) || 0
         const maintenance = Number(costMaintenance) || 0
         const others = Number(costOthers) || 0
-        return gasoline + toll + parking + meals + maintenance + others
-    }, [costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers])
+        const rapidTest = Number(costRapidTest) || 0
+        const ferry = Number(costFerry) || 0
+        const portal = Number(costPortal) || 0
+        const washing = Number(costWashing) || 0
+        const escort = Number(costEscort) || 0
+        return dexlite + bio + toll + parking + meals + maintenance + others + rapidTest + ferry + portal + washing + escort
+    }, [costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort])
 
     // Items
     const [items, setItems] = useState<DeliveryFormItem[]>(() => {
@@ -252,12 +348,43 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                 serialNumbers: item.serialNumbers || [],
             }))
         }
+        if (defaultSO) {
+            return defaultSO.items
+                .filter(item => item.remainingQuantity > 0)
+                .map(item => ({
+                    salesOrderItemId: item.id,
+                    productId: item.productId,
+                    productName: item.product?.materialDescription || item.product?.materialNumber || "",
+                    productCategory: item.product?.category || "",
+                    orderedQuantity: item.quantity,
+                    remainingQuantity: item.remainingQuantity,
+                    deliveredQuantity: item.remainingQuantity,
+                    serialNumbers: isTyreCategory(item.product?.category) ? Array(item.remainingQuantity).fill("") : [],
+                }))
+        }
         return []
     })
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<number, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
 
     // Stock check
     const [stockResults, setStockResults] = useState<StockResult[]>([])
     const [checkingStock, setCheckingStock] = useState(false)
+
+    // Alternative product selection dialog
+    const [selectedAlternative, setSelectedAlternative] = useState<{
+        productId: number
+        productName: string
+        alternatives: { id: number; stock: number; description: string }[]
+    } | null>(null)
+    const [selectingAlternative, setSelectingAlternative] = useState(false)
+
+    // Stock view dialog
+    const [stockViewOpen, setStockViewOpen] = useState(false)
+    const [allStocks, setAllStocks] = useState<StockListItem[]>([])
+    const [loadingStocks, setLoadingStocks] = useState(false)
+    const [stockFilter, setStockFilter] = useState("")
+    const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false)
 
     // UI
     const [soOpen, setSoOpen] = useState(false)
@@ -268,12 +395,313 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
     const [vehicleTypeSearch, setVehicleTypeSearch] = useState("")
     const [saving, setSaving] = useState(false)
     const [whToOpen, setWhToOpen] = useState(false)
+    const [addrOpen, setAddrOpen] = useState(false)
+    const [savedAddresses, setSavedAddresses] = useState<{ id: number; address: string; label: string | null }[]>([])
+    const [, setLoadingAddresses] = useState(false)
+    const [draftHydrated, setDraftHydrated] = useState(isEdit)
+    const trackedProductIds = useMemo(
+        () => Array.from(new Set(items.map((item) => item.productId).filter((productId) => productId > 0))).sort((a, b) => a - b),
+        [items],
+    )
+    const trackedProductIdsKey = useMemo(() => trackedProductIds.join(","), [trackedProductIds])
+
+    useEffect(() => {
+        if (isEdit || typeof window === "undefined") {
+            return
+        }
+
+        const savedDraft = window.sessionStorage.getItem(DELIVERY_FORM_DRAFT_KEY)
+        if (savedDraft) {
+            try {
+                const draft = JSON.parse(savedDraft) as DeliveryFormDraft
+                
+                // Mencegah Draf yang bersinggah menimpa Parameter Otomatis yang dirujuk
+                const isOverridingSO = defaultSalesOrderId && defaultSalesOrderId !== draft.salesOrderId
+
+                setGeneratedDeliveryNumber(draft.generatedDeliveryNumber || "")
+                setDoSap(draft.doSap || "")
+                setSalesOrderId(isOverridingSO ? defaultSalesOrderId : draft.salesOrderId)
+                setScheduledDate(draft.scheduledDate || new Date().toISOString().slice(0, 10))
+                setDeliveryDate(draft.deliveryDate || "")
+                setStatus(draft.status || "scheduled")
+                setDeliveryType(draft.deliveryType || "full")
+                setDriverName(draft.driverName || "")
+                setVehicleNumber(draft.vehicleNumber || "")
+                setVehicleType(draft.vehicleType || "")
+                setWarehouseId(isOverridingSO ? undefined : draft.warehouseId)
+                setWarehouseToId(draft.warehouseToId)
+                setShippingAddress(draft.shippingAddress || "")
+                setNotes(draft.notes || "")
+                setTripDestination(draft.tripDestination || "")
+                setCostGasolineDexlite(draft.costGasolineDexlite || "0")
+                setCostGasolineBio(draft.costGasolineBio || "0")
+                setCostToll(draft.costToll || "0")
+                setCostParking(draft.costParking || "0")
+                setCostMeals(draft.costMeals || "0")
+                setCostMaintenance(draft.costMaintenance || "0")
+                setCostOthers(draft.costOthers || "0")
+                setCostRapidTest(draft.costRapidTest || "0")
+                setCostFerry(draft.costFerry || "0")
+                setCostPortal(draft.costPortal || "0")
+                setCostWashing(draft.costWashing || "0")
+                setCostEscort(draft.costEscort || "0")
+                setIsExternal(Boolean(draft.isExternal))
+                setVendorName(draft.vendorName || "")
+                setAwbNumber(draft.awbNumber || "")
+                setShippingCost(draft.shippingCost || "0")
+                setItems(isOverridingSO ? [] : (Array.isArray(draft.items) ? draft.items : []))
+            } catch (error) {
+                console.error("Failed to restore delivery draft:", error)
+                window.sessionStorage.removeItem(DELIVERY_FORM_DRAFT_KEY)
+            }
+        }
+
+        const reloadReason = window.sessionStorage.getItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+        if (reloadReason === "stale-server-action") {
+            toast.info("Halaman dimuat ulang karena server baru diperbarui. Form Anda sudah dipulihkan, silakan submit lagi.")
+            window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+        }
+
+        setDraftHydrated(true)
+    }, [defaultSalesOrderId, isEdit])
+
+    useEffect(() => {
+        if (isEdit || !draftHydrated || generatedDeliveryNumber) {
+            return
+        }
+
+        let cancelled = false
+
+        const loadDeliveryNumber = async () => {
+            try {
+                const num = await generateDeliveryNumber()
+
+                if (!cancelled) {
+                    setGeneratedDeliveryNumber(current => current || num)
+                }
+            } catch (error) {
+                console.error("Failed to generate delivery number:", error)
+            }
+        }
+
+        loadDeliveryNumber()
+
+        return () => {
+            cancelled = true
+        }
+    }, [draftHydrated, generatedDeliveryNumber, isEdit])
+
+    useEffect(() => {
+        if (isEdit || typeof window === "undefined" || !draftHydrated) {
+            return
+        }
+
+        const draft: DeliveryFormDraft = {
+            generatedDeliveryNumber,
+            doSap,
+            salesOrderId,
+            scheduledDate,
+            deliveryDate,
+            status,
+            deliveryType,
+            driverName,
+            vehicleNumber,
+            vehicleType,
+            warehouseId,
+            warehouseToId,
+            shippingAddress,
+            notes,
+            tripDestination,
+            costGasolineDexlite,
+            costGasolineBio,
+            costToll,
+            costParking,
+            costMeals,
+            costMaintenance,
+            costOthers,
+            costRapidTest,
+            costFerry,
+            costPortal,
+            costWashing,
+            costEscort,
+            isExternal,
+            vendorName,
+            awbNumber,
+            shippingCost,
+            items,
+        }
+
+        window.sessionStorage.setItem(DELIVERY_FORM_DRAFT_KEY, JSON.stringify(draft))
+    }, [
+        isEdit,
+        draftHydrated,
+        generatedDeliveryNumber,
+        doSap,
+        salesOrderId,
+        scheduledDate,
+        deliveryDate,
+        status,
+        deliveryType,
+        driverName,
+        vehicleNumber,
+        vehicleType,
+        warehouseId,
+        warehouseToId,
+        shippingAddress,
+        notes,
+        tripDestination,
+        costGasolineDexlite,
+        costGasolineBio,
+        costToll,
+        costParking,
+        costMeals,
+        costMaintenance,
+        costOthers,
+        costRapidTest,
+        costFerry,
+        costPortal,
+        costWashing,
+        costEscort,
+        isExternal,
+        vendorName,
+        awbNumber,
+        shippingCost,
+        items,
+    ])
 
     // Selected SO
     const selectedSO = useMemo(() =>
         salesOrders.find(so => so.id === salesOrderId),
         [salesOrders, salesOrderId]
     )
+    const selectedWarehouse = useMemo(
+        () => warehouses.find((warehouse) => warehouse.id === warehouseId),
+        [warehouses, warehouseId]
+    )
+    const selectedWarehouseLabel = useMemo(
+        () => formatWarehouseLabel(selectedWarehouse, "Warehouse asal"),
+        [selectedWarehouse]
+    )
+    const selectedSoDocumentUrl = useMemo(
+        () => resolveUploadDocumentUrl(selectedSO?.poDocument || null),
+        [selectedSO?.poDocument]
+    )
+    const selectedSoDocumentIsImage = useMemo(
+        () => isUploadImageFile(selectedSO?.poDocument || null),
+        [selectedSO?.poDocument]
+    )
+    const getTrackingDecision = useCallback(
+        (productId: number) => trackingDecisions[productId],
+        [trackingDecisions],
+    )
+
+    useEffect(() => {
+        let cancelled = false
+        const productIds = trackedProductIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+
+        if (!warehouseId || productIds.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        getTrackingDecisionPreview(warehouseId, productIds)
+            .then((decisions) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(
+                    Object.fromEntries(decisions.map((decision) => [decision.productId, decision])),
+                )
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load delivery tracking decisions:", error)
+                setTrackingDecisions({})
+
+                if (isStaleServerActionError(error) && typeof window !== "undefined") {
+                    window.sessionStorage.setItem(DELIVERY_FORM_RELOAD_REASON_KEY, "stale-server-action")
+                    window.location.reload()
+                    return
+                }
+
+                toast.error("Gagal memuat aturan tracking warehouse")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [trackedProductIdsKey, warehouseId])
+
+    useEffect(() => {
+        if (items.length === 0) {
+            return
+        }
+
+        setItems((prev) => {
+            let changed = false
+
+            const nextItems = prev.map((item) => {
+                const trackingDecision = trackingDecisions[item.productId]
+
+                if (!requiresSerialNumbers(item, trackingDecision)) {
+                    return item
+                }
+
+                if (item.deliveredQuantity > item.serialNumbers.length) {
+                    changed = true
+                    return {
+                        ...item,
+                        serialNumbers: [
+                            ...item.serialNumbers,
+                            ...Array(item.deliveredQuantity - item.serialNumbers.length).fill(""),
+                        ],
+                    }
+                }
+
+                if (item.deliveredQuantity < item.serialNumbers.length) {
+                    changed = true
+                    return {
+                        ...item,
+                        serialNumbers: item.serialNumbers.slice(0, item.deliveredQuantity),
+                    }
+                }
+
+                return item
+            })
+
+            return changed ? nextItems : prev
+        })
+    }, [items.length, trackingDecisions])
+
+    // Load saved addresses when customer changes
+    useEffect(() => {
+        if (selectedSO?.customerId) {
+            setLoadingAddresses(true)
+            getCustomerAddresses(selectedSO.customerId).then(res => {
+                if (res.success && res.data) {
+                    setSavedAddresses(res.data)
+                }
+                setLoadingAddresses(false)
+            })
+        } else {
+            setSavedAddresses([])
+        }
+    }, [selectedSO?.customerId])
 
     // When SO changes
     const handleSOChange = useCallback((soId: number) => {
@@ -291,7 +719,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     orderedQuantity: item.quantity,
                     remainingQuantity: item.remainingQuantity,
                     deliveredQuantity: item.remainingQuantity, // Default: deliver all remaining
-                    serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
+                    serialNumbers: isTyreCategory(item.product?.category) ? Array(item.remainingQuantity).fill("") : [],
                 }))
             setItems(newItems)
 
@@ -314,28 +742,65 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         }
     }, [salesOrders])
 
+    useEffect(() => {
+        if (isEdit || !draftHydrated || !defaultSalesOrderId || !defaultSO) {
+            return
+        }
+
+        const shouldHydrateFromDefaultSo =
+            salesOrderId !== defaultSalesOrderId ||
+            items.length === 0 ||
+            !warehouseId ||
+            !shippingAddress.trim()
+
+        if (!shouldHydrateFromDefaultSo) {
+            return
+        }
+
+        handleSOChange(defaultSalesOrderId)
+    }, [
+        defaultSO,
+        defaultSalesOrderId,
+        draftHydrated,
+        handleSOChange,
+        isEdit,
+        items.length,
+        salesOrderId,
+        shippingAddress,
+        warehouseId,
+    ])
+
     // Update item qty
     const updateItemQty = useCallback((index: number, qty: number) => {
+        let shouldResetStockResults = false
+
         setItems(prev => prev.map((item, i) => {
             if (i !== index) return item
 
-            const newQty = Math.min(Math.max(1, qty), item.remainingQuantity)
+            const newQty = Math.min(Math.max(0, qty), item.remainingQuantity)
+            shouldResetStockResults = shouldResetStockResults || newQty !== item.deliveredQuantity
 
-            // Adjust serial numbers array size if it's a TYRE
+            const trackingDecision = trackingDecisions[item.productId]
+            const serialRequired = requiresSerialNumbers(item, trackingDecision)
+
             let newSerialNumbers = item.serialNumbers
-            if (item.productCategory === "TYRE") {
+            if (serialRequired) {
                 if (newQty > item.serialNumbers.length) {
-                    // Add empty strings
                     newSerialNumbers = [...item.serialNumbers, ...Array(newQty - item.serialNumbers.length).fill("")]
                 } else if (newQty < item.serialNumbers.length) {
-                    // Remove form end
                     newSerialNumbers = item.serialNumbers.slice(0, newQty)
                 }
+            } else if (newQty < item.serialNumbers.length) {
+                newSerialNumbers = item.serialNumbers.slice(0, newQty)
             }
 
             return { ...item, deliveredQuantity: newQty, serialNumbers: newSerialNumbers }
         }))
-    }, [])
+
+        if (shouldResetStockResults) {
+            setStockResults([])
+        }
+    }, [trackingDecisions])
 
     const updateSN = useCallback((itemIndex: number, snIndex: number, value: string) => {
         setItems(prev => prev.map((item, i) => {
@@ -344,6 +809,46 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             newSNs[snIndex] = value
             return { ...item, serialNumbers: newSNs }
         }))
+    }, [])
+
+    const handlePasteSN = useCallback(async (itemIndex: number, requiredQty: number) => {
+        try {
+            const text = await navigator.clipboard.readText()
+            if (!text) {
+                toast.error("Clipboard kosong")
+                return
+            }
+
+            // Pisahkan berdasarkan baris baru, koma, atau spasi beruntun
+            const snList = text
+                .split(/[\n,\s]+/)
+                .map(sn => sn.trim().toUpperCase())
+                .filter(sn => sn.length > 0)
+
+            if (snList.length === 0) {
+                toast.error("Tidak ada teks Serial Number yang valid di Clipboard")
+                return
+            }
+
+            setItems(prev => prev.map((item, i) => {
+                if (i !== itemIndex) return item
+                
+                const newSNs = [...item.serialNumbers]
+                let pastedCount = 0
+                
+                // Isi slot
+                for (let j = 0; j < Math.min(snList.length, requiredQty); j++) {
+                    newSNs[j] = snList[j]
+                    pastedCount++
+                }
+                
+                toast.success(`Berhasil paste ${pastedCount} Serial Number`, { duration: 3000 })
+                return { ...item, serialNumbers: newSNs }
+            }))
+        } catch (err) {
+            console.error("Paste Error:", err)
+            toast.error("Gagal paste SN. Pastikan Anda memberi izin akses Clipboard ke browser.")
+        }
     }, [])
 
     // Check stock
@@ -384,6 +889,70 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         return result
     }, [stockResults])
 
+    const getReadyStockWarehouses = useCallback((stock: StockResult | null) => {
+        if (!stock || stock.requested <= 0 || !stock.otherWarehouses) return []
+
+        return stock.otherWarehouses.filter((warehouse) => warehouse.stock >= stock.requested)
+    }, [])
+
+    // Handle alternative product selection
+    const handleSelectAlternative = useCallback(async (productId: number, alternativeId: number, alternativeDescription: string) => {
+        setSelectingAlternative(true)
+        try {
+            // Update the item with the new product
+            setItems(prev => prev.map((item) => {
+                if (item.productId !== productId) return item
+                
+                return {
+                    ...item,
+                    productId: alternativeId,
+                    productName: alternativeDescription,
+                }
+            }))
+
+            // Reset stock results to force re-check
+            setStockResults([])
+            
+            // Close the dialog
+            setSelectedAlternative(null)
+            
+            toast.success("Produk alternatif dipilih! Silakan check stock ulang.")
+        } catch (error) {
+            console.error("Failed to select alternative:", error)
+            toast.error("Gagal memilih produk alternatif")
+        } finally {
+            setSelectingAlternative(false)
+        }
+    }, [])
+
+    // Handle view all stocks
+    const handleViewStocks = useCallback(async () => {
+        setLoadingStocks(true)
+        try {
+            const stocks = await getStocks()
+            setAllStocks(stocks)
+            setStockViewOpen(true)
+            toast.success("Data stok berhasil dimuat!")
+        } catch (error) {
+            console.error("Failed to load stocks:", error)
+            toast.error("Gagal memuat data stok")
+        } finally {
+            setLoadingStocks(false)
+        }
+    }, [])
+
+    const showSaveBlockedToast = useCallback((errors: string[]) => {
+        toast.error("Delivery belum bisa disimpan", {
+            description: (
+                <ul className="list-disc pl-4">
+                    {errors.map((error, index) => (
+                        <li key={`${error}-${index}`}>{error}</li>
+                    ))}
+                </ul>
+            ),
+        })
+    }, [])
+
     // Submit
     const handleSubmit = useCallback(async () => {
         console.log("🔍 Starting validation...")
@@ -392,50 +961,59 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         console.log("items:", items)
         console.log("selectedSO:", selectedSO)
 
-        if (!salesOrderId) {
-            console.log("❌ Validation failed: No Sales Order")
-            toast.error("Please select a Sales Order")
-            return
+        const validationErrors: string[] = []
+        if (typeof salesOrderId !== "number") {
+            validationErrors.push("Sales Order belum dipilih")
         }
         if (!warehouseId) {
-            console.log("❌ Validation failed: No Warehouse")
-            toast.error("Please select a Warehouse")
-            return
+            validationErrors.push("Origin Warehouse belum dipilih")
         }
         if (items.length === 0) {
-            console.log("❌ Validation failed: No items")
-            toast.error("No items to deliver")
-            return
+            validationErrors.push("Belum ada item untuk dikirim")
         }
-
         if (selectedSO?.categoryPo === "VHS/Consignment" && (!warehouseToId || warehouseToId === 0)) {
-            console.log("❌ Validation failed: VHS/Consignment needs destination warehouse")
-            toast.error("Please select a Destination Warehouse for VHS/Consignment orders")
-            return
+            validationErrors.push("Destination Warehouse wajib dipilih untuk PO kategori VHS/Consignment")
+        }
+        if (isExternal && !vendorName.trim()) {
+            validationErrors.push("Vendor Name wajib diisi untuk pengiriman external")
         }
 
-        if (isExternal && !vendorName) {
-            console.log("❌ Validation failed: External delivery needs vendor name")
-            toast.error("Vendor Name is required for external delivery")
-            return
+        const hasDeliveringItems = items.some(item => item.deliveredQuantity > 0)
+        if (!hasDeliveringItems && items.length > 0) {
+            validationErrors.push("Setidaknya harus ada satu barang yang dikirim (Qty > 0)")
         }
 
-        // Validate Serial Numbers
         for (const item of items) {
-            if (item.productCategory === "TYRE") {
-                if (item.serialNumbers.some(sn => !sn.trim())) {
-                    console.log("❌ Validation failed: Missing serial numbers for", item.productName)
-                    toast.error(`Please enter all serial numbers for ${item.productName}`)
-                    return
+            if (item.deliveredQuantity <= 0) {
+                continue // Skip validation if item is not being delivered on this run
+            }
+
+            const productLabel = item.productName || `Produk #${item.productId}`
+            const trackingDecision = trackingDecisions[item.productId]
+
+            if (requiresSerialNumbers(item, trackingDecision)) {
+                const filledSerials = item.serialNumbers.filter(sn => sn.trim())
+                if (filledSerials.length !== item.serialNumbers.length) {
+                    validationErrors.push(`Serial number ${productLabel} masih ada yang kosong`)
                 }
-                // Check for duplicates within the same item
-                const uniqueSNs = new Set(item.serialNumbers)
-                if (uniqueSNs.size !== item.serialNumbers.length) {
-                    console.log("❌ Validation failed: Duplicate serial numbers for", item.productName)
-                    toast.error(`Duplicate serial numbers found for ${item.productName}`)
-                    return
+                if (filledSerials.length !== item.deliveredQuantity) {
+                    validationErrors.push(`Jumlah serial number ${productLabel} harus sama dengan qty kirim (${item.deliveredQuantity})`)
+                }
+                const uniqueSNs = new Set(filledSerials.map(sn => sn.trim().toUpperCase()))
+                if (uniqueSNs.size !== filledSerials.length) {
+                    validationErrors.push(`Serial number duplikat ditemukan pada ${productLabel}`)
                 }
             }
+        }
+
+        if (validationErrors.length > 0) {
+            console.log("❌ Validation failed:", validationErrors)
+            showSaveBlockedToast(Array.from(new Set(validationErrors)))
+            return
+        }
+
+        if (typeof salesOrderId !== "number" || typeof warehouseId !== "number") {
+            return
         }
 
         console.log("✅ All validations passed!")
@@ -443,6 +1021,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
         setSaving(true)
         const payload = {
             deliveryNumber: generatedDeliveryNumber || undefined,
+            doSap: doSap || null,
             salesOrderId,
             scheduledDate,
             deliveryDate: deliveryDate || null,
@@ -458,23 +1037,39 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             // For internal, save total calculated cost. For external, save input shippingCost
             shippingCost: isExternal ? Number(shippingCost) : totalInternalCost,
             // Internal Cost Breakdown
-            costGasoline: !isExternal ? Number(costGasoline) : 0,
+            tripDestination: !isExternal ? (tripDestination || undefined) : undefined,
+            costGasolineDexlite: !isExternal ? Number(costGasolineDexlite) : 0,
+            costGasolineBio: !isExternal ? Number(costGasolineBio) : 0,
             costToll: !isExternal ? Number(costToll) : 0,
             costParking: !isExternal ? Number(costParking) : 0,
             costMeals: !isExternal ? Number(costMeals) : 0,
             costMaintenance: !isExternal ? Number(costMaintenance) : 0,
             costOthers: !isExternal ? Number(costOthers) : 0,
+            costRapidTest: !isExternal ? Number(costRapidTest) : 0,
+            costFerry: !isExternal ? Number(costFerry) : 0,
+            costPortal: !isExternal ? Number(costPortal) : 0,
+            costWashing: !isExternal ? Number(costWashing) : 0,
+            costEscort: !isExternal ? Number(costEscort) : 0,
 
             warehouseId,
             warehouseToId: selectedSO?.categoryPo === "VHS/Consignment" ? warehouseToId : null,
             shippingAddress: shippingAddress || undefined,
             notes: notes || undefined,
-            items: items.map(item => ({
+            items: items.filter(item => item.deliveredQuantity > 0).map(item => ({
                 salesOrderItemId: item.salesOrderItemId || undefined,
                 productId: item.productId,
                 orderedQuantity: item.orderedQuantity,
                 deliveredQuantity: item.deliveredQuantity,
-                serialNumbers: item.productCategory === "TYRE" ? item.serialNumbers : undefined,
+                serialNumbers: (() => {
+                    const trackingDecision = trackingDecisions[item.productId]
+                    if (!requiresSerialNumbers(item, trackingDecision) && !item.serialNumbers.some((sn) => sn.trim())) {
+                        return undefined
+                    }
+
+                    return item.serialNumbers
+                        .map((sn) => sn.trim().toUpperCase())
+                        .filter(Boolean)
+                })(),
             })),
         }
 
@@ -488,21 +1083,74 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
             console.log("📦 Delivery Result:", result)
 
             if (result.success) {
+                if (!isEdit && typeof window !== "undefined") {
+                    window.sessionStorage.removeItem(DELIVERY_FORM_DRAFT_KEY)
+                    window.sessionStorage.removeItem(DELIVERY_FORM_RELOAD_REASON_KEY)
+                }
                 toast.success(isEdit ? "Delivery updated!" : "Delivery created!")
-                router.refresh()
-                router.push("/dashboard/deliveries")
+                const savedId =
+                    ("id" in result && typeof result.id === "number")
+                        ? result.id
+                        : initialData?.id
+                const listParams = new URLSearchParams({
+                    refresh: Date.now().toString(),
+                })
+                if (savedId) {
+                    listParams.set("focusId", String(savedId))
+                }
+                const listUrl = `/dashboard/deliveries?${listParams.toString()}`
+                if (typeof window !== "undefined") {
+                    window.location.assign(listUrl)
+                    return
+                }
+                router.replace(listUrl)
             } else {
                 const errorMsg = 'error' in result && result.error ? result.error : "Failed to save delivery"
+                const serverDetailErrors: string[] = []
+                if ("fieldErrors" in result && result.fieldErrors && typeof result.fieldErrors === "object") {
+                    for (const value of Object.values(result.fieldErrors as Record<string, unknown>)) {
+                        if (typeof value === "string" && value.trim()) {
+                            serverDetailErrors.push(value)
+                        } else if (Array.isArray(value)) {
+                            for (const message of value) {
+                                if (typeof message === "string" && message.trim()) {
+                                    serverDetailErrors.push(message)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 console.error("❌ Delivery Error:", errorMsg, result)
-                toast.error(errorMsg)
+                if (serverDetailErrors.length > 0) {
+                    toast.error(errorMsg, {
+                        description: (
+                            <ul className="list-disc pl-4">
+                                {Array.from(new Set(serverDetailErrors)).map((message, index) => (
+                                    <li key={`${message}-${index}`}>{message}</li>
+                                ))}
+                            </ul>
+                        ),
+                    })
+                } else {
+                    toast.error(errorMsg)
+                }
             }
         } catch (error) {
             console.error("❌ Delivery Exception:", error)
+
+            if (!isEdit && typeof window !== "undefined" && isStaleServerActionError(error)) {
+                window.sessionStorage.setItem(DELIVERY_FORM_RELOAD_REASON_KEY, "stale-server-action")
+                toast.info("Server baru saja diperbarui. Halaman akan dimuat ulang dan form dipulihkan otomatis.")
+                window.location.reload()
+                return
+            }
+
             toast.error("Error: " + (error instanceof Error ? error.message : "Unknown error occurred"))
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasoline, costToll, costParking, costMeals, costMaintenance, costOthers, selectedSO, generatedDeliveryNumber, totalInternalCost])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, trackingDecisions, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost, showSaveBlockedToast])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -533,17 +1181,6 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
 
     const totalQty = items.reduce((sum, item) => sum + item.deliveredQuantity, 0)
     const totalItems = items.length
-
-    // Helper function to ensure the URL has the correct format
-    const getFileUrl = (poDocument: string | null): string | null => {
-        if (!poDocument) return null
-        // If it already starts with /api/uploads/, use it as is
-        if (poDocument.startsWith('/api/uploads/')) {
-            return poDocument
-        }
-        // If it's just a filename, prepend /api/uploads/
-        return `/api/uploads/${poDocument}`
-    }
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
@@ -578,7 +1215,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             console.log("Button state:", { saving, salesOrderId, warehouseId, itemsCount: items.length })
                             handleSubmit()
                         }}
-                        disabled={saving || !salesOrderId || !warehouseId || items.length === 0}
+                        disabled={saving}
                         className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
                         title={
                             !salesOrderId ? "Please select a Sales Order" :
@@ -658,7 +1295,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                         </CardHeader>
                         <CardContent>
                             <div className="grid gap-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="space-y-2">
                                         <Label className="text-sm font-medium">Delivery Order Number</Label>
                                         <Input
@@ -666,6 +1303,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                             readOnly
                                             className="h-11 bg-slate-50 dark:bg-slate-900 border-dashed font-mono font-medium text-blue-700 dark:text-blue-400"
                                             placeholder="Generating..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-medium">DO SAP / Manual Ref</Label>
+                                        <Input
+                                            value={doSap}
+                                            onChange={(e) => setDoSap(e.target.value)}
+                                            className="h-11 font-mono"
+                                            placeholder="Enter DO SAP..."
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -703,7 +1349,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                         {salesOrders.map(so => (
                                                             <CommandItem
                                                                 key={so.id}
-                                                                value={`${so.invoiceNumber} ${so.customer.name}`}
+                                                                value={`${so.invoiceNumber} ${so.customer.name} ${so.customerPo || ""}`}
                                                                 onSelect={() => {
                                                                     handleSOChange(so.id)
                                                                     setSoOpen(false)
@@ -728,6 +1374,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                                     <span className="text-sm text-muted-foreground mt-1">
                                                                         {so.customer.name} • {so.items.length} items
                                                                     </span>
+                                                                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                                        <Badge variant={so.customerPo ? "secondary" : "outline"} className="text-[11px]">
+                                                                            {so.customerPo ? `PO: ${so.customerPo}` : "No PO Number"}
+                                                                        </Badge>
+                                                                        <Badge variant={so.poDocument ? "secondary" : "outline"} className="text-[11px]">
+                                                                            {so.poDocument ? "PO File Ready" : "No PO File"}
+                                                                        </Badge>
+                                                                    </div>
                                                                 </div>
                                                             </CommandItem>
                                                         ))}
@@ -770,191 +1424,260 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <CardTitle className="text-lg">Items to Deliver</CardTitle>
-                                        <CardDescription>Adjust quantities and enter serial numbers if required.</CardDescription>
+                                        <CardDescription>Adjust quantities and follow the effective manual/RFID rule for each item.</CardDescription>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleCheckStock}
-                                        disabled={checkingStock || !warehouseId}
-                                        className={cn(
-                                            "gap-2",
-                                            !warehouseId && "opacity-50 cursor-not-allowed"
+                                    <div className="flex flex-col items-end gap-2">
+                                        {loadingTrackingDecisions && warehouseId && (
+                                            <span className="text-xs text-muted-foreground">
+                                                Menyelaraskan aturan tracking warehouse...
+                                            </span>
                                         )}
-                                    >
-                                        {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
-                                        Check Stock
-                                    </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleCheckStock}
+                                            disabled={checkingStock || !warehouseId}
+                                            className={cn(
+                                                "gap-2",
+                                                !warehouseId && "opacity-50 cursor-not-allowed"
+                                            )}
+                                        >
+                                            {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
+                                            Check Stock
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="p-0">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-transparent hover:bg-transparent">
-                                            <TableHead className="w-[40%] pl-6">Product Details</TableHead>
-                                            <TableHead className="w-[15%] text-center">Ordered</TableHead>
-                                            <TableHead className="w-[20%]">Deliver Qty</TableHead>
-                                            <TableHead className="w-[25%] pr-6 text-right">Availability (Origin)</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, idx) => {
-                                            const stock = getStockStatus(item.productId)
-                                            const isTyre = item.productCategory === "TYRE"
+                            <CardContent className="p-0 w-full overflow-hidden">
+                                <div className="flex flex-col divide-y w-full">
+                                    {items.map((item, idx) => {
+                                        const stock = getStockStatus(item.productId)
+                                        const trackingDecision = getTrackingDecision(item.productId)
+                                        const trackingMode = trackingDecision?.trackingMode ?? "manual_only"
+                                        const serialRequired = requiresSerialNumbers(item, trackingDecision)
+                                        const readyWarehouses = getReadyStockWarehouses(stock)
 
-                                            return (
-                                                <TableRow key={idx} className="group">
-                                                    <TableCell className="pl-6 align-top py-4">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="font-medium text-base text-gray-900 dark:text-gray-100">
-                                                                {item.productName}
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                                                                    {item.productCategory}
+                                        return (
+                                            <div key={idx} className="flex flex-col p-4 sm:px-6 md:py-6 gap-5 group hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors">
+                                                
+                                                {/* TOP SECTION: Info, Quantities, Stock */}
+                                                <div className="flex flex-col lg:flex-row gap-5 lg:gap-8 items-start lg:items-center">
+                                                    
+                                                    {/* 1. Product Info */}
+                                                    <div className="flex-1 flex flex-col gap-2.5 w-full lg:w-auto">
+                                                        <span className="font-semibold text-base sm:text-lg leading-tight break-words text-gray-900 dark:text-gray-100">
+                                                            {item.productName}
+                                                        </span>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <Badge variant="secondary" className="text-[10px] sm:text-xs h-6 px-2">
+                                                                {item.productCategory}
+                                                            </Badge>
+                                                            <TrackingModeBadge mode={trackingMode} className="text-[10px] sm:text-xs h-6 px-2" />
+                                                            {serialRequired && (
+                                                                <Badge variant="outline" className="text-[10px] sm:text-xs h-6 px-2 border-orange-200 text-orange-700 bg-orange-50 dark:bg-orange-950/30">
+                                                                    Serial No. Required
                                                                 </Badge>
-                                                                {isTyre && (
-                                                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-orange-200 text-orange-700 bg-orange-50">
-                                                                        Serial No. Required
-                                                                    </Badge>
-                                                                )}
+                                                            )}
+                                                            {trackingDecision?.trackingMode === "required_rfid" && trackingDecision.allowManualFallback && (
+                                                                <Badge variant="outline" className="text-[10px] sm:text-xs h-6 px-2 border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-950/30">
+                                                                    Manual Fallback Allowed
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        {trackingDecision?.trackingMode !== "manual_only" && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {trackingDecision?.reason}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 2. Controls & Stats */}
+                                                    <div className="w-full lg:w-auto grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-row gap-4 lg:gap-8 bg-gray-50/50 dark:bg-gray-900/50 lg:bg-transparent rounded-xl p-4 lg:p-0 border lg:border-0 items-start lg:items-center shadow-sm lg:shadow-none">
+                                                        
+                                                        {/* Ordered Qty */}
+                                                        <div className="flex flex-col gap-1.5 items-start sm:items-center lg:w-20">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider lg:hidden">Ordered</span>
+                                                            <div className="flex flex-col sm:items-center">
+                                                                <span className="font-extrabold text-xl lg:text-lg leading-none">{item.orderedQuantity}</span>
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold hidden lg:block mt-1">Order</span>
+                                                                <span className="text-[11px] sm:text-xs text-amber-600 dark:text-amber-500 font-bold mt-1.5 whitespace-nowrap bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-md">
+                                                                    Rem: {item.remainingQuantity}
+                                                                </span>
                                                             </div>
                                                         </div>
 
-                                                        {/* Serial Number Input Section for TYRE */}
-                                                        {isTyre && item.deliveredQuantity > 0 && (
-                                                            <div className="mt-4 space-y-3">
-                                                                {/* Info Alert */}
-                                                                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-900">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <AlertTriangle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                                                                        <div className="flex-1 text-xs text-blue-800 dark:text-blue-200">
-                                                                            <p className="font-semibold mb-1">Serial Number Wajib Diisi</p>
-                                                                            <p className="mb-2">Setiap ban harus memiliki serial number yang UNIK dan BERBEDA.</p>
-                                                                            <div className="bg-white dark:bg-blue-950 p-2 rounded border border-blue-200 dark:border-blue-800 font-mono text-[11px]">
-                                                                                <p className="text-blue-600 dark:text-blue-400 font-semibold mb-1">Contoh Format:</p>
-                                                                                <p>SN-001</p>
-                                                                                <p>SN-002</p>
-                                                                                <p>SN-003</p>
-                                                                                <p className="text-blue-500 mt-1">... dan seterusnya</p>
+                                                        {/* Deliver Qty */}
+                                                        <div className="flex flex-col gap-1.5 items-start sm:items-center lg:w-24">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider lg:hidden">Deliver Qty</span>
+                                                            <div className="flex flex-col sm:items-center w-full max-w-[120px] lg:max-w-none">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={item.remainingQuantity}
+                                                                    value={item.deliveredQuantity}
+                                                                    onChange={e => updateItemQty(idx, Number(e.target.value))}
+                                                                    className="w-full lg:w-24 font-mono text-center font-bold text-lg h-10 lg:h-11 shadow-sm border-gray-300 dark:border-gray-700 focus-visible:ring-blue-500"
+                                                                />
+                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold hidden lg:block mt-1">Deliver</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Ketersediaan / Stock */}
+                                                        <div className="col-span-2 sm:col-span-1 lg:w-72 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-200 dark:border-gray-800 flex flex-col items-start lg:items-end w-full">
+                                                            <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mb-2.5 lg:hidden">Ketersediaan Stok</span>
+                                                            
+                                                            {warehouseId ? (
+                                                                stock ? (
+                                                                    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3.5 shadow-sm">
+                                                                        <div className={cn(
+                                                                            "flex items-center justify-between gap-2.5 font-semibold text-sm",
+                                                                            stock.sufficient ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"
+                                                                        )}>
+                                                                            <div className="flex min-w-0 items-center gap-1.5">
+                                                                                {stock.sufficient ? (
+                                                                                    <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                                                                                ) : (
+                                                                                    <XCircle className="h-4 w-4 flex-shrink-0" />
+                                                                                )}
+                                                                                <span className="whitespace-nowrap">{stock.sufficient ? "Tersedia" : "Stok kurang"}</span>
                                                                             </div>
+                                                                            <span className={cn(
+                                                                                "rounded-full px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap shadow-sm border",
+                                                                                stock.available >= 0 
+                                                                                    ? "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" 
+                                                                                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-400 dark:border-rose-900"
+                                                                            )}>
+                                                                                Aktual: {stock.available}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="mt-3">
+                                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground break-words line-clamp-1 opacity-75">
+                                                                                {selectedWarehouseLabel}
+                                                                            </p>
+                                                                            <div className="mt-2.5 flex flex-wrap gap-2">
+                                                                                {stock.sufficient ? (
+                                                                                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 shadow-sm">
+                                                                                        Sisa: <strong className="text-emerald-900">{stock.remainingAfterDelivery}</strong>
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 shadow-sm">
+                                                                                        Kekurangan: <strong className="text-rose-900">{stock.shortage}</strong>
+                                                                                    </span>
+                                                                                )}
+
+                                                                                {!stock.sufficient && stock.alternativeIds && stock.alternativeIds.length > 0 && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setSelectedAlternative({
+                                                                                            productId: item.productId,
+                                                                                            productName: item.productName,
+                                                                                            alternatives: stock.alternativeIds!,
+                                                                                        })}
+                                                                                        className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer shadow-sm group/alt"
+                                                                                    >
+                                                                                        <Info className="h-3 w-3 text-amber-500 group-hover/alt:scale-110 transition-transform" />
+                                                                                        Alt. record: <span className="text-amber-900">{stock.alternativeIds[0].stock}</span>
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+
+                                                                            {readyWarehouses.length > 0 && (
+                                                                                <div className="mt-3.5 border-t border-slate-100 dark:border-slate-800 pt-3">
+                                                                                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                                                                                        <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
+                                                                                        Gudang Alternatif
+                                                                                    </div>
+                                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                                        {readyWarehouses.map((warehouse) => (
+                                                                                            <span key={warehouse.warehouseId} className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-800/50 dark:text-indigo-300">
+                                                                                                {warehouse.warehouseName}: <strong>{warehouse.stock}</strong>
+                                                                                            </span>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     </div>
-                                                                </div>
-
-                                                                {/* Serial Number Inputs */}
-                                                                <div className="p-3 bg-orange-50/50 dark:bg-orange-950/10 rounded-md border border-orange-100 dark:border-orange-900/20">
-                                                                    <Label className="text-xs font-semibold text-orange-800 dark:text-orange-400 mb-2 block uppercase tracking-wider">
-                                                                        Enter {item.deliveredQuantity} Serial Number(s)
-                                                                    </Label>
-                                                                    <div className="grid grid-cols-1 gap-2">
-                                                                        {item.serialNumbers.map((sn, snIdx) => (
-                                                                            <Input
-                                                                                key={snIdx}
-                                                                                placeholder={`Contoh: SN-${String(snIdx + 1).padStart(3, '0')}`}
-                                                                                value={sn}
-                                                                                onChange={e => updateSN(idx, snIdx, e.target.value)}
-                                                                                className={cn(
-                                                                                    "h-8 text-sm bg-white dark:bg-black border-orange-200 dark:border-orange-900 focus-visible:ring-orange-500",
-                                                                                    !sn.trim() && "border-red-300 bg-red-50 dark:bg-red-950/20"
-                                                                                )}
-                                                                            />
-                                                                        ))}
+                                                                ) : (
+                                                                    <div className="w-full text-center p-4 rounded-xl border-2 border-dashed text-xs font-medium text-muted-foreground italic bg-gray-50/50 dark:bg-gray-900/50">
+                                                                        Check stock to see availability
                                                                     </div>
-                                                                    {item.serialNumbers.some(sn => !sn.trim()) && (
-                                                                        <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
-                                                                            <XCircle className="h-3 w-3" />
-                                                                            Semua serial number harus diisi!
-                                                                        </p>
-                                                                    )}
+                                                                )
+                                                            ) : (
+                                                                <div className="w-full text-center p-4 rounded-xl border-2 border-dashed text-xs font-medium text-muted-foreground italic bg-gray-50/50 dark:bg-gray-900/50">
+                                                                    Select warehouse first
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                    </div>
+                                                </div>
+
+                                                {/* BOTTOM SECTION: Serial Numbers (Full Width Block) */}
+                                                {serialRequired && item.deliveredQuantity > 0 && (
+                                                    <div className="flex flex-col mt-1">
+                                                        
+                                                        {/* Input Grid Box */}
+                                                        <div className="w-full bg-white dark:bg-zinc-950 rounded-xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                                                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
+                                                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-5">
+                                                                <Label className="text-xs font-bold text-orange-600 dark:text-orange-500 uppercase tracking-wider flex items-center gap-2">
+                                                                    <div className="h-2.5 w-2.5 rounded-full bg-orange-500 animate-pulse shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+                                                                    Lengkapi {item.deliveredQuantity} Serial Number
+                                                                </Label>
+                                                                
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => handlePasteSN(idx, item.deliveredQuantity)}
+                                                                        className="h-8 text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:hover:bg-orange-900/50 dark:border-orange-900 dark:text-orange-400 font-semibold shadow-sm"
+                                                                    >
+                                                                        <ClipboardPaste className="h-3.5 w-3.5 mr-1.5" />
+                                                                        Paste dari WA
+                                                                    </Button>
+
+                                                                    {/* "Tooltip" Style Inline Info */}
+                                                                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-100 dark:border-blue-900/50 text-[10px] sm:text-xs font-medium w-fit">
+                                                                        <Info className="h-3.5 w-3.5 flex-shrink-0" />
+                                                                        <span>S/N wajib unik. <strong className="font-mono bg-blue-100/50 dark:bg-blue-900/50 px-1 py-0.5 rounded ml-0.5 font-bold">Cth: SN-24A001</strong></span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        )}
-                                                    </TableCell>
-
-                                                    <TableCell className="text-center align-top py-4">
-                                                        <div className="text-sm">
-                                                            <span className="font-semibold">{item.orderedQuantity}</span>
-                                                            <span className="text-muted-foreground text-xs block">Order</span>
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground mt-1">
-                                                            (Rem: {item.remainingQuantity})
-                                                        </div>
-                                                    </TableCell>
-
-                                                    <TableCell className="align-top py-4">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            max={item.remainingQuantity}
-                                                            value={item.deliveredQuantity}
-                                                            onChange={e => updateItemQty(idx, Number(e.target.value))}
-                                                            className="w-24 font-mono text-center"
-                                                        />
-                                                    </TableCell>
-
-                                                    <TableCell className="text-right pr-6 align-top py-4">
-                                                        {warehouseId ? (
-                                                            stock ? (
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <div className={cn(
-                                                                        "flex items-center gap-1.5 font-medium text-sm",
-                                                                        stock.sufficient ? "text-green-600" : "text-red-600"
-                                                                    )}>
-                                                                        {stock.sufficient ? (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                                    <span>Available</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="flex flex-col items-end">
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <XCircle className="h-4 w-4" />
-                                                                                    <span>Insufficient</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                                                {item.serialNumbers.map((sn, snIdx) => (
+                                                                    <div key={snIdx} className="relative group/sn">
+                                                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/sn:text-orange-500 transition-colors">
+                                                                            #{(snIdx + 1).toString().padStart(2, '0')}
+                                                                        </div>
+                                                                        <Input
+                                                                            placeholder="Ketik SN..."
+                                                                            value={sn}
+                                                                            onChange={e => updateSN(idx, snIdx, e.target.value)}
+                                                                            className={cn(
+                                                                                "h-11 text-sm pl-11 bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-orange-500 focus-visible:border-orange-500 font-mono uppercase transition-all shadow-sm rounded-lg",
+                                                                                !sn.trim() && "border-red-300/80 bg-red-50/50 dark:bg-red-900/20 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.1)] focus-visible:ring-red-400"
+                                                                            )}
+                                                                        />
                                                                     </div>
-                                                                    <div className="flex flex-col items-end gap-1 mt-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-                                                                            {stock.available} in Origin Warehouse
-                                                                        </span>
-
-                                                                        {stock.alternativeIds && stock.alternativeIds.length > 0 && (
-                                                                            <div className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                                                                                <AlertTriangle className="h-3 w-3" />
-                                                                                <span>Alternative record: {stock.alternativeIds[0].stock}</span>
-                                                                            </div>
-                                                                        )}
-
-                                                                        {stock.otherWarehouses && stock.otherWarehouses.length > 0 && (
-                                                                            <div className="mt-1 flex flex-col items-end gap-1">
-                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Stock in other warehouses:</span>
-                                                                                {stock.otherWarehouses.map((ow, owIdx) => (
-                                                                                    <span key={owIdx} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
-                                                                                        {ow.warehouseName}: <strong>{ow.stock}</strong>
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            {item.serialNumbers.some(sn => !sn.trim()) && (
+                                                                <div className="mt-5 flex items-center gap-2.5 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-100 dark:border-red-900/50 shadow-sm">
+                                                                    <XCircle className="h-4 w-4" />
+                                                                    Mohon isi semua serial number!
                                                                 </div>
-                                                            ) : (
-                                                                <span className="text-xs text-muted-foreground italic">
-                                                                    Check stock to see availability
-                                                                </span>
-                                                            )
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">Select warehouse first</span>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        })}
-                                    </TableBody>
-                                </Table>
+                                                            )}
+                                                        </div>
+
+                                                    </div>
+                                                )}
+
+                                            </div>
+                                        )
+                                    })}
+                                </div>
                             </CardContent>
                             <div className="bg-gray-50/50 dark:bg-gray-900/50 p-4 border-t flex justify-between items-center text-sm">
                                 <div className="text-muted-foreground">
@@ -976,17 +1699,30 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                     <Plus className="h-4 w-4 rotate-45 text-amber-500" />
                                     Customer PO Preview
                                 </CardTitle>
-                                <CardDescription>Verify items against the original Customer PO document.</CardDescription>
-                            </CardHeader>
-                            <CardContent className={cn("p-0", !selectedSO?.poDocument && "p-8")}>
-                                {selectedSO?.poDocument ? (
-                                    <div className="aspect-[1/1.4] w-full">
-                                        <iframe
-                                            src={getFileUrl(selectedSO.poDocument) || ''}
-                                            className="w-full h-full border-0"
-                                            title="Customer PO Preview"
-                                        />
-                                    </div>
+                            <CardDescription>Verify items against the original Customer PO document.</CardDescription>
+                        </CardHeader>
+                        <CardContent className={cn("p-0", !selectedSO?.poDocument && "p-8")}>
+                                {selectedSO?.poDocument && selectedSoDocumentUrl ? (
+                                    selectedSoDocumentIsImage ? (
+                                        <div className="flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+                                            <Image
+                                                src={selectedSoDocumentUrl}
+                                                alt="Customer PO Preview"
+                                                width={1200}
+                                                height={1600}
+                                                unoptimized
+                                                className="max-h-[720px] w-auto max-w-full rounded-md border bg-white shadow-sm"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="aspect-[1/1.4] w-full">
+                                            <iframe
+                                                src={selectedSoDocumentUrl}
+                                                className="w-full h-full border-0"
+                                                title="Customer PO Preview"
+                                            />
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="flex flex-col items-center justify-center text-center py-4 text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg border border-dashed">
                                         <AlertTriangle className="h-8 w-8 mb-2 opacity-20" />
@@ -1134,7 +1870,66 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                             )}
 
                             <div className="space-y-2">
-                                <Label>Shipping Address</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label>Shipping Address</Label>
+                                    {selectedSO && (
+                                        <Popover open={addrOpen} onOpenChange={setAddrOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                                    <MapPin className="h-3 w-3" />
+                                                    Alamat Sebelumnya
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[400px] p-0" align="end">
+                                                <Command>
+                                                    <CommandInput placeholder="Cari alamat..." />
+                                                    <CommandList>
+                                                        <CommandEmpty>Belum ada riwayat alamat.</CommandEmpty>
+                                                        <CommandGroup heading="Alamat Tersimpan">
+                                                            {savedAddresses.map((addr) => (
+                                                                <CommandItem
+                                                                    key={addr.id}
+                                                                    onSelect={() => {
+                                                                        setShippingAddress(addr.address)
+                                                                        setAddrOpen(false)
+                                                                        toast.success("Alamat dipilih")
+                                                                    }}
+                                                                    className="py-3 cursor-pointer"
+                                                                >
+                                                                    <div className="flex flex-col gap-0.5">
+                                                                        {addr.label && <span className="font-semibold text-xs">{addr.label}</span>}
+                                                                        <span className="text-sm line-clamp-2">{addr.address}</span>
+                                                                    </div>
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                        <Separator />
+                                                        <CommandGroup heading="Alamat Utama Customer">
+                                                            <CommandItem
+                                                                onSelect={() => {
+                                                                    const addr = [selectedSO.customer.address1, selectedSO.customer.address2, selectedSO.customer.address3, selectedSO.customer.address4, selectedSO.customer.address5]
+                                                                        .filter(Boolean).join(", ")
+                                                                    setShippingAddress(addr)
+                                                                    setAddrOpen(false)
+                                                                    toast.success("Alamat utama dipilih")
+                                                                }}
+                                                                className="py-3 cursor-pointer"
+                                                            >
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span className="font-semibold text-xs text-blue-600 italic">Head Office / Primary</span>
+                                                                    <span className="text-sm">
+                                                                        {[selectedSO.customer.address1, selectedSO.customer.address2, selectedSO.customer.address3, selectedSO.customer.address4, selectedSO.customer.address5]
+                                                                            .filter(Boolean).join(", ")}
+                                                                    </span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                    )}
+                                </div>
                                 <Textarea
                                     placeholder="Destination address..."
                                     value={shippingAddress}
@@ -1396,17 +2191,36 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                         </div>
                                     </div>
                                     <div className="space-y-3 pt-2">
+                                        <div className="space-y-1 mb-4">
+                                            <Label className="text-xs">Trip Destination</Label>
+                                            <Input
+                                                placeholder="e.g. Jakarta Pusat, Bandung..."
+                                                value={tripDestination}
+                                                onChange={e => setTripDestination(e.target.value)}
+                                                className="h-9"
+                                            />
+                                        </div>
                                         <Label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                                             Operational Costs
                                         </Label>
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-xs">Gasoline</Label>
+                                                <Label className="text-xs">Gasoline (Dexlite)</Label>
                                                 <Input
                                                     type="number"
                                                     min={0}
-                                                    value={costGasoline}
-                                                    onChange={e => setCostGasoline(e.target.value)}
+                                                    value={costGasolineDexlite}
+                                                    onChange={e => setCostGasolineDexlite(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Gasoline (Bio Solar)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costGasolineBio}
+                                                    onChange={e => setCostGasolineBio(e.target.value)}
                                                     className="h-8 font-mono text-right"
                                                 />
                                             </div>
@@ -1457,6 +2271,56 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                                                     min={0}
                                                     value={costOthers}
                                                     onChange={e => setCostOthers(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Rapid Test</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costRapidTest}
+                                                    onChange={e => setCostRapidTest(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Ferry Ticket</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costFerry}
+                                                    onChange={e => setCostFerry(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Portal (Gate)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costPortal}
+                                                    onChange={e => setCostPortal(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Car Washing</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costWashing}
+                                                    onChange={e => setCostWashing(e.target.value)}
+                                                    className="h-8 font-mono text-right"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Escort (Pengawalan)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={costEscort}
+                                                    onChange={e => setCostEscort(e.target.value)}
                                                     className="h-8 font-mono text-right"
                                                 />
                                             </div>
@@ -1532,6 +2396,401 @@ export function DeliveryForm({ salesOrders, warehouses, initialData }: DeliveryF
                     </Card>
                 </div >
             </div >
+
+            {/* Alternative Product Selection Dialog */}
+            <Dialog open={!!selectedAlternative} onOpenChange={(open) => !open && setSelectedAlternative(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Alternative Product Records</DialogTitle>
+                        <DialogDescription>
+                            Produk ini memiliki catatan stok alternatif dengan deskripsi material yang sama. Pilih produk alternatif untuk digunakan dalam delivery ini.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedAlternative && (
+                        <div className="py-4">
+                            {/* Current Product Info */}
+                            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-900">
+                                <div className="flex items-start gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-red-800 dark:text-red-400 mb-1">
+                                            Produk Saat Ini (Stok Tidak Cukup)
+                                        </p>
+                                        <div className="text-xs text-red-700 dark:text-red-300 space-y-1 ml-6">
+                                            <p><strong>Product ID:</strong> {selectedAlternative.productId}</p>
+                                            <p><strong>Nama:</strong> {selectedAlternative.productName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Alternative Products List */}
+                            <div className="space-y-2">
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                    Produk Alternatif Tersedia:
+                                </p>
+                                {selectedAlternative.alternatives.map((alt, idx) => (
+                                    <div
+                                        key={alt.id}
+                                        className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900 hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                    <span className="text-sm font-semibold text-green-800 dark:text-green-400">
+                                                        Alternative #{idx + 1}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-green-700 dark:text-green-300 space-y-1 ml-6">
+                                                    <p><strong>Product ID:</strong> {alt.id}</p>
+                                                    <p><strong>Deskripsi:</strong> {alt.description || `Product #${alt.id}`}</p>
+                                                    <p><strong>Stok Tersedia:</strong> <span className="font-bold">{alt.stock}</span></p>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleSelectAlternative(selectedAlternative.productId, alt.id, alt.description || `Product #${alt.id}`)}
+                                                disabled={selectingAlternative}
+                                                className="bg-green-600 hover:bg-green-700 text-white"
+                                            >
+                                                {selectingAlternative ? "Selecting..." : "Use This"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {selectedAlternative.alternatives.length === 0 && (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                    <p>Tidak ada produk alternatif yang tersedia</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedAlternative(null)} disabled={selectingAlternative}>
+                            Cancel
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Stock View Dialog */}
+            <Dialog open={stockViewOpen} onOpenChange={setStockViewOpen}>
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[calc(100vw-2rem)] h-[85vh] p-0 gap-0 overflow-hidden flex flex-col">
+                    <DialogTitle className="sr-only">Stok Aktual - Semua Warehouse</DialogTitle>
+                    {/* Gradient Header */}
+                    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-4 sm:px-6 py-3 sm:py-4 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 hidden sm:block bg-white/20 rounded-lg backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-base sm:text-lg font-bold tracking-tight">Stok Aktual - Semua Warehouse</h2>
+                                <p className="text-blue-100 text-xs sm:text-sm mt-0.5">Lihat detail stok aktual untuk semua produk di semua warehouse</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 pt-3 sm:pt-4 pb-3 sm:pb-4">
+                        {/* Search Bar */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Cari material number, deskripsi, sloc..."
+                                    value={stockFilter}
+                                    onChange={(e) => setStockFilter(e.target.value)}
+                                    className="pl-10 h-10 border-2 focus:border-blue-500 transition-colors"
+                                />
+                            </div>
+                            {stockFilter && (
+                                <Button variant="ghost" onClick={() => setStockFilter("")} size="sm" className="text-muted-foreground hover:text-foreground">
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            )}
+                            <Button
+                                variant={showDuplicatesOnly ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                                className={cn(
+                                    "gap-1.5 text-xs shrink-0 h-10",
+                                    showDuplicatesOnly && "bg-violet-600 hover:bg-violet-700 text-white"
+                                )}
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                                Duplikat
+                            </Button>
+                        </div>
+
+                        {/* Stats Strip */}
+                        {!loadingStocks && (
+                            (() => {
+                                // Calculate duplicate keys for stats
+                                const keyCounts = new Map<string, number>()
+                                allStocks.forEach(s => {
+                                    const key = [
+                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                        s.warehouse?.description
+                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                    keyCounts.set(key, (keyCounts.get(key) || 0) + 1)
+                                })
+                                const dupCount = allStocks.filter(s => {
+                                    const key = [
+                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                        s.warehouse?.description
+                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                    return (keyCounts.get(key) || 0) > 1
+                                }).length
+                                return (
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+                                            <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-md">
+                                                <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Produk</p>
+                                                <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{allStocks.length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900">
+                                            <div className="p-1.5 bg-red-100 dark:bg-red-900 rounded-md">
+                                                <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-red-600 dark:text-red-400 font-medium">Stok Negatif</p>
+                                                <p className="text-lg font-bold text-red-700 dark:text-red-300">{allStocks.filter(s => (s.totalStock ?? 0) < 0).length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900">
+                                            <div className="p-1.5 bg-amber-100 dark:bg-amber-900 rounded-md">
+                                                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Stok Kosong</p>
+                                                <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{allStocks.filter(s => (s.totalStock ?? 0) === 0).length.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                        <div
+                                            className={cn(
+                                                "flex items-center gap-3 px-4 py-2.5 rounded-lg border cursor-pointer transition-colors",
+                                                showDuplicatesOnly
+                                                    ? 'bg-violet-100 dark:bg-violet-950/50 border-violet-400 dark:border-violet-700 ring-2 ring-violet-400/50'
+                                                    : 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900 hover:bg-violet-100 dark:hover:bg-violet-950/40'
+                                            )}
+                                            onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                                        >
+                                            <div className="p-1.5 bg-violet-100 dark:bg-violet-900 rounded-md">
+                                                <Copy className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Duplikat</p>
+                                                <p className="text-lg font-bold text-violet-700 dark:text-violet-300">{dupCount.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })()
+                        )}
+
+                        {/* Stock Table */}
+                        <div className="flex-1 min-h-0 rounded-lg border overflow-auto scrollbar-thin scrollbar-thumb-accent">
+                                <Table className="min-w-[1200px]">
+                                    <TableHeader className="sticky top-0 z-10">
+                                        <TableRow className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800">
+                                            <TableHead className="w-[60px] text-xs font-bold uppercase tracking-wider">Plnt</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-bold uppercase tracking-wider">Category</TableHead>
+                                            <TableHead className="w-[90px] text-xs font-bold uppercase tracking-wider">Brand</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Material #</TableHead>
+                                            <TableHead className="w-[150px] text-xs font-bold uppercase tracking-wider">Old Mat. No</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-wider">Description</TableHead>
+                                            <TableHead className="w-[60px] text-xs font-bold uppercase tracking-wider">SLoc</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Sloc Desc</TableHead>
+                                            <TableHead className="w-[90px] text-right text-xs font-bold uppercase tracking-wider">Act Stock</TableHead>
+                                            <TableHead className="w-[90px] text-right text-xs font-bold uppercase tracking-wider">Min Stock</TableHead>
+                                            <TableHead className="w-[130px] text-xs font-bold uppercase tracking-wider">Type WH</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loadingStocks ? (
+                                            <TableRow>
+                                                <TableCell colSpan={11} className="h-32 text-center">
+                                                    <div className="flex flex-col items-center justify-center gap-3">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                                                        <span className="text-sm text-muted-foreground">Memuat data stok...</span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            (() => {
+                                                // Build duplicate map
+                                                const dupKeyCounts = new Map<string, number>()
+                                                allStocks.forEach(s => {
+                                                    const key = [
+                                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                                        s.product?.materialNumber, s.product?.oldMaterialNo,
+                                                        s.product?.materialDescription, s.warehouse?.sloc,
+                                                        s.warehouse?.description
+                                                    ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                                    dupKeyCounts.set(key, (dupKeyCounts.get(key) || 0) + 1)
+                                                })
+                                                return allStocks
+                                                    .filter((stock) => {
+                                                        // Text search filter
+                                                        if (stockFilter.trim()) {
+                                                            const filter = stockFilter.toLowerCase()
+                                                            const matches = (
+                                                                stock.product?.materialNumber?.toLowerCase().includes(filter) ||
+                                                                stock.product?.materialDescription?.toLowerCase().includes(filter) ||
+                                                                stock.product?.oldMaterialNo?.toLowerCase().includes(filter) ||
+                                                                stock.warehouse?.sloc?.toLowerCase().includes(filter) ||
+                                                                stock.warehouse?.description?.toLowerCase().includes(filter) ||
+                                                                stock.product?.category?.toLowerCase().includes(filter) ||
+                                                                stock.product?.brand?.toLowerCase().includes(filter) ||
+                                                                stock.product?.plant?.toLowerCase().includes(filter)
+                                                            )
+                                                            if (!matches) return false
+                                                        }
+                                                        // Duplicate filter
+                                                        if (showDuplicatesOnly) {
+                                                            const key = [
+                                                                stock.product?.plant, stock.product?.category, stock.product?.brand,
+                                                                stock.product?.materialNumber, stock.product?.oldMaterialNo,
+                                                                stock.product?.materialDescription, stock.warehouse?.sloc,
+                                                                stock.warehouse?.description
+                                                            ].map(v => (v || '').toString().toLowerCase().trim()).join('|')
+                                                            return (dupKeyCounts.get(key) || 0) > 1
+                                                        }
+                                                        return true
+                                                    })
+                                                .map((stock, idx) => {
+                                                    const totalStock = stock.totalStock ?? 0
+                                                    const categoryColors: Record<string, string> = {
+                                                        'TYRE': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+                                                        'ACC': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+                                                        'SPM': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+                                                        'WHEEL & RIM': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border-orange-200 dark:border-orange-800',
+                                                    }
+                                                    const catClass = categoryColors[stock.product?.category?.toUpperCase() || ''] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                                                    const whType = stock.warehouse?.type || '-'
+                                                    const whClass = whType.toLowerCase().includes('hub')
+                                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                        : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                                    return (
+                                                        <TableRow key={stock.id} className={cn(
+                                                            idx % 2 === 0 ? 'bg-white dark:bg-gray-950' : 'bg-gray-50/70 dark:bg-gray-900/50',
+                                                            'hover:bg-blue-50/70 dark:hover:bg-blue-950/30 transition-colors'
+                                                        )}>
+                                                            <TableCell className="font-mono text-xs font-semibold">
+                                                                {stock.product?.plant || "-"}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className={cn('text-[10px] font-semibold border', catClass)}>
+                                                                    {stock.product?.category || "-"}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-xs">{stock.product?.brand || "-"}</TableCell>
+                                                            <TableCell>
+                                                                <span className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                                                    {stock.product?.materialNumber || "-"}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground">{stock.product?.oldMaterialNo || "-"}</TableCell>
+                                                            <TableCell className="max-w-[300px] truncate text-xs" title={stock.product?.materialDescription || ""}>
+                                                                {stock.product?.materialDescription || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="font-mono text-xs font-semibold">{stock.warehouse?.sloc || "-"}</TableCell>
+                                                            <TableCell className="max-w-[130px] truncate text-xs text-muted-foreground" title={stock.warehouse?.description || ""}>
+                                                                {stock.warehouse?.description || "-"}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <span className={cn(
+                                                                    'font-mono text-xs font-bold px-2 py-0.5 rounded-md',
+                                                                    totalStock < 0 && 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+                                                                    totalStock === 0 && 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+                                                                    totalStock > 0 && 'text-emerald-700 dark:text-emerald-400'
+                                                                )}>
+                                                                    {totalStock.toLocaleString('id-ID')}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono text-xs text-orange-600 dark:text-orange-400">
+                                                                {stock.minStock?.toLocaleString("id-ID") || "0"}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className={cn('text-[10px] font-semibold border', whClass)}>
+                                                                    {whType}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })
+                                            })()
+                                        )}
+                                    </TableBody>
+                                </Table>
+                        </div>
+
+                        {/* Enhanced Footer */}
+                        <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-muted-foreground">Total:</span>
+                                    <Badge variant="secondary" className="font-mono text-xs">{allStocks.length}</Badge>
+                                </div>
+                                {stockFilter && (
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-muted-foreground">Filtered:</span>
+                                        <Badge className="font-mono text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-100">
+                                            {allStocks.filter((stock) => {
+                                                const filter = stockFilter.toLowerCase()
+                                                return (
+                                                    stock.product?.materialNumber?.toLowerCase().includes(filter) ||
+                                                    stock.product?.materialDescription?.toLowerCase().includes(filter) ||
+                                                    stock.product?.oldMaterialNo?.toLowerCase().includes(filter) ||
+                                                    stock.warehouse?.sloc?.toLowerCase().includes(filter) ||
+                                                    stock.warehouse?.description?.toLowerCase().includes(filter)
+                                                )
+                                            }).length}
+                                        </Badge>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={handleViewStocks} disabled={loadingStocks} className="gap-1.5">
+                                    <RefreshCcw className={cn("h-3.5 w-3.5", loadingStocks && "animate-spin")} />
+                                    Refresh
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setStockViewOpen(false)}>
+                                    Close
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Floating Action Button with Pulse */}
+            <div className="fixed bottom-4 right-4 z-50">
+                <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-blue-500 animate-ping opacity-20" />
+                    <Button
+                        size="sm"
+                        onClick={handleViewStocks}
+                        className="relative h-9 px-4 rounded-full shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-1.5 text-xs font-medium"
+                    >
+                        <Eye className="h-3.5 w-3.5" />
+                        Cek Stok Aktual
+                    </Button>
+                </div>
+            </div>
         </div >
     )
 }

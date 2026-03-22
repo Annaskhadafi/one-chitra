@@ -12,7 +12,7 @@ export default async function StockOpnamePdfPage({ params }: Props) {
 
     if (isNaN(sessionId)) notFound()
 
-    const result = await getOpnamePdfReportData(sessionId)
+    const result = await getOpnamePdfReportData(sessionId, "sap")
     
     if (!result.success || !result.data) {
         notFound()

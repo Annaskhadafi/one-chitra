@@ -229,8 +229,14 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
                 {/* Charts Section */}
                 {data && (
                     <DashboardCharts
-                        categoryStats={data.categoryStats}
-                        areaStats={data.areaStats}
+                        categoryStats={data.categoryStats.map((item) => ({
+                            ...item,
+                            category: item.category ?? undefined,
+                        }))}
+                        areaStats={data.areaStats.map((item) => ({
+                            ...item,
+                            area: item.area ?? undefined,
+                        }))}
                         monthlyStats={data.monthlyStats}
                         years={filters.years}
                     />

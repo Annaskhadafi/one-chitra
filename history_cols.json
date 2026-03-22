@@ -1,0 +1,198 @@
+[
+  {
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "sorg",
+    "data_type": "text"
+  },
+  {
+    "column_name": "bill_ty",
+    "data_type": "text"
+  },
+  {
+    "column_name": "rev_type",
+    "data_type": "text"
+  },
+  {
+    "column_name": "customer",
+    "data_type": "text"
+  },
+  {
+    "column_name": "customer_name",
+    "data_type": "text"
+  },
+  {
+    "column_name": "salesman",
+    "data_type": "text"
+  },
+  {
+    "column_name": "item",
+    "data_type": "text"
+  },
+  {
+    "column_name": "sloc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "plant",
+    "data_type": "text"
+  },
+  {
+    "column_name": "material_no",
+    "data_type": "text"
+  },
+  {
+    "column_name": "material_description",
+    "data_type": "text"
+  },
+  {
+    "column_name": "size_dimen",
+    "data_type": "text"
+  },
+  {
+    "column_name": "material_group",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp1",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp1_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp2",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp2_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp3",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp3_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp4",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp4_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp5",
+    "data_type": "text"
+  },
+  {
+    "column_name": "mat_grp5_desc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "qty",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "uom",
+    "data_type": "text"
+  },
+  {
+    "column_name": "curr",
+    "data_type": "text"
+  },
+  {
+    "column_name": "base_price",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "intdept_price",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "adjustment_price",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "revenue_in_doc_curr",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "revenue_in_loc_curr",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "billing_no",
+    "data_type": "text"
+  },
+  {
+    "column_name": "billing_date",
+    "data_type": "text"
+  },
+  {
+    "column_name": "inco1",
+    "data_type": "text"
+  },
+  {
+    "column_name": "inco2",
+    "data_type": "text"
+  },
+  {
+    "column_name": "c",
+    "data_type": "text"
+  },
+  {
+    "column_name": "cancelled",
+    "data_type": "text"
+  },
+  {
+    "column_name": "delivery_no",
+    "data_type": "text"
+  },
+  {
+    "column_name": "sales_order",
+    "data_type": "text"
+  },
+  {
+    "column_name": "work_order",
+    "data_type": "text"
+  },
+  {
+    "column_name": "po_no",
+    "data_type": "text"
+  },
+  {
+    "column_name": "po_date",
+    "data_type": "text"
+  },
+  {
+    "column_name": "po_type",
+    "data_type": "text"
+  },
+  {
+    "column_name": "cost_of_sales",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "profit_margin",
+    "data_type": "double precision"
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "column_name": "updated_at",
+    "data_type": "timestamp without time zone"
+  }
+]

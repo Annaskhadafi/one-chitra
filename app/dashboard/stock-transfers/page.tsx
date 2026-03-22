@@ -1,7 +1,7 @@
 import { getStockTransfers, getStockTransferStats } from "@/app/actions/stock-transfer"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Plus, ArrowLeftRight, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeftRight, CheckCircle2, Clock } from "lucide-react"
 import { StockTransferTable } from "./_components/stock-transfer-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -50,7 +50,7 @@ export default async function StockTransfersPage() {
                         <CardTitle className="text-sm font-medium text-emerald-50">Completed</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">{stats.completedTransfers}</div>
+                        <div className="text-3xl font-bold">{stats.receivedTransfers}</div>
                         <p className="text-xs text-emerald-100 mt-1">Successful movements</p>
                     </CardContent>
                 </Card>
@@ -62,14 +62,17 @@ export default async function StockTransfersPage() {
                         <CardTitle className="text-sm font-medium text-amber-50">Pending</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">{stats.pendingTransfers}</div>
+                        <div className="text-3xl font-bold">{stats.scheduledTransfers}</div>
                         <p className="text-xs text-amber-100 mt-1">Awaiting processing</p>
                     </CardContent>
                 </Card>
             </div>
 
             <Card className="border-none bg-transparent shadow-none">
-                <StockTransferTable data={transfers} />
+                <StockTransferTable data={transfers.map((transfer) => ({
+                    ...transfer,
+                    receivedStatus: transfer.receivedStatus as "Scheduled" | "Received" | "Rejected",
+                }))} />
             </Card>
         </div>
     )

@@ -7,11 +7,25 @@ import { eq, inArray, and } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { replaceUserWarehouseAccess, type WarehouseAccessLevel } from "@/lib/warehouse-access"
 import { headers } from "next/headers"
 import bcrypt from "bcryptjs"
 
-export async function createUser(data: { name: string; email: string; password: string; role: string }) {
+type UserWarehouseAccessInput = {
+    warehouseId: number
+    accessLevel?: WarehouseAccessLevel | null
+}
+
+export async function createUser(data: {
+    name: string
+    email: string
+    password: string
+    role: string
+    warehouseAccesses?: UserWarehouseAccessInput[]
+}) {
     try {
+        await getAuthenticatedSession("users", "create")
+
         const result = await auth.api.signUpEmail({
             body: {
                 name: data.name,
@@ -24,9 +38,12 @@ export async function createUser(data: { name: string; email: string; password: 
             await db.update(user)
                 .set({ role: data.role })
                 .where(eq(user.id, result.user.id))
+
+            await replaceUserWarehouseAccess(db, result.user.id, data.warehouseAccesses || [])
         }
 
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         return { success: true, userId: result.user.id }
     } catch (error: unknown) {
         console.error("Failed to create user:", error)
@@ -36,7 +53,16 @@ export async function createUser(data: { name: string; email: string; password: 
 
 export async function getUsers() {
     await getAuthenticatedSession("users", "view")
-    return await db.select().from(user).orderBy(user.createdAt)
+    return await db.query.user.findMany({
+        with: {
+            warehouseAccesses: {
+                with: {
+                    warehouse: true,
+                },
+            },
+        },
+        orderBy: (fields, { desc }) => [desc(fields.createdAt)],
+    })
 }
 
 
@@ -45,6 +71,7 @@ export async function deleteUser(userId: string) {
         await getAuthenticatedSession("users", "delete")
         await db.delete(user).where(eq(user.id, userId))
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         return { success: true }
     } catch (error) {
         console.error("Failed to delete user:", error)
@@ -100,6 +127,7 @@ export async function importUsers(formData: FormData) {
         }
 
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         return { success: true, count }
     } catch (error: unknown) {
         console.error("Failed to import users:", error)
@@ -113,6 +141,7 @@ export async function bulkDeleteUsers(userIds: string[]) {
         await getAuthenticatedSession("users", "delete")
         await db.delete(user).where(inArray(user.id, userIds))
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         return { success: true }
     } catch (error) {
         console.error("Failed to bulk delete users:", error)
@@ -128,6 +157,7 @@ export async function bulkUpdateUserRole(userIds: string[], role: string) {
             .set({ role })
             .where(inArray(user.id, userIds))
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         return { success: true }
     } catch (error) {
         console.error("Failed to bulk update user roles:", error)
@@ -142,11 +172,43 @@ export async function setUserRole(userId: string, role: string) {
             .set({ role })
             .where(eq(user.id, userId))
         revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
         revalidatePath('/dashboard/account')
         return { success: true }
     } catch (error) {
         console.error("Failed to update user role:", error)
         return { success: false, error: "Failed to update user role" }
+    }
+}
+
+export async function updateUserAccessSettings(
+    userId: string,
+    data: {
+        role: string
+        warehouseAccesses: UserWarehouseAccessInput[]
+    }
+) {
+    try {
+        await getAuthenticatedSession("users", "edit")
+
+        await db.transaction(async (tx) => {
+            await tx.update(user)
+                .set({
+                    role: data.role,
+                    updatedAt: new Date(),
+                })
+                .where(eq(user.id, userId))
+
+            await replaceUserWarehouseAccess(tx, userId, data.warehouseAccesses || [])
+        })
+
+        revalidatePath('/dashboard/admin/users')
+        revalidatePath('/dashboard/security/users')
+        revalidatePath('/dashboard/account')
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update user access settings:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to update user access settings" }
     }
 }
 
@@ -196,12 +258,12 @@ export async function changePassword(data: { oldPassword: string; newPassword: s
 
 export async function adminResetPassword(userId: string, newPassword: string) {
     try {
-        // Verify caller is authenticated
-        const session = await auth.api.getSession({ headers: await headers() })
-        if (!session?.user) throw new Error("Unauthorized")
+        // Use central RBAC function to verify the caller has 'edit' permission for users
+        // This ensures the caller is an Admin or has permission, rather than just any logged-in user.
+        const session = await getAuthenticatedSession("users", "edit")
+        if (!session?.user?.id) throw new Error("Unauthorized")
 
-        // Bypass auth.api.setUserPassword — it checks for lowercase 'admin' role internally
-        // but the DB stores role as 'Admin' (capital A). Instead, hash directly with bcryptjs.
+        // Hash directly with bcryptjs
         const hashedPassword = await bcrypt.hash(newPassword, 10)
 
         const updated = await db
@@ -216,9 +278,11 @@ export async function adminResetPassword(userId: string, newPassword: string) {
             .returning({ id: account.id })
 
         if (updated.length === 0) {
+            console.error(`adminResetPassword error: No credential account found for user ${userId}`)
             throw new Error("User account not found or uses social login only")
         }
 
+        console.log(`User ${userId} password has been successfully reset by admin ${session.user.id}`)
         return { success: true }
     } catch (error) {
         console.error("Failed to reset password:", error)

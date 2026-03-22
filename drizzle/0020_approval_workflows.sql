@@ -1,8 +1,8 @@
-CREATE TYPE "approval_definition_status" AS ENUM('draft', 'active', 'archived');
-CREATE TYPE "approval_approver_type" AS ENUM('role', 'user');
-CREATE TYPE "approval_request_status" AS ENUM('pending', 'approved', 'rejected', 'cancelled');
-CREATE TYPE "approval_assignment_status" AS ENUM('pending', 'approved', 'rejected', 'skipped');
-CREATE TYPE "approval_decision_action" AS ENUM('approve', 'reject', 'comment', 'escalate', 'cancel');
+-- CREATE TYPE "approval_definition_status" AS ENUM('draft', 'active', 'archived');
+-- CREATE TYPE "approval_approver_type" AS ENUM('role', 'user');
+-- CREATE TYPE "approval_request_status" AS ENUM('pending', 'approved', 'rejected', 'cancelled');
+-- CREATE TYPE "approval_assignment_status" AS ENUM('pending', 'approved', 'rejected', 'skipped');
+-- CREATE TYPE "approval_decision_action" AS ENUM('approve', 'reject', 'comment', 'escalate', 'cancel');
 
 CREATE TABLE "approval_form_registry" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,

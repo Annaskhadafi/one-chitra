@@ -11,7 +11,7 @@ export default async function PrintChecklistPage({ params }: Props) {
 
     if (isNaN(sessionId)) notFound()
 
-    const session = await getStockOpnameSession(sessionId)
+    const session = await getStockOpnameSession(sessionId, "sap")
     
     if (!session) {
         notFound()
@@ -27,9 +27,30 @@ export default async function PrintChecklistPage({ params }: Props) {
         }
         
         @media print {
+            [data-slot="sidebar"],
+            [data-slot="sidebar-gap"],
+            [data-slot="sidebar-rail"],
+            [data-slot="sidebar-wrapper"] > [data-slot="sidebar-inset"] > header {
+                display: none !important;
+            }
+
+            [data-slot="sidebar-inset"] {
+                margin: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            [data-slot="sidebar-inset"] > div {
+                padding: 0 !important;
+            }
+
             body {
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
+                margin: 0 !important;
+                background: white !important;
             }
             
             .print-checklist table {
@@ -43,6 +64,12 @@ export default async function PrintChecklistPage({ params }: Props) {
             
             .print-checklist thead {
                 display: table-header-group;
+            }
+
+            .print-checklist {
+                max-width: 100%;
+                margin: 0;
+                padding: 0;
             }
         }
         

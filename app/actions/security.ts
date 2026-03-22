@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { user, session as sessionTable } from "@/db/schema/auth"
 import { roles, permissions, rolePermissions } from "@/db/schema"
 import { auditLogs } from "@/db/schema/audit-logs"
+import { userWarehouseAccess } from "@/db/schema/user-warehouse-access"
 import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
@@ -131,6 +132,55 @@ export async function updateSecurityUserRole(targetUserId: string, newRole: stri
     return { success: true }
 }
 
+export async function updateSecurityUserAccessSettings(
+    targetUserId: string,
+    data: { role: string; warehouseAccesses: Array<{ warehouseId: number; accessLevel: "view" | "edit" }> }
+) {
+    const session = await getAuthenticatedSession("security", "edit")
+
+    try {
+        await db.transaction(async (tx) => {
+            // 1. Update role
+            await tx
+                .update(user)
+                .set({ role: data.role, updatedAt: new Date() })
+                .where(eq(user.id, targetUserId))
+
+            // 2. Clear existing warehouse access
+            await tx
+                .delete(userWarehouseAccess)
+                .where(eq(userWarehouseAccess.userId, targetUserId))
+
+            // 3. Insert new warehouse access if any
+            if (data.warehouseAccesses.length > 0) {
+                await tx.insert(userWarehouseAccess).values(
+                    data.warehouseAccesses.map((wa) => ({
+                        userId: targetUserId,
+                        warehouseId: wa.warehouseId,
+                        accessLevel: wa.accessLevel,
+                    }))
+                )
+            }
+        })
+
+        await writeAuditLog(
+            session.user.id,
+            "user.access_update",
+            `Updated role and warehouse access for user ${targetUserId}`
+        )
+
+        revalidatePath("/dashboard/security/users")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update user access settings:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update access settings",
+        }
+    }
+}
+
+
 export async function updateSecurityUserProfile(targetUserId: string, data: {
     name?: string
     department?: string
@@ -216,16 +266,39 @@ export async function deleteSecurityUser(targetUserId: string) {
         return { success: false, error: "Cannot delete your own account" }
     }
 
-    await db.delete(user).where(eq(user.id, targetUserId))
+    try {
+        await db.delete(user).where(eq(user.id, targetUserId))
 
-    await writeAuditLog(
-        session.user.id,
-        "user.delete",
-        `Deleted user ${targetUser.email}`
-    )
+        await writeAuditLog(
+            session.user.id,
+            "user.delete",
+            `Deleted user ${targetUser.email}`
+        )
 
-    revalidatePath("/dashboard/security/users")
-    return { success: true }
+        revalidatePath("/dashboard/security/users")
+        return { success: true }
+    } catch (error: unknown) {
+        const errorCode = typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code: unknown }).code)
+            : undefined
+        const errorMessage = error instanceof Error
+            ? error.message
+            : typeof error === "string"
+                ? error
+                : ""
+
+        // Cek jika error adalah constraint violation dari database
+        if (errorCode === "23503" || errorMessage.includes("foreign key constraint") || errorMessage.includes("violates foreign key")) {
+            return {
+                success: false,
+                error: "Tidak bisa menghapus user yang masih memiliki kaitan riwayat transaksi di sistem. Rekomendasi: Gunakan fitur 'Ban User' untuk menonaktifkan pengguna ini."
+            }
+        }
+        return {
+            success: false,
+            error: "Gagal menghapus user. Terjadi kesalahan pada database."
+        }
+    }
 }
 
 export async function bulkCreateSecurityUsers(
@@ -480,6 +553,7 @@ export async function getAuditLogs(params: {
 export async function getActiveSessions() {
     const session = await getAuthenticatedSession("security", "view")
     const currentSession = session
+    const currentSessionId = (currentSession as { session?: { id?: string } }).session?.id ?? null
 
     // Admins see all sessions; others see only their own
     const dbUser = await db.query.user.findFirst({
@@ -517,7 +591,7 @@ export async function getActiveSessions() {
         ...s,
         // Hide full token — expose only last 8 chars for identification
         tokenPreview: s.token.slice(-8),
-        isCurrent: s.id === currentSession.session.id,
+        isCurrent: currentSessionId ? s.id === currentSessionId : false,
     }))
 }
 
@@ -555,7 +629,11 @@ export async function revokeSession(targetSessionId: string) {
 
 export async function revokeAllOtherSessions() {
     const session = await getAuthenticatedSession("security", "edit")
-    const currentSessionId = session.session.id
+    const currentSessionId = (session as { session?: { id?: string } }).session?.id
+
+    if (!currentSessionId) {
+        return { success: false, error: "Current session not found" }
+    }
 
     await db
         .delete(sessionTable)

@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useFieldArray, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2, Plus, Trash, Check, ChevronsUpDown, Package, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { CalendarIcon, Loader2, Plus, Trash, Check, ChevronsUpDown, Package, CheckCircle2, XCircle } from "lucide-react"
 
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -80,6 +82,8 @@ interface ProductSelectorProps {
     value: string
     onSelect: (value: string) => void
 }
+
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
 
 function ProductSelector({ products, value, onSelect }: ProductSelectorProps) {
     const [open, setOpen] = useState(false)
@@ -187,8 +191,72 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
 
     const [stockResults, setStockResults] = useState<{ productId: number; available: number; sufficient: boolean }[]>([])
     const [checkingStock, setCheckingStock] = useState(false)
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<number, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
 
     const isSubmitting = form.formState.isSubmitting
+    const watchedSourceWarehouseId = useWatch({
+        control: form.control,
+        name: "sourceWarehouseId",
+    })
+    const watchedItems = useWatch({
+        control: form.control,
+        name: "items",
+    })
+    const trackedProductIds = useMemo(
+        () => Array.from(new Set((watchedItems ?? []).map((item) => Number(item?.productId)).filter((productId) => Number.isInteger(productId) && productId > 0))).sort((a, b) => a - b),
+        [watchedItems],
+    )
+    const trackedProductIdsKey = useMemo(() => trackedProductIds.join(","), [trackedProductIds])
+    const trackedItemCount = useMemo(
+        () => Object.values(trackingDecisions).filter((decision) => decision.trackingMode !== "manual_only").length,
+        [trackingDecisions],
+    )
+
+    useEffect(() => {
+        let cancelled = false
+        const productIds = trackedProductIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+
+        if (!watchedSourceWarehouseId || productIds.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        getTrackingDecisionPreview(Number(watchedSourceWarehouseId), productIds)
+            .then((decisions) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(
+                    Object.fromEntries(decisions.map((decision) => [decision.productId, decision])),
+                )
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load transfer tracking decisions:", error)
+                setTrackingDecisions({})
+                toast.error("Failed to load tracking policy for source warehouse")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [trackedProductIdsKey, watchedSourceWarehouseId])
 
     async function handleCheckStock() {
         const sourceWhId = form.getValues("sourceWarehouseId")
@@ -237,7 +305,7 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
             } else {
                 toast.error("error" in result ? result.error : "Failed to transfer")
             }
-        } catch (error) {
+        } catch {
             toast.error("An unexpected error occurred")
         }
     }
@@ -341,10 +409,25 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
 
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-medium">Products</h3>
+                        <div>
+                            <h3 className="text-lg font-medium">Products</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Tracking mengikuti policy gudang asal per item. Transfer manual tetap tersedia untuk warehouse pilot.
+                            </p>
+                        </div>
+                        {loadingTrackingDecisions && watchedSourceWarehouseId ? (
+                            <span className="text-xs text-muted-foreground">Loading tracking rules...</span>
+                        ) : null}
                     </div>
 
+                    {trackedItemCount > 0 && (
+                        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                            {trackedItemCount} item pada transfer ini ikut pilot RFID di warehouse asal. Transfer manual tetap bisa disimpan; jika serial atau tag belum dicatat, sistem akan membuat follow-up exception RFID tanpa mengganggu proses transfer yang berjalan sekarang.
+                        </div>
+                    )}
+
                     <div className="rounded-md border">
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
@@ -370,6 +453,23 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                                                             value={field.value}
                                                             onSelect={field.onChange}
                                                         />
+                                                        {field.value ? (
+                                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                <TrackingModeBadge
+                                                                    mode={trackingDecisions[Number(field.value)]?.trackingMode ?? "manual_only"}
+                                                                />
+                                                                {trackingDecisions[Number(field.value)]?.serialRequired && (
+                                                                    <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                                                                        Serial Required
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : null}
+                                                        {field.value && trackingDecisions[Number(field.value)]?.trackingMode !== "manual_only" ? (
+                                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                                {trackingDecisions[Number(field.value)]?.reason}
+                                                            </p>
+                                                        ) : null}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
@@ -435,6 +535,7 @@ export function CreateTransferForm({ warehouses, products }: CreateTransferFormP
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">

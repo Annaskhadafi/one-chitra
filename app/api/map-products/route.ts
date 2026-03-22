@@ -1,0 +1,17 @@
+import { NextRequest } from "next/server"
+import { mapExtractedToMaster } from "@/lib/so-mapping"
+
+export const runtime = "nodejs"
+
+export async function POST(req: NextRequest) {
+    const body = await req.json().catch(() => null)
+    if (!body) {
+        return Response.json({ error: "Invalid JSON" }, { status: 400 })
+    }
+    const { extracted } = body as { extracted: any }
+    if (!extracted) {
+        return Response.json({ error: "extracted is required" }, { status: 400 })
+    }
+    const result = await mapExtractedToMaster(extracted)
+    return Response.json(result)
+}

@@ -28,7 +28,8 @@ async function main() {
             deliveryType: "full" as const,
             isExternal: false,
             // Internal Costs
-            costGasoline: 50000,
+            costGasolineDexlite: 50000,
+            costGasolineBio: 0,
             costToll: 25000,
             costParking: 10000,
             costMeals: 35000,
@@ -55,14 +56,15 @@ async function main() {
             });
 
             console.log('Saved Delivery Costs:', {
-                gasoline: savedDelivery?.costGasoline,
+                gasolineDexlite: savedDelivery?.costGasolineDexlite,
+                gasolineBio: savedDelivery?.costGasolineBio,
                 toll: savedDelivery?.costToll,
                 parking: savedDelivery?.costParking,
                 meals: savedDelivery?.costMeals,
                 others: savedDelivery?.costOthers
             });
 
-            if (Number(savedDelivery?.costGasoline) === 50000) {
+            if (Number(savedDelivery?.costGasolineDexlite) === 50000) {
                 console.log('SUCCESS: Cost gasoline saved correctly.');
             } else {
                 console.error('FAILURE: Cost gasoline mismatch.');

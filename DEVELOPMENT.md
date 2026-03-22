@@ -2,26 +2,31 @@
 
 ## 📁 File Upload Rule (Standardized)
 
-To ensure uploaded files are persistent across deployments on Dokploy, all file uploads MUST follow this unified rule:
+To ensure uploaded files are persistent across deployments, all file uploads MUST follow this unified rule:
 
 ### 1. Storage Location
-Files are stored in the `public/uploads` directory.
+Preferred production storage is S3-compatible object storage via `UPLOAD_DRIVER=s3`.
 
-| Environment | Actual Path | Notes |
+| Environment | Storage | Notes |
 |---|---|---|
-| **Development** | `<project-root>/public/uploads` | `process.cwd()` = project root |
-| **Production (Nixpacks)** | `/app/.next/standalone/public/uploads` | `process.cwd()` = `/app/.next/standalone` in standalone mode |
+| **Production (Recommended)** | S3-compatible object storage | Use `UPLOAD_DRIVER=s3` and `OBJECT_STORAGE_*` env vars |
+| **Development / Legacy Local** | `<project-root>/public/uploads` | Used when `UPLOAD_DRIVER=local` or not set |
+| **Production (Legacy Dokploy Volume)** | `/app/uploads` | Local bind mount fallback if object storage is not used |
 
-On production (Dokploy), the container path `/app/.next/standalone/public/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
+If using legacy local storage on production (Dokploy), the container path `/app/uploads` is mapped to a **Persistent Bind Mount** at `/mnt/data/one-chitra/uploads` on the VPS.
 
 Mount Type
 BIND
 Host Path
 /mnt/data/one-chitra/uploads
 Mount Path
-/app/.next/standalone/public/uploads
+/app/uploads
 
-> ⚠️ **Jangan ubah path di `upload.ts` atau `route.ts`** — keduanya menggunakan `process.cwd()` yang sudah secara otomatis resolve ke path yang benar di dev maupun production.
+> ⚠️ **PENTING: Jangan gunakan `process.cwd()` secara langsung di environment Production (Dokploy)**
+> Aplikasi Next.js under Dokploy Docker sering me-run CWD di `/app`, sehingga jika menggunakan `process.cwd()` file bisa meleset ke `/app/public/uploads` yang tidak persisten.
+> **Selalu gunakan deteksi environment:**
+> - Production: gunakan path absolute `/app/uploads` (atau `UPLOAD_DIR` yang mengarah ke sana)
+> - Development: `resolve(process.cwd(), "public", "uploads")`
 
 ### 2. Upload Action
 Always use the centralized `uploadFile` action. Do NOT use `fs` directly in your components or other actions.

@@ -9,6 +9,7 @@ import {
 import { AlertTriangle, Pencil, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface PoPreviewDialogProps {
     open: boolean
@@ -18,19 +19,6 @@ interface PoPreviewDialogProps {
     editUrl?: string
 }
 
-// Helper function to ensure the URL has the correct format
-function getFileUrl(poDocument: string | null): string | null {
-    if (!poDocument) return null
-
-    // If it already starts with /api/uploads/, use it as is
-    if (poDocument.startsWith('/api/uploads/')) {
-        return poDocument
-    }
-
-    // If it's just a filename, prepend /api/uploads/
-    return `/api/uploads/${poDocument}`
-}
-
 export function PoPreviewDialog({
     open,
     onOpenChange,
@@ -38,17 +26,17 @@ export function PoPreviewDialog({
     title = "Customer PO Preview",
     editUrl
 }: PoPreviewDialogProps) {
-    const fileUrl = getFileUrl(poDocument)
+    const fileUrl = resolveUploadDocumentUrl(poDocument)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-7xl h-[92vh] p-0 flex flex-col gap-0 overflow-hidden">
-                <DialogHeader className="px-6 py-4 border-b flex-row items-center justify-between space-y-0">
-                    <DialogTitle>{title}</DialogTitle>
-                    <div className="flex items-center gap-2 mr-8">
+            <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100vw-2rem)] sm:max-w-7xl">
+                <DialogHeader className="flex flex-col gap-3 border-b px-4 py-4 sm:px-6">
+                    <DialogTitle className="pr-10 text-left text-base sm:text-lg">{title}</DialogTitle>
+                    <div className="mr-8 flex flex-wrap items-center gap-2">
                         {editUrl && (
                             <Link href={editUrl}>
-                                <Button variant="outline" size="sm">
+                                <Button variant="outline" size="sm" className="w-full sm:w-auto">
                                     <Pencil className="h-4 w-4 mr-2" />
                                     Edit Sales Order
                                 </Button>
@@ -58,6 +46,7 @@ export function PoPreviewDialog({
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 onClick={() => window.open(fileUrl, '_blank')}
                             >
                                 <ExternalLink className="h-4 w-4 mr-2" />
@@ -66,14 +55,14 @@ export function PoPreviewDialog({
                         )}
                     </div>
                 </DialogHeader>
-                <div className="flex-1 bg-muted/10 relative overflow-auto">
+                <div className="relative min-h-0 flex-1 overflow-auto bg-muted/10">
                     {fileUrl ? (
-                        fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/) ? (
-                            <div className="flex items-center justify-center min-h-full p-4">
+                        isUploadImageFile(fileUrl) ? (
+                            <div className="flex min-h-full items-center justify-center p-3 sm:p-4">
                                 <img
                                     src={fileUrl}
                                     alt="Customer PO Document"
-                                    className="max-w-full h-auto shadow-lg"
+                                    className="h-auto max-w-full rounded-md shadow-lg"
                                 />
                             </div>
                         ) : (

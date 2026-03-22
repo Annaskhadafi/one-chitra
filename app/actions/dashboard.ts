@@ -7,8 +7,32 @@ import { quotations } from "@/db/schema/quotations"
 import { salesOrders, salesOrderItems } from "@/db/schema/sales-orders"
 import { deliveries } from "@/db/schema/deliveries"
 import { stockLevels } from "@/db/schema/stock-levels"
-import { warehouses } from "@/db/schema/warehouses"
-import { count, eq, sql, desc, lte, sum } from "drizzle-orm"
+import { count, eq, sql, desc, and } from "drizzle-orm"
+
+export type DashboardOverviewRange = "this-week" | "this-month" | "this-quarter"
+
+function getRangeBounds(range: DashboardOverviewRange) {
+    const now = new Date()
+    const endDate = new Date(now)
+
+    if (range === "this-week") {
+        const startDate = new Date(now)
+        startDate.setDate(now.getDate() - 6)
+        startDate.setHours(0, 0, 0, 0)
+        return { startDate, endDate }
+    }
+
+    if (range === "this-quarter") {
+        const startMonth = Math.floor(now.getMonth() / 3) * 3
+        const startDate = new Date(now.getFullYear(), startMonth, 1)
+        startDate.setHours(0, 0, 0, 0)
+        return { startDate, endDate }
+    }
+
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    startDate.setHours(0, 0, 0, 0)
+    return { startDate, endDate }
+}
 
 export type DashboardStats = {
     totalProducts: number
@@ -38,7 +62,34 @@ export type DashboardStats = {
     }[]
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(range: DashboardOverviewRange = "this-month"): Promise<DashboardStats> {
+    const { startDate, endDate } = getRangeBounds(range)
+
+    const productDateFilter = and(
+        sql`${products.createdAt} >= ${startDate}`,
+        sql`${products.createdAt} <= ${endDate}`
+    )
+    const customerDateFilter = and(
+        sql`${customers.createdAt} >= ${startDate}`,
+        sql`${customers.createdAt} <= ${endDate}`
+    )
+    const quotationDateFilter = and(
+        sql`${quotations.quotationDate} >= ${startDate}`,
+        sql`${quotations.quotationDate} <= ${endDate}`
+    )
+    const salesDateFilter = and(
+        sql`${salesOrders.salesDate} >= ${startDate}`,
+        sql`${salesOrders.salesDate} <= ${endDate}`
+    )
+    const deliveryDateFilter = and(
+        sql`${deliveries.scheduledDate} >= ${startDate}`,
+        sql`${deliveries.scheduledDate} <= ${endDate}`
+    )
+    const stockDateFilter = and(
+        sql`${stockLevels.updatedAt} >= ${startDate}`,
+        sql`${stockLevels.updatedAt} <= ${endDate}`
+    )
+
     // Run all queries in parallel for performance
     const [
         productCount,
@@ -53,30 +104,33 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         stockAlertData,
     ] = await Promise.all([
         // Total products
-        db.select({ count: count() }).from(products),
+        db.select({ count: count() }).from(products).where(productDateFilter),
 
         // Total customers
-        db.select({ count: count() }).from(customers),
+        db.select({ count: count() }).from(customers).where(customerDateFilter),
 
         // Quotation stats
         db.select({
             total: count(),
             pending: sql<number>`count(*) filter (where ${quotations.status} = 'draft' or ${quotations.status} = 'pending')`,
             approved: sql<number>`count(*) filter (where ${quotations.status} = 'approved')`,
-        }).from(quotations),
+        }).from(quotations).where(quotationDateFilter),
 
         // Total sales orders
-        db.select({ count: count() }).from(salesOrders),
+        db.select({ count: count() }).from(salesOrders).where(salesDateFilter),
 
         // Pending deliveries
         db.select({ count: count() })
             .from(deliveries)
-            .where(eq(deliveries.status, "scheduled")),
+            .where(and(eq(deliveries.status, "scheduled"), deliveryDateFilter)),
 
         // Low stock count
         db.select({ count: count() })
             .from(stockLevels)
-            .where(sql`${stockLevels.totalStock} <= ${stockLevels.minStock} AND ${stockLevels.minStock} > 0`),
+            .where(and(
+                stockDateFilter,
+                sql`${stockLevels.totalStock} <= ${stockLevels.minStock} AND ${stockLevels.minStock} > 0`
+            )),
 
         // Monthly sales (last 6 months)
         db.select({
@@ -87,7 +141,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         })
             .from(salesOrders)
             .innerJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
-            .where(sql`${salesOrders.salesDate} >= now() - interval '6 months'`)
+            .where(salesDateFilter)
             .groupBy(sql`to_char(${salesOrders.salesDate}, 'YYYY-MM')`)
             .orderBy(sql`to_char(${salesOrders.salesDate}, 'YYYY-MM')`),
 
@@ -97,6 +151,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             count: count(),
         })
             .from(products)
+            .where(productDateFilter)
             .groupBy(products.category)
             .orderBy(desc(count())),
 
@@ -114,6 +169,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             FROM sales_orders so
             LEFT JOIN customers c ON c.id = so.customer_id
             LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+            WHERE so.sales_date >= ${startDate} AND so.sales_date <= ${endDate}
             GROUP BY so.id, so.invoice_number, c.name, so.sales_date, so.status
             ORDER BY so.created_at DESC
             LIMIT 5
@@ -131,6 +187,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             JOIN products p ON p.id = sl.product_id
             JOIN warehouses w ON w.id = sl.warehouse_id
             WHERE sl.total_stock <= sl.min_stock AND sl.min_stock > 0
+                            AND sl.updated_at >= ${startDate} AND sl.updated_at <= ${endDate}
             ORDER BY (sl.total_stock::float / NULLIF(sl.min_stock, 0)) ASC
             LIMIT 10
         `),
@@ -154,17 +211,17 @@ export async function getDashboardStats(): Promise<DashboardStats> {
             count: row.count,
         })),
         recentOrders: (recentOrdersData.rows as Record<string, unknown>[]).map(row => ({
-            id: row.id,
-            invoiceNumber: row.invoice_number,
-            customerName: row.customer_name ?? "Unknown",
-            salesDate: new Date(row.sales_date),
-            status: row.status,
+            id: Number(row.id ?? 0),
+            invoiceNumber: (row.invoice_number as string | null) ?? null,
+            customerName: String(row.customer_name ?? "Unknown"),
+            salesDate: new Date(String(row.sales_date ?? new Date().toISOString())),
+            status: String(row.status ?? "unknown"),
             totalValue: Number(row.total_value ?? 0),
         })),
         stockAlerts: (stockAlertData.rows as Record<string, unknown>[]).map(row => ({
-            productName: row.product_name ?? "Unknown Product",
-            materialNumber: row.material_number,
-            warehouseName: row.warehouse_name,
+            productName: String(row.product_name ?? "Unknown Product"),
+            materialNumber: String(row.material_number ?? ""),
+            warehouseName: String(row.warehouse_name ?? ""),
             currentStock: Number(row.current_stock),
             minStock: Number(row.min_stock),
         })),

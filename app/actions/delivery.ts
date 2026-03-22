@@ -1,14 +1,19 @@
-﻿"use server"
+"use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses } from "@/db/schema"
 import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
+import { saveCustomerAddress } from "./customer"
 import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
+import { clearDeliveryRfidArtifacts, syncDeliveryRfidLedger } from "@/lib/rfid-delivery"
+import { sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
+import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
+import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 
 const isConsignmentCategory = (categoryPo: string | null | undefined) => {
     const normalized = (categoryPo ?? "").trim().toLowerCase()
@@ -46,12 +51,181 @@ const isSameDeliveryItemComposition = (
     return true
 }
 
+function normalizeDeliveryOutput<T>(value: T): T {
+    return normalizeSapDocumentFields(normalizeSlocFields(value))
+}
+
+type StockQueryable = Pick<typeof db, "query" | "select">
+
+type DeliveryStockCheckInput = {
+    productId: number
+    quantity: number
+}
+
+type DeliveryStockCheckResult = {
+    productId: number
+    requested: number
+    available: number
+    remainingAfterDelivery: number
+    shortage: number
+    sufficient: boolean
+    alternativeIds?: { id: number; stock: number; description: string }[]
+    otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[]
+}
+
+async function getOriginWarehouseStock(queryable: StockQueryable, warehouseId: number, productId: number) {
+    // Look up the warehouse sloc and product materialNumber
+    // Then find stock by matching sloc + materialNumber (not just IDs)
+    // This handles cases where the same product/warehouse exists under different IDs
+    const result = await queryable.select({
+        totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+    })
+        .from(stockLevels)
+        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+        .innerJoin(products, eq(stockLevels.productId, products.id))
+        .where(and(
+            sql`${warehouses.sloc} = (SELECT sloc FROM warehouses WHERE id = ${warehouseId})`,
+            sql`${products.materialNumber} = (SELECT material_number FROM products WHERE id = ${productId} LIMIT 1)`,
+        ))
+
+    return Number(result[0]?.totalStock) || 0
+}
+
+function getProductStockLabel(
+    product: { materialDescription?: string | null; materialNumber?: string | null } | null | undefined,
+    productId: number,
+) {
+    return product?.materialDescription || product?.materialNumber || `Produk #${productId}`
+}
+
+async function buildDeliveryStockCheckResult(
+    queryable: StockQueryable,
+    warehouseId: number,
+    item: DeliveryStockCheckInput,
+): Promise<DeliveryStockCheckResult> {
+    const requested = Math.max(item.quantity, 0)
+    const directAvailable = await getOriginWarehouseStock(queryable, warehouseId, item.productId)
+    const remainingAfterDelivery = Math.max(directAvailable - requested, 0)
+    const shortage = Math.max(requested - directAvailable, 0)
+    const sufficient = directAvailable >= requested
+
+    const alternatives: { id: number; stock: number; description: string }[] = []
+
+    // Suggestions only: do not affect the Available status for Delivery.
+    const currentProduct = await queryable.query.products.findFirst({
+        where: eq(products.id, item.productId),
+    })
+
+    if (currentProduct?.materialDescription) {
+        const relatedProducts = await queryable.query.products.findMany({
+            where: and(
+                eq(products.materialDescription, currentProduct.materialDescription),
+                sql`${products.id} != ${item.productId}`,
+            ),
+        })
+
+        for (const rel of relatedProducts) {
+            const relStock = await getOriginWarehouseStock(queryable, warehouseId, rel.id)
+            if (relStock > 0) {
+                alternatives.push({
+                    id: rel.id,
+                    stock: relStock,
+                    description: rel.materialDescription || "",
+                })
+            }
+        }
+    }
+
+    // Find stock in other warehouses (different sloc) for the same materialNumber
+    const otherWarehouseStocks = await queryable.select({
+        warehouseId: stockLevels.warehouseId,
+        totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+        whSloc: warehouses.sloc,
+        whDescription: warehouses.description,
+    })
+        .from(stockLevels)
+        .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+        .innerJoin(products, eq(stockLevels.productId, products.id))
+        .where(and(
+            sql`${products.materialNumber} = (SELECT material_number FROM products WHERE id = ${item.productId} LIMIT 1)`,
+            sql`${warehouses.sloc} != (SELECT sloc FROM warehouses WHERE id = ${warehouseId})`,
+            sql`${stockLevels.totalStock} > 0`,
+        ))
+        .groupBy(stockLevels.warehouseId, warehouses.sloc, warehouses.description)
+
+    const otherWarehouses = otherWarehouseStocks.map((sw) => ({
+        warehouseId: sw.warehouseId,
+        warehouseName: sw.whSloc && sw.whDescription ? `${sw.whSloc} - ${sw.whDescription}` : sw.whSloc || "Unknown",
+        stock: Number(sw.totalStock),
+    }))
+
+    return {
+        productId: item.productId,
+        requested,
+        available: directAvailable,
+        remainingAfterDelivery,
+        shortage,
+        sufficient,
+        alternativeIds: alternatives.length > 0 ? alternatives : undefined,
+        otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined,
+    }
+}
+
+async function assertOriginWarehouseStock(
+    queryable: StockQueryable,
+    warehouseId: number,
+    items: Array<{ productId: number; deliveredQuantity: number }>,
+) {
+    const insufficientItems: string[] = []
+
+    for (const item of items) {
+        const stock = await buildDeliveryStockCheckResult(queryable, warehouseId, {
+            productId: item.productId,
+            quantity: item.deliveredQuantity,
+        })
+
+        if (!stock.sufficient) {
+            const product = await queryable.query.products.findFirst({
+                where: eq(products.id, item.productId),
+                columns: {
+                    materialDescription: true,
+                    materialNumber: true,
+                },
+            })
+
+            insufficientItems.push(
+                `${getProductStockLabel(product, item.productId)}: stok aktual ${stock.available}, qty kirim ${stock.requested}, kurang ${stock.shortage}`,
+            )
+        }
+    }
+
+    if (insufficientItems.length > 0) {
+        throw new Error(`Stok origin warehouse tidak cukup. ${insufficientItems.join("; ")}`)
+    }
+}
+
+async function notifyDeliveredDeliveries(deliveryIds: number[]) {
+    for (const deliveryId of deliveryIds) {
+        try {
+            const result = await sendDeliveryDeliveredNotification(deliveryId)
+            if (!result.success && !result.skipped) {
+                console.error(`[DELIVERY EMAIL] Failed to send notification for delivery ${deliveryId}:`, result.error)
+            }
+        } catch (error) {
+            console.error(`[DELIVERY EMAIL] Unexpected error for delivery ${deliveryId}:`, error)
+        }
+    }
+}
+
 export async function getDeliveries() {
-    return await db.query.deliveries.findMany({
+    noStore()
+    const rows = await db.query.deliveries.findMany({
         with: {
             salesOrder: {
                 with: {
                     customer: true,
+                    warehouse: true,
+                    items: true,
                 },
             },
             warehouse: true,
@@ -64,15 +238,22 @@ export async function getDeliveries() {
         },
         orderBy: [desc(deliveries.createdAt)],
     })
+
+    return normalizeDeliveryOutput(rows)
 }
 
 export async function getDeliveryItemsFlat() {
+    noStore()
     const allDeliveries = await db.query.deliveries.findMany({
         with: {
             salesOrder: {
-                with: { customer: true },
+                with: { 
+                    customer: true,
+                    warehouse: true 
+                },
             },
             warehouse: true,
+            createdByUser: true,
             items: {
                 with: { product: true },
             },
@@ -81,7 +262,7 @@ export async function getDeliveryItemsFlat() {
     })
 
     // Flatten: satu baris per item produk
-    return allDeliveries.flatMap(delivery =>
+    return normalizeDeliveryOutput(allDeliveries.flatMap(delivery =>
         delivery.items.map(item => ({
             itemId: item.id,
             productId: item.productId,
@@ -94,6 +275,7 @@ export async function getDeliveryItemsFlat() {
             serialNumbers: item.serialNumbers,
             deliveryId: delivery.id,
             deliveryNumber: delivery.deliveryNumber,
+            doSap: delivery.doSap,
             scheduledDate: delivery.scheduledDate,
             deliveryDate: delivery.deliveryDate,
             status: delivery.status,
@@ -108,13 +290,14 @@ export async function getDeliveryItemsFlat() {
             customerName: delivery.salesOrder?.customer?.name,
             customerId: delivery.salesOrder?.customer?.id,
             warehouseId: delivery.warehouseId,
-            warehouseName: delivery.warehouse?.description || delivery.warehouse?.sloc,
+            warehouseName: formatWarehouseLabel(delivery.warehouse),
+            createdByName: delivery.createdByUser?.name || null,
         }))
-    )
+    ))
 }
 
 export async function getDelivery(id: number) {
-    return await db.query.deliveries.findFirst({
+    const delivery = await db.query.deliveries.findFirst({
         where: eq(deliveries.id, id),
         with: {
             salesOrder: {
@@ -136,9 +319,12 @@ export async function getDelivery(id: number) {
             },
         },
     })
+
+    return normalizeDeliveryOutput(delivery)
 }
 
 export async function getSalesOrdersForDelivery() {
+    noStore()
     // Get confirmed sales orders with their items and already-delivered quantities
     const orders = await db.query.salesOrders.findMany({
         where: eq(salesOrders.status, "confirmed"),
@@ -181,94 +367,62 @@ export async function getSalesOrdersForDelivery() {
     })).filter(order => order.items.some(item => item.remainingQuantity > 0))
 }
 
-export async function checkStockAvailability(warehouseId: number, items: { productId: number; quantity: number }[]) {
-    const results: {
-        productId: number;
-        requested: number;
-        available: number;
-        sufficient: boolean;
-        alternativeIds?: { id: number; stock: number; description: string }[];
-        otherWarehouses?: { warehouseId: number; warehouseName: string; stock: number }[];
-    }[] = []
+export type ReadyOutstandingSalesOrder = Awaited<ReturnType<typeof getSalesOrdersForDelivery>>[0] & {
+    readyItems: (Awaited<ReturnType<typeof getSalesOrdersForDelivery>>[0]["items"][0] & { availableStock: number })[]
+}
 
-    console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
+export async function getReadyOutstandingSalesOrders(): Promise<ReadyOutstandingSalesOrder[]> {
+    noStore()
 
-    for (const item of items) {
-        // 1. Get exact product stock in requested warehouse
-        const stockRecord = await db.query.stockLevels.findFirst({
-            where: and(
-                eq(stockLevels.warehouseId, warehouseId),
-                eq(stockLevels.productId, item.productId),
-            )
-        })
+    const orders = await getSalesOrdersForDelivery()
+    const readyOrdersList: ReadyOutstandingSalesOrder[] = []
 
-        const directAvailable = stockRecord ? stockRecord.totalStock : 0
+    for (const order of orders) {
+        // Cek apakah pesanan ini Outstanding (Parsial) dengan mengecek item yang sudah pernah dikirim
+        const isPartial = order.items.some(i => i.alreadyDelivered > 0)
+        
+        // Hanya notifikasi untuk pesanan parsial/outstanding seperti request user
+        // (Pesanan yang sama sekali belum disentuh bukan kategori Outstanding Tertunda)
+        if (!isPartial) continue
 
-        let totalAvailable = directAvailable
-        const alternatives: { id: number; stock: number; description: string }[] = []
+        const readyItems = []
 
-        // 2. Smart Check: look for other products with same description in requested warehouse
-        const currentProduct = await db.query.products.findFirst({
-            where: eq(products.id, item.productId)
-        })
-
-        if (currentProduct?.materialDescription) {
-            // Find other products with SAME description
-            const relatedProducts = await db.query.products.findMany({
-                where: and(
-                    eq(products.materialDescription, currentProduct.materialDescription),
-                    sql`${products.id} != ${item.productId}`
-                )
-            })
-
-            for (const rel of relatedProducts) {
-                const relStock = await db.query.stockLevels.findFirst({
-                    where: and(
-                        eq(stockLevels.warehouseId, warehouseId),
-                        eq(stockLevels.productId, rel.id)
-                    )
-                })
-                if (relStock && relStock.totalStock > 0) {
-                    alternatives.push({
-                        id: rel.id,
-                        stock: relStock.totalStock,
-                        description: rel.materialDescription || ""
+        for (const item of order.items) {
+            if (item.remainingQuantity > 0) {
+                // Mengecek stok akurat di Origin Warehouse
+                const directAvailable = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
+                if (directAvailable > 0) {
+                    readyItems.push({
+                        ...item,
+                        availableStock: directAvailable
                     })
-                    totalAvailable += relStock.totalStock
                 }
             }
         }
 
-        // 3. Check other warehouses for the same product
-        const otherWarehouseStocks = await db.query.stockLevels.findMany({
-            where: and(
-                eq(stockLevels.productId, item.productId),
-                sql`${stockLevels.warehouseId} != ${warehouseId}`,
-                sql`${stockLevels.totalStock} > 0`
-            ),
-            with: {
-                warehouse: true
-            }
-        })
-
-        const otherWarehouses = otherWarehouseStocks.map(sw => ({
-            warehouseId: sw.warehouseId,
-            warehouseName: sw.warehouse?.description || sw.warehouse?.sloc || "Unknown",
-            stock: sw.totalStock
-        }))
-
-        const sufficient = totalAvailable >= item.quantity
-
-        const result = {
-            productId: item.productId,
-            requested: item.quantity,
-            available: directAvailable,
-            sufficient,
-            alternativeIds: alternatives.length > 0 ? alternatives : undefined,
-            otherWarehouses: otherWarehouses.length > 0 ? otherWarehouses : undefined
+        // Kalau ada item sisa kelupaan yang sekarang ready di gudang, masukkan ke Notifikasi
+        if (readyItems.length > 0) {
+            readyOrdersList.push({
+                ...order,
+                readyItems
+            })
         }
+    }
 
-        console.log(`[STOCKS] Product ${item.productId}: available=${directAvailable}, alternatives=${alternatives.length}, otherWHs=${otherWarehouses.length}`)
+    return readyOrdersList
+}
+
+export async function checkStockAvailability(warehouseId: number, items: DeliveryStockCheckInput[]) {
+    const results: DeliveryStockCheckResult[] = []
+
+    console.log(`[STOCKS] Checking warehouse ${warehouseId}, items:`, items)
+
+    for (const item of items) {
+        const result = await buildDeliveryStockCheckResult(db, warehouseId, item)
+
+        console.log(
+            `[STOCKS] Product ${item.productId}: available=${result.available}, requested=${result.requested}, remaining=${result.remainingAfterDelivery}, alternatives=${result.alternativeIds?.length ?? 0}, otherWHs=${result.otherWarehouses?.length ?? 0}`,
+        )
         results.push(result)
     }
 
@@ -279,11 +433,33 @@ export async function generateDeliveryNumber() {
     const now = new Date()
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
 
-    const allDeliveries = await db.select({ deliveryNumber: deliveries.deliveryNumber }).from(deliveries)
-    const todayDeliveries = allDeliveries.filter(d => d.deliveryNumber?.startsWith(`DLV-${dateStr}`))
-    const nextNum = todayDeliveries.length + 1
+    // Use SQL to count instead of fetching everything
+    const [result] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(deliveries)
+        .where(sql`${deliveries.deliveryNumber} LIKE ${`DLV-${dateStr}-%`}`)
 
-    return `DLV-${dateStr}-${String(nextNum).padStart(4, "0")}`
+    const nextNum = (Number(result?.count) || 0) + 1
+    
+    // Safety check: if the number exists, increment until we find a free one
+    let finalNum = nextNum
+    let exists = true
+    let finalDeliveryNumber = ""
+
+    while (exists) {
+        finalDeliveryNumber = `DLV-${dateStr}-${String(finalNum).padStart(4, "0")}`
+        const check = await db.query.deliveries.findFirst({
+            where: eq(deliveries.deliveryNumber, finalDeliveryNumber),
+            columns: { id: true }
+        })
+        if (!check) {
+            exists = false
+        } else {
+            finalNum++
+        }
+    }
+
+    return finalDeliveryNumber
 }
 
 export async function createDelivery(data: z.infer<typeof deliverySchema>) {
@@ -297,12 +473,13 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
         console.log("[CREATE DELIVERY] Delivery Number:", deliveryNumber)
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             console.log("[CREATE DELIVERY] Starting transaction...")
 
             const [newDelivery] = await tx.insert(deliveries)
                 .values({
                     deliveryNumber,
+                    doSap: normalizeCodeValue(data.doSap),
                     salesOrderId: data.salesOrderId,
                     createdBy: userId,
                     scheduledDate: new Date(data.scheduledDate),
@@ -319,12 +496,19 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     awbNumber: data.awbNumber || null,
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
                     // Internal Cost Breakdown
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    tripDestination: data.tripDestination || null,
+                    costGasolineDexlite: data.costGasolineDexlite ? String(data.costGasolineDexlite) : "0",
+                    costGasolineBio: data.costGasolineBio ? String(data.costGasolineBio) : "0",
                     costToll: data.costToll ? String(data.costToll) : "0",
                     costParking: data.costParking ? String(data.costParking) : "0",
                     costMeals: data.costMeals ? String(data.costMeals) : "0",
                     costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
                     costOthers: data.costOthers ? String(data.costOthers) : "0",
+                    costRapidTest: data.costRapidTest ? String(data.costRapidTest) : "0",
+                    costFerry: data.costFerry ? String(data.costFerry) : "0",
+                    costPortal: data.costPortal ? String(data.costPortal) : "0",
+                    costWashing: data.costWashing ? String(data.costWashing) : "0",
+                    costEscort: data.costEscort ? String(data.costEscort) : "0",
 
                     warehouseId: data.warehouseId,
                     warehouseToId: data.warehouseToId,
@@ -335,7 +519,28 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
             console.log("[CREATE DELIVERY] Delivery created, ID:", newDelivery.id)
 
+            // Save Address to history
+            if (data.shippingAddress) {
+                const so = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, data.salesOrderId),
+                    columns: { customerId: true }
+                })
+                if (so?.customerId) {
+                    await saveCustomerAddress(so.customerId, data.shippingAddress)
+                }
+            }
+
             if (data.items.length > 0) {
+                const hasDestination = data.warehouseToId && data.warehouseToId !== 0
+                const isCancelled = data.status === "cancelled"
+
+                if (!isCancelled && data.warehouseId) {
+                    await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                        productId: item.productId,
+                        deliveredQuantity: item.deliveredQuantity,
+                    })))
+                }
+
                 console.log("[CREATE DELIVERY] Inserting items...")
                 await tx.insert(deliveryItems)
                     .values(data.items.map(item => ({
@@ -355,9 +560,6 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     where: eq(salesOrders.id, data.salesOrderId),
                     columns: { categoryPo: true, customerId: true }
                 })
-
-                const hasDestination = data.warehouseToId && data.warehouseToId !== 0
-                const isCancelled = data.status === "cancelled"
 
                 if (hasDestination && !isCancelled) {
                     console.log("[CREATE DELIVERY] Creating stock transfer...")
@@ -424,6 +626,22 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
             }
 
+            try {
+                await syncDeliveryRfidLedger(tx, {
+                    deliveryId: newDelivery.id,
+                    deliveryNumber,
+                    warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
+                    status: data.status,
+                    userId,
+                    items: data.items,
+                    captureMethod: "manual",
+                    notes: data.notes,
+                })
+            } catch (rfidError) {
+                console.error("[CREATE DELIVERY] RFID sync skipped:", rfidError)
+            }
+
             // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
             await syncDeliveryTypesForSO(tx, data.salesOrderId)
 
@@ -435,11 +653,26 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/deliveries/create")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
 
             console.log("[CREATE DELIVERY] Transaction completed successfully")
-            return { success: true, id: newDelivery.id }
+            return {
+                success: true as const,
+                id: newDelivery.id,
+                deliveredNotificationIds: data.status === "delivered" ? [newDelivery.id] : [],
+            }
         })
+
+        if (result.success && result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true, id: result.id }
     } catch (error) {
         console.error("[CREATE DELIVERY] Error:", error)
         return { success: false, error: "Failed to create delivery: " + (error instanceof Error ? error.message : "Unknown error") }
@@ -451,15 +684,17 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
         const session = await getAuthenticatedSession('deliveries', 'edit')
         const userId = session.user.id
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const originalDelivery = await tx.query.deliveries.findFirst({
                 where: eq(deliveries.id, id),
                 with: { items: true },
             })
 
             if (!originalDelivery) {
-                return { success: false, error: "Delivery not found" }
+                console.error("[UPDATE DELIVERY] Delivery not found:", id)
+                return { success: false as const, error: "Delivery not found" }
             }
+            console.log("[UPDATE DELIVERY] Found original delivery:", id)
 
             // Revert stock if it was previously committed (not cancelled)
             // Check if original was VHS/Consignment
@@ -520,9 +755,17 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 }
             }
 
+            if (shouldReconcileStock && newIsCommitted && data.warehouseId) {
+                await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                    productId: item.productId,
+                    deliveredQuantity: item.deliveredQuantity,
+                })))
+            }
+
             await tx.update(deliveries)
                 .set({
                     deliveryNumber: data.deliveryNumber || undefined,
+                    doSap: normalizeCodeValue(data.doSap),
                     salesOrderId: data.salesOrderId,
                     scheduledDate: new Date(data.scheduledDate),
                     deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
@@ -538,12 +781,19 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     awbNumber: data.awbNumber || null,
                     shippingCost: data.shippingCost ? String(data.shippingCost) : "0",
                     // Internal Cost Breakdown
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
+                    tripDestination: data.tripDestination || null,
+                    costGasolineDexlite: data.costGasolineDexlite ? String(data.costGasolineDexlite) : "0",
+                    costGasolineBio: data.costGasolineBio ? String(data.costGasolineBio) : "0",
                     costToll: data.costToll ? String(data.costToll) : "0",
                     costParking: data.costParking ? String(data.costParking) : "0",
                     costMeals: data.costMeals ? String(data.costMeals) : "0",
                     costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
                     costOthers: data.costOthers ? String(data.costOthers) : "0",
+                    costRapidTest: data.costRapidTest ? String(data.costRapidTest) : "0",
+                    costFerry: data.costFerry ? String(data.costFerry) : "0",
+                    costPortal: data.costPortal ? String(data.costPortal) : "0",
+                    costWashing: data.costWashing ? String(data.costWashing) : "0",
+                    costEscort: data.costEscort ? String(data.costEscort) : "0",
 
                     warehouseId: data.warehouseId,
                     warehouseToId: data.warehouseToId,
@@ -552,6 +802,19 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     updatedAt: new Date(),
                 })
                 .where(eq(deliveries.id, id))
+
+            // Save Address to history
+            if (data.shippingAddress) {
+                console.log("[UPDATE DELIVERY] Saving address to history...")
+                const so = await tx.query.salesOrders.findFirst({
+                    where: eq(salesOrders.id, originalDelivery.salesOrderId),
+                    columns: { customerId: true }
+                })
+                if (so?.customerId) {
+                    const addrRes = await saveCustomerAddress(so.customerId, data.shippingAddress)
+                    console.log("[UPDATE DELIVERY] Address save result:", addrRes)
+                }
+            }
 
             // Sync automated Stock Transfer
             const hasDestination = data.warehouseToId && data.warehouseToId !== 0
@@ -660,6 +923,22 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 }
             }
 
+            try {
+                await syncDeliveryRfidLedger(tx, {
+                    deliveryId: id,
+                    deliveryNumber: data.deliveryNumber ?? originalDelivery.deliveryNumber,
+                    warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
+                    status: data.status,
+                    userId,
+                    items: data.items,
+                    captureMethod: "manual",
+                    notes: data.notes,
+                })
+            } catch (rfidError) {
+                console.error("[UPDATE DELIVERY] RFID sync skipped:", rfidError)
+            }
+
             // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
             await syncDeliveryTypesForSO(tx, data.salesOrderId)
 
@@ -669,12 +948,30 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
             try {
                 revalidatePath("/dashboard/deliveries")
+                revalidatePath("/dashboard/deliveries/create")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
-            return { success: true }
+            return {
+                success: true as const,
+                deliveredNotificationIds: originalDelivery.status !== "delivered" && data.status === "delivered" ? [id] : [],
+            }
         })
+
+        if (!result.success) {
+            return result
+        }
+
+        if (result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true }
     } catch (error) {
-        console.error("Failed to update delivery:", error)
-        return { success: false, error: "Failed to update delivery" }
+        console.error("Failed to update delivery (GLOBAL CATCH):", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to update delivery" }
     }
 }
 
@@ -738,6 +1035,12 @@ export async function deleteDelivery(id: number) {
             // Permanent deletion of stock transfers
             await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
 
+            try {
+                await clearDeliveryRfidArtifacts(tx, id)
+            } catch (rfidError) {
+                console.error("[DELETE DELIVERY] RFID cleanup skipped:", rfidError)
+            }
+
             // Permanent deletion of items
             await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
             // Permanent deletion of the delivery record
@@ -746,6 +1049,10 @@ export async function deleteDelivery(id: number) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return { success: true }
         })
@@ -811,6 +1118,11 @@ export async function bulkDeleteDeliveries(ids: number[]) {
 
                 // 3. Delete items, transfers and record
                 await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+                try {
+                    await clearDeliveryRfidArtifacts(tx, id)
+                } catch (rfidError) {
+                    console.error("[BULK DELETE DELIVERY] RFID cleanup skipped:", rfidError)
+                }
                 await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
                 await tx.delete(deliveries).where(eq(deliveries.id, id))
             }
@@ -818,6 +1130,10 @@ export async function bulkDeleteDeliveries(ids: number[]) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return { success: true }
         })
@@ -831,9 +1147,10 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
     try {
         await checkPermission('deliveries', 'edit')
 
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const session = await getAuthenticatedSession('deliveries', 'edit')
             const userId = session.user.id
+            const deliveredNotificationIds: number[] = []
 
             for (const id of ids) {
                 const delivery = await tx.query.deliveries.findFirst({
@@ -884,6 +1201,11 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                 // 2. From cancelled to non-cancelled: APPLY stock
                 if (delivery.status === "cancelled" && status !== "cancelled") {
                     if (delivery.warehouseId) {
+                        await assertOriginWarehouseStock(tx, delivery.warehouseId, delivery.items.map((item) => ({
+                            productId: item.productId,
+                            deliveredQuantity: item.deliveredQuantity,
+                        })))
+
                         const movementType = isVHS ? "TRANSFER_OUT" : "DELIVERY"
                         for (const item of delivery.items) {
                             await tx.update(stockLevels)
@@ -936,17 +1258,46 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                     .set({ status, updatedAt: new Date() })
                     .where(eq(deliveries.id, id))
 
+                try {
+                    await syncDeliveryRfidLedger(tx, {
+                        deliveryId: delivery.id,
+                        deliveryNumber: delivery.deliveryNumber,
+                        warehouseId: delivery.warehouseId,
+                        warehouseToId: delivery.warehouseToId,
+                        status,
+                        userId,
+                        items: delivery.items,
+                        captureMethod: "manual",
+                        notes: delivery.notes,
+                    })
+                } catch (rfidError) {
+                    console.error("[BULK UPDATE DELIVERY STATUS] RFID sync skipped:", rfidError)
+                }
+
                 if (status === "delivered") {
                     await checkAndCompleteSalesOrder(tx, delivery.salesOrderId)
+                    if (delivery.status !== "delivered") {
+                        deliveredNotificationIds.push(id)
+                    }
                 }
             }
 
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
-            return { success: true }
+            return { success: true as const, deliveredNotificationIds }
         })
+
+        if (result.success && result.deliveredNotificationIds.length > 0) {
+            await notifyDeliveredDeliveries(result.deliveredNotificationIds)
+        }
+
+        return { success: true }
     } catch (_error) {
         console.error("Bulk update delivery status error:", _error)
         return { success: false, error: "Failed to update delivery status" }
@@ -976,6 +1327,7 @@ export async function updateDoMonitoringFields(id: number, data: {
     doStatus?: string,
     remark?: string | null,
     scanDoDocument?: string | null,
+    doSap?: string | null,
 }) {
     try {
         await checkPermission('deliveries', 'edit')
@@ -986,11 +1338,12 @@ export async function updateDoMonitoringFields(id: number, data: {
         }
 
         if (data.returnDoDate !== undefined) updateData.returnDoDate = data.returnDoDate
-        if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber
+        if (data.invoiceNumber !== undefined) updateData.invoiceNumber = normalizeCodeValue(data.invoiceNumber)
         if (data.invoiceDate !== undefined) updateData.invoiceDate = data.invoiceDate
         if (data.doStatus !== undefined) updateData.doStatus = data.doStatus
         if (data.remark !== undefined) updateData.remark = data.remark
         if (data.scanDoDocument !== undefined) updateData.scanDoDocument = data.scanDoDocument
+        if (data.doSap !== undefined) updateData.doSap = normalizeCodeValue(data.doSap)
 
         await db.update(deliveries)
             .set(updateData)
@@ -1082,7 +1435,8 @@ export async function getLogisticsCosts() {
             vendorName: deliveries.vendorName,
             isExternal: deliveries.isExternal,
             shippingCost: deliveries.shippingCost,
-            costGasoline: deliveries.costGasoline,
+            costGasolineDexlite: deliveries.costGasolineDexlite,
+            costGasolineBio: deliveries.costGasolineBio,
             costToll: deliveries.costToll,
             costParking: deliveries.costParking,
             costMeals: deliveries.costMeals,
@@ -1116,7 +1470,8 @@ export async function clearLogisticsCosts() {
         await db.update(deliveries)
             .set({
                 shippingCost: "0",
-                costGasoline: "0",
+                costGasolineDexlite: "0",
+                costGasolineBio: "0",
                 costToll: "0",
                 costParking: "0",
                 costMeals: "0",

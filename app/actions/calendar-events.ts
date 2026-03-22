@@ -104,6 +104,7 @@ export async function getCalendarEvents(
         const holidays = getHolidaysInRange(startDate, endDate)
         for (const h of holidays) {
             const bg = h.type === "national_holiday" ? "#ef4444" : "#f97316"
+            const mappedEventType = h.type === "observance" ? "reminder" : h.type
             fcEvents.push({
                 id: `holiday-${h.date}`,
                 title: h.name,
@@ -113,8 +114,12 @@ export async function getCalendarEvents(
                 borderColor: bg,
                 textColor: "#ffffff",
                 extendedProps: {
-                    eventType: h.type,
-                    description: h.type === "national_holiday" ? "Hari Libur Nasional" : "Cuti Bersama",
+                    eventType: mappedEventType,
+                    description: h.type === "national_holiday"
+                        ? "Hari Libur Nasional"
+                        : h.type === "joint_leave"
+                            ? "Cuti Bersama"
+                            : "Hari Peringatan",
                 },
             })
         }

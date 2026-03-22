@@ -4,9 +4,11 @@ import { salesOrderItems } from "./sales-orders";
 
 export const billingRecords = pgTable("billing_records", {
     id: serial("id").primaryKey(),
-    deliveryItemId: integer("delivery_item_id").references(() => deliveryItems.id).unique(),
+    deliveryItemId: integer("delivery_item_id").references(() => deliveryItems.id),
     // We keep salesOrderItemId optional if we ever need to link directly without delivery, but usually via delivery
     salesOrderItemId: integer("sales_order_item_id").references(() => salesOrderItems.id),
+    evoucherId: integer("evoucher_id"), // Keep old column to prevent data loss
+    invoiceType: text("invoice_type"), // Keep old column to prevent data loss
 
     // Fields requested by user
     no: text("no"), // Can be auto-generated or manual
@@ -41,6 +43,12 @@ export const billingRecords = pgTable("billing_records", {
     receiverDate: timestamp("receiver_date"),
     recvDateApproved: timestamp("recv_date_approved"),
     eFaktur: text("e_faktur"),
+
+    // Phase 3 Advanced Tracking
+    modeDelivery: text("mode_delivery"),
+    noResi: text("no_resi"),
+    statusDelivery: text("status_delivery"),
+    scanInvUrl: text("scan_inv_url"),
 
     // Metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),

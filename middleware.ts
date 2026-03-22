@@ -29,6 +29,12 @@ function isPublicRoute(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
+    const cookieHeader = request.headers.get("cookie") ?? ""
+    const hasAuthCookies = request.cookies.getAll().some(({ name }) =>
+        name.includes("better-auth") ||
+        name.endsWith("session_token") ||
+        name.endsWith("session_data"),
+    )
 
     // Allow public routes and static assets through without auth check
     if (isPublicRoute(pathname)) {
@@ -55,11 +61,18 @@ export async function middleware(request: NextRequest) {
         const { data: session } = await betterFetch<Session>("/api/auth/get-session", {
             baseURL: internalBaseURL,
             headers: {
-                cookie: request.headers.get("cookie") ?? "",
+                cookie: cookieHeader,
             },
         })
 
         if (!session?.user?.id) {
+            if (hasAuthCookies) {
+                console.warn("[middleware] Session endpoint returned no user despite auth cookies. Allowing request to continue for server-side verification.", {
+                    pathname,
+                })
+                return NextResponse.next()
+            }
+
             const signInUrl = new URL("/sign-in", request.url)
             signInUrl.searchParams.set("callbackUrl", pathname)
             return NextResponse.redirect(signInUrl)
@@ -69,7 +82,13 @@ export async function middleware(request: NextRequest) {
     } catch (err) {
         // Log the error so we can debug in production logs
         console.error("[middleware] Session check failed:", err)
-        // If session check fails, redirect to sign-in for safety
+
+        // If auth cookies exist but the middleware session check fails, allow the
+        // request to continue and let the server layout verify the session.
+        if (hasAuthCookies) {
+            return NextResponse.next()
+        }
+
         const signInUrl = new URL("/sign-in", request.url)
         signInUrl.searchParams.set("callbackUrl", pathname)
         return NextResponse.redirect(signInUrl)

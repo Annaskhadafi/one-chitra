@@ -100,7 +100,6 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
             salesman = [],
             customers = [],
             revTypes = [],
-            _areas = [],
             page = 1,
             pageSize = 30,
             sortByYear = '', // If empty, sort by Total overall

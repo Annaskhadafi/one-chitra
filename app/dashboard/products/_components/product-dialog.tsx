@@ -66,14 +66,16 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productSchema),
         defaultValues: {
-            category: product?.category || "TYRE",
-            materialNumber: product?.materialNumber || "",
-            oldMaterialNo: product?.oldMaterialNo || "",
-            materialDescription: product?.materialDescription || "",
-            plant: product?.plant || "",
-            sloc: product?.sloc || "",
-            slocDescription: product?.slocDescription || "",
-            imageUrl: product?.imageUrl || "",
+            category: product?.category ?? "TYRE",
+            materialNumber: product?.materialNumber ?? "",
+            oldMaterialNo: product?.oldMaterialNo ?? "",
+            materialDescription: product?.materialDescription ?? "",
+            brand: product?.brand ?? "",
+            costSap: product?.costSap ?? "",
+            plant: product?.plant ?? "",
+            sloc: product?.sloc ?? "",
+            slocDescription: product?.slocDescription ?? "",
+            imageUrl: product?.imageUrl ?? "",
         },
     })
 

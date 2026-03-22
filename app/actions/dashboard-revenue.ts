@@ -1,235 +1,182 @@
 "use server"
-
 import { db } from "@/db"
-import { historyOrders } from "@/db/schema/history-orders"
-import { forecasts } from "@/db/schema/forecasts"
-import { eq, sql, and, isNotNull, ne, or, isNull, notIlike, ilike } from "drizzle-orm"
+import { settings } from "@/db/schema/settings"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
+import type { DashboardRevenueFilters } from "./dashboard-revenue-logic"
+import { 
+    fetchDashboardRevenueForecast, 
+    fetchDashboardInventory,
+    fetchAllSalesRevenueData,
+    fetchRevenueReportConfig,
+} from "./dashboard-revenue-logic"
+import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
 
-export interface DashboardRevenueFilters {
-    period: string; // MM.YYYY or YYYY
+
+
+export async function getAllSalesRevenueData(filters: DashboardRevenueFilters) {
+    try {
+        await getAuthenticatedSession("revenue-forecast", "view")
+        return await fetchAllSalesRevenueData(filters)
+    } catch (error) {
+        console.error("Failed to fetch all sales revenue data:", error);
+        return { success: false, error: "Failed to fetch sales revenue data" };
+    }
 }
-
-// Mat grp desc for Prime Product (Tires)
-const PRIME_PRODUCT_MAT_GRPS = [
-    'TRUCK&BUS TIRES R24', 'TRUCK&BUS TIRES R20', 'TRUCK&BUS TIRES R16', 'TRUCK&BUS TIRES R10',
-    'PASSENGER TIRES R16',
-    'INDUSTRIAL TIRES R15', 'INDUSTRIAL TIRES R22', 'INDUSTRIAL TIRES R20', 'INDUSTRIAL TIRES R18',
-    'INDUSTRIAL TIRES R11', 'INDUSTRIAL TIRES R12',
-    'EARTHMOVER TIRES R63', 'EARTHMOVER TIRES R57', 'EARTHMOVER TIRES R51', 'EARTHMOVER TIRES R49',
-    'EARTHMOVER TIRES R45', 'EARTHMOVER TIRES R35', 'EARTHMOVER TIRES R33', 'EARTHMOVER TIRES R25'
-]
-
-// Mat grp desc for PA (Product Accessories)
-const PA_MAT_GRPS = [
-    'CP ACCESSORIES', 'CP TOOLS', 'CP WHEEL & RIM', 'CP CONSUMEABLE', 'CP EQUIPMENT', 'CP SERVICE'
-]
-
-
 export async function getDashboardRevenueForecast(filters: DashboardRevenueFilters) {
     try {
         await getAuthenticatedSession("revenue-forecast", "view")
-        const periodStr = filters.period || "02.2026";
-        const isYearlyView = !periodStr.includes('.');
-        const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
-
-        // 1. Fetch Forecast for the requested period
-        const forecastData = await db.select().from(forecasts).where(eq(forecasts.period, periodStr));
-
-        const targetMap = new Map<string, number>();
-        forecastData.forEach(item => {
-            targetMap.set(item.targetName, item.amount);
-        });
-
-        // 2. Date filter
-        const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
-        const dateFilter = sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), ${dateFormat}) = ${periodStr}`;
-        const baseFilter = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
-            dateFilter,
-            or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-            )
-        );
-
-        // Customer NOT (ITC008 or 100289)
-        const customerNotExcluded = and(
-            notIlike(historyOrders.customer!, '%ITC008%'),
-            notIlike(historyOrders.customer!, '%100289%')
-        );
-
-        // ─── A. Revenue Prime Product ───────────────────────────────────────────
-        // Filter: rev_type = 'Trading', mat_grp_desc IN (Tire list)
-        const primeProdMatGrpFilter = sql`upper(trim(${historyOrders.matGrpDesc})) = ANY(ARRAY[${sql.raw(
-            PRIME_PRODUCT_MAT_GRPS.map(g => `'${g}'`).join(', ')
-        )}]::text[])`;
-
-        const primeProductData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
-            baseFilter,
-            ilike(historyOrders.revType!, 'Trading'),
-            primeProdMatGrpFilter
-        ));
-        const revenuePrimeProduct = Number(primeProductData[0]?.total || 0);
-
-        // ─── B. Revenue Service ─────────────────────────────────────────────────
-        // Filter: rev_type != 'Trading', exclude customer ITC008/100289
-        const serviceData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
-            baseFilter,
-            notIlike(historyOrders.revType!, 'Trading'),
-            customerNotExcluded
-        ));
-        const revenueService = Number(serviceData[0]?.total || 0);
-
-        // ─── C. Revenue PA (Product Accessories) ───────────────────────────────
-        // Filter: rev_type = 'Trading', mat_grp_desc ILIKE CP*, exclude ITC008/100289
-        const paMtGrpFilter = sql`upper(trim(${historyOrders.matGrpDesc})) = ANY(ARRAY[${sql.raw(
-            PA_MAT_GRPS.map(g => `'${g}'`).join(', ')
-        )}]::text[])`;
-
-        const paData = await db.select({
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(
-            baseFilter,
-            ilike(historyOrders.revType!, 'Trading'),
-            paMtGrpFilter,
-            customerNotExcluded
-        ));
-        const revenuePA = Number(paData[0]?.total || 0);
-
-        // ─── D. Consolidate = Prime + PA + Service ─────────────────────────────
-        const revenueConsolidate = revenuePrimeProduct + revenuePA + revenueService;
-
-        // ─── E. Forecast Consolidate = sum of sub-forecasts ────────────────────
-        const forecastPrime = targetMap.get("Prime Product") || 0;
-        const forecastService = targetMap.get("Service") || 0;
-        const forecastPA = targetMap.get("PA") || 0;
-        const forecastConsolidate = forecastPrime + forecastService + forecastPA;
-
-        // ─── F. Revenue By Customer (CK vs SIS) ────────────────────────────────
-        const customerRevenueData = await db.select({
-            cust: historyOrders.customerName,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.customerName);
-
-        let revenueCK = 0;
-        let revenueSIS = 0;
-        customerRevenueData.forEach(c => {
-            const name = (c.cust || "").toUpperCase();
-            if (name.includes('CIPTA KRIDATAMA')) revenueCK += Number(c.total);
-            if (name.includes('SAPTAINDRA SEJATI') || (name.includes('SIS') && !name.includes('SIMPSON'))) revenueSIS += Number(c.total);
-        });
-
-        // ─── G. Salesman Revenue ────────────────────────────────────────────────
-        const salesData = await db.select({
-            salesman: historyOrders.salesman,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.salesman);
-
-        const salesmanRevenue: Record<string, number> = {
-            ma_oc: 0, ma_wis: 0, ma_fq: 0, ma_bur: 0, ma_ag: 0, ma_mic: 0
-        };
-        salesData.forEach(s => {
-            const name = (s.salesman || "").toUpperCase();
-            if (name.includes("OCKY") || name === "MA OC") salesmanRevenue.ma_oc += Number(s.total);
-            else if (name.includes("WIS") || name.includes("WISHNU")) salesmanRevenue.ma_wis += Number(s.total);
-            else if (name.includes("FQ") || name.includes("FAQIH")) salesmanRevenue.ma_fq += Number(s.total);
-            else if (name.includes("BUR") || name.includes("BURHAN")) salesmanRevenue.ma_bur += Number(s.total);
-            else if (name.includes("AG ") || name === "MA AG" || name.includes("AGUS")) salesmanRevenue.ma_ag += Number(s.total);
-            else if (name.includes("MIC") || name.includes("MICHAEL")) salesmanRevenue.ma_mic += Number(s.total);
-        });
-
-        // ─── H. Rev Type Table ──────────────────────────────────────────────────
-        const revTypeData = await db.select({
-            type: historyOrders.revType,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(baseFilter).groupBy(historyOrders.revType);
-
-        const revTypeTable = revTypeData.map(r => ({
-            type: r.type || "Unknown",
-            total: Number(r.total)
-        })).sort((a, b) => b.total - a.total);
-
-        // ─── I. Product Accessories Detail ─────────────────────────────────────
-        const matGrp1Data = await db.select({
-            desc: historyOrders.matGrp1Desc,
-            total: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders).where(and(baseFilter, paMtGrpFilter, ilike(historyOrders.revType!, 'Trading')))
-            .groupBy(historyOrders.matGrp1Desc)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0)) DESC`);
-
-        // ─── J. Top Materials (Rank Material Sell Out) ─────────────────────────
-        const materialsData = await db.select({
-            materialDesc: historyOrders.materialDescription,
-            totalRevenue: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`,
-            qty: sql<number>`SUM(COALESCE(${historyOrders.qty}, 0))`
-        }).from(historyOrders)
-            .where(baseFilter)
-            .groupBy(historyOrders.materialDescription)
-            .orderBy(sql`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0)) DESC`)
-            .limit(20);
-
-        // ─── K. YTD Revenue Chart ───────────────────────────────────────────────
-        const baseFilterYTD = and(
-            isNotNull(historyOrders.billingDate),
-            ne(historyOrders.billingDate, ""),
-            sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'YYYY') = ${year}`,
-            or(
-                isNull(historyOrders.customerName),
-                notIlike(historyOrders.customerName, '%Chitra Paratama Singapore Branch%')
-            )
-        );
-
-        const ytdData = await db.select({
-            month: sql<string>`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`,
-            rev: sql<number>`SUM(COALESCE(${historyOrders.revenueInLocCurr}, 0))`
-        }).from(historyOrders)
-            .where(baseFilterYTD)
-            .groupBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`)
-            .orderBy(sql`to_char(to_date(${historyOrders.billingDate}, 'MM/DD/YYYY'), 'MM.YYYY')`);
-
-        // ─── Build Result ───────────────────────────────────────────────────────
-        return {
-            success: true,
-            data: {
-                period: periodStr,
-                isYearlyView,
-                targets: {
-                    consolidate: { revenue: revenueConsolidate, forecast: forecastConsolidate },
-                    primeProduct: { revenue: revenuePrimeProduct, forecast: forecastPrime },
-                    service: { revenue: revenueService, forecast: forecastService },
-                    pa: { revenue: revenuePA, forecast: forecastPA },
-                    paService: {
-                        revenue: revenuePA + revenueService,
-                        forecast: forecastPA + forecastService
-                    },
-                    ck: { revenue: revenueCK, forecast: targetMap.get("CK") || 0 },
-                    sis: { revenue: revenueSIS, forecast: targetMap.get("SIS") || 0 },
-                    ma_oc: { revenue: salesmanRevenue.ma_oc, forecast: targetMap.get("MA OC") || 0 },
-                    ma_wis: { revenue: salesmanRevenue.ma_wis, forecast: targetMap.get("MA WIS") || 0 },
-                    ma_fq: { revenue: salesmanRevenue.ma_fq, forecast: targetMap.get("MA FQ") || 0 },
-                    ma_bur: { revenue: salesmanRevenue.ma_bur, forecast: targetMap.get("MA BUR") || 0 },
-                    ma_ag: { revenue: salesmanRevenue.ma_ag, forecast: targetMap.get("MA AG") || 0 },
-                    ma_mic: { revenue: salesmanRevenue.ma_mic, forecast: targetMap.get("MA MIC") || 0 },
-                },
-                materials: materialsData.map(m => ({
-                    desc: m.materialDesc || "Unknown",
-                    revenue: Number(m.totalRevenue),
-                    qty: Number(m.qty)
-                })),
-                revTypes: revTypeTable,
-                matGroups: matGrp1Data.map(m => ({ desc: m.desc || "Unknown", revenue: Number(m.total) })),
-                ytdChart: ytdData.map(y => ({ name: y.month, revenue: Number(y.rev) }))
-            }
-        };
-
+        return await fetchDashboardRevenueForecast(filters)
     } catch (error) {
         console.error("Failed to fetch dashboard revenue forecast:", error);
         return { success: false, error: "Failed to fetch dashboard data" };
+    }
+}
+
+export async function getDashboardInventory() {
+    try {
+        await getAuthenticatedSession("revenue-forecast", "view")
+        return await fetchDashboardInventory()
+    } catch (error) {
+        console.error("Failed to fetch dashboard inventory:", error);
+        return { success: false, error: "Failed to fetch dashboard inventory" };
+    }
+}
+
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
+import { formatCurrency } from "@/lib/utils"
+
+import { generateRevenueReportPdf } from "@/lib/revenue-report-pdf"
+import { resolveUserEmailsFromRolesAndIds } from "@/lib/email"
+
+export async function sendManualRevenueReport(period: string) {
+    try {
+        console.log(`[RevenueReport] Starting manual report for period: ${period}`)
+        await getAuthenticatedSession("email-settings", "edit")
+
+        const [revenueRes, inventoryRes, configRes] = await Promise.all([
+            fetchDashboardRevenueForecast({ period }),
+            fetchDashboardInventory(),
+            getRevenueReportConfig()
+        ])
+
+        if (!revenueRes.success || !inventoryRes.success || !configRes.success) {
+            console.error("[RevenueReport] Failed to fetch data:", { 
+                rev: revenueRes.success, 
+                inv: inventoryRes.success, 
+                conf: configRes.success 
+            })
+            throw new Error("Failed to fetch dashboard data or configuration")
+        }
+
+        const rev = revenueRes.data!
+        const inv = inventoryRes.data!
+        const config = configRes.data!
+
+        console.log(`[RevenueReport] Resolving recipients for roles: ${config.recipientRoles.join(', ')}`)
+        const recipients = await resolveUserEmailsFromRolesAndIds(config.recipientRoles, [])
+        
+        if (recipients.length === 0) {
+            console.warn("[RevenueReport] No recipients resolved.")
+            return { success: false, error: "No recipients configured for revenue report." }
+        }
+
+        console.log(`[RevenueReport] Generating PDF for ${recipients.length} recipients...`)
+        const pdfContent = await generateRevenueReportPdf({
+            ...rev,
+            inventory: inv
+        })
+
+        console.log(`[RevenueReport] Sending email via system template...`)
+        const result = await sendSystemTemplatedEmailByCode({
+            code: SYSTEM_EMAIL_TEMPLATE_CODES.revenueReport,
+            to: recipients,
+            data: {
+                period,
+                customMessage: config.customMessage,
+                consolidateRevenue: formatCurrency(rev.targets.consolidate.revenue),
+                consolidateForecast: formatCurrency(rev.targets.consolidate.forecast),
+                consolidatePct: getPct(rev.targets.consolidate.revenue, rev.targets.consolidate.forecast),
+                
+                primeProductRevenue: formatCurrency(rev.targets.primeProduct.revenue),
+                primeProductForecast: formatCurrency(rev.targets.primeProduct.forecast),
+                primeProductPct: getPct(rev.targets.primeProduct.revenue, rev.targets.primeProduct.forecast),
+                
+                serviceRevenue: formatCurrency(rev.targets.service.revenue),
+                serviceForecast: formatCurrency(rev.targets.service.forecast),
+                servicePct: getPct(rev.targets.service.revenue, rev.targets.service.forecast),
+                
+                paRevenue: formatCurrency(rev.targets.pa.revenue),
+                paForecast: formatCurrency(rev.targets.pa.forecast),
+                paPct: getPct(rev.targets.pa.revenue, rev.targets.pa.forecast),
+
+                ckRevenue: formatCurrency(rev.targets.ck.revenue),
+                ckPct: getPct(rev.targets.ck.revenue, rev.targets.ck.forecast),
+                sisRevenue: formatCurrency(rev.targets.sis.revenue),
+                sisPct: getPct(rev.targets.sis.revenue, rev.targets.sis.forecast),
+
+                inventoryTotal: formatCurrency(inv.total),
+                actionUrl: "/dashboard/revenue-forecast"
+            },
+            ignoreTemplateRecipients: true,
+            attachments: [
+                {
+                    filename: `Revenue_Report_${period}.pdf`,
+                    content: Buffer.from(pdfContent),
+                    contentType: "application/pdf"
+                }
+            ]
+        })
+
+        if (result.success) console.log("[RevenueReport] Manual report sent successfully")
+        else console.error("[RevenueReport] Failed to send email:", result.error)
+
+        return result
+    } catch (error) {
+        console.error("Failed to send manual revenue report:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to send report" }
+    }
+}
+
+const getPct = (actual: number, target: number) => 
+    target > 0 ? ((actual / target) * 100).toFixed(1) : "0.0"
+
+
+export async function getRevenueReportConfig() {
+    try {
+        await getAuthenticatedSession("email-settings", "view")
+        return await fetchRevenueReportConfig()
+    } catch (error) {
+        console.error("Failed to fetch revenue report config:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to fetch configuration" }
+    }
+}
+
+
+export async function saveRevenueReportConfig(config: RevenueReportConfig) {
+    try {
+        await getAuthenticatedSession("email-settings", "edit")
+        
+        const normalizedConfig = normalizeRevenueReportConfig(config)
+        const value = JSON.stringify(normalizedConfig)
+        
+        const existing = await db.select().from(settings).where(eq(settings.key, "revenue_report_config")).limit(1)
+        
+        if (existing.length > 0) {
+            await db.update(settings)
+                .set({ value, updatedAt: new Date() })
+                .where(eq(settings.key, "revenue_report_config"))
+        } else {
+            await db.insert(settings)
+                .values({ key: "revenue_report_config", value })
+        }
+
+        revalidatePath("/dashboard/settings/email")
+        return { success: true, data: normalizedConfig }
+    } catch (error) {
+        console.error("Failed to save revenue report config:", error)
+        return { success: false, error: error instanceof Error ? error.message : "Failed to save configuration" }
     }
 }

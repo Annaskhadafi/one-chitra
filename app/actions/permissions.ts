@@ -59,6 +59,12 @@ export async function syncPermissions() {
         const dynamicResources = collectResourcesFromEditableConfig(editableConfig)
         dynamicResources.forEach((resource) => resources.add(resource))
 
+        // Ensure newly introduced settlement permission is always present even on older navbar configs.
+        resources.add("cost-settlements")
+        resources.add("evhs")
+        resources.add("stock-opname-aktual")
+        resources.add("bundling")
+
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav
         // resources.add('roles') // Already in nav

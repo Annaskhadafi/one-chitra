@@ -15,9 +15,9 @@ export default async function EditDeliveryPage({ params }: { params: Promise<{ i
     return (
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
             <DeliveryForm
-                salesOrders={salesOrders}
+                salesOrders={salesOrders as Parameters<typeof DeliveryForm>[0]["salesOrders"]}
                 warehouses={warehouses}
-                initialData={delivery}
+                initialData={delivery as Parameters<typeof DeliveryForm>[0]["initialData"]}
             />
         </div>
     )

@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import {
     Dialog,
     DialogContent,
@@ -10,6 +11,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Download, X, ExternalLink, FileText } from "lucide-react"
 import type { StockOpnameSession } from "@/lib/types"
+import {
+    extractUploadFilename,
+    isUploadImageFile,
+    resolveUploadDocumentUrl,
+} from "@/lib/upload-url"
 
 interface StockOpnameDocumentPreviewProps {
     session: StockOpnameSession | null
@@ -18,13 +24,23 @@ interface StockOpnameDocumentPreviewProps {
 }
 
 export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpnameDocumentPreviewProps) {
-    if (!session || !session.documentUrl) return null
+    const documentUrl = resolveUploadDocumentUrl(session?.documentUrl)
+    const documentName =
+        session?.documentFileName?.trim() ||
+        extractUploadFilename(session?.documentUrl) ||
+        "document"
+    const documentMimeType = session?.documentFileType?.toLowerCase() ?? ""
+    const isImageDocument =
+        documentMimeType.startsWith("image/") ||
+        isUploadImageFile(session?.documentFileName || session?.documentUrl)
+
+    if (!session || !documentUrl) return null
 
     const handleDownload = () => {
-        if (!session.documentUrl) return
+        if (!documentUrl) return
         const link = document.createElement("a")
-        link.href = session.documentUrl
-        link.download = session.documentFileName || "document.pdf"
+        link.href = documentUrl
+        link.download = documentName
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -47,11 +63,11 @@ export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpna
                                 {session.documentTitle || "Dokumen Hasil Audit Lapangan"}
                             </span>
                             <Badge variant="outline" className="text-[10px] font-bold shrink-0 bg-red-50 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800">
-                                PDF
+                                {isImageDocument ? "IMAGE" : "PDF"}
                             </Badge>
                         </div>
                         <span className="text-xs text-muted-foreground truncate block">
-                            {session.documentFileName || "document.pdf"}
+                            {documentName}
                         </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -60,7 +76,7 @@ export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpna
                             Download
                         </Button>
                         <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
-                            <a href={session.documentUrl} target="_blank" rel="noopener noreferrer">
+                            <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
                                 Open
                             </a>
@@ -73,11 +89,23 @@ export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpna
 
                 {/* Content Viewer */}
                 <div className="flex-1 bg-muted/30 overflow-hidden relative overflow-y-auto">
-                    <iframe
-                        src={`${session.documentUrl}#toolbar=0&view=FitH`}
-                        className="w-full h-full border-none"
-                        title={session.documentTitle || session.name || "Dokumen"}
-                    />
+                    {isImageDocument ? (
+                        <div className="relative w-full h-full min-h-[480px]">
+                            <Image
+                                src={documentUrl}
+                                alt={session.documentTitle || session.name || "Dokumen"}
+                                fill
+                                className="object-contain"
+                                unoptimized
+                            />
+                        </div>
+                    ) : (
+                        <iframe
+                            src={`${documentUrl}#toolbar=0&view=FitH`}
+                            className="w-full h-full border-none"
+                            title={session.documentTitle || session.name || "Dokumen"}
+                        />
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

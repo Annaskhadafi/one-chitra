@@ -7,6 +7,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { DashboardShortcutsCommand } from "@/components/dashboard-shortcuts-command"
 import { SiteHeader } from "@/components/site-header"
 
 import "@/app/dashboard/theme.css"
@@ -18,6 +19,173 @@ import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
+
+const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isLogisticsGroup = item.title === "Logistics & Cost" || item.url === "/dashboard/logistics-costs"
+      if (!isLogisticsGroup) {
+        return item
+      }
+
+      const existingItems = item.items ?? []
+      const hasLogisticsCostLog = existingItems.some((subItem) => subItem.url === "/dashboard/logistics-costs")
+      const hasCostSettlement = existingItems.some((subItem) => subItem.url === "/dashboard/cost-settlements")
+
+      const mergedItems = [...existingItems]
+      if (!hasLogisticsCostLog) {
+        mergedItems.unshift({
+          id: `${item.id}-logistics-cost-log`,
+          title: "Logistics Cost Log",
+          url: "/dashboard/logistics-costs",
+          resource: "logistics-costs",
+          hidden: false,
+        })
+      }
+      if (!hasCostSettlement) {
+        mergedItems.push({
+          id: `${item.id}-cost-settlement`,
+          title: "Cost Settlement",
+          url: "/dashboard/cost-settlements",
+          resource: "cost-settlements",
+          hidden: false,
+        })
+      }
+
+      return {
+        ...item,
+        url: "#",
+        resource: item.resource ?? "logistics-costs",
+        items: mergedItems,
+      }
+    }),
+  }))
+}
+
+const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  const allowedMasterDataUrls = new Set([
+    "/dashboard/products",
+    "/dashboard/warehouse",
+    "/dashboard/rfid-setup",
+  ])
+
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isMasterDataGroup = item.title === "Master Data & Umum"
+      if (!isMasterDataGroup) {
+        return item
+      }
+
+      const seen = new Set<string>()
+      const filteredItems = (item.items ?? [])
+        .filter((subItem) => allowedMasterDataUrls.has(subItem.url))
+        .filter((subItem) => {
+          if (seen.has(subItem.url)) {
+            return false
+          }
+          seen.add(subItem.url)
+          return true
+        })
+
+      const hasWarehouse = filteredItems.some((subItem) => subItem.url === "/dashboard/warehouse")
+      const hasRfidSetup = filteredItems.some((subItem) => subItem.url === "/dashboard/rfid-setup")
+
+      const mergedItems = [...filteredItems]
+      if (!hasWarehouse) {
+        mergedItems.push({
+          id: `${item.id}-warehouse`,
+          title: "Warehouse",
+          url: "/dashboard/warehouse",
+          resource: "warehouses",
+          hidden: false,
+        })
+      }
+      if (!hasRfidSetup) {
+        mergedItems.push({
+          id: `${item.id}-rfid-setup`,
+          title: "RFID Setup",
+          url: "/dashboard/rfid-setup",
+          resource: "warehouses",
+          hidden: false,
+        })
+      }
+
+      return {
+        ...item,
+        url: "#",
+        items: mergedItems,
+      }
+    }),
+  }))
+}
+
+const ensureInventoryControlMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isInventoryGroup = item.title === "Inventory Control" || item.resource === "inventory-control"
+      if (!isInventoryGroup) {
+        return item
+      }
+
+      const existingItems = item.items ?? []
+      const hasRfidMonitoring = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-monitoring")
+      const hasRfidExceptions = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-exceptions")
+      const hasRfidTaggedUnits = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-tagged-units")
+      const hasRfidTraceability = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-traceability")
+
+      if (hasRfidMonitoring && hasRfidExceptions && hasRfidTaggedUnits && hasRfidTraceability) {
+        return item
+      }
+
+      const mergedItems = [...existingItems]
+      if (!hasRfidMonitoring) {
+        mergedItems.push({
+          id: `${item.id}-rfid-monitoring`,
+          title: "RFID Monitoring",
+          url: "/dashboard/rfid-monitoring",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidExceptions) {
+        mergedItems.push({
+          id: `${item.id}-rfid-exceptions`,
+          title: "RFID Exceptions",
+          url: "/dashboard/rfid-exceptions",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidTaggedUnits) {
+        mergedItems.push({
+          id: `${item.id}-rfid-tagged-units`,
+          title: "RFID Tagged Units",
+          url: "/dashboard/rfid-tagged-units",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidTraceability) {
+        mergedItems.push({
+          id: `${item.id}-rfid-traceability`,
+          title: "RFID Traceability",
+          url: "/dashboard/rfid-traceability",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+
+      return {
+        ...item,
+        url: "#",
+        items: mergedItems,
+      }
+    }),
+  }))
+}
 
 // ... imports
 
@@ -46,7 +214,11 @@ export default async function DashboardLayout({
     getNavbarTheme(),
     getNavbarMenuSettingsAction(),
   ])
-  const runtimeNavigationSections = toRuntimeNavigationConfig(navbarMenuSettings)
+  const runtimeNavigationSections = ensureInventoryControlMenu(
+    ensureMasterDataMenu(
+      ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+    ),
+  )
 
   const user = session?.user as {
     name: string;
@@ -178,7 +350,8 @@ export default async function DashboardLayout({
             avatar: user.image || "",
           } : undefined
         } />
-        <SidebarInset>
+        <DashboardShortcutsCommand navigationSections={navigationSectionsWithStockSapNew} />
+        <SidebarInset suppressHydrationWarning>
           <SiteHeader />
           <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
         </SidebarInset>

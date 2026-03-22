@@ -1,4 +1,4 @@
-import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, priceLists, priceListItems, priceHistory, calendarEvents } from "@/db/schema"
+import type { products, customers, warehouses, roles, user, stockLevels, salesOrders, salesOrderItems, deliveries, deliveryItems, quotations, quotationItems, stockMovements, stockOpnameSessions, stockOpnameItems, stockOpnameSignatures, priceLists, priceListItems, priceHistory, calendarEvents, aiInventoryPredictions, restockNotifications, aiSettings } from "@/db/schema"
 import { type InferSelectModel, type InferInsertModel } from "drizzle-orm"
 
 export type Product = InferSelectModel<typeof products> & { totalStock?: number | null }
@@ -17,10 +17,19 @@ export type NewRole = InferInsertModel<typeof roles>
 
 export type User = InferSelectModel<typeof user>
 
-export type Stock = InferSelectModel<typeof stockLevels> & {
-    product?: Product | null
-    warehouse?: Warehouse | null
-}
+type StockLevelBase = InferSelectModel<typeof stockLevels>
+
+export type Stock = Pick<
+    StockLevelBase,
+    "id" | "warehouseId" | "productId" | "valuationValue" | "totalStock" | "minStock"
+> &
+    Partial<Omit<
+        StockLevelBase,
+        "id" | "warehouseId" | "productId" | "valuationValue" | "totalStock" | "minStock"
+    >> & {
+        product?: Partial<Product> | null
+        warehouse?: Partial<Warehouse> | null
+    }
 export type NewStock = InferInsertModel<typeof stockLevels>
 
 export type SalesOrder = InferSelectModel<typeof salesOrders>
@@ -29,8 +38,9 @@ export type SalesOrderItem = InferSelectModel<typeof salesOrderItems>
 export type NewSalesOrderItem = InferInsertModel<typeof salesOrderItems>
 
 export type SalesOrderWithRelations = SalesOrder & {
-    customer: Customer
-    createdByUser: { id: string; name: string; email: string } | null
+    customer: Customer | null
+    createdByUser: User | null
+    salesPerson: User | null
     items: (SalesOrderItem & {
         product: Product | null
     })[]
@@ -47,7 +57,6 @@ export type QuotationItem = InferSelectModel<typeof quotationItems>
 export type NewQuotationItem = InferInsertModel<typeof quotationItems>
 
 export type BillingRecordDisplay = {
-    deliveryItemId: number
     billingRecordId: number | null
     no: string | null
     year: number | null
@@ -75,13 +84,20 @@ export type BillingRecordDisplay = {
     actualNoDo: string | null
     tglDoFaktur: Date | null
     remaks: string | null
-    dateSendInvoice: Date | null
-    receiverDate: Date | null
-    recvDateApproved: Date | null
-    eFaktur: string | null
-    status: string
+    dateSendInvoice?: string | null;
+    receiverDate?: string | null;
+    recvDateApproved?: string | null;
+    eFaktur?: string | null;
+    modeDelivery?: string | null;
+    noResi?: string | null;
+    statusDelivery?: string | null;
+    scanInvUrl?: string | null;
+    // joined item properties (as generic)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    items?: any[];
+    status: string | null
     deliveryNumber: string | null
-    originalPrice: string
+    originalPrice: string | null
 }
 
 export type StockMovement = InferSelectModel<typeof stockMovements> & {
@@ -137,6 +153,14 @@ export type ReorderAlert = Stock & {
     product: Product
     warehouse: Warehouse
     urgency: 'critical' | 'warning' | 'ok'
+}
+
+export type ReorderPredictionStock = Stock & {
+    product: Product
+    warehouse: Warehouse
+    mlMinimumStock: number | null
+    mlPredictionId: number | null
+    mlPredictedAt: Date | string | null
 }
 
 // Price Management
@@ -195,4 +219,74 @@ export type FCEvent = {
         customerName?: string
         dbId?: number
     }
+}
+
+// AI Inventory Forecast types
+export type AIPrediction = InferSelectModel<typeof aiInventoryPredictions>
+export type NewAIPrediction = InferInsertModel<typeof aiInventoryPredictions>
+
+export type RestockNotification = InferSelectModel<typeof restockNotifications> & {
+    prediction?: AIPrediction | null
+}
+export type NewRestockNotification = InferInsertModel<typeof restockNotifications>
+
+export type AISetting = InferSelectModel<typeof aiSettings>
+export type NewAISetting = InferInsertModel<typeof aiSettings>
+
+// Dashboard metrics type
+export type DashboardMetrics = {
+    predictions7Days: number
+    predictions30Days: number
+    predictionsByType: {
+        replenishment: number
+        safetyStock: number
+        customerRecommendation: number
+    }
+    topRestockProducts: Array<{
+        productCode: string
+        productName: string | null
+        recommendedStock: number
+        currentStock: number | null
+    }>
+    productsNearRestock: number
+    averageAccuracy: number | null
+}
+
+// Urgency levels for notifications
+export type UrgencyLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM'
+
+// Prediction types
+export type PredictionType = 'REPLENISHMENT' | 'SAFETY_STOCK' | 'CUSTOMER_RECOMMENDATION'
+
+// Accuracy calculation result
+export type AccuracyResult = {
+    predictionId: number
+    accuracyPercentage: number
+    predicted: number
+    actual: number
+    variance: number
+}
+
+// Bulk prediction result
+export type BulkPredictionResult = {
+    batchId: string
+    totalProcessed: number
+    successful: number
+    failed: number
+    fromCache: number
+    results: Array<{
+        productCode: string
+        status: 'success' | 'failed' | 'cached'
+        predictionId?: number
+        error?: string
+    }>
+}
+
+// AI Settings configuration
+export type AIConfig = {
+    model: string
+    temperature: number
+    maxTokens: number
+    cacheDuration: number // in hours
+    thinkingMode: boolean
 }

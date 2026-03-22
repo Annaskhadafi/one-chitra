@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getPendingEmailReminders, markReminderSent, getCustomersWithTomorrowBirthday } from "@/app/actions/calendar-events"
 import { getSmtpSettings } from "@/app/actions/email"
-import { sendEmail } from "@/lib/email"
-import type { SmtpConfig } from "@/lib/email"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
 
@@ -30,17 +30,9 @@ export async function GET(request: Request) {
         return NextResponse.json({ message: "SMTP not configured or inactive. Skipping." })
     }
 
-    const smtp: SmtpConfig = {
-        host: smtpRow.host,
-        port: Number(smtpRow.port),
-        secure: smtpRow.secure,
-        username: smtpRow.username,
-        password: smtpRow.password,
-        fromEmail: smtpRow.fromEmail,
-        fromName: smtpRow.fromName,
-    }
-
     const results: string[] = []
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
+    const calendarUrl = baseUrl ? `${baseUrl}/dashboard/calendar` : "/dashboard/calendar"
 
     // ── 1. Send calendar event reminders ─────────────────────────────────────
     const pendingReminders = await getPendingEmailReminders()
@@ -48,16 +40,24 @@ export async function GET(request: Request) {
     for (const ev of pendingReminders) {
         if (!ev.emailReminderTo) continue
         try {
-            await sendEmail(
-                {
-                    to: ev.emailReminderTo,
-                    subject: `🔔 Reminder: ${ev.title}`,
-                    html: buildReminderHtml(ev.title, ev.startDate, ev.description),
+            const sendResult = await sendSystemTemplatedEmailByCode({
+                code: SYSTEM_EMAIL_TEMPLATE_CODES.calendarEventReminder,
+                to: ev.emailReminderTo,
+                data: {
+                    eventTitle: ev.title,
+                    eventDate: format(ev.startDate, "EEEE, dd MMMM yyyy HH:mm", { locale: localeId }),
+                    eventDescription: ev.description || "-",
+                    actionUrl: calendarUrl,
+                    appName: "One Chitra",
                 },
-                smtp
-            )
-            await markReminderSent(ev.id)
-            results.push(`✅ Reminder sent for event #${ev.id}: ${ev.title}`)
+            })
+
+            if (sendResult.success) {
+                await markReminderSent(ev.id)
+                results.push(`✅ Reminder sent for event #${ev.id}: ${ev.title}`)
+            } else {
+                results.push(`❌ Failed for event #${ev.id}: ${sendResult.error || "Template inactive or SMTP issue"}`)
+            }
         } catch (err) {
             results.push(`❌ Failed for event #${ev.id}: ${err instanceof Error ? err.message : String(err)}`)
         }
@@ -69,15 +69,20 @@ export async function GET(request: Request) {
     for (const c of birthdayCustomers) {
         if (!c.email) continue
         try {
-            await sendEmail(
-                {
-                    to: c.email,
-                    subject: `🎂 Selamat Ulang Tahun, ${c.name}!`,
-                    html: buildBirthdayHtml(c.name),
+            const sendResult = await sendSystemTemplatedEmailByCode({
+                code: SYSTEM_EMAIL_TEMPLATE_CODES.customerBirthdayGreeting,
+                to: c.email,
+                data: {
+                    customerName: c.name,
+                    appName: "One Chitra",
                 },
-                smtp
-            )
-            results.push(`✅ Birthday email sent to ${c.name} (${c.email})`)
+            })
+
+            if (sendResult.success) {
+                results.push(`✅ Birthday email sent to ${c.name} (${c.email})`)
+            } else {
+                results.push(`❌ Birthday email failed for ${c.name}: ${sendResult.error || "Template inactive or SMTP issue"}`)
+            }
         } catch (err) {
             results.push(`❌ Birthday email failed for ${c.name}: ${err instanceof Error ? err.message : String(err)}`)
         }
@@ -90,35 +95,3 @@ export async function GET(request: Request) {
     })
 }
 
-// ─── HTML templates ──────────────────────────────────────────────────────────
-
-function buildReminderHtml(title: string, startDate: Date, description?: string | null): string {
-    const dateStr = format(startDate, "EEEE, dd MMMM yyyy HH:mm", { locale: localeId })
-    return `
-    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#f9fafb;border-radius:8px;">
-      <h2 style="color:#111827;margin-bottom:4px;">🔔 Pengingat Event</h2>
-      <h3 style="color:#1d4ed8;margin-top:0;">${title}</h3>
-      <p style="color:#6b7280;">📅 ${dateStr}</p>
-      ${description ? `<p style="color:#374151;">${description}</p>` : ""}
-      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
-      <p style="color:#9ca3af;font-size:12px;">Email ini dikirim otomatis oleh sistem One Chitra.</p>
-    </div>
-  `
-}
-
-function buildBirthdayHtml(name: string): string {
-    return `
-    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#fdf2f8;border-radius:8px;text-align:center;">
-      <h1 style="font-size:48px;margin:0;">🎂</h1>
-      <h2 style="color:#be185d;">Selamat Ulang Tahun!</h2>
-      <p style="color:#374151;font-size:18px;">Halo <strong>${name}</strong>,</p>
-      <p style="color:#6b7280;">
-        Semoga ulang tahun Anda penuh kebahagiaan, kesehatan, dan kesuksesan.
-        Terima kasih telah menjadi pelanggan setia kami! 🎉
-      </p>
-      <p style="color:#be185d;font-weight:600;margin-top:24px;">Salam hangat,<br/>Tim One Chitra</p>
-      <hr style="border:none;border-top:1px solid #fbcfe8;margin:24px 0;" />
-      <p style="color:#9ca3af;font-size:12px;">Email ini dikirim otomatis oleh sistem One Chitra.</p>
-    </div>
-  `
-}

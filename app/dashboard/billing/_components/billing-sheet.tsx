@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Sheet,
@@ -15,20 +15,26 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { updateBillingRecord } from "@/app/actions/billing"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
+import { uploadFile } from "@/app/actions/upload"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, UploadCloud } from "lucide-react"
 import type { BillingRecordDisplay } from "@/lib/types"
 
 interface BillingSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     record: BillingRecordDisplay | null
+    onSuccess?: () => void
 }
 
-export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) {
+export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
-    const [formData, setFormData] = useState<Partial<BillingRecordDisplay>>({})
+    const [isTracking, setIsTracking] = useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [formData, setFormData] = useState<any>({})
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
         if (record) {
@@ -36,26 +42,111 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
         }
     }, [record])
 
+    // Auto-track JNE resi saat noResi berubah (debounce 1.5 detik)
+    useEffect(() => {
+        if (formData.modeDelivery !== 'JNE' || !formData.noResi || formData.noResi.trim().length < 10) return
+
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+
+        debounceRef.current = setTimeout(async () => {
+            setIsTracking(true)
+            try {
+                const result = await trackJneResi(formData.noResi.trim())
+                if (result.success && result.data) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    setFormData((prev: any) => ({
+                        ...prev,
+                        statusDelivery: result.data.statusAction,
+                        receiverDate: result.data.receiverDate || prev.receiverDate
+                    }))
+                }
+            } catch {
+                // Gagal silent — user tidak perlu tahu gagal auto-track
+            } finally {
+                setIsTracking(false)
+            }
+        }, 1500)
+
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.noResi, formData.modeDelivery])
+
     const handleChange = (key: string, value: unknown) => {
-        setFormData((prev) => ({ ...prev, [key]: value }))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setFormData((prev: any) => ({ ...prev, [key]: value }))
     }
 
     const handleSubmit = async () => {
-        if (!record?.deliveryItemId) return
+        if (!record?.poNo) return
 
         setIsLoading(true)
         try {
-            const { deliveryItemId: _deliveryItemId } = formData
+            // Hanya ekstrak properties yang diperbolehkan di skema Drizzle UpdateBillingRecord
+            const allowedFields = [
+                "dateInvoice", "noInvSap", "eFaktur", "ddpAddress", "paymentType", "custId",
+                "dateSendInvoice", "tglDoFaktur", "nomorDoSap", "modeDelivery", "noResi",
+                "statusDelivery", "receiverDate", "scanInvUrl"
+            ]
 
-            await updateBillingRecord({
-                deliveryItemId: record.deliveryItemId as number,
-                ...formData
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const updatePayload: any = {}
+            for (const key of allowedFields) {
+                if (formData[key] !== undefined) {
+                    updatePayload[key] = formData[key] // Ambil nilai state terakhir
+                }
+            }
+
+            const result = await updateBillingRecord({
+                poNo: formData.poNo || record.poNo,
+                ...updatePayload
             })
+
+            // Jika API merespons success: false, lempar Error spesifik
+            if (!result || !result.success) throw new Error(result?.error || "Gagal memperbarui row DB")
 
             toast.success("Record updated successfully")
             onOpenChange(false)
-        } catch (_error) {
-            toast.error("Failed to update record")
+            onSuccess?.()
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update record")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !record?.poNo) return
+
+        setIsLoading(true)
+        try {
+            const FormPayload = new FormData()
+            FormPayload.append("file", file)
+
+            const result = await uploadFile(FormPayload)
+            if (result.success && result.url) {
+                handleChange("scanInvUrl", result.url)
+
+                // AUTO SAVE langsung ke DB tanpa harus klik tombol Save
+                const saveResult = await updateBillingRecord({
+                    poNo: record.poNo as string,
+                    scanInvUrl: result.url
+                })
+
+                if (saveResult && saveResult.success) {
+                    toast.success("Dokumen Scan Inv terunggah dan tersimpan otomatis")
+                    onSuccess?.()
+                } else {
+                    toast.error(saveResult?.error || "Berhasil unggah tapi gagal simpan ke DB")
+                }
+            } else {
+                toast.error(result.error || "Failed to upload file")
+            }
+        } catch (error) {
+            toast.error("An error occurred while uploading")
         } finally {
             setIsLoading(false)
         }
@@ -65,7 +156,7 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[400px] sm:w-[540px]">
+            <SheetContent className="w-full sm:max-w-3xl sm:w-[800px] p-6 sm:p-10">
                 <SheetHeader>
                     <SheetTitle>Billing Details</SheetTitle>
                     <SheetDescription>
@@ -73,77 +164,38 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
                     </SheetDescription>
                 </SheetHeader>
                 <ScrollArea className="h-[calc(100vh-120px)] pr-4">
-                    <div className="grid gap-4 py-4">
+                    <div className="grid gap-6 py-4 px-1 sm:px-4">
                         <div className="space-y-4">
                             <h3 className="font-medium">Basic Info</h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label>No</Label>
-                                    <Input value={formData.no || ""} onChange={e => handleChange("no", e.target.value)} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Year</Label>
-                                    <Input type="number" value={formData.year || ""} onChange={e => handleChange("year", parseInt(e.target.value))} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Month</Label>
-                                    <Input value={formData.month || ""} onChange={e => handleChange("month", e.target.value)} />
-                                </div>
-                                <div className="space-y-2">
                                     <Label>PO No</Label>
                                     <Input value={formData.poNo || ""} onChange={e => handleChange("poNo", e.target.value)} />
                                 </div>
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        <div className="space-y-4">
-                            <h3 className="font-medium">Product & Price</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2 space-y-2">
-                                    <Label>Material</Label>
-                                    <Input value={formData.materialDescription || ""} disabled className="bg-muted" />
-                                </div>
                                 <div className="space-y-2">
-                                    <Label>Qty</Label>
-                                    <Input value={formData.qty || ""} onChange={e => handleChange("qty", e.target.value)} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Curr</Label>
-                                    <Input value={formData.curr || ""} onChange={e => handleChange("curr", e.target.value)} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Price/Pcs</Label>
-                                    <Input type="number" value={formData.pricePerPcsIdr || ""} onChange={e => handleChange("pricePerPcsIdr", parseFloat(e.target.value))} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Total Price</Label>
-                                    <Input type="number" value={formData.totalPriceIdr || ""} onChange={e => handleChange("totalPriceIdr", parseFloat(e.target.value))} />
-                                </div>
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        <div className="space-y-4">
-                            <h3 className="font-medium">Tax & Invoice</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>PPN</Label>
-                                    <Input type="number" value={formData.ppn || ""} onChange={e => handleChange("ppn", parseFloat(e.target.value))} />
+                                    <Label>Date Invoice</Label>
+                                    <Input type="date" value={formData.dateInvoice ? new Date(formData.dateInvoice).toISOString().split('T')[0] : ""} onChange={e => handleChange("dateInvoice", new Date(e.target.value))} />
+                                    <p className="text-xs text-muted-foreground mt-1 text-green-600">Year and Month will be automated from Date Invoice.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>No INV SAP</Label>
                                     <Input value={formData.noInvSap || ""} onChange={e => handleChange("noInvSap", e.target.value)} />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Date Invoice</Label>
-                                    <Input type="date" value={formData.dateInvoice ? new Date(formData.dateInvoice).toISOString().split('T')[0] : ""} onChange={e => handleChange("dateInvoice", new Date(e.target.value))} />
-                                </div>
-                                <div className="space-y-2">
                                     <Label>e-Faktur</Label>
                                     <Input value={formData.eFaktur || ""} onChange={e => handleChange("eFaktur", e.target.value)} />
+                                </div>
+                                <div className="col-span-2 space-y-2">
+                                    <Label>DDP Address</Label>
+                                    <Textarea value={formData.ddpAddress || ""} onChange={e => handleChange("ddpAddress", e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Payment Type</Label>
+                                    <Input value={formData.paymentType || ""} onChange={e => handleChange("paymentType", e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Cust ID</Label>
+                                    <Input value={formData.custId || ""} onChange={e => handleChange("custId", e.target.value)} />
                                 </div>
                             </div>
                         </div>
@@ -154,17 +206,67 @@ export function BillingSheet({ open, onOpenChange, record }: BillingSheetProps) 
                             <h3 className="font-medium">Status & Logistics</h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label>Nomor DO SAP</Label>
-                                    <Input value={formData.nomorDoSap || ""} onChange={e => handleChange("nomorDoSap", e.target.value)} />
+                                    <Label>Date Send Invoice</Label>
+                                    <Input type="date" value={formData.dateSendInvoice ? new Date(formData.dateSendInvoice).toISOString().split('T')[0] : ""} onChange={e => handleChange("dateSendInvoice", new Date(e.target.value))} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Tgl DO Faktur</Label>
                                     <Input type="date" value={formData.tglDoFaktur ? new Date(formData.tglDoFaktur).toISOString().split('T')[0] : ""} onChange={e => handleChange("tglDoFaktur", new Date(e.target.value))} />
                                 </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Remarks</Label>
-                                <Textarea value={formData.remaks || ""} onChange={e => handleChange("remaks", e.target.value)} />
+                                <div className="space-y-2">
+                                    <Label>Nomor DO SAP</Label>
+                                    <Input value={formData.nomorDoSap || ""} onChange={e => handleChange("nomorDoSap", e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Mode Delivery</Label>
+                                    <Select value={formData.modeDelivery || ""} onValueChange={val => handleChange("modeDelivery", val)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select mode" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="JNE">JNE</SelectItem>
+                                            <SelectItem value="PORTAL">PORTAL</SelectItem>
+                                            <SelectItem value="HANDCARRY">HANDCARRY</SelectItem>
+                                            <SelectItem value="PANDUSIWI">PANDUSIWI</SelectItem>
+                                            <SelectItem value="CENDANA">CENDANA</SelectItem>
+                                            <SelectItem value="BYEMAIL">BYEMAIL</SelectItem>
+                                            <SelectItem value="TIKI">TIKI</SelectItem>
+                                            <SelectItem value="WAHANA">WAHANA</SelectItem>
+                                            <SelectItem value="POS">POS</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>No. Resi</Label>
+                                    <div className="relative">
+                                        <Input value={formData.noResi || ""} onChange={e => handleChange("noResi", e.target.value)} placeholder={formData.modeDelivery === 'JNE' ? "Input resi → auto track..." : ""} />
+                                        {isTracking && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {formData.modeDelivery === 'JNE' && (
+                                        <p className="text-xs text-muted-foreground">Status & receiver date akan terisi otomatis setelah input resi.</p>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Status Delivery</Label>
+                                    <Input value={formData.statusDelivery || ""} onChange={e => handleChange("statusDelivery", e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Receiver Date</Label>
+                                    <Input type="date" value={formData.receiverDate ? new Date(formData.receiverDate).toISOString().split('T')[0] : ""} onChange={e => handleChange("receiverDate", new Date(e.target.value))} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Upload Scan INV</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="file" onChange={handleFileUpload} accept="image/*,application/pdf" className="text-xs" />
+                                        {formData.scanInvUrl && (
+                                            <a href={formData.scanInvUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">View</a>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

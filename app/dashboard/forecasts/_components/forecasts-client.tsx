@@ -65,7 +65,7 @@ export function ForecastsClient({ initialData }: { initialData: ForecastPeriodDa
                             ) : (
                                 initialData.map((row) => {
                                     const cons = row.items.find(i => i.targetName === "Consolidate")?.amount || 0;
-                                    const formattedCons = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(cons)
+                                    const formattedCons = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cons)
 
                                     return (
                                         <tr key={row.period} className="border-b last:border-0 hover:bg-muted/50 transition-colors">

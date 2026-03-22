@@ -1,5 +1,6 @@
-import { getSalesOrder } from "@/app/actions/sales-order"
+import { getSalesOrder, getSalesOrderPicUsers } from "@/app/actions/sales-order"
 import { getCustomers } from "@/app/actions/customer"
+import { getEvhsMasterPrices } from "@/app/actions/evhs-master"
 import { getProducts } from "@/app/actions/product"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { SalesOrderForm } from "../../_components/sales-order-form"
@@ -9,11 +10,13 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
     const { id } = await params
     const orderId = parseInt(id)
 
-    const [order, customers, products, warehouses] = await Promise.all([
+    const [order, customers, products, warehouses, users, ckMasterPrices] = await Promise.all([
         getSalesOrder(orderId),
         getCustomers(),
         getProducts(),
         getWarehouses(),
+        getSalesOrderPicUsers(),
+        getEvhsMasterPrices(),
     ])
 
     if (!order) {
@@ -25,7 +28,9 @@ export default async function EditSalesOrderPage({ params }: { params: Promise<{
             customers={customers}
             products={products}
             warehouses={warehouses}
-            initialData={order}
+            users={users}
+            ckMasterPrices={ckMasterPrices}
+            initialData={order as Parameters<typeof SalesOrderForm>[0]["initialData"]}
         />
     )
 }

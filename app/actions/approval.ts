@@ -1,9 +1,9 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { readdir } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
-import { and, asc, count, desc, eq, ilike, inArray } from "drizzle-orm"
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm"
 import Papa from "papaparse"
 import * as XLSX from "xlsx"
 import { db } from "@/db"
@@ -17,10 +17,15 @@ import {
     approvalOrgStructureNodes,
     approvalOrgStructures,
     approvalRequests,
+    quotations,
     user,
 } from "@/db/schema"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
-import { sendNotificationEmail } from "@/lib/email"
+import type { ActionResult, ApprovalReportsData, ApprovalStatusItem, StatusFilter, StepReorderItem, UIStepType } from "@/app/dashboard/approvals/_lib/types"
+import { canRevert, validateNotePolicy, validateStepReorder } from "@/app/dashboard/approvals/_lib/utils"
+import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
+import { processEmailNotificationRulesForSnapshot } from "@/lib/email-notification-rules"
 
 type DecisionType = "approve" | "reject"
 
@@ -43,6 +48,44 @@ type WebsiteFormOption = {
     formKey: string
     formName: string
     modulePath: string
+}
+
+const DASHBOARD_ROUTE_PREFIX = "/dashboard"
+const DASHBOARD_ROOT_DIR = path.resolve(process.cwd(), "app", "dashboard")
+
+export type ApprovalFieldDataType = "string" | "number" | "date" | "boolean" | "array"
+
+export type ApprovalFormFieldOption = {
+    key: string
+    dataType: ApprovalFieldDataType
+}
+
+const FIELD_SCAN_IGNORE = new Set([
+    "open",
+    "isOpen",
+    "loading",
+    "isLoading",
+    "submitting",
+    "isSubmitting",
+    "mounted",
+    "router",
+    "data",
+    "items",
+    "error",
+    "errors",
+    "result",
+    "response",
+    "file",
+])
+
+const FIELD_KEY_REGEX = /^[a-z][a-zA-Z0-9]*$/
+
+const DATA_TYPE_PRIORITY: Record<ApprovalFieldDataType, number> = {
+    string: 1,
+    number: 2,
+    date: 3,
+    boolean: 4,
+    array: 5,
 }
 
 function toTitleCase(value: string) {
@@ -68,6 +111,42 @@ function buildFormOptionFromRoute(route: string): WebsiteFormOption {
         formName,
         modulePath: cleanRoute,
     }
+}
+
+function normalizeModuleRoute(modulePath: string): string | null {
+    const raw = String(modulePath ?? "").trim().replace(/\\/g, "/")
+    if (!raw) {
+        return null
+    }
+
+    const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`
+    const normalized = withLeadingSlash.replace(/\/+/g, "/").replace(/\/+$/, "") || "/"
+
+    if (normalized !== DASHBOARD_ROUTE_PREFIX && !normalized.startsWith(`${DASHBOARD_ROUTE_PREFIX}/`)) {
+        return null
+    }
+
+    const segments = normalized.split("/").filter(Boolean)
+    if (segments.some((segment) => segment === "." || segment === ".." || segment.includes("\0"))) {
+        return null
+    }
+
+    return normalized
+}
+
+function resolveSafeDashboardModuleDir(modulePath: string): string | null {
+    const normalizedRoute = normalizeModuleRoute(modulePath)
+    if (!normalizedRoute) {
+        return null
+    }
+
+    const relativePath = normalizedRoute.slice(1)
+    const resolvedDir = path.resolve(process.cwd(), "app", relativePath)
+    if (resolvedDir === DASHBOARD_ROOT_DIR || resolvedDir.startsWith(`${DASHBOARD_ROOT_DIR}${path.sep}`)) {
+        return resolvedDir
+    }
+
+    return null
 }
 
 async function collectDashboardRoutes(currentDir: string, segments: string[] = []): Promise<string[]> {
@@ -96,6 +175,119 @@ async function collectDashboardRoutes(currentDir: string, segments: string[] = [
     return routes
 }
 
+async function collectModuleFiles(currentDir: string): Promise<string[]> {
+    const entries = await readdir(currentDir, { withFileTypes: true })
+    const files: string[] = []
+
+    for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name)
+        if (entry.isDirectory()) {
+            if (entry.name.startsWith(".") || entry.name === "node_modules") {
+                continue
+            }
+
+            files.push(...await collectModuleFiles(fullPath))
+            continue
+        }
+
+        if (entry.name.endsWith(".tsx") || entry.name.endsWith(".ts")) {
+            files.push(fullPath)
+        }
+    }
+
+    return files
+}
+
+function inferDataType(fieldKey: string, initializer?: string): ApprovalFieldDataType {
+    const normalizedKey = fieldKey.toLowerCase()
+    const normalizedInitializer = (initializer ?? "").trim().toLowerCase()
+
+    if (normalizedInitializer.includes("[]") || normalizedInitializer.includes("array.from") || normalizedKey.endsWith("ids")) {
+        return "array"
+    }
+
+    if (normalizedInitializer.includes("true") || normalizedInitializer.includes("false") || normalizedKey.startsWith("is") || normalizedKey.startsWith("has")) {
+        return "boolean"
+    }
+
+    if (
+        normalizedInitializer.includes("number(") ||
+        normalizedInitializer.includes("parseint") ||
+        normalizedInitializer.includes("parsefloat") ||
+        /(^|[^a-z])\d+(\.\d+)?($|[^a-z])/.test(normalizedInitializer) ||
+        normalizedKey.includes("amount") ||
+        normalizedKey.includes("price") ||
+        normalizedKey.includes("qty") ||
+        normalizedKey.includes("quantity") ||
+        normalizedKey.includes("total") ||
+        normalizedKey.includes("count") ||
+        normalizedKey.includes("discount") ||
+        normalizedKey.includes("shipping") ||
+        normalizedKey.endsWith("id")
+    ) {
+        return "number"
+    }
+
+    if (
+        normalizedInitializer.includes("new date") ||
+        normalizedInitializer.includes("toisostring") ||
+        normalizedKey.includes("date") ||
+        normalizedKey.includes("time") ||
+        normalizedKey.endsWith("at")
+    ) {
+        return "date"
+    }
+
+    return "string"
+}
+
+function upsertFieldType(fieldTypeMap: Map<string, ApprovalFieldDataType>, fieldKey: string, nextType: ApprovalFieldDataType) {
+    const existing = fieldTypeMap.get(fieldKey)
+    if (!existing || DATA_TYPE_PRIORITY[nextType] > DATA_TYPE_PRIORITY[existing]) {
+        fieldTypeMap.set(fieldKey, nextType)
+    }
+}
+
+function pickFieldMetaFromSource(source: string): ApprovalFormFieldOption[] {
+    const fieldTypeMap = new Map<string, ApprovalFieldDataType>()
+
+    const stateRegex = /const\s*\[\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*set[A-Z][a-zA-Z0-9_]*\s*\]\s*=\s*useState\(([^)]*)\)/g
+    const formDataRegex = /formData\.get\(\s*["']([a-zA-Z_][a-zA-Z0-9_]*)["']\s*\)/g
+    const fieldNameRegex = /name\s*=\s*["']([a-zA-Z_][a-zA-Z0-9_]*)["']/g
+
+    for (const match of source.matchAll(stateRegex)) {
+        const candidate = match[1]
+        const initializer = match[2]
+        if (!candidate) continue
+        if (FIELD_SCAN_IGNORE.has(candidate)) continue
+        if (!FIELD_KEY_REGEX.test(candidate)) continue
+
+        upsertFieldType(fieldTypeMap, candidate, inferDataType(candidate, initializer))
+    }
+
+    for (const match of source.matchAll(formDataRegex)) {
+        const candidate = match[1]
+        if (!candidate) continue
+        if (FIELD_SCAN_IGNORE.has(candidate)) continue
+        if (!FIELD_KEY_REGEX.test(candidate)) continue
+
+        upsertFieldType(fieldTypeMap, candidate, inferDataType(candidate))
+    }
+
+    for (const match of source.matchAll(fieldNameRegex)) {
+        const candidate = match[1]
+        if (!candidate) continue
+        if (FIELD_SCAN_IGNORE.has(candidate)) continue
+        if (!FIELD_KEY_REGEX.test(candidate)) continue
+
+        upsertFieldType(fieldTypeMap, candidate, inferDataType(candidate))
+    }
+
+    return Array.from(fieldTypeMap.entries())
+        .map(([key, dataType]) => ({ key, dataType }))
+        .sort((a, b) => a.key.localeCompare(b.key))
+}
+
 function safeRevalidatePath(path: string) {
     try {
         revalidatePath(path)
@@ -104,13 +296,343 @@ function safeRevalidatePath(path: string) {
     }
 }
 
-async function resolveAssigneeIds(stepId: number) {
+function getStepDueAt(fromDate: Date, slaDays: number | null | undefined): Date | null {
+    const safeDays = Number(slaDays ?? 0)
+    if (!Number.isFinite(safeDays) || safeDays <= 0) {
+        return null
+    }
+
+    const dueAt = new Date(fromDate)
+    dueAt.setDate(dueAt.getDate() + Math.floor(safeDays))
+    return dueAt
+}
+
+type WorkflowNodeKind =
+    | "approvalStep"
+    | "parallelApproval"
+    | "conditionNode"
+    | "conditionByField"
+    | "notifyNode"
+    | "autoApproveNode"
+    | "delayNode"
+    | "subWorkflowNode"
+    | "deadlineBranchNode"
+    | "waitEventNode"
+    | "cancelNode"
+    | "switchNode"
+    | "businessDelayNode"
+    | "requiredAttachmentNode"
+    | "dynamicRoleResolverNode"
+
+type WorkflowRuntimeContext = {
+    requestDueAt?: Date | null
+    requestSubmittedAt?: Date | null
+    requestMetadata?: Record<string, unknown>
+}
+
+type WorkflowTransition = {
+    handle: string
+    targetStepOrder: number | null
+    target: "step" | "end"
+}
+
+function normalizeComparisonOperator(operator: unknown): string {
+    if (typeof operator !== "string") return "eq"
+
+    const legacyMap: Record<string, string> = {
+        ">": "gt",
+        ">=": "gte",
+        "<": "lt",
+        "<=": "lte",
+        "==": "eq",
+        "!=": "neq",
+        equals: "eq",
+        not_equals: "neq",
+    }
+
+    return legacyMap[operator] ?? operator
+}
+
+function getNodeKind(conditionJson: Record<string, unknown> | null | undefined): WorkflowNodeKind {
+    const raw = conditionJson?.nodeKind
+    if (
+        raw === "approvalStep" ||
+        raw === "parallelApproval" ||
+        raw === "conditionNode" ||
+        raw === "conditionByField" ||
+        raw === "notifyNode" ||
+        raw === "autoApproveNode" ||
+        raw === "delayNode" ||
+        raw === "subWorkflowNode" ||
+        raw === "deadlineBranchNode" ||
+        raw === "waitEventNode" ||
+        raw === "cancelNode" ||
+        raw === "switchNode" ||
+        raw === "businessDelayNode" ||
+        raw === "requiredAttachmentNode" ||
+        raw === "dynamicRoleResolverNode"
+    ) {
+        return raw
+    }
+    return "approvalStep"
+}
+
+function parseRequiredKeys(raw: unknown): string[] {
+    if (typeof raw !== "string") return []
+    return raw
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+}
+
+function getTransitions(conditionJson: Record<string, unknown> | null | undefined): WorkflowTransition[] {
+    if (!conditionJson || !Array.isArray(conditionJson.transitions)) {
+        return []
+    }
+
+    return conditionJson.transitions
+        .map((item) => {
+            const transition = item as Record<string, unknown>
+            return {
+                handle: typeof transition.handle === "string" ? transition.handle : "out",
+                targetStepOrder: typeof transition.targetStepOrder === "number" ? transition.targetStepOrder : null,
+                target: transition.target === "end" ? "end" : "step",
+            } satisfies WorkflowTransition
+        })
+}
+
+function getValueByPath(snapshot: Record<string, unknown>, fieldPath: string): unknown {
+    if (!fieldPath) return undefined
+
+    const pathSegments = fieldPath.split(".").filter(Boolean)
+    let current: unknown = snapshot
+
+    for (const segment of pathSegments) {
+        if (typeof current !== "object" || current === null || !(segment in current)) {
+            return undefined
+        }
+
+        current = (current as Record<string, unknown>)[segment]
+    }
+
+    return current
+}
+
+function isEmptyValue(value: unknown): boolean {
+    if (value === null || value === undefined) return true
+    if (typeof value === "string") return value.trim() === ""
+    if (Array.isArray(value)) return value.length === 0
+    return false
+}
+
+function compareByOperator(left: unknown, operator: string, rightRaw: unknown): boolean {
+    const right = rightRaw ?? ""
+    const normalizedOperator = normalizeComparisonOperator(operator)
+
+    if (normalizedOperator === "exists") return left !== undefined && left !== null
+    if (normalizedOperator === "not_exists") return left === undefined || left === null
+    if (normalizedOperator === "is_empty") return isEmptyValue(left)
+    if (normalizedOperator === "is_not_empty") return !isEmptyValue(left)
+    if (normalizedOperator === "is_true") return left === true || String(left).toLowerCase() === "true"
+    if (normalizedOperator === "is_false") return left === false || String(left).toLowerCase() === "false"
+
+    const leftString = left === null || left === undefined ? "" : String(left)
+    const rightString = String(right)
+
+    if (normalizedOperator === "eq") return leftString === rightString
+    if (normalizedOperator === "neq") return leftString !== rightString
+    if (normalizedOperator === "contains") {
+        if (Array.isArray(left)) return left.some((entry) => String(entry) === rightString)
+        return leftString.toLowerCase().includes(rightString.toLowerCase())
+    }
+    if (normalizedOperator === "not_contains") {
+        if (Array.isArray(left)) return !left.some((entry) => String(entry) === rightString)
+        return !leftString.toLowerCase().includes(rightString.toLowerCase())
+    }
+    if (normalizedOperator === "starts_with") return leftString.toLowerCase().startsWith(rightString.toLowerCase())
+    if (normalizedOperator === "not_starts_with") return !leftString.toLowerCase().startsWith(rightString.toLowerCase())
+    if (normalizedOperator === "ends_with") return leftString.toLowerCase().endsWith(rightString.toLowerCase())
+    if (normalizedOperator === "not_ends_with") return !leftString.toLowerCase().endsWith(rightString.toLowerCase())
+    if (normalizedOperator === "regex" || normalizedOperator === "not_regex") {
+        try {
+            const matched = new RegExp(rightString).test(leftString)
+            return normalizedOperator === "regex" ? matched : !matched
+        } catch {
+            return false
+        }
+    }
+
+    const leftNumber = Array.isArray(left) ? left.length : Number(left)
+    const rightNumber = Number(right)
+
+    if (["gt", "lt", "gte", "lte", "len_eq", "len_neq", "len_gt", "len_lt", "len_gte", "len_lte"].includes(normalizedOperator)) {
+        if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber)) return false
+    }
+
+    if (normalizedOperator === "gt") return leftNumber > rightNumber
+    if (normalizedOperator === "lt") return leftNumber < rightNumber
+    if (normalizedOperator === "gte") return leftNumber >= rightNumber
+    if (normalizedOperator === "lte") return leftNumber <= rightNumber
+    if (normalizedOperator === "len_eq") return leftNumber === rightNumber
+    if (normalizedOperator === "len_neq") return leftNumber !== rightNumber
+    if (normalizedOperator === "len_gt") return leftNumber > rightNumber
+    if (normalizedOperator === "len_lt") return leftNumber < rightNumber
+    if (normalizedOperator === "len_gte") return leftNumber >= rightNumber
+    if (normalizedOperator === "len_lte") return leftNumber <= rightNumber
+
+    const leftDate = new Date(leftString)
+    const rightDate = new Date(rightString)
+    if (normalizedOperator === "after" || normalizedOperator === "before" || normalizedOperator === "on_or_after" || normalizedOperator === "on_or_before") {
+        if (Number.isNaN(leftDate.getTime()) || Number.isNaN(rightDate.getTime())) return false
+        if (normalizedOperator === "after") return leftDate > rightDate
+        if (normalizedOperator === "before") return leftDate < rightDate
+        if (normalizedOperator === "on_or_after") return leftDate >= rightDate
+        if (normalizedOperator === "on_or_before") return leftDate <= rightDate
+    }
+
+    return false
+}
+
+function evaluateConditionForStep(
+    conditionJson: Record<string, unknown> | null | undefined,
+    conditionSnapshot: Record<string, unknown>,
+    runtimeContext?: WorkflowRuntimeContext
+): boolean {
+    const nodeKind = getNodeKind(conditionJson)
+    if (nodeKind === "conditionNode") {
+        const field = typeof conditionJson?.conditionField === "string" ? conditionJson.conditionField : ""
+        const operator = normalizeComparisonOperator(conditionJson?.conditionOperator)
+        const expected = typeof conditionJson?.conditionValue === "string" ? conditionJson.conditionValue : ""
+        const actual = getValueByPath(conditionSnapshot, field)
+        return compareByOperator(actual, operator, expected)
+    }
+
+    if (nodeKind === "conditionByField") {
+        const field = typeof conditionJson?.fieldKey === "string" ? conditionJson.fieldKey : ""
+        const operator = normalizeComparisonOperator(conditionJson?.operator)
+        const expected = typeof conditionJson?.targetValue === "string" ? conditionJson.targetValue : ""
+        const actual = getValueByPath(conditionSnapshot, field)
+        return compareByOperator(actual, operator, expected)
+    }
+
+    if (nodeKind === "deadlineBranchNode") {
+        const mode = conditionJson?.mode === "hours_since_submit" ? "hours_since_submit" : "request_due_at"
+        if (mode === "hours_since_submit") {
+            const submittedAt = runtimeContext?.requestSubmittedAt
+            if (!submittedAt) return false
+            const thresholdHours = Math.max(1, Number(conditionJson?.thresholdHours ?? 24))
+            const diffMs = Date.now() - submittedAt.getTime()
+            return diffMs >= thresholdHours * 60 * 60 * 1000
+        }
+
+        const dueAt = runtimeContext?.requestDueAt
+        if (!dueAt) return false
+        return dueAt.getTime() <= Date.now()
+    }
+
+    if (nodeKind === "waitEventNode") {
+        const metadata = runtimeContext?.requestMetadata ?? {}
+        const eventKey = typeof conditionJson?.eventKey === "string" ? conditionJson.eventKey.trim() : ""
+        if (!eventKey) return false
+        const eventMap = (typeof metadata.events === "object" && metadata.events !== null
+            ? metadata.events
+            : {}) as Record<string, unknown>
+        return Boolean(eventMap[eventKey])
+    }
+
+    if (nodeKind === "requiredAttachmentNode") {
+        const requiredKeys = parseRequiredKeys(conditionJson?.requiredKeys)
+        if (requiredKeys.length === 0) return true
+
+        const metadata = runtimeContext?.requestMetadata ?? {}
+        const attachmentMap = (typeof metadata.attachments === "object" && metadata.attachments !== null
+            ? metadata.attachments
+            : {}) as Record<string, unknown>
+
+        return requiredKeys.every((key) => Boolean(attachmentMap[key]))
+    }
+
+    return true
+}
+
+function resolveNextStepOrderFromGraph(
+    currentStepOrder: number,
+    conditionJson: Record<string, unknown> | null | undefined,
+    conditionSnapshot: Record<string, unknown>,
+    runtimeContext?: WorkflowRuntimeContext
+): number | null {
+    const nodeKind = getNodeKind(conditionJson)
+    const transitions = getTransitions(conditionJson)
+
+    const findTransitionByHandle = (handle: string) => transitions.find((transition) => transition.handle === handle)
+    const transitionForHandle = (handle: string) => findTransitionByHandle(handle) ?? findTransitionByHandle("out")
+
+    const transition = nodeKind === "conditionNode"
+        ? transitionForHandle(evaluateConditionForStep(conditionJson, conditionSnapshot, runtimeContext) ? "yes" : "no")
+        : nodeKind === "conditionByField"
+            ? transitionForHandle(evaluateConditionForStep(conditionJson, conditionSnapshot, runtimeContext) ? "match" : "notMatch")
+            : nodeKind === "deadlineBranchNode"
+                ? transitionForHandle(evaluateConditionForStep(conditionJson, conditionSnapshot, runtimeContext) ? "overdue" : "onTime")
+                : nodeKind === "waitEventNode"
+                    ? transitionForHandle(evaluateConditionForStep(conditionJson, conditionSnapshot, runtimeContext) ? "received" : "pending")
+                    : nodeKind === "requiredAttachmentNode"
+                        ? transitionForHandle(evaluateConditionForStep(conditionJson, conditionSnapshot, runtimeContext) ? "available" : "missing")
+                        : nodeKind === "switchNode"
+                            ? (() => {
+                                const field = typeof conditionJson?.fieldKey === "string" ? conditionJson.fieldKey : ""
+                                const actual = getValueByPath(conditionSnapshot, field)
+                                const value = String(actual ?? "")
+                                const caseA = String(conditionJson?.caseA ?? "")
+                                const caseB = String(conditionJson?.caseB ?? "")
+                                const caseC = String(conditionJson?.caseC ?? "")
+                                const caseD = String(conditionJson?.caseD ?? "")
+                                const caseE = String(conditionJson?.caseE ?? "")
+                                const caseF = String(conditionJson?.caseF ?? "")
+                                if (value && value === caseA) return transitionForHandle("caseA")
+                                if (value && value === caseB) return transitionForHandle("caseB")
+                                if (value && value === caseC) return transitionForHandle("caseC")
+                                if (value && value === caseD) return transitionForHandle("caseD")
+                                if (value && value === caseE) return transitionForHandle("caseE")
+                                if (value && value === caseF) return transitionForHandle("caseF")
+                                return transitionForHandle("default")
+                            })()
+            : transitionForHandle("out")
+
+    if (!transition) {
+        return currentStepOrder + 1
+    }
+
+    if (transition.target === "end") {
+        return null
+    }
+
+    if (typeof transition.targetStepOrder === "number" && transition.targetStepOrder > 0) {
+        return transition.targetStepOrder
+    }
+
+    return currentStepOrder + 1
+}
+
+async function resolveAssigneeIds(stepId: number, requestMetadata?: Record<string, unknown>) {
     const step = await db.query.approvalDefinitionSteps.findFirst({
         where: eq(approvalDefinitionSteps.id, stepId),
     })
 
     if (!step) {
         throw new Error("Approval step not found")
+    }
+
+    const conditionJson = (step.conditionJson ?? {}) as Record<string, unknown>
+    const nodeKind = getNodeKind(conditionJson)
+
+    if (nodeKind === "parallelApproval") {
+        const explicitApprovers = Array.isArray(conditionJson.approverUserIds)
+            ? conditionJson.approverUserIds.filter((entry): entry is string => typeof entry === "string")
+            : []
+
+        if (explicitApprovers.length > 0) {
+            return { step, assigneeIds: explicitApprovers }
+        }
     }
 
     if (step.approverType === "user") {
@@ -120,24 +642,40 @@ async function resolveAssigneeIds(stepId: number) {
         return { step, assigneeIds: [step.approverUserId] }
     }
 
-    if (!step.approverRole) {
+    let resolvedRole = step.approverRole
+
+    if (resolvedRole?.startsWith("dynamic:")) {
+        const metadataKey = resolvedRole.slice("dynamic:".length).trim() || "dynamicRole"
+        const dynamicRole = requestMetadata?.[metadataKey]
+        resolvedRole = typeof dynamicRole === "string" ? dynamicRole : null
+    }
+
+    if (!resolvedRole) {
         throw new Error("Approver role is not configured on this step")
     }
 
     const roleUsers = await db
         .select({ id: user.id })
         .from(user)
-        .where(ilike(user.role, step.approverRole))
+        .where(ilike(user.role, resolvedRole))
 
     if (roleUsers.length === 0) {
-        throw new Error(`No users found for role ${step.approverRole}`)
+        throw new Error(`No users found for role ${resolvedRole}`)
     }
 
     return { step, assigneeIds: roleUsers.map((entry) => entry.id) }
 }
 
 async function createAssignmentsForStep(requestId: string, stepId: number, stepOrder: number) {
-    const { assigneeIds } = await resolveAssigneeIds(stepId)
+    const request = await db.query.approvalRequests.findFirst({
+        where: eq(approvalRequests.id, requestId),
+    })
+
+    const requestMetadata = (typeof request?.metadata === "object" && request.metadata !== null
+        ? request.metadata
+        : {}) as Record<string, unknown>
+
+    const { assigneeIds } = await resolveAssigneeIds(stepId, requestMetadata)
 
     await db.insert(approvalAssignments).values(
         assigneeIds.map((assigneeId) => ({
@@ -155,13 +693,72 @@ async function createAssignmentsForStep(requestId: string, stepId: number, stepO
 
     const recipientEmails = recipients.map((entry) => entry.email).filter(Boolean)
     if (recipientEmails.length > 0) {
-        await sendNotificationEmail(
-            recipientEmails,
-            "New Approval Assignment",
-            `You have a new approval task (Request ID: ${requestId}, Step ${stepOrder}).`,
-            `/dashboard/approvals/${requestId}`
-        )
+        await sendSystemTemplatedEmailByCode({
+            code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalAssignment,
+            to: recipientEmails,
+            data: {
+                requestId,
+                stepOrder,
+                actionUrl: `/dashboard/approvals/${requestId}`,
+                appName: "One Chitra",
+            },
+        })
     }
+}
+
+const AUTO_ROUTING_NODE_KINDS = new Set<WorkflowNodeKind>([
+    "conditionNode",
+    "conditionByField",
+    "notifyNode",
+    "autoApproveNode",
+    "delayNode",
+    "subWorkflowNode",
+    "deadlineBranchNode",
+    "waitEventNode",
+    "cancelNode",
+    "switchNode",
+    "businessDelayNode",
+    "requiredAttachmentNode",
+    "dynamicRoleResolverNode",
+])
+
+async function resolveFirstActionableStep(
+    definitionId: string,
+    firstStepOrder: number,
+    conditionSnapshot: Record<string, unknown>,
+    runtimeContext?: WorkflowRuntimeContext
+) {
+    let currentStepOrder: number | null = firstStepOrder
+    const visited = new Set<number>()
+
+    while (currentStepOrder !== null) {
+        if (visited.has(currentStepOrder)) {
+            throw new Error("Workflow routing loop detected at initial step")
+        }
+        visited.add(currentStepOrder)
+
+        const step = await db.query.approvalDefinitionSteps.findFirst({
+            where: and(
+                eq(approvalDefinitionSteps.definitionId, definitionId),
+                eq(approvalDefinitionSteps.stepOrder, currentStepOrder)
+            ),
+        })
+
+        if (!step) {
+            return null
+        }
+
+        const conditionJson = (step.conditionJson ?? {}) as Record<string, unknown>
+        const nodeKind = getNodeKind(conditionJson)
+
+        if (!AUTO_ROUTING_NODE_KINDS.has(nodeKind)) {
+            return step
+        }
+
+        currentStepOrder = resolveNextStepOrderFromGraph(step.stepOrder, conditionJson, conditionSnapshot, runtimeContext)
+    }
+
+    return null
 }
 
 export async function getApprovalInbox() {
@@ -176,6 +773,7 @@ export async function getApprovalInbox() {
             entityId: approvalRequests.entityId,
             currentStepOrder: approvalRequests.currentStepOrder,
             stepName: approvalDefinitionSteps.stepName,
+            stepConditionJson: approvalDefinitionSteps.conditionJson,
             stepOrder: approvalAssignments.stepOrder,
             definitionName: approvalDefinitions.name,
             submittedAt: approvalRequests.submittedAt,
@@ -229,6 +827,38 @@ export async function getApprovalDefinitions() {
     })
 }
 
+export type SubWorkflowOption = {
+    id: string
+    name: string
+    formKey: string
+    status: "draft" | "active" | "archived"
+    version: number
+}
+
+export async function getSubWorkflowOptions() {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const definitions = await db
+        .select({
+            id: approvalDefinitions.id,
+            name: approvalDefinitions.name,
+            formKey: approvalDefinitions.formKey,
+            status: approvalDefinitions.status,
+            version: approvalDefinitions.version,
+            updatedAt: approvalDefinitions.updatedAt,
+        })
+        .from(approvalDefinitions)
+        .orderBy(desc(approvalDefinitions.updatedAt))
+
+    return definitions.map((item) => ({
+        id: item.id,
+        name: item.name,
+        formKey: item.formKey,
+        status: item.status,
+        version: item.version,
+    })) satisfies SubWorkflowOption[]
+}
+
 export async function getApprovalFormRegistry() {
     await getAuthenticatedSession("approvals-settings", "view")
 
@@ -267,6 +897,73 @@ export async function getWebsiteFormOptions() {
     return Array.from(uniqueByRoute.values()).sort((a, b) => a.formName.localeCompare(b.formName))
 }
 
+async function scanFormFieldOptionsByModulePath(modulePath: string) {
+    const moduleDir = resolveSafeDashboardModuleDir(modulePath)
+    if (!moduleDir) {
+        return {
+            success: false as const,
+            error: "Unsafe module path. Module path must stay inside /app/dashboard",
+            fields: [] as string[],
+            fieldMeta: [] as ApprovalFormFieldOption[],
+        }
+    }
+
+    try {
+        const files = await collectModuleFiles(moduleDir)
+        const fieldTypeMap = new Map<string, ApprovalFieldDataType>()
+
+        for (const filePath of files) {
+            const content = await readFile(filePath, "utf8")
+            const fieldMeta = pickFieldMetaFromSource(content)
+            for (const field of fieldMeta) {
+                upsertFieldType(fieldTypeMap, field.key, field.dataType)
+            }
+        }
+
+        const mergedFieldMeta = Array.from(fieldTypeMap.entries())
+            .map(([key, dataType]) => ({ key, dataType }))
+            .sort((a, b) => a.key.localeCompare(b.key))
+
+        return {
+            success: true as const,
+            fields: mergedFieldMeta.map((field) => field.key),
+            fieldMeta: mergedFieldMeta,
+        }
+    } catch {
+        return { success: true as const, fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+}
+
+export async function getWebsiteFormFieldOptions(modulePath: string) {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const safeModulePath = String(modulePath ?? "").trim()
+    if (!safeModulePath) {
+        return { success: false, error: "Module path is required", fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+
+    return scanFormFieldOptionsByModulePath(safeModulePath)
+}
+
+export async function getApprovalFormFieldOptions(formKey: string) {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const safeFormKey = String(formKey ?? "").trim()
+    if (!safeFormKey) {
+        return { success: false, error: "Form key is required", fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+
+    const form = await db.query.approvalFormRegistry.findFirst({
+        where: eq(approvalFormRegistry.formKey, safeFormKey),
+    })
+
+    if (!form?.modulePath) {
+        return { success: true, fields: [] as string[], fieldMeta: [] as ApprovalFormFieldOption[] }
+    }
+
+    return scanFormFieldOptionsByModulePath(form.modulePath)
+}
+
 export async function registerApprovalForm(formData: FormData) {
     const session = await getAuthenticatedSession("approvals-settings", "create")
 
@@ -295,11 +992,16 @@ export async function registerApprovalForm(formData: FormData) {
         return { success: false, error: "Please select a form from website list" }
     }
 
+    const normalizedModulePath = normalizeModuleRoute(modulePath)
+    if (!normalizedModulePath) {
+        return { success: false, error: "Invalid module path. Use a route under /dashboard" }
+    }
+
     try {
         await db.insert(approvalFormRegistry).values({
             formKey,
             formName,
-            modulePath,
+            modulePath: normalizedModulePath,
             description: description || null,
             createdBy: session.user.id,
         }).onConflictDoNothing()
@@ -408,9 +1110,36 @@ export async function createApprovalRequest(formData: FormData) {
     const definitionId = String(formData.get("definitionId") ?? "").trim()
     const formKey = String(formData.get("formKey") ?? "").trim()
     const entityId = String(formData.get("entityId") ?? "").trim()
+    const conditionSnapshotRaw = String(formData.get("conditionSnapshot") ?? "").trim()
+    const metadataRaw = String(formData.get("metadata") ?? "").trim()
 
     if (!definitionId || !formKey || !entityId) {
         return { success: false, error: "Definition, form key, and entity ID are required" }
+    }
+
+    let conditionSnapshot: Record<string, unknown> = {}
+    let metadata: Record<string, unknown> = {}
+
+    if (conditionSnapshotRaw) {
+        try {
+            const parsed = JSON.parse(conditionSnapshotRaw) as unknown
+            if (typeof parsed === "object" && parsed !== null) {
+                conditionSnapshot = parsed as Record<string, unknown>
+            }
+        } catch {
+            return { success: false, error: "Invalid condition snapshot payload" }
+        }
+    }
+
+    if (metadataRaw) {
+        try {
+            const parsed = JSON.parse(metadataRaw) as unknown
+            if (typeof parsed === "object" && parsed !== null) {
+                metadata = parsed as Record<string, unknown>
+            }
+        } catch {
+            return { success: false, error: "Invalid metadata payload" }
+        }
     }
 
     const firstStep = await db.query.approvalDefinitionSteps.findFirst({
@@ -423,15 +1152,28 @@ export async function createApprovalRequest(formData: FormData) {
     }
 
     try {
+        const actionableFirstStep = await resolveFirstActionableStep(definitionId, firstStep.stepOrder, conditionSnapshot, {
+            requestDueAt: null,
+            requestSubmittedAt: new Date(),
+            requestMetadata: metadata,
+        })
+
         const [created] = await db.insert(approvalRequests).values({
             definitionId,
             formKey,
             entityId,
             requesterId: session.user.id,
-            currentStepOrder: firstStep.stepOrder,
+            currentStepOrder: actionableFirstStep?.stepOrder ?? firstStep.stepOrder,
+            dueAt: getStepDueAt(new Date(), actionableFirstStep?.slaDays ?? null),
+            conditionSnapshot,
+            metadata,
+            status: actionableFirstStep ? "pending" : "approved",
+            completedAt: actionableFirstStep ? null : new Date(),
         }).returning({ id: approvalRequests.id })
 
-        await createAssignmentsForStep(created.id, firstStep.id, firstStep.stepOrder)
+        if (actionableFirstStep) {
+            await createAssignmentsForStep(created.id, actionableFirstStep.id, actionableFirstStep.stepOrder)
+        }
 
         await db.insert(approvalAuditLogs).values({
             requestId: created.id,
@@ -439,7 +1181,7 @@ export async function createApprovalRequest(formData: FormData) {
             actorUserId: session.user.id,
             payload: {
                 message: "Approval request submitted",
-                stepOrder: firstStep.stepOrder,
+                stepOrder: actionableFirstStep?.stepOrder ?? firstStep.stepOrder,
             },
         })
 
@@ -457,6 +1199,8 @@ async function createApprovalRequestCore(input: {
     formKey: string
     entityId: string
     requesterId: string
+    conditionSnapshot?: Record<string, unknown>
+    metadata?: Record<string, unknown>
 }) {
     const firstStep = await db.query.approvalDefinitionSteps.findFirst({
         where: eq(approvalDefinitionSteps.definitionId, input.definitionId),
@@ -467,15 +1211,29 @@ async function createApprovalRequestCore(input: {
         return { success: false as const, error: "Definition has no steps" }
     }
 
+    const conditionSnapshot = input.conditionSnapshot ?? {}
+    const actionableFirstStep = await resolveFirstActionableStep(input.definitionId, firstStep.stepOrder, conditionSnapshot, {
+        requestDueAt: null,
+        requestSubmittedAt: new Date(),
+        requestMetadata: input.metadata ?? {},
+    })
+
     const [created] = await db.insert(approvalRequests).values({
         definitionId: input.definitionId,
         formKey: input.formKey,
         entityId: input.entityId,
         requesterId: input.requesterId,
-        currentStepOrder: firstStep.stepOrder,
+        currentStepOrder: actionableFirstStep?.stepOrder ?? firstStep.stepOrder,
+        dueAt: getStepDueAt(new Date(), actionableFirstStep?.slaDays ?? null),
+        conditionSnapshot,
+        metadata: input.metadata ?? {},
+        status: actionableFirstStep ? "pending" : "approved",
+        completedAt: actionableFirstStep ? null : new Date(),
     }).returning({ id: approvalRequests.id })
 
-    await createAssignmentsForStep(created.id, firstStep.id, firstStep.stepOrder)
+    if (actionableFirstStep) {
+        await createAssignmentsForStep(created.id, actionableFirstStep.id, actionableFirstStep.stepOrder)
+    }
 
     await db.insert(approvalAuditLogs).values({
         requestId: created.id,
@@ -483,9 +1241,23 @@ async function createApprovalRequestCore(input: {
         actorUserId: input.requesterId,
         payload: {
             message: "Approval request submitted",
-            stepOrder: firstStep.stepOrder,
+            stepOrder: actionableFirstStep?.stepOrder ?? firstStep.stepOrder,
         },
     })
+
+    try {
+        await processEmailNotificationRulesForSnapshot({
+            formKey: input.formKey,
+            entityId: input.entityId,
+            snapshot: conditionSnapshot,
+            context: {
+                approvalRequestId: created.id,
+                approvalUrl: `/dashboard/approvals/${created.id}`,
+            },
+        })
+    } catch (error) {
+        console.error("[EMAIL NOTIFICATION RULE] Failed to process rules:", error)
+    }
 
     return { success: true as const, id: created.id }
 }
@@ -494,6 +1266,8 @@ export async function createApprovalRequestForEntity(input: {
     formKey: string
     entityId: string
     requesterId: string
+    conditionSnapshot?: Record<string, unknown>
+    metadata?: Record<string, unknown>
 }) {
     const activeDefinition = await db.query.approvalDefinitions.findFirst({
         where: and(
@@ -513,6 +1287,8 @@ export async function createApprovalRequestForEntity(input: {
             formKey: input.formKey,
             entityId: input.entityId,
             requesterId: input.requesterId,
+            conditionSnapshot: input.conditionSnapshot ?? {},
+            metadata: input.metadata ?? {},
         })
 
         if (!result.success) {
@@ -538,43 +1314,67 @@ export async function submitApprovalDecision(formData: FormData) {
         return { success: false, error: "Invalid assignment or decision" }
     }
 
-    if (decision === "approve" && !comment) {
-        return { success: false, error: "Comment is required when approving" }
-    }
-
-    const assignment = await db.query.approvalAssignments.findFirst({
-        where: eq(approvalAssignments.id, assignmentId),
-    })
-
-    if (!assignment) {
-        return { success: false, error: "Assignment not found" }
-    }
-
-    if (assignment.assigneeUserId !== session.user.id) {
-        return { success: false, error: "You are not assigned to this approval step" }
-    }
-
-    if (assignment.status !== "pending") {
-        return { success: false, error: "Assignment already processed" }
-    }
-
     try {
         await db.transaction(async (tx) => {
-            await tx.update(approvalAssignments)
-                .set({
-                    status: decision === "approve" ? "approved" : "rejected",
-                    actedAt: new Date(),
-                    comment: comment || null,
-                    updatedAt: new Date(),
-                })
-                .where(eq(approvalAssignments.id, assignmentId))
+            const updatedAssignmentResult = await tx.execute(sql<{
+                assignment_id: string
+                request_id: string
+                step_id: number
+                step_order: number
+            }>`
+                UPDATE approval_assignments AS a
+                SET
+                    status = ${decision === "approve" ? "approved" : "rejected"},
+                    acted_at = NOW(),
+                    comment = ${comment || null},
+                    updated_at = NOW()
+                FROM approval_requests AS r
+                WHERE
+                    a.id = ${assignmentId}
+                    AND a.assignee_user_id = ${session.user.id}
+                    AND a.status = 'pending'
+                    AND r.id = a.request_id
+                    AND r.status = 'pending'
+                RETURNING
+                    a.id AS assignment_id,
+                    a.request_id AS request_id,
+                    a.step_id AS step_id,
+                    a.step_order AS step_order
+            `)
+
+            const updatedAssignment = updatedAssignmentResult.rows[0] as {
+                assignment_id: string
+                request_id: string
+                step_id: number
+                step_order: number
+            } | undefined
+            if (!updatedAssignment) {
+                throw new Error("Assignment already processed or request no longer pending")
+            }
 
             const request = await tx.query.approvalRequests.findFirst({
-                where: eq(approvalRequests.id, assignment.requestId),
+                where: eq(approvalRequests.id, updatedAssignment.request_id),
             })
 
             if (!request) {
                 throw new Error("Approval request not found")
+            }
+
+            const currentStep = await tx.query.approvalDefinitionSteps.findFirst({
+                where: eq(approvalDefinitionSteps.id, updatedAssignment.step_id),
+            })
+
+            if (!currentStep) {
+                throw new Error("Approval step missing")
+            }
+
+            const currentStepConditionJson = (currentStep.conditionJson ?? {}) as Record<string, unknown>
+            const workflowNotePolicy = typeof currentStepConditionJson.workflowNotePolicy === "string"
+                ? currentStepConditionJson.workflowNotePolicy
+                : "optional"
+
+            if (!validateNotePolicy(workflowNotePolicy, comment, decision)) {
+                throw new Error(`Comment is required for ${decision} on this step`)
             }
 
             if (decision === "reject") {
@@ -597,7 +1397,7 @@ export async function submitApprovalDecision(formData: FormData) {
                     payload: {
                         assignmentId,
                         comment,
-                        stepOrder: assignment.stepOrder,
+                        stepOrder: updatedAssignment.step_order,
                     },
                 })
 
@@ -606,12 +1406,16 @@ export async function submitApprovalDecision(formData: FormData) {
                 })
 
                 if (requester?.email) {
-                    await sendNotificationEmail(
-                        requester.email,
-                        "Approval Request Rejected",
-                        `Your approval request ${request.id} has been rejected at step ${assignment.stepOrder}.`,
-                        `/dashboard/approvals/${request.id}`
-                    )
+                    await sendSystemTemplatedEmailByCode({
+                        code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalRejected,
+                        to: requester.email,
+                        data: {
+                            requestId: request.id,
+                            stepOrder: updatedAssignment.step_order,
+                            actionUrl: `/dashboard/approvals/${request.id}`,
+                            appName: "One Chitra",
+                        },
+                    })
                 }
 
                 return
@@ -624,25 +1428,22 @@ export async function submitApprovalDecision(formData: FormData) {
                 payload: {
                     assignmentId,
                     comment,
-                    stepOrder: assignment.stepOrder,
+                    stepOrder: updatedAssignment.step_order,
                 },
             })
-
-            const currentStep = await tx.query.approvalDefinitionSteps.findFirst({
-                where: eq(approvalDefinitionSteps.id, assignment.stepId),
-            })
-
-            if (!currentStep) {
-                throw new Error("Approval step missing")
-            }
 
             const currentAssignments = await tx
                 .select({ status: approvalAssignments.status })
                 .from(approvalAssignments)
-                .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.stepId, assignment.stepId)))
+                .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.stepId, updatedAssignment.step_id)))
 
             const approvedCount = currentAssignments.filter((entry) => entry.status === "approved").length
             const rejectedCount = currentAssignments.filter((entry) => entry.status === "rejected").length
+            const approvalPolicy = currentStepConditionJson.approvalPolicy === "any"
+                ? "any"
+                : currentStepConditionJson.approvalPolicy === "all"
+                    ? "all"
+                    : "quorum"
 
             if (rejectedCount > 0) {
                 await tx.update(approvalRequests)
@@ -660,7 +1461,13 @@ export async function submitApprovalDecision(formData: FormData) {
                 return
             }
 
-            if (approvedCount < currentStep.minApprovals) {
+            const totalAssignments = Math.max(1, currentAssignments.length)
+            const configuredMinApprovals = Math.max(1, Number(currentStep.minApprovals ?? 1))
+            const requiredApprovals = approvalPolicy === "all"
+                ? totalAssignments
+                : Math.min(configuredMinApprovals, totalAssignments)
+
+            if (approvedCount < requiredApprovals) {
                 return
             }
 
@@ -670,19 +1477,19 @@ export async function submitApprovalDecision(formData: FormData) {
                     .set({ status: "skipped", updatedAt: new Date() })
                     .where(and(
                         eq(approvalAssignments.requestId, request.id),
-                        eq(approvalAssignments.stepId, assignment.stepId),
+                        eq(approvalAssignments.stepId, updatedAssignment.step_id),
                         eq(approvalAssignments.status, "pending")
                     ))
             }
 
-            const nextStep = await tx.query.approvalDefinitionSteps.findFirst({
-                where: and(
-                    eq(approvalDefinitionSteps.definitionId, request.definitionId),
-                    eq(approvalDefinitionSteps.stepOrder, assignment.stepOrder + 1)
-                ),
-            })
+            const conditionSnapshot = (typeof request.conditionSnapshot === "object" && request.conditionSnapshot !== null
+                ? request.conditionSnapshot
+                : {}) as Record<string, unknown>
+            let requestMetadata = (typeof request.metadata === "object" && request.metadata !== null
+                ? request.metadata
+                : {}) as Record<string, unknown>
 
-            if (!nextStep) {
+            const finalizeApprovedRequest = async () => {
                 await tx.update(approvalRequests)
                     .set({
                         status: "approved",
@@ -696,71 +1503,638 @@ export async function submitApprovalDecision(formData: FormData) {
                 })
 
                 if (requester?.email) {
-                    await sendNotificationEmail(
-                        requester.email,
-                        "Approval Request Approved",
-                        `Your approval request ${request.id} has been fully approved.`,
-                        `/dashboard/approvals/${request.id}`
-                    )
+                    await sendSystemTemplatedEmailByCode({
+                        code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalApproved,
+                        to: requester.email,
+                        data: {
+                            requestId: request.id,
+                            actionUrl: `/dashboard/approvals/${request.id}`,
+                            appName: "One Chitra",
+                        },
+                    })
                 }
-
-                return
             }
 
-            await tx.update(approvalRequests)
-                .set({
-                    currentStepOrder: nextStep.stepOrder,
-                    updatedAt: new Date(),
-                })
-                .where(eq(approvalRequests.id, request.id))
-
-            const stepAssignees = await (async () => {
-                if (nextStep.approverType === "user") {
-                    return nextStep.approverUserId ? [nextStep.approverUserId] : []
+            const resolveAssigneesForStep = async (step: typeof currentStep): Promise<string[]> => {
+                const stepConditionJson = (step.conditionJson ?? {}) as Record<string, unknown>
+                if (getNodeKind(stepConditionJson) === "parallelApproval") {
+                    const explicitApprovers = Array.isArray(stepConditionJson.approverUserIds)
+                        ? stepConditionJson.approverUserIds.filter((entry): entry is string => typeof entry === "string")
+                        : []
+                    if (explicitApprovers.length > 0) {
+                        return explicitApprovers
+                    }
                 }
 
-                if (!nextStep.approverRole) {
+                if (step.approverType === "user") {
+                    return step.approverUserId ? [step.approverUserId] : []
+                }
+
+                let resolvedRole = step.approverRole
+                if (resolvedRole?.startsWith("dynamic:")) {
+                    const metadataKey = resolvedRole.slice("dynamic:".length).trim() || "dynamicRole"
+                    const dynamicRole = requestMetadata[metadataKey]
+                    resolvedRole = typeof dynamicRole === "string" ? dynamicRole : null
+                }
+
+                if (!resolvedRole) {
                     return []
                 }
 
                 const roleUsers = await tx
                     .select({ id: user.id })
                     .from(user)
-                    .where(ilike(user.role, nextStep.approverRole))
+                    .where(ilike(user.role, resolvedRole))
 
                 return roleUsers.map((entry) => entry.id)
-            })()
-
-            if (stepAssignees.length === 0) {
-                throw new Error("Next step has no assignees")
             }
 
-            await tx.insert(approvalAssignments).values(
-                stepAssignees.map((assigneeId) => ({
-                    requestId: request.id,
-                    stepId: nextStep.id,
-                    stepOrder: nextStep.stepOrder,
-                    assigneeUserId: assigneeId,
-                }))
+            let nextStepOrder = resolveNextStepOrderFromGraph(
+                currentStep.stepOrder,
+                (currentStep.conditionJson ?? {}) as Record<string, unknown>,
+                conditionSnapshot,
+                {
+                    requestDueAt: request.dueAt,
+                    requestSubmittedAt: request.submittedAt,
+                    requestMetadata,
+                }
             )
 
-            await tx.insert(approvalAuditLogs).values({
-                requestId: request.id,
-                action: "comment",
-                actorUserId: session.user.id,
-                payload: {
-                    message: "Moved to next step",
-                    from: assignment.stepOrder,
-                    to: nextStep.stepOrder,
-                },
-            })
+            const autoNodeKinds = AUTO_ROUTING_NODE_KINDS
+            const visitedStepOrders = new Set<number>()
+
+            while (true) {
+                if (nextStepOrder === null) {
+                    await finalizeApprovedRequest()
+                    return
+                }
+
+                if (visitedStepOrders.has(nextStepOrder)) {
+                    throw new Error("Workflow routing loop detected")
+                }
+                visitedStepOrders.add(nextStepOrder)
+
+                const nextStep = await tx.query.approvalDefinitionSteps.findFirst({
+                    where: and(
+                        eq(approvalDefinitionSteps.definitionId, request.definitionId),
+                        eq(approvalDefinitionSteps.stepOrder, nextStepOrder)
+                    ),
+                })
+
+                if (!nextStep) {
+                    await finalizeApprovedRequest()
+                    return
+                }
+
+                const nextStepConditionJson = (nextStep.conditionJson ?? {}) as Record<string, unknown>
+                const nextNodeKind = getNodeKind(nextStepConditionJson)
+
+                if (autoNodeKinds.has(nextNodeKind)) {
+                    if (nextNodeKind === "cancelNode") {
+                        await tx.update(approvalRequests)
+                            .set({
+                                status: "cancelled",
+                                completedAt: new Date(),
+                                updatedAt: new Date(),
+                            })
+                            .where(eq(approvalRequests.id, request.id))
+
+                        await tx.update(approvalAssignments)
+                            .set({ status: "skipped", updatedAt: new Date() })
+                            .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.status, "pending")))
+
+                        await tx.insert(approvalAuditLogs).values({
+                            requestId: request.id,
+                            action: "cancel",
+                            actorUserId: session.user.id,
+                            payload: {
+                                message: "Request cancelled by workflow node",
+                                stepOrder: nextStep.stepOrder,
+                                reason: typeof nextStepConditionJson.reason === "string" ? nextStepConditionJson.reason : null,
+                            },
+                        })
+
+                        return
+                    }
+
+                    if (nextNodeKind === "dynamicRoleResolverNode") {
+                        const sourceField = typeof nextStepConditionJson.sourceField === "string" ? nextStepConditionJson.sourceField : "department"
+                        const fallbackRole = typeof nextStepConditionJson.fallbackRole === "string" ? nextStepConditionJson.fallbackRole : "manager"
+                        const metadataKey = typeof nextStepConditionJson.metadataKey === "string" ? nextStepConditionJson.metadataKey : "dynamicRole"
+                        const sourceValue = getValueByPath(conditionSnapshot, sourceField)
+                        const resolvedRole = String(sourceValue ?? "").trim() || fallbackRole
+
+                        requestMetadata = {
+                            ...requestMetadata,
+                            [metadataKey]: resolvedRole,
+                        }
+
+                        await tx.update(approvalRequests)
+                            .set({
+                                metadata: requestMetadata,
+                                updatedAt: new Date(),
+                            })
+                            .where(eq(approvalRequests.id, request.id))
+                    }
+
+                    const evaluated = (nextNodeKind === "conditionNode" || nextNodeKind === "conditionByField" || nextNodeKind === "deadlineBranchNode" || nextNodeKind === "waitEventNode" || nextNodeKind === "requiredAttachmentNode")
+                        ? evaluateConditionForStep(nextStepConditionJson, conditionSnapshot, {
+                            requestDueAt: request.dueAt,
+                            requestSubmittedAt: request.submittedAt,
+                            requestMetadata,
+                        })
+                        : true
+
+                    const routedStepOrder = resolveNextStepOrderFromGraph(
+                        nextStep.stepOrder,
+                        nextStepConditionJson,
+                        conditionSnapshot,
+                        {
+                            requestDueAt: request.dueAt,
+                            requestSubmittedAt: request.submittedAt,
+                            requestMetadata,
+                        }
+                    )
+
+                    await tx.insert(approvalAuditLogs).values({
+                        requestId: request.id,
+                        action: "comment",
+                        actorUserId: session.user.id,
+                        payload: {
+                            message: "Auto-routed node",
+                            nodeKind: nextNodeKind,
+                            stepOrder: nextStep.stepOrder,
+                            evaluated,
+                            nextStepOrder: routedStepOrder,
+                        },
+                    })
+
+                    nextStepOrder = routedStepOrder
+                    continue
+                }
+
+                await tx.update(approvalRequests)
+                    .set({
+                        currentStepOrder: nextStep.stepOrder,
+                        dueAt: getStepDueAt(new Date(), nextStep.slaDays ?? null),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(approvalRequests.id, request.id))
+
+                const stepAssignees = await resolveAssigneesForStep(nextStep)
+                if (stepAssignees.length === 0) {
+                    throw new Error("Next step has no assignees")
+                }
+
+                await tx.insert(approvalAssignments).values(
+                    stepAssignees.map((assigneeId) => ({
+                        requestId: request.id,
+                        stepId: nextStep.id,
+                        stepOrder: nextStep.stepOrder,
+                        assigneeUserId: assigneeId,
+                    }))
+                )
+
+                await tx.insert(approvalAuditLogs).values({
+                    requestId: request.id,
+                    action: "comment",
+                    actorUserId: session.user.id,
+                    payload: {
+                        message: "Moved to next step",
+                        from: updatedAssignment.step_order,
+                        to: nextStep.stepOrder,
+                    },
+                })
+
+                return
+            }
         })
 
         safeRevalidatePath("/dashboard/approvals")
         return { success: true }
     } catch (error) {
         console.error("Failed to submit approval decision:", error)
+        if (error instanceof Error && error.message.startsWith("Comment is required")) {
+            return { success: false, error: error.message }
+        }
         return { success: false, error: "Failed to submit decision" }
+    }
+}
+
+export async function runApprovalSlaEscalationJob() {
+    await getAuthenticatedSession("approvals-settings", "edit")
+
+    const now = new Date()
+    const dayInMs = 24 * 60 * 60 * 1000
+    const escalationRole = String(process.env.APPROVAL_SLA_ESCALATION_ROLE ?? "").trim()
+
+    const overdueRequests = await db
+        .select({
+            requestId: approvalRequests.id,
+            definitionId: approvalRequests.definitionId,
+            requesterId: approvalRequests.requesterId,
+            dueAt: approvalRequests.dueAt,
+            currentStepOrder: approvalRequests.currentStepOrder,
+            metadata: approvalRequests.metadata,
+        })
+        .from(approvalRequests)
+        .where(and(eq(approvalRequests.status, "pending"), lte(approvalRequests.dueAt, now)))
+        .orderBy(asc(approvalRequests.dueAt))
+        .limit(200)
+
+    let reminded = 0
+    let escalated = 0
+
+    for (const request of overdueRequests) {
+        const metadata = (typeof request.metadata === "object" && request.metadata !== null
+            ? request.metadata
+            : {}) as Record<string, unknown>
+        const slaMetaRaw = metadata.sla
+        const slaMeta = (typeof slaMetaRaw === "object" && slaMetaRaw !== null
+            ? slaMetaRaw
+            : {}) as Record<string, unknown>
+
+        const pendingAssignments = await db
+            .select({ assigneeUserId: approvalAssignments.assigneeUserId })
+            .from(approvalAssignments)
+            .where(and(
+                eq(approvalAssignments.requestId, request.requestId),
+                eq(approvalAssignments.stepOrder, request.currentStepOrder),
+                eq(approvalAssignments.status, "pending")
+            ))
+
+        const pendingAssigneeIds = pendingAssignments.map((item) => item.assigneeUserId)
+        if (pendingAssigneeIds.length === 0) {
+            continue
+        }
+
+        const assigneeEmails = await db
+            .select({ email: user.email })
+            .from(user)
+            .where(inArray(user.id, pendingAssigneeIds))
+
+        const reminderRecipients = assigneeEmails.map((entry) => entry.email).filter(Boolean)
+        const lastReminderAtRaw = typeof slaMeta.lastReminderAt === "string" ? slaMeta.lastReminderAt : ""
+        const lastReminderAt = lastReminderAtRaw ? new Date(lastReminderAtRaw) : null
+        const shouldSendReminder = !lastReminderAt || Number.isNaN(lastReminderAt.getTime()) || (now.getTime() - lastReminderAt.getTime()) >= dayInMs
+
+        if (shouldSendReminder && reminderRecipients.length > 0) {
+            await sendSystemTemplatedEmailByCode({
+                code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalSlaReminder,
+                to: reminderRecipients,
+                data: {
+                    requestId: request.requestId,
+                    stepOrder: request.currentStepOrder,
+                    actionUrl: `/dashboard/approvals/${request.requestId}`,
+                    appName: "One Chitra",
+                },
+            })
+            slaMeta.lastReminderAt = now.toISOString()
+            reminded += 1
+        }
+
+        let didEscalate = false
+        const lastEscalatedAtRaw = typeof slaMeta.lastEscalatedAt === "string" ? slaMeta.lastEscalatedAt : ""
+        const lastEscalatedAt = lastEscalatedAtRaw ? new Date(lastEscalatedAtRaw) : null
+        const canEscalateAgain = !lastEscalatedAt || Number.isNaN(lastEscalatedAt.getTime()) || (now.getTime() - lastEscalatedAt.getTime()) >= dayInMs
+
+        if (escalationRole && canEscalateAgain) {
+            const escalationUsers = await db
+                .select({ id: user.id, email: user.email })
+                .from(user)
+                .where(ilike(user.role, escalationRole))
+
+            const escalationUserIds = escalationUsers
+                .map((entry) => entry.id)
+                .filter((id) => !pendingAssigneeIds.includes(id))
+
+            if (escalationUserIds.length > 0) {
+                const currentStep = await db.query.approvalDefinitionSteps.findFirst({
+                    where: and(
+                        eq(approvalDefinitionSteps.definitionId, request.definitionId),
+                        eq(approvalDefinitionSteps.stepOrder, request.currentStepOrder)
+                    ),
+                })
+
+                if (currentStep) {
+                    await db.insert(approvalAssignments).values(
+                        escalationUserIds.map((assigneeUserId) => ({
+                            requestId: request.requestId,
+                            stepId: currentStep.id,
+                            stepOrder: request.currentStepOrder,
+                            assigneeUserId,
+                        }))
+                    )
+
+                    const escalationEmails = escalationUsers
+                        .filter((entry) => escalationUserIds.includes(entry.id))
+                        .map((entry) => entry.email)
+                        .filter(Boolean)
+
+                    if (escalationEmails.length > 0) {
+                        await sendSystemTemplatedEmailByCode({
+                            code: SYSTEM_EMAIL_TEMPLATE_CODES.approvalSlaEscalation,
+                            to: escalationEmails,
+                            data: {
+                                requestId: request.requestId,
+                                stepOrder: request.currentStepOrder,
+                                actionUrl: `/dashboard/approvals/${request.requestId}`,
+                                appName: "One Chitra",
+                            },
+                        })
+                    }
+
+                    await db.insert(approvalAuditLogs).values({
+                        requestId: request.requestId,
+                        action: "escalate",
+                        actorUserId: null,
+                        payload: {
+                            message: "SLA escalation executed",
+                            escalationRole,
+                            stepOrder: request.currentStepOrder,
+                            addedAssigneeIds: escalationUserIds,
+                        },
+                    })
+
+                    slaMeta.lastEscalatedAt = now.toISOString()
+                    didEscalate = true
+                    escalated += 1
+                }
+            }
+        }
+
+        if (shouldSendReminder || didEscalate) {
+            await db.update(approvalRequests)
+                .set({
+                    metadata: {
+                        ...metadata,
+                        sla: {
+                            ...slaMeta,
+                            overdueSince: request.dueAt?.toISOString?.() ?? null,
+                        },
+                    },
+                    updatedAt: new Date(),
+                })
+                .where(eq(approvalRequests.id, request.requestId))
+        }
+    }
+
+    safeRevalidatePath("/dashboard/approvals")
+    return {
+        success: true,
+        scanned: overdueRequests.length,
+        reminded,
+        escalated,
+    }
+}
+
+export async function triggerApprovalRequestEvent(input: {
+    requestId: string
+    eventKey: string
+    eventValue?: unknown
+}) {
+    const requestId = String(input.requestId ?? "").trim()
+    const eventKey = String(input.eventKey ?? "").trim()
+
+    if (!requestId || !eventKey) {
+        return { success: false, error: "requestId and eventKey are required" }
+    }
+
+    try {
+        const result = await db.transaction(async (tx) => {
+            const request = await tx.query.approvalRequests.findFirst({
+                where: and(eq(approvalRequests.id, requestId), eq(approvalRequests.status, "pending")),
+            })
+
+            if (!request) {
+                return { success: false as const, error: "Pending request not found" }
+            }
+
+            const conditionSnapshot = (typeof request.conditionSnapshot === "object" && request.conditionSnapshot !== null
+                ? request.conditionSnapshot
+                : {}) as Record<string, unknown>
+
+            let requestMetadata = (typeof request.metadata === "object" && request.metadata !== null
+                ? request.metadata
+                : {}) as Record<string, unknown>
+
+            const existingEvents = (typeof requestMetadata.events === "object" && requestMetadata.events !== null
+                ? requestMetadata.events
+                : {}) as Record<string, unknown>
+
+            const eventValue = input.eventValue === undefined ? true : input.eventValue
+            requestMetadata = {
+                ...requestMetadata,
+                events: {
+                    ...existingEvents,
+                    [eventKey]: eventValue,
+                },
+                lastEventKey: eventKey,
+                lastEventAt: new Date().toISOString(),
+            }
+
+            await tx.update(approvalRequests)
+                .set({ metadata: requestMetadata, updatedAt: new Date() })
+                .where(eq(approvalRequests.id, request.id))
+
+            await tx.insert(approvalAuditLogs).values({
+                requestId: request.id,
+                action: "comment",
+                actorUserId: null,
+                payload: {
+                    message: "Event received",
+                    eventKey,
+                },
+            })
+
+            const currentStep = await tx.query.approvalDefinitionSteps.findFirst({
+                where: and(
+                    eq(approvalDefinitionSteps.definitionId, request.definitionId),
+                    eq(approvalDefinitionSteps.stepOrder, request.currentStepOrder)
+                ),
+            })
+
+            if (!currentStep) {
+                return { success: true as const, advanced: false as const, reason: "Current step missing" }
+            }
+
+            const currentStepConditionJson = (currentStep.conditionJson ?? {}) as Record<string, unknown>
+            const currentNodeKind = getNodeKind(currentStepConditionJson)
+            if (currentNodeKind !== "waitEventNode") {
+                return { success: true as const, advanced: false as const, reason: "Current step is not wait-event node" }
+            }
+
+            const resolveAssigneesForStep = async (step: typeof currentStep): Promise<string[]> => {
+                const stepConditionJson = (step.conditionJson ?? {}) as Record<string, unknown>
+                if (getNodeKind(stepConditionJson) === "parallelApproval") {
+                    const explicitApprovers = Array.isArray(stepConditionJson.approverUserIds)
+                        ? stepConditionJson.approverUserIds.filter((entry): entry is string => typeof entry === "string")
+                        : []
+                    if (explicitApprovers.length > 0) {
+                        return explicitApprovers
+                    }
+                }
+
+                if (step.approverType === "user") {
+                    return step.approverUserId ? [step.approverUserId] : []
+                }
+
+                let resolvedRole = step.approverRole
+                if (resolvedRole?.startsWith("dynamic:")) {
+                    const metadataKey = resolvedRole.slice("dynamic:".length).trim() || "dynamicRole"
+                    const dynamicRole = requestMetadata[metadataKey]
+                    resolvedRole = typeof dynamicRole === "string" ? dynamicRole : null
+                }
+
+                if (!resolvedRole) {
+                    return []
+                }
+
+                const roleUsers = await tx
+                    .select({ id: user.id })
+                    .from(user)
+                    .where(ilike(user.role, resolvedRole))
+
+                return roleUsers.map((entry) => entry.id)
+            }
+
+            let nextStepOrder = resolveNextStepOrderFromGraph(
+                currentStep.stepOrder,
+                currentStepConditionJson,
+                conditionSnapshot,
+                {
+                    requestDueAt: request.dueAt,
+                    requestSubmittedAt: request.submittedAt,
+                    requestMetadata,
+                }
+            )
+
+            const visitedStepOrders = new Set<number>()
+
+            while (true) {
+                if (nextStepOrder === null) {
+                    await tx.update(approvalRequests)
+                        .set({ status: "approved", completedAt: new Date(), updatedAt: new Date() })
+                        .where(eq(approvalRequests.id, request.id))
+
+                    await tx.update(approvalAssignments)
+                        .set({ status: "skipped", updatedAt: new Date() })
+                        .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.status, "pending")))
+
+                    return { success: true as const, advanced: true as const, status: "approved" as const }
+                }
+
+                if (visitedStepOrders.has(nextStepOrder)) {
+                    throw new Error("Workflow routing loop detected")
+                }
+                visitedStepOrders.add(nextStepOrder)
+
+                const nextStep = await tx.query.approvalDefinitionSteps.findFirst({
+                    where: and(
+                        eq(approvalDefinitionSteps.definitionId, request.definitionId),
+                        eq(approvalDefinitionSteps.stepOrder, nextStepOrder)
+                    ),
+                })
+
+                if (!nextStep) {
+                    await tx.update(approvalRequests)
+                        .set({ status: "approved", completedAt: new Date(), updatedAt: new Date() })
+                        .where(eq(approvalRequests.id, request.id))
+
+                    await tx.update(approvalAssignments)
+                        .set({ status: "skipped", updatedAt: new Date() })
+                        .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.status, "pending")))
+
+                    return { success: true as const, advanced: true as const, status: "approved" as const }
+                }
+
+                const nextStepConditionJson = (nextStep.conditionJson ?? {}) as Record<string, unknown>
+                const nextNodeKind = getNodeKind(nextStepConditionJson)
+
+                if (AUTO_ROUTING_NODE_KINDS.has(nextNodeKind)) {
+                    if (nextNodeKind === "cancelNode") {
+                        await tx.update(approvalRequests)
+                            .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
+                            .where(eq(approvalRequests.id, request.id))
+
+                        await tx.update(approvalAssignments)
+                            .set({ status: "skipped", updatedAt: new Date() })
+                            .where(and(eq(approvalAssignments.requestId, request.id), eq(approvalAssignments.status, "pending")))
+
+                        return { success: true as const, advanced: true as const, status: "cancelled" as const }
+                    }
+
+                    if (nextNodeKind === "dynamicRoleResolverNode") {
+                        const sourceField = typeof nextStepConditionJson.sourceField === "string" ? nextStepConditionJson.sourceField : "department"
+                        const fallbackRole = typeof nextStepConditionJson.fallbackRole === "string" ? nextStepConditionJson.fallbackRole : "manager"
+                        const metadataKey = typeof nextStepConditionJson.metadataKey === "string" ? nextStepConditionJson.metadataKey : "dynamicRole"
+                        const sourceValue = getValueByPath(conditionSnapshot, sourceField)
+                        const resolvedRole = String(sourceValue ?? "").trim() || fallbackRole
+
+                        requestMetadata = {
+                            ...requestMetadata,
+                            [metadataKey]: resolvedRole,
+                        }
+
+                        await tx.update(approvalRequests)
+                            .set({ metadata: requestMetadata, updatedAt: new Date() })
+                            .where(eq(approvalRequests.id, request.id))
+                    }
+
+                    nextStepOrder = resolveNextStepOrderFromGraph(
+                        nextStep.stepOrder,
+                        nextStepConditionJson,
+                        conditionSnapshot,
+                        {
+                            requestDueAt: request.dueAt,
+                            requestSubmittedAt: request.submittedAt,
+                            requestMetadata,
+                        }
+                    )
+                    continue
+                }
+
+                await tx.update(approvalRequests)
+                    .set({
+                        currentStepOrder: nextStep.stepOrder,
+                        dueAt: getStepDueAt(new Date(), nextStep.slaDays ?? null),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(approvalRequests.id, request.id))
+
+                const stepAssignees = await resolveAssigneesForStep(nextStep)
+                if (stepAssignees.length === 0) {
+                    throw new Error("Next step has no assignees")
+                }
+
+                await tx.insert(approvalAssignments).values(
+                    stepAssignees.map((assigneeId) => ({
+                        requestId: request.id,
+                        stepId: nextStep.id,
+                        stepOrder: nextStep.stepOrder,
+                        assigneeUserId: assigneeId,
+                    }))
+                )
+
+                return { success: true as const, advanced: true as const, status: "pending" as const, nextStepOrder: nextStep.stepOrder }
+            }
+        })
+
+        safeRevalidatePath("/dashboard/approvals")
+        return result
+    } catch (error) {
+        console.error("Failed to trigger approval request event:", error)
+        return { success: false, error: "Failed to trigger approval event" }
+    }
+}
+
+export async function getApprovalTestUtils() {
+    return {
+        normalizeModuleRoute,
+        resolveSafeDashboardModuleDir,
+        getStepDueAt,
+        evaluateConditionForStep,
+        resolveNextStepOrderFromGraph,
     }
 }
 
@@ -826,13 +2200,69 @@ export async function getApprovalRequestDetail(requestId: string) {
     const isRequester = request.requesterId === session.user.id
     const isAssignee = request.assignments.some((assignment) => assignment.assigneeUserId === session.user.id)
 
+    const resolvePreviewEntityUrl = async () => {
+        const modulePath = request.definition?.form?.modulePath?.trim() ?? ""
+        const normalizedModulePath = modulePath
+            ? modulePath.startsWith("/")
+                ? modulePath
+                : `/${modulePath}`
+            : ""
+
+        const basePath = normalizedModulePath.endsWith("/create")
+            ? normalizedModulePath.replace(/\/create$/, "")
+            : normalizedModulePath
+
+        if (!basePath) return null
+
+        const entityId = String(request.entityId ?? "").trim()
+        if (!entityId) return null
+
+        if (basePath === "/dashboard/quotations") {
+            if (/^\d+$/.test(entityId)) {
+                return `${basePath}/${entityId}`
+            }
+
+            const byQuotationNumber = await db
+                .select({ id: quotations.id })
+                .from(quotations)
+                .where(eq(quotations.quotationNumber, entityId))
+                .limit(1)
+
+            if (byQuotationNumber[0]?.id) {
+                return `${basePath}/${byQuotationNumber[0].id}`
+            }
+
+            const byReferenceNumber = await db
+                .select({ id: quotations.id })
+                .from(quotations)
+                .where(eq(quotations.referenceNumber, entityId))
+                .limit(1)
+
+            if (byReferenceNumber[0]?.id) {
+                return `${basePath}/${byReferenceNumber[0].id}`
+            }
+
+            return null
+        }
+
+        return `${basePath}/${encodeURIComponent(entityId)}`
+    }
+
+    const previewEntityUrl = await resolvePreviewEntityUrl()
+
     if (isRequester || isAssignee) {
-        return request
+        return {
+            ...request,
+            previewEntityUrl,
+        }
     }
 
     try {
         await checkPermission("approvals-inbox", "view")
-        return request
+        return {
+            ...request,
+            previewEntityUrl,
+        }
     } catch {
         return null
     }
@@ -1644,5 +3074,585 @@ export async function importApprovalMatrix(formData: FormData) {
         })
 
         return { success: false, error: `Import failed: ${message}` }
+    }
+}
+
+// ─── Workflow Canvas Actions ────────────────────────────────────────────────
+
+export type WorkflowStepInput = {
+    tempId: string
+    stepOrder: number
+    stepName: string
+    approverType: "role" | "user"
+    approverRole: string | null
+    approverUserId: string | null
+    minApprovals: number
+    notifyOnAssign: boolean
+    notifyOnComplete: boolean
+    ccEmails: string | null
+    slaDays: number | null
+    nodePositionX: number
+    nodePositionY: number
+    conditionJson?: Record<string, unknown> | null
+}
+
+export async function getApprovalUsersForSelect() {
+    await getAuthenticatedSession("approvals-settings", "view")
+
+    const users = await db
+        .select({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+        })
+        .from(user)
+        .orderBy(asc(user.name))
+
+    return users
+}
+
+export async function saveWorkflowSteps(definitionId: string, steps: WorkflowStepInput[]) {
+    await getAuthenticatedSession("approvals-settings", "edit")
+
+    if (!definitionId) {
+        return { success: false, error: "Definition ID is required" }
+    }
+
+    const definition = await db.query.approvalDefinitions.findFirst({
+        where: eq(approvalDefinitions.id, definitionId),
+    })
+
+    if (!definition) {
+        return { success: false, error: "Definition not found" }
+    }
+
+    try {
+        await db.transaction(async (tx) => {
+            // Delete existing steps
+            await tx.delete(approvalDefinitionSteps).where(
+                eq(approvalDefinitionSteps.definitionId, definitionId)
+            )
+
+            // Insert new steps from canvas
+            if (steps.length > 0) {
+                await tx.insert(approvalDefinitionSteps).values(
+                    steps.map((step) => ({
+                        definitionId,
+                        stepOrder: step.stepOrder,
+                        stepName: step.stepName,
+                        approverType: step.approverType,
+                        approverRole: step.approverRole ?? null,
+                        approverUserId: step.approverUserId ?? null,
+                        minApprovals: step.minApprovals,
+                        notifyOnAssign: step.notifyOnAssign,
+                        notifyOnComplete: step.notifyOnComplete,
+                        ccEmails: step.ccEmails ?? null,
+                        slaDays: step.slaDays ?? null,
+                        nodePositionX: step.nodePositionX,
+                        nodePositionY: step.nodePositionY,
+                        conditionJson: step.conditionJson ?? {},
+                    }))
+                )
+            }
+        })
+
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to save workflow steps:", error)
+        return { success: false, error: "Failed to save workflow steps" }
+    }
+}
+
+export async function updateApprovalDefinitionStatus(definitionId: string, status: "draft" | "active" | "archived") {
+    try {
+        await getAuthenticatedSession()
+        await db.update(approvalDefinitions)
+            .set({ status, updatedAt: new Date() })
+            .where(eq(approvalDefinitions.id, definitionId))
+
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to update status"
+        return { success: false, error: message }
+    }
+}
+
+export async function deleteApprovalDefinition(definitionId: string) {
+    try {
+        // Check authentication only
+        await getAuthenticatedSession()
+
+        // 1. First delete approval_requests that reference this definition
+        //    (approvalRequests has no onDelete cascade to approvalDefinitions)
+        const relatedRequests = await db
+            .select({ id: approvalRequests.id })
+            .from(approvalRequests)
+            .where(eq(approvalRequests.definitionId, definitionId))
+
+        if (relatedRequests.length > 0) {
+            // approvalAssignments and approvalAuditLogs will cascade-delete with requests
+            await db.delete(approvalRequests).where(eq(approvalRequests.definitionId, definitionId))
+        }
+
+        // 2. approvalDefinitionSteps already has onDelete: cascade — but delete manually to be safe
+        await db.delete(approvalDefinitionSteps).where(eq(approvalDefinitionSteps.definitionId, definitionId))
+
+        // 3. Now safe to delete the definition
+        const result = await db.delete(approvalDefinitions).where(eq(approvalDefinitions.id, definitionId))
+
+        console.log(`[deleteApprovalDefinition] Deleted definition ${definitionId}, result:`, result)
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to delete definition:", error)
+        const message = error instanceof Error ? error.message : "Failed to delete definition"
+        return { success: false, error: message }
+    }
+}
+
+export async function getApprovalStatusList(filters: StatusFilter): Promise<ApprovalStatusItem[]> {
+    await getAuthenticatedSession()
+
+    const conditions = []
+
+    if (filters.status !== "all") {
+        conditions.push(eq(approvalRequests.status, filters.status))
+    }
+
+    if (filters.search && filters.search.trim() !== "") {
+        conditions.push(ilike(approvalRequests.id, `%${filters.search.trim()}%`))
+    }
+
+    if (filters.dateFrom) {
+        conditions.push(gte(approvalRequests.submittedAt, new Date(filters.dateFrom)))
+    }
+
+    if (filters.dateTo) {
+        // Include the full dateTo day by going to end of day
+        const dateTo = new Date(filters.dateTo)
+        dateTo.setHours(23, 59, 59, 999)
+        conditions.push(lte(approvalRequests.submittedAt, dateTo))
+    }
+
+    if (filters.formKey) {
+        conditions.push(eq(approvalRequests.formKey, filters.formKey))
+    }
+
+    const rows = await db
+        .select({
+            requestId: approvalRequests.id,
+            formKey: approvalRequests.formKey,
+            definitionName: approvalDefinitions.name,
+            requesterId: approvalRequests.requesterId,
+            requesterName: user.name,
+            status: approvalRequests.status,
+            currentStepOrder: approvalRequests.currentStepOrder,
+            submittedAt: approvalRequests.submittedAt,
+            completedAt: approvalRequests.completedAt,
+        })
+        .from(approvalRequests)
+        .innerJoin(approvalDefinitions, eq(approvalRequests.definitionId, approvalDefinitions.id))
+        .innerJoin(user, eq(approvalRequests.requesterId, user.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(approvalRequests.submittedAt))
+
+    return rows.map((row) => ({
+        requestId: row.requestId,
+        formKey: row.formKey,
+        definitionName: row.definitionName,
+        requesterId: row.requesterId,
+        requesterName: row.requesterName ?? row.requesterId,
+        status: row.status,
+        currentStepOrder: row.currentStepOrder,
+        submittedAt: row.submittedAt,
+        completedAt: row.completedAt,
+    }))
+}
+
+export async function getApprovalReports(dateRange: { from: string | null; to: string | null }): Promise<ApprovalReportsData> {
+    await getAuthenticatedSession()
+
+    const dateConditions: ReturnType<typeof and>[] = []
+
+    if (dateRange.from) {
+        dateConditions.push(gte(approvalRequests.submittedAt, new Date(dateRange.from)))
+    }
+
+    if (dateRange.to) {
+        const dateTo = new Date(dateRange.to)
+        dateTo.setHours(23, 59, 59, 999)
+        dateConditions.push(lte(approvalRequests.submittedAt, dateTo))
+    }
+
+    const dateFilter = dateConditions.length > 0 ? and(...dateConditions) : undefined
+
+    // Query 1: Count by status
+    const statusCountRows = await db
+        .select({
+            status: approvalRequests.status,
+            count: count(),
+        })
+        .from(approvalRequests)
+        .where(dateFilter)
+        .groupBy(approvalRequests.status)
+
+    const byStatus: Record<string, number> = {}
+    for (const row of statusCountRows) {
+        byStatus[row.status] = row.count
+    }
+
+    // Query 2: Avg completion days for completed/approved requests
+    const completedFilter = and(
+        dateFilter,
+        or(
+            eq(approvalRequests.status, "approved"),
+            eq(approvalRequests.status, "rejected"),
+        ),
+        sql`${approvalRequests.completedAt} IS NOT NULL`,
+    )
+
+    const avgRows = await db
+        .select({
+            avgDays: sql<number>`AVG(EXTRACT(EPOCH FROM (${approvalRequests.completedAt} - ${approvalRequests.submittedAt})) / 86400)`,
+        })
+        .from(approvalRequests)
+        .where(completedFilter)
+
+    const avgCompletionDays = avgRows[0]?.avgDays != null ? Number(avgRows[0].avgDays) : null
+
+    // Query 3: Step bottlenecks — pending assignments grouped by step, joined with requests for date filter
+    const bottleneckWhere = and(
+        eq(approvalAssignments.status, "pending"),
+        dateFilter,
+    )
+
+    const bottleneckRows = await db
+        .select({
+            stepName: approvalDefinitionSteps.stepName,
+            stepOrder: approvalDefinitionSteps.stepOrder,
+            pendingCount: count(),
+        })
+        .from(approvalAssignments)
+        .innerJoin(approvalDefinitionSteps, eq(approvalAssignments.stepId, approvalDefinitionSteps.id))
+        .innerJoin(approvalRequests, eq(approvalAssignments.requestId, approvalRequests.id))
+        .where(bottleneckWhere)
+        .groupBy(approvalDefinitionSteps.id, approvalDefinitionSteps.stepName, approvalDefinitionSteps.stepOrder)
+        .orderBy(desc(count()))
+
+    return {
+        byStatus,
+        avgCompletionDays,
+        stepBottlenecks: bottleneckRows.map((row) => ({
+            stepName: row.stepName,
+            stepOrder: row.stepOrder,
+            pendingCount: row.pendingCount,
+        })),
+        dateRange: {
+            from: dateRange.from ? new Date(dateRange.from) : null,
+            to: dateRange.to ? new Date(dateRange.to) : null,
+        },
+    }
+}
+
+export async function revertApprovalRequest(requestId: string): Promise<ActionResult> {
+    const session = await getAuthenticatedSession()
+
+    if (!requestId?.trim()) {
+        return { success: false, error: "Invalid request ID" }
+    }
+
+    try {
+        const request = await db.query.approvalRequests.findFirst({
+            where: eq(approvalRequests.id, requestId),
+        })
+
+        if (!request) {
+            return { success: false, error: "Approval request not found" }
+        }
+
+        const assignments = await db
+            .select({ status: approvalAssignments.status })
+            .from(approvalAssignments)
+            .where(eq(approvalAssignments.requestId, requestId))
+
+        if (!canRevert(request, assignments, session.user.id)) {
+            return { success: false, error: "Cannot revert this request. You must be the submitter, the request must be pending, and no approver decision must have been made." }
+        }
+
+        await db.transaction(async (tx) => {
+            await tx
+                .update(approvalRequests)
+                .set({ status: "cancelled", completedAt: new Date(), updatedAt: new Date() })
+                .where(eq(approvalRequests.id, requestId))
+
+            await tx
+                .update(approvalAssignments)
+                .set({ status: "skipped", updatedAt: new Date() })
+                .where(and(eq(approvalAssignments.requestId, requestId), eq(approvalAssignments.status, "pending")))
+
+            await tx.insert(approvalAuditLogs).values({
+                requestId,
+                action: "cancel",
+                actorUserId: session.user.id,
+                payload: { message: "Request reverted by submitter" },
+            })
+        })
+
+        safeRevalidatePath("/dashboard/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to revert approval request:", error)
+        return { success: false, error: "Failed to revert request" }
+    }
+}
+
+export async function reorderWorkflowSteps(
+    definitionId: string,
+    stepReorderItems: StepReorderItem[]
+): Promise<ActionResult> {
+    await getAuthenticatedSession()
+
+    if (!definitionId?.trim()) {
+        return { success: false, error: "Invalid definition ID" }
+    }
+
+    try {
+        const currentSteps = await db
+            .select({ id: approvalDefinitionSteps.id, stepOrder: approvalDefinitionSteps.stepOrder })
+            .from(approvalDefinitionSteps)
+            .where(eq(approvalDefinitionSteps.definitionId, definitionId))
+
+        const original: StepReorderItem[] = currentSteps.map((s) => ({
+            stepId: s.id,
+            newStepOrder: s.stepOrder,
+        }))
+
+        if (!validateStepReorder(original, stepReorderItems)) {
+            return {
+                success: false,
+                error: "Invalid step reorder: duplicate orders, missing steps, or invalid order values",
+            }
+        }
+
+        const currentStepIds = new Set(currentSteps.map((s) => s.id))
+        for (const item of stepReorderItems) {
+            if (!currentStepIds.has(item.stepId)) {
+                return { success: false, error: "One or more step IDs do not belong to this definition" }
+            }
+        }
+
+        await db.transaction(async (tx) => {
+            for (const item of stepReorderItems) {
+                await tx
+                    .update(approvalDefinitionSteps)
+                    .set({ stepOrder: item.newStepOrder })
+                    .where(eq(approvalDefinitionSteps.id, item.stepId))
+            }
+        })
+
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to reorder workflow steps:", error)
+        return { success: false, error: "Failed to reorder workflow steps" }
+    }
+}
+
+function validateStepConfig(stepType: UIStepType, config: Record<string, unknown>): string | null {
+    switch (stepType) {
+        case "approval": {
+            const approverType = config.approverType
+            if (approverType !== "role" && approverType !== "user") {
+                return "approverType must be 'role' or 'user'"
+            }
+            if (approverType === "role" && !config.approverRole) {
+                return "approverRole is required when approverType is 'role'"
+            }
+            if (approverType === "user" && !config.approverUserId) {
+                return "approverUserId is required when approverType is 'user'"
+            }
+            return null
+        }
+        case "notification": {
+            const recipients = config.recipients
+            if (!Array.isArray(recipients) || recipients.length === 0) {
+                return "recipients must be a non-empty array"
+            }
+            if (!config.messageTemplate || typeof config.messageTemplate !== "string" || !config.messageTemplate.trim()) {
+                return "messageTemplate is required and must be a non-empty string"
+            }
+            return null
+        }
+        case "update_user": {
+            if (!config.targetField || typeof config.targetField !== "string" || !config.targetField.trim()) {
+                return "targetField is required and must be a non-empty string"
+            }
+            if (!config.newValue || typeof config.newValue !== "string" || !config.newValue.trim()) {
+                return "newValue is required and must be a non-empty string"
+            }
+            return null
+        }
+        case "user_input": {
+            const inputFields = config.inputFields
+            if (!Array.isArray(inputFields) || inputFields.length === 0) {
+                return "inputFields must be a non-empty array"
+            }
+            for (const field of inputFields) {
+                if (!field || typeof field !== "object") return "Each inputField must be an object"
+                const f = field as Record<string, unknown>
+                if (!f.key || !f.label || !f.type) {
+                    return "Each inputField must have key, label, and type"
+                }
+            }
+            return null
+        }
+        default:
+            return "Unknown stepType"
+    }
+}
+
+function stepTypeToNodeKind(stepType: UIStepType): string {
+    switch (stepType) {
+        case "approval": return "approvalStep"
+        case "notification": return "notifyNode"
+        case "update_user": return "updateUserNode"
+        case "user_input": return "userInputNode"
+    }
+}
+
+function nodeKindToStepType(nodeKind: string): UIStepType | null {
+    switch (nodeKind) {
+        case "approvalStep":
+        case "parallelApproval":
+            return "approval"
+        case "notifyNode":
+            return "notification"
+        case "updateUserNode":
+            return "update_user"
+        case "userInputNode":
+            return "user_input"
+        default:
+            return null
+    }
+}
+
+const STEP_TYPE_LABELS: Record<UIStepType, string> = {
+    approval: "Approval Step",
+    notification: "Notification",
+    update_user: "Update User",
+    user_input: "User Input",
+}
+
+export async function addWorkflowStep(
+    definitionId: string,
+    stepType: UIStepType,
+    config: Record<string, unknown>
+): Promise<ActionResult> {
+    await getAuthenticatedSession("approvals-settings", "create")
+
+    if (!definitionId?.trim()) {
+        return { success: false, error: "definitionId is required" }
+    }
+
+    const validationError = validateStepConfig(stepType, config)
+    if (validationError) {
+        return { success: false, error: validationError }
+    }
+
+    try {
+        const maxOrderResult = await db
+            .select({ maxOrder: sql<number>`coalesce(max(${approvalDefinitionSteps.stepOrder}), 0)` })
+            .from(approvalDefinitionSteps)
+            .where(eq(approvalDefinitionSteps.definitionId, definitionId))
+
+        const nextStepOrder = (maxOrderResult[0]?.maxOrder ?? 0) + 1
+        const nodeKind = stepTypeToNodeKind(stepType)
+        const stepName = typeof config.stepName === "string" && config.stepName.trim()
+            ? config.stepName.trim()
+            : STEP_TYPE_LABELS[stepType]
+
+        await db.insert(approvalDefinitionSteps).values({
+            definitionId,
+            stepOrder: nextStepOrder,
+            stepName,
+            approverType: stepType === "approval" ? (config.approverType as string) : null,
+            approverRole: stepType === "approval" ? ((config.approverRole as string) ?? null) : null,
+            approverUserId: stepType === "approval" ? ((config.approverUserId as string) ?? null) : null,
+            minApprovals: stepType === "approval" ? ((config.minApprovals as number) ?? 1) : 1,
+            conditionJson: { nodeKind, ...config },
+        })
+
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to add workflow step:", error)
+        return { success: false, error: "Failed to add workflow step" }
+    }
+}
+
+export async function updateWorkflowStep(
+    stepId: number,
+    config: Record<string, unknown>
+): Promise<ActionResult> {
+    await getAuthenticatedSession("approvals-settings", "edit")
+
+    if (!stepId || stepId <= 0) {
+        return { success: false, error: "stepId must be a positive integer" }
+    }
+
+    try {
+        const existing = await db
+            .select({ conditionJson: approvalDefinitionSteps.conditionJson })
+            .from(approvalDefinitionSteps)
+            .where(eq(approvalDefinitionSteps.id, stepId))
+            .limit(1)
+
+        if (!existing.length) {
+            return { success: false, error: "Step not found" }
+        }
+
+        const existingCondition = (existing[0].conditionJson ?? {}) as Record<string, unknown>
+        const nodeKind = typeof existingCondition.nodeKind === "string" ? existingCondition.nodeKind : ""
+        const stepType = nodeKindToStepType(nodeKind)
+
+        if (!stepType) {
+            return { success: false, error: `Unknown nodeKind: ${nodeKind}` }
+        }
+
+        const validationError = validateStepConfig(stepType, config)
+        if (validationError) {
+            return { success: false, error: validationError }
+        }
+
+        const mergedConditionJson = { ...existingCondition, ...config }
+
+        const updateValues: Record<string, unknown> = {
+            conditionJson: mergedConditionJson,
+        }
+
+        if (typeof config.stepName === "string" && config.stepName.trim()) {
+            updateValues.stepName = config.stepName.trim()
+        }
+
+        if (stepType === "approval") {
+            if (config.approverType !== undefined) updateValues.approverType = config.approverType
+            if (config.approverRole !== undefined) updateValues.approverRole = config.approverRole
+            if (config.approverUserId !== undefined) updateValues.approverUserId = config.approverUserId
+            if (config.minApprovals !== undefined) updateValues.minApprovals = config.minApprovals
+        }
+
+        await db
+            .update(approvalDefinitionSteps)
+            .set(updateValues)
+            .where(eq(approvalDefinitionSteps.id, stepId))
+
+        safeRevalidatePath("/dashboard/settings/approvals")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update workflow step:", error)
+        return { success: false, error: "Failed to update workflow step" }
     }
 }

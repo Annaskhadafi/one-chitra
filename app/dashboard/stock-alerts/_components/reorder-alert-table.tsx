@@ -2,9 +2,11 @@
 
 import * as React from "react"
 import { useState, useMemo } from "react"
-import { AlertTriangle, XCircle, Search } from "lucide-react"
+import { AlertTriangle, XCircle, Search, Download } from "lucide-react"
+import Papa from "papaparse"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
     Table,
     TableBody,
@@ -32,9 +34,15 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
     const [search, setSearch] = useState("")
     const [filterUrgency, setFilterUrgency] = useState("all")
     const [filterWarehouse, setFilterWarehouse] = useState("all")
+    const [filterCategory, setFilterCategory] = useState("all")
 
     const warehouses = useMemo(() => {
         const names = new Set(data.map((d) => d.warehouse?.sloc).filter(Boolean) as string[])
+        return Array.from(names).sort()
+    }, [data])
+
+    const categories = useMemo(() => {
+        const names = new Set(data.map((d) => d.product?.category).filter(Boolean) as string[])
         return Array.from(names).sort()
     }, [data])
 
@@ -49,14 +57,52 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
             const matchUrgency = filterUrgency === "all" || row.urgency === filterUrgency
             const matchWarehouse =
                 filterWarehouse === "all" || row.warehouse?.sloc === filterWarehouse
-            return matchSearch && matchUrgency && matchWarehouse
+            const matchCategory =
+                filterCategory === "all" || row.product?.category === filterCategory
+            return matchSearch && matchUrgency && matchWarehouse && matchCategory
         })
-    }, [data, search, filterUrgency, filterWarehouse])
+    }, [data, search, filterUrgency, filterWarehouse, filterCategory])
+
+    const handleExport = () => {
+        // Prepare data for CSV
+        const exportData = filtered.map((row, index) => ({
+            "No": index + 1,
+            "Material No.": row.product?.materialNumber || "-",
+            "Deskripsi": row.product?.materialDescription || "-",
+            "Brand": row.product?.brand || "-",
+            "Kategori": row.product?.category || "-",
+            "Warehouse": row.warehouse?.sloc || "-",
+            "Stok Saat Ini": Number(row.totalStock) || 0,
+            "Min Stock": Number(row.minStock) || 0,
+            "Kekurangan": (Number(row.minStock) || 0) - (Number(row.totalStock) || 0),
+            "Urgensi": row.urgency?.toUpperCase() || "-",
+        }))
+
+        // Generate CSV content using PapaParse
+        const csv = Papa.unparse(exportData)
+
+        // Create a blob with proper CSV mime type and UTF-8 encoding (BOM) for Excel
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" })
+
+        // Use the exact ObjectURL + hidden anchor technique to bypass policy
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+
+        // Setup simple filename
+        const fileName = `reorder_alerts_${new Date().toISOString().split('T')[0]}.csv`
+
+        link.setAttribute("href", url)
+        link.setAttribute("download", fileName)
+        link.style.visibility = "hidden"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
 
     return (
         <div className="flex flex-col gap-4">
             {/* Filters */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -67,7 +113,7 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
                     />
                 </div>
                 <Select value={filterUrgency} onValueChange={setFilterUrgency}>
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger className="w-32">
                         <SelectValue placeholder="Urgency" />
                     </SelectTrigger>
                     <SelectContent>
@@ -76,8 +122,19 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
                         <SelectItem value="warning">Warning</SelectItem>
                     </SelectContent>
                 </Select>
-                <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
                     <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Semua Kategori</SelectItem>
+                        {categories.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
+                    <SelectTrigger className="w-36">
                         <SelectValue placeholder="Warehouse" />
                     </SelectTrigger>
                     <SelectContent>
@@ -87,6 +144,14 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
                         ))}
                     </SelectContent>
                 </Select>
+                <Button
+                    variant="outline"
+                    onClick={handleExport}
+                    className="flex items-center gap-2 border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20 shadow-sm"
+                >
+                    <Download className="h-4 w-4" />
+                    Export CSV
+                </Button>
             </div>
 
             {/* Table */}
@@ -108,7 +173,7 @@ export function ReorderAlertTable({ data }: ReorderAlertTableProps) {
                             filtered.map((row, i) => {
                                 const shortage = row.minStock - row.totalStock
                                 const isCritical = row.urgency === "critical"
-                                
+
                                 return (
                                     <div
                                         key={row.id}

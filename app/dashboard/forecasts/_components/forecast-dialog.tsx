@@ -44,13 +44,13 @@ const CATEGORIES = [
 export default function ForecastDialog({ open, onOpenChange, initialData, onSuccess }: ForecastDialogProps) {
     const [isLoading, setIsLoading] = useState(false)
     const [period, setPeriod] = useState("")
-    const [formData, setFormData] = useState<Record<string, number>>({ isYearly: 0 })
+    const [formData, setFormData] = useState<Record<string, number | string>>({ isYearly: 0 })
 
     useEffect(() => {
         if (open) {
             if (initialData) {
                 setPeriod(initialData.period)
-                const newFormData: Record<string, number> = { isYearly: initialData.isYearly ? 1 : 0 }
+                const newFormData: Record<string, number | string> = { isYearly: initialData.isYearly ? 1 : 0 }
                 initialData.items.forEach(item => {
                     newFormData[item.targetName] = item.amount
                 })
@@ -76,7 +76,14 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
 
             CATEGORIES.forEach(category => {
                 category.items.forEach(itemName => {
-                    const amount = formData[itemName] || 0
+                    const rawVal = formData[itemName]
+                    let amount = 0;
+                    if (typeof rawVal === 'string') {
+                        amount = parseFloat(rawVal.replace(/,/g, '.')) || 0;
+                    } else if (typeof rawVal === 'number') {
+                        amount = rawVal;
+                    }
+                    
                     if (amount > 0 || initialData) {
                         itemsToSave.push({
                             targetName: itemName,
@@ -91,13 +98,14 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
             const res = await saveForecastPeriod(period, itemsToSave)
 
             if (res.success) {
-                toast.success(initialData ? "Forecast updated" : "Forecast created")
+                toast.success("Forecast saved successfully")
                 onSuccess()
+                onOpenChange(false)
             } else {
                 toast.error(res.error || "Failed to save forecast")
             }
-        } catch (error) {
-            toast.error("An error occurred")
+        } catch (_error) {
+            toast.error("An error occurred while saving forecast")
         } finally {
             setIsLoading(false)
         }
@@ -154,20 +162,22 @@ export default function ForecastDialog({ open, onOpenChange, initialData, onSucc
                                             <div key={itemName} className="space-y-2">
                                                 <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Forecast {itemName}</Label>
                                                 <div className="relative group">
-                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold group-focus-within:text-primary transition-colors">Rp</span>
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold group-focus-within:text-primary transition-colors">$</span>
                                                     <Input
                                                         type="text"
-                                                        className="pl-9 h-10 bg-background border-muted-foreground/20 focus-visible:ring-blue-500 font-bold text-primary transition-all overflow-hidden"
-                                                        value={formData[itemName] ? new Intl.NumberFormat('id-ID').format(formData[itemName]) : ""}
+                                                        className="pl-7 h-10 bg-background border-muted-foreground/20 focus-visible:ring-blue-500 font-bold text-primary transition-all overflow-hidden"
+                                                        value={formData[itemName] !== undefined && formData[itemName] !== 0 ? formData[itemName] : ""}
                                                         onChange={(e) => {
-                                                            const digits = e.target.value.replace(/\D/g, "");
-                                                            const parsed = digits ? parseInt(digits, 10) : 0;
+                                                            let val = e.target.value;
+                                                            // allow numbers, dot, and comma
+                                                            val = val.replace(/[^0-9.,]/g, '');
+                                                            
                                                             setFormData(prev => ({
                                                                 ...prev,
-                                                                [itemName]: parsed
+                                                                [itemName]: val
                                                             }));
                                                         }}
-                                                        placeholder="0"
+                                                        placeholder="0.00"
                                                     />
                                                 </div>
                                             </div>
