@@ -160,6 +160,17 @@ export async function createStockOpnameSession(
         }
         
         const validatedData = validation.data
+        const selectedCategoriesRaw = normalizeStringArray(validatedData.selectedCategories)
+        const selectedCategoryMap = new Map<string, string>()
+        for (const category of selectedCategoriesRaw) {
+            const normalized = category.trim().toLowerCase()
+            if (!normalized || selectedCategoryMap.has(normalized)) continue
+            selectedCategoryMap.set(normalized, category.trim())
+        }
+        const selectedCategorySet = new Set(selectedCategoryMap.keys())
+        const selectedCategories = Array.from(selectedCategoryMap.values())
+        const notifyRoles = normalizeStringArray(validatedData.notifyRoles)
+        const notifyUserIds = normalizeStringArray(validatedData.notifyUserIds)
         
         const session = await getAuthenticatedSession("stock-opname", "create")
         const userId = session.user.id
@@ -173,9 +184,9 @@ export async function createStockOpnameSession(
                     warehouseId: validatedData.warehouseId,
                     notes: validatedData.notes,
                     sourceType: "sap",
-                    selectedCategories: [],
-                    notifyRoles: [],
-                    notifyUserIds: [],
+                    selectedCategories,
+                    notifyRoles,
+                    notifyUserIds,
                     opnameDate: validatedData.opnameDate,
                     opnameTime: validatedData.opnameTime,
                     location: validatedData.location,
@@ -234,12 +245,19 @@ export async function createStockOpnameSession(
                     columns: {
                         id: true,
                         materialNumber: true,
+                        category: true,
                     },
                 })
                 : []
 
             const productIdByMaterialNumber = new Map(
-                mappedProducts.map((product) => [normalizeMaterialNumber(product.materialNumber), product.id])
+                mappedProducts
+                    .filter((product) => {
+                        if (selectedCategorySet.size === 0) return true
+                        const category = (product.category ?? "").trim().toLowerCase()
+                        return selectedCategorySet.has(category)
+                    })
+                    .map((product) => [normalizeMaterialNumber(product.materialNumber), product.id])
             )
 
             const sapQtyByProductId = new Map<number, number>()
@@ -672,7 +690,7 @@ async function getNotificationRecipientEmails(roleNames: string[], userIds: stri
     return Array.from(new Set(recipients))
 }
 
-async function sendStockOpnameActualCompletionNotification(sessionId: number): Promise<{
+async function sendStockOpnameCompletionNotification(sessionId: number): Promise<{
     sent: boolean
     reason?: string
     recipientCount?: number
@@ -689,8 +707,8 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
         },
     })
 
-    if (!opnameSession || opnameSession.sourceType !== "actual") {
-        return { sent: false, reason: "Session is not stock opname aktual" }
+    if (!opnameSession) {
+        return { sent: false, reason: "Session not found" }
     }
 
     const notifyRoles = normalizeStringArray(opnameSession.notifyRoles)
@@ -716,7 +734,9 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
         }))
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
-    const detailPath = `/dashboard/stock-opname-aktual/${opnameSession.id}`
+    const detailPath = opnameSession.sourceType === "actual"
+        ? `/dashboard/stock-opname-aktual/${opnameSession.id}`
+        : `/dashboard/stock-opname/${opnameSession.id}`
     const detailUrl = baseUrl ? `${baseUrl}${detailPath}` : detailPath
     const warehouseLabel = formatWarehouseLabel(opnameSession.warehouse)
     const opnameDate = opnameSession.opnameDate
@@ -759,7 +779,7 @@ async function sendStockOpnameActualCompletionNotification(sessionId: number): P
     })
 
     if (!emailResult.success) {
-        console.error("Failed to send stock opname aktual notification:", emailResult.error)
+        console.error("Failed to send stock opname notification:", emailResult.error)
         return { sent: false, reason: emailResult.error || "Gagal mengirim email", recipientCount: recipients.length }
     }
 
@@ -844,11 +864,11 @@ export async function closeStockOpnameSession(
         revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}`)
 
         let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
-        if (opnameSession.sourceType === "actual") {
+        if ((opnameSession.notifyRoles?.length ?? 0) > 0 || (opnameSession.notifyUserIds?.length ?? 0) > 0) {
             try {
-                notificationResult = await sendStockOpnameActualCompletionNotification(sessionId)
+                notificationResult = await sendStockOpnameCompletionNotification(sessionId)
             } catch (notificationError) {
-                console.error("Stock opname aktual notification error:", notificationError)
+                console.error("Stock opname notification error:", notificationError)
                 notificationResult = { sent: false, reason: "Terjadi error saat mengirim notifikasi email" }
             }
         }

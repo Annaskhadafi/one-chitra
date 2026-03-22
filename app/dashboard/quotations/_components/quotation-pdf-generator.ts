@@ -35,6 +35,39 @@ interface QuotationPdfData {
     }[]
 }
 
+type QuotationPdfPayloadSource = {
+    quotationNumber: string | null
+    currentRevision?: number
+    quotationDate: Date
+    validUntil: Date | null
+    salesPerson?: { name: string | null } | null
+    attn: string | null
+    address: string | null
+    customer: Customer
+    currency: string
+    discountType: string
+    discount: string
+    tax: string
+    shipping: string
+    termsConditions: string | null
+    clientNote: string | null
+    items: {
+        product: Product
+        description: string | null
+        longDescription: string | null
+        quantity: number
+        unitPrice: string
+    }[]
+    attachments?: {
+        title: string
+        fileName: string
+        fileUrl?: string
+        mimeType?: string | null
+        kind: string
+        includeInPdf: boolean
+    }[]
+}
+
 function formatCurrency(value: number, currency = "IDR") {
     if (currency === "USD") {
         return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
@@ -48,6 +81,41 @@ function formatDate(date: Date) {
 
 function sanitizeFilenamePart(value: string | null | undefined) {
     return (value || "Draft").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Draft"
+}
+
+export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): QuotationPdfData {
+    return {
+        quotationNumber: source.quotationNumber,
+        currentRevision: source.currentRevision,
+        quotationDate: source.quotationDate,
+        validUntil: source.validUntil,
+        salesPerson: source.salesPerson ? { name: source.salesPerson.name } : null,
+        attn: source.attn,
+        address: source.address,
+        customer: source.customer,
+        currency: source.currency,
+        discountType: source.discountType,
+        discount: source.discount,
+        tax: source.tax,
+        shipping: source.shipping,
+        termsConditions: source.termsConditions,
+        clientNote: source.clientNote,
+        items: source.items.map((item) => ({
+            product: item.product,
+            description: item.description,
+            longDescription: item.longDescription,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+        })),
+        attachments: source.attachments?.map((attachment) => ({
+            title: attachment.title,
+            fileName: attachment.fileName,
+            fileUrl: attachment.fileUrl,
+            mimeType: attachment.mimeType,
+            kind: attachment.kind,
+            includeInPdf: attachment.includeInPdf,
+        })),
+    }
 }
 
 function inferMimeType(fileName: string, mimeType?: string | null) {

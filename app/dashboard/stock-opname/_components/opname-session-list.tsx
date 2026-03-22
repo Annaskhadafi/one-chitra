@@ -165,15 +165,15 @@ export function OpnameSessionList({
 
     return (
         <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Input
                     placeholder="Cari nama sesi / warehouse..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="flex-1 min-w-[200px]"
+                    className="min-w-0 flex-1"
                 />
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-36">
+                    <SelectTrigger className="w-full sm:w-36">
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -188,7 +188,7 @@ export function OpnameSessionList({
                         variant="destructive"
                         size="sm"
                         onClick={handleBulkDeleteClick}
-                        className="gap-2"
+                        className="w-full gap-2 sm:w-auto"
                     >
                         <Trash2 className="h-4 w-4" />
                         Hapus {selectedSessions.size} Sesi
@@ -209,7 +209,7 @@ export function OpnameSessionList({
                 </div>
             )}
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
                 {filtered.length === 0 ? (
                     <p className="text-center py-8 text-muted-foreground text-sm">
                         Tidak ada hasil sesuai filter.
@@ -231,19 +231,20 @@ export function OpnameSessionList({
                         return (
                             <div
                                 key={session.id}
-                                className="group rounded-xl border bg-card p-5 flex items-center gap-4 hover:bg-muted/30 transition-colors"
+                                className="group rounded-2xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30 sm:p-5"
                             >
                                 <Checkbox
                                     checked={selectedSessions.has(session.id)}
                                     onCheckedChange={() => toggleSelectSession(session.id)}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="flex-none"
+                                    className="mb-3 flex-none sm:mb-0"
                                 />
+                                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                                 <Link
                                     href={`${basePath}/${session.id}`}
-                                    className="flex items-center gap-4 flex-1 min-w-0"
+                                    className="flex min-w-0 flex-1 items-start gap-3 sm:items-center sm:gap-4"
                                 >
-                                    <div className="flex-none w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                                    <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-muted">
                                         <ClipboardList className="h-5 w-5 text-muted-foreground" />
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -254,14 +255,14 @@ export function OpnameSessionList({
                                                 {cfg.label}
                                             </Badge>
                                         </div>
-                                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
-                                            <span>Warehouse: <strong className="text-foreground">{session.warehouse?.sloc ?? "-"}</strong></span>
+                                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                            <span>Warehouse: <strong className="text-foreground">{session.warehouse?.description || session.warehouse?.sloc || "-"}</strong></span>
                                             <span>Dibuat: <strong className="text-foreground">{new Date(session.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</strong></span>
                                             {session.closedAt && (
                                                 <span>Ditutup: {new Date(session.closedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                                             )}
                                         </div>
-                                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
+                                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                                             <span>Tgl Opname: <strong className="text-foreground">{formattedOpnameDate}</strong></span>
                                             <span>Waktu: <strong className="text-foreground">{session.opnameTime ?? "-"}</strong></span>
                                             <span>Lokasi: <strong className="text-foreground">{session.location ?? "-"}</strong></span>
@@ -281,8 +282,8 @@ export function OpnameSessionList({
                                             </span>
                                         </div>
                                         {totalItems > 0 && (
-                                            <div className="mt-2 flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
+                                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <div className="h-1.5 w-full max-w-full overflow-hidden rounded-full bg-muted sm:max-w-[160px]">
                                                     <div
                                                         className="h-full rounded-full bg-emerald-500 transition-all"
                                                         style={{ width: `${progress}%` }}
@@ -299,38 +300,44 @@ export function OpnameSessionList({
                                             </div>
                                         )}
                                     </div>
-                                    <ChevronRight className="flex-none h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                    <ChevronRight className="mt-1 hidden h-5 w-5 flex-none text-muted-foreground transition-colors group-hover:text-foreground sm:block" />
                                 </Link>
-                                <Button variant="ghost" size="icon" className="flex-none" asChild title="Lihat detail sesi">
-                                    <Link href={`${basePath}/${session.id}`}>
-                                        <Eye className="h-4 w-4" />
-                                    </Link>
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled={!session.documentUrl}
-                                    className="flex-none text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 disabled:text-muted-foreground/40 disabled:hover:bg-transparent"
-                                    onClick={(e) => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        if (!session.documentUrl) return
-                                        setPreviewSession(session)
-                                    }}
-                                    title={session.documentUrl
-                                        ? "Lihat hasil scan audit lapangan"
-                                        : "Belum ada hasil scan audit"}
-                                >
-                                    <FileText className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="flex-none text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                    onClick={(e) => handleDeleteClick(e, session.id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-none sm:items-center">
+                                    <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild title="Lihat detail sesi">
+                                        <Link href={`${basePath}/${session.id}`}>
+                                            <Eye className="h-4 w-4 sm:mr-1" />
+                                            <span className="hidden sm:inline">Detail</span>
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={!session.documentUrl}
+                                        className="w-full text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/30 disabled:text-muted-foreground/40 disabled:hover:bg-transparent sm:w-auto"
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            if (!session.documentUrl) return
+                                            setPreviewSession(session)
+                                        }}
+                                        title={session.documentUrl
+                                            ? "Lihat hasil scan audit lapangan"
+                                            : "Belum ada hasil scan audit"}
+                                    >
+                                        <FileText className="h-4 w-4 sm:mr-1" />
+                                        <span className="hidden sm:inline">Dokumen</span>
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
+                                        onClick={(e) => handleDeleteClick(e, session.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4 sm:mr-1" />
+                                        <span className="hidden sm:inline">Hapus</span>
+                                    </Button>
+                                </div>
+                                </div>
                             </div>
                         )
                     })

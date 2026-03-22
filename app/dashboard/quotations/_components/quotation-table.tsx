@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
@@ -1135,6 +1135,162 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         )
     }
 
+    const renderQuotationActions = useCallback((quotation: QuotationWithRelations, mobile = false) => {
+        const isOwner = quotation.createdBy === currentUserId
+        const canDeleteRow = canDelete && isOwner
+        const canUploadPo = quotation.status !== "rejected"
+        const hasDeliveryContext = quotation.salesOrderId !== null || quotation.relatedDeliveries.length > 0
+        const uploadPoTitle = quotation.customerPoDocument
+            ? "Update customer PO dan sinkronkan via OCR"
+            : "Upload customer PO dan validasi OCR"
+        const deleteDisabledReason = !canDelete
+            ? "You do not have permission to delete quotations"
+            : "You can only delete quotations you created"
+        const buttonClassName = mobile ? "h-9 w-9" : "h-8 w-8"
+        const iconClassName = mobile ? "h-4 w-4" : "h-3.5 w-3.5"
+
+        return (
+            <div className={cn("flex flex-wrap items-center gap-1.5", mobile ? "justify-start" : "justify-end")}>
+                <Link href={`/dashboard/quotations/${quotation.id}`}>
+                    <Button variant="ghost" size="icon" className={buttonClassName} title="View quotation">
+                        <Eye className={iconClassName} />
+                    </Button>
+                </Link>
+                <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
+                    <Button variant="ghost" size="icon" className={buttonClassName} title="Edit quotation">
+                        <Pencil className={iconClassName} />
+                    </Button>
+                </Link>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(buttonClassName, "text-sky-600 hover:text-sky-700")}
+                    title={canUploadPo ? uploadPoTitle : "Rejected quotation tidak bisa upload PO"}
+                    disabled={!canUploadPo}
+                    onClick={() => {
+                        setPoDialogQuotation(quotation)
+                        setPoFile(null)
+                    }}
+                >
+                    <FileUp className={iconClassName} />
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(buttonClassName, "text-cyan-600 hover:text-cyan-700")}
+                    title={hasDeliveryContext ? "Lihat delivery terkait quotation ini" : "Belum ada delivery terkait quotation ini"}
+                    disabled={!hasDeliveryContext}
+                    onClick={() => setDeliveryDialogQuotation(quotation)}
+                >
+                    <Truck className={iconClassName} />
+                </Button>
+                {quotation.customerPoDocument && (
+                    <Link href={quotation.customerPoDocument} target="_blank">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(buttonClassName, "text-amber-600 hover:text-amber-700")}
+                            title={quotation.customerPoNumber ? `Lihat file PO ${quotation.customerPoNumber}` : "Lihat file PO customer"}
+                        >
+                            <FileSearch className={iconClassName} />
+                        </Button>
+                    </Link>
+                )}
+                {quotation.salesOrderId && (
+                    <Link href={`/dashboard/sales-orders/${quotation.salesOrderId}/edit`}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(buttonClassName, "text-emerald-600 hover:text-emerald-700")}
+                            title={`Buka Sales Order #${quotation.salesOrderId}`}
+                        >
+                            <ExternalLink className={iconClassName} />
+                        </Button>
+                    </Link>
+                )}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(buttonClassName, "text-blue-500 hover:text-blue-600")}
+                    title="Duplicate quotation"
+                    disabled={isDuplicating === quotation.id}
+                    onClick={async () => {
+                        setIsDuplicating(quotation.id)
+                        try {
+                            const result = await duplicateQuotation(quotation.id)
+                            if (result.success) {
+                                toast.success("Quotation duplicated")
+                                refetch()
+                            } else {
+                                toast.error(result.error || "Failed to duplicate")
+                            }
+                        } catch {
+                            toast.error("An error occurred while duplicating")
+                        } finally {
+                            setIsDuplicating(null)
+                        }
+                    }}
+                >
+                    {isDuplicating === quotation.id ? (
+                        <Loader2 className={cn(iconClassName, "animate-spin")} />
+                    ) : (
+                        <Copy className={iconClassName} />
+                    )}
+                </Button>
+                {canDeleteRow ? (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(buttonClassName, "text-destructive hover:text-destructive")}
+                                title="Delete quotation"
+                            >
+                                <Trash2 className={iconClassName} />
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will permanently delete quotation {quotation.quotationNumber} and all its items.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={async () => {
+                                        const result = await deleteQuotation(quotation.id)
+                                        if (result.success) {
+                                            toast.success("Quotation deleted")
+                                            refetch()
+                                        } else {
+                                            toast.error(result.error || "Failed to delete")
+                                        }
+                                    }}
+                                >
+                                    Delete
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                ) : (
+                    <span title={deleteDisabledReason}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(buttonClassName, "cursor-not-allowed text-muted-foreground opacity-45")}
+                            disabled
+                            aria-label={deleteDisabledReason}
+                        >
+                            <Trash2 className={iconClassName} />
+                        </Button>
+                    </span>
+                )}
+            </div>
+        )
+    }, [canDelete, currentUserId, isDuplicating, refetch])
+
     const columns = useMemo<ColumnDef<QuotationWithRelations>[]>(() => [
         {
             id: "select",
@@ -1306,160 +1462,9 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
         {
             id: "actions",
             header: () => <div className="text-right">Actions</div>,
-            cell: ({ row }) => {
-                const isOwner = row.original.createdBy === currentUserId
-                const canDeleteRow = canDelete && isOwner
-                const canUploadPo = row.original.status !== "rejected"
-                const hasDeliveryContext = row.original.salesOrderId !== null || row.original.relatedDeliveries.length > 0
-                const uploadPoTitle = row.original.customerPoDocument
-                    ? "Update customer PO dan sinkronkan via OCR"
-                    : "Upload customer PO dan validasi OCR"
-                const deleteDisabledReason = !canDelete
-                    ? "You do not have permission to delete quotations"
-                    : "You can only delete quotations you created"
-
-                return (
-                <div className="flex items-center justify-end gap-1">
-                    <Link href={`/dashboard/quotations/${row.original.id}`}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="View quotation">
-                            <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                    </Link>
-                    <Link href={`/dashboard/quotations/${row.original.id}/edit`}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit quotation">
-                            <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                    </Link>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-sky-600 hover:text-sky-700"
-                        title={canUploadPo ? uploadPoTitle : "Rejected quotation tidak bisa upload PO"}
-                        disabled={!canUploadPo}
-                        onClick={() => {
-                            setPoDialogQuotation(row.original)
-                            setPoFile(null)
-                        }}
-                    >
-                        <FileUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-cyan-600 hover:text-cyan-700"
-                        title={hasDeliveryContext ? "Lihat delivery terkait quotation ini" : "Belum ada delivery terkait quotation ini"}
-                        disabled={!hasDeliveryContext}
-                        onClick={() => setDeliveryDialogQuotation(row.original)}
-                    >
-                        <Truck className="h-3.5 w-3.5" />
-                    </Button>
-                    {row.original.customerPoDocument && (
-                        <Link href={row.original.customerPoDocument} target="_blank">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-amber-600 hover:text-amber-700"
-                                title={row.original.customerPoNumber ? `Lihat file PO ${row.original.customerPoNumber}` : "Lihat file PO customer"}
-                            >
-                                <FileSearch className="h-3.5 w-3.5" />
-                            </Button>
-                        </Link>
-                    )}
-                    {row.original.salesOrderId && (
-                        <Link href={`/dashboard/sales-orders/${row.original.salesOrderId}/edit`}>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
-                                title={`Buka Sales Order #${row.original.salesOrderId}`}
-                            >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                        </Link>
-                    )}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-blue-500 hover:text-blue-600"
-                        title="Duplicate quotation"
-                        disabled={isDuplicating === row.original.id}
-                        onClick={async () => {
-                            setIsDuplicating(row.original.id)
-                            try {
-                                const result = await duplicateQuotation(row.original.id)
-                                if (result.success) {
-                                    toast.success("Quotation duplicated")
-                                    refetch()
-                                } else {
-                                    toast.error(result.error || "Failed to duplicate")
-                                }
-                            } catch {
-                                toast.error("An error occurred while duplicating")
-                            } finally {
-                                setIsDuplicating(null)
-                            }
-                        }}
-                    >
-                        {isDuplicating === row.original.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                            <Copy className="h-3.5 w-3.5" />
-                        )}
-                    </Button>
-                    {canDeleteRow ? (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-destructive hover:text-destructive"
-                                    title="Delete quotation"
-                                >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This will permanently delete quotation {row.original.quotationNumber} and all its items.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        onClick={async () => {
-                                            const result = await deleteQuotation(row.original.id)
-                                            if (result.success) {
-                                                toast.success("Quotation deleted")
-                                                refetch()
-                                            } else {
-                                                toast.error(result.error || "Failed to delete")
-                                            }
-                                        }}
-                                    >
-                                        Delete
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    ) : (
-                        <span title={deleteDisabledReason}>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 cursor-not-allowed text-muted-foreground opacity-45"
-                                disabled
-                                aria-label={deleteDisabledReason}
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                        </span>
-                    )}
-                </div >
-            )},
+            cell: ({ row }) => renderQuotationActions(row.original),
         },
-    ], [refetch, isDuplicating, canEdit, canDelete, currentUserId, mounted, expandedQuotationIds])
+    ], [renderQuotationActions, canEdit, mounted, expandedQuotationIds, refetch])
 
     const table = useReactTable({
         data: quotations,
@@ -1549,6 +1554,7 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
             toast.error("Failed to delete quotations")
         }
     }
+
 
     const { rows } = table.getRowModel()
     const visibleQuotationIds = useMemo(
@@ -2169,7 +2175,152 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                         </Button>
                     </div>
 
-                    <div className="overflow-hidden rounded-lg border bg-card">
+                    <div className="space-y-3 md:hidden">
+                        {rows.length > 0 ? (
+                            rows.map((row) => {
+                                const quotation = row.original
+                                const isExpanded = expandedQuotationIds.includes(quotation.id)
+                                const isExpired = quotation.validUntil && new Date(quotation.validUntil) < new Date() && quotation.status !== "converted" && quotation.status !== "approved"
+                                const grandTotal = calculateGrandTotal(quotation)
+                                const hasDeliveryContext = quotation.salesOrderId !== null || quotation.relatedDeliveries.length > 0
+
+                                return (
+                                    <Card key={`mobile-${quotation.id}`} className="overflow-hidden border-slate-200/90 shadow-sm">
+                                        <CardContent className="space-y-4 p-4">
+                                            <div className="flex items-start gap-3">
+                                                <Checkbox
+                                                    checked={row.getIsSelected()}
+                                                    onCheckedChange={(value) => row.toggleSelected(!!value)}
+                                                    aria-label={`Select quotation ${quotation.quotationNumber || quotation.id}`}
+                                                    className="mt-1"
+                                                />
+                                                <div className="min-w-0 flex-1 space-y-3">
+                                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setPreviewQuotation(quotation)
+                                                                    setIsPreviewOpen(true)
+                                                                }}
+                                                                className="inline-flex max-w-full items-center gap-2 bg-transparent p-0 text-left font-mono text-sm font-semibold text-primary underline underline-offset-4"
+                                                                title="Buka preview PDF quotation"
+                                                            >
+                                                                <FileText className="h-3.5 w-3.5 shrink-0" />
+                                                                <span className="truncate">{quotation.quotationNumber || `QT-${quotation.id}`}</span>
+                                                            </button>
+                                                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                                                Tap nomor quotation untuk preview PDF & download
+                                                            </p>
+                                                            <p className="mt-1 text-sm font-medium text-foreground">{quotation.customer.name}</p>
+                                                            <p className="text-xs text-muted-foreground">{quotation.customer.customerCode}</p>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <Badge variant={statusVariants[quotation.status] || "secondary"}>
+                                                                {STATUS_LABELS[quotation.status] || quotation.status}
+                                                            </Badge>
+                                                            {isExpired ? <Badge variant="destructive">Expired</Badge> : null}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-3 rounded-xl bg-muted/25 p-3">
+                                                        <div>
+                                                            <p className="text-[11px] text-muted-foreground">Date</p>
+                                                            <p className="mt-1 text-sm font-semibold">{formatDate(quotation.quotationDate)}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] text-muted-foreground">Valid Until</p>
+                                                            <p className={cn("mt-1 text-sm font-semibold", isExpired && "text-destructive")}>
+                                                                {quotation.validUntil ? formatDate(quotation.validUntil) : "-"}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] text-muted-foreground">Created By</p>
+                                                            <p className="mt-1 text-sm font-semibold">{quotation.createdByUser?.name || quotation.createdBy}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] text-muted-foreground">Grand Total</p>
+                                                            <p className="mt-1 text-sm font-semibold text-primary">{formatCurrency(grandTotal)}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <p className="text-[11px] text-muted-foreground">Subject</p>
+                                                            <p className="mt-1 text-sm text-foreground">{quotation.subject || "-"}</p>
+                                                        </div>
+                                                        {quotation.customerPoNumber || quotation.customerPoDocument || hasDeliveryContext ? (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {quotation.customerPoNumber ? <Badge variant="outline">PO {quotation.customerPoNumber}</Badge> : null}
+                                                                {quotation.customerPoDocument ? <Badge variant="outline">PO File</Badge> : null}
+                                                                {quotation.salesOrderId ? <Badge variant="outline">SO #{quotation.salesOrderId}</Badge> : null}
+                                                                {quotation.relatedDeliveries.length > 0 ? <Badge variant="outline">{quotation.relatedDeliveries.length} Delivery</Badge> : null}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+
+                                                    {renderQuotationActions(quotation, true)}
+
+                                                    <div className="rounded-xl border">
+                                                        <button
+                                                            type="button"
+                                                            className="flex w-full items-center justify-between px-3 py-2.5 text-left"
+                                                            onClick={() => toggleQuotationExpansion(quotation.id)}
+                                                        >
+                                                            <span className="text-sm font-medium">Items ({quotation.items.length})</span>
+                                                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                        </button>
+                                                        {isExpanded ? (
+                                                            <div className="space-y-2 border-t bg-muted/10 p-3">
+                                                                {quotation.items.map((item) => {
+                                                                    const lineTotal = item.quantity * Number(item.unitPrice) - Number(item.discount || 0) + Number(item.tax || 0)
+
+                                                                    return (
+                                                                        <div key={item.id} className="rounded-lg border bg-background p-3">
+                                                                            <p className="font-medium text-foreground">
+                                                                                {item.product?.materialDescription || item.description || item.product?.materialNumber || "-"}
+                                                                            </p>
+                                                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                                                {item.product?.materialNumber || "-"}
+                                                                            </p>
+                                                                            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                                                                <div>
+                                                                                    <p className="text-[11px] text-muted-foreground">Qty</p>
+                                                                                    <p className="font-medium">{item.quantity}</p>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <p className="text-[11px] text-muted-foreground">Price</p>
+                                                                                    <p className="font-medium">{formatCurrency(Number(item.unitPrice || 0))}</p>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <p className="text-[11px] text-muted-foreground">Discount</p>
+                                                                                    <p className="font-medium text-red-500">{formatCurrency(Number(item.discount || 0))}</p>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <p className="text-[11px] text-muted-foreground">Line Total</p>
+                                                                                    <p className="font-medium">{formatCurrency(lineTotal)}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            })
+                        ) : (
+                            <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+                                <FileText className="mx-auto mb-3 h-10 w-10 opacity-30" />
+                                <p>No quotations found</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
                         <div className="relative h-[560px] overflow-auto scrollbar-thin scrollbar-thumb-accent">
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">

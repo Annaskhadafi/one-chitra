@@ -256,20 +256,20 @@ export function CreateSessionDialogActual({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="bg-teal-600 hover:bg-teal-700 text-white">
+                <Button className="w-full bg-teal-600 text-white hover:bg-teal-700 sm:w-auto">
                     <Plus className="h-4 w-4 mr-2" />
                     Buat Sesi Aktual
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
+            <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-2xl p-0 sm:max-w-[720px]">
+                <DialogHeader className="px-4 pt-5 sm:px-6">
                     <DialogTitle>Buat Sesi Stock Opname Aktual</DialogTitle>
                     <DialogDescription>
                         Data sistem diambil dari stock aktual internal, lalu difilter berdasarkan kategori produk yang dipilih.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-4 py-2 sm:px-6">
                         <FormField
                             control={form.control}
                             name="name"
@@ -338,7 +338,7 @@ export function CreateSessionDialogActual({
                             )}
                         />
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <FormField
                                 control={form.control}
                                 name="opnameDate"
@@ -388,14 +388,14 @@ export function CreateSessionDialogActual({
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <FormLabel>Peserta / Tanda Tangan</FormLabel>
-                                <Button type="button" variant="outline" size="sm" onClick={() => append({ name: "", position: "" })}>
+                                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => append({ name: "", position: "" })}>
                                     <Plus className="h-3 w-3 mr-1" />
                                     Tambah
                                 </Button>
                             </div>
                             {fields.map((entry, index) => (
-                                <div key={entry.id} className="flex gap-2 items-start">
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                <div key={entry.id} className="flex items-start gap-2 rounded-xl border p-3">
+                                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <FormField
                                             control={form.control}
                                             name={`signatures.${index}.name`}
@@ -422,7 +422,7 @@ export function CreateSessionDialogActual({
                                         />
                                     </div>
                                     {fields.length > 1 && (
-                                        <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                        <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => remove(index)}>
                                             <X className="h-4 w-4" />
                                         </Button>
                                     )}
@@ -482,11 +482,11 @@ export function CreateSessionDialogActual({
                             )}
                         />
 
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+                        <DialogFooter className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-4 sm:-mx-6 sm:px-6">
+                            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading} className="w-full sm:w-auto">
                                 Batal
                             </Button>
-                            <Button type="submit" disabled={loading}>
+                            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                                 {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                                 Buat & Mulai
                             </Button>

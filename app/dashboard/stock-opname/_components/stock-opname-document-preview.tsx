@@ -48,12 +48,12 @@ export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpna
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-6xl w-[95vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl">
+            <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-6xl">
                 <VisuallyHidden>
                     <DialogTitle>{session.documentTitle || session.name || "Dokumen"}</DialogTitle>
                 </VisuallyHidden>
                 {/* Header */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0">
+                <div className="flex shrink-0 flex-col gap-3 border-b bg-background px-4 py-3 sm:flex-row sm:items-center">
                     <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900">
                         <FileText className="w-4 h-4 text-red-500" />
                     </div>
@@ -70,18 +70,18 @@ export function StockOpnameDocumentPreview({ session, open, onClose }: StockOpna
                             {documentName}
                         </span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleDownload}>
+                    <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-1.5">
+                        <Button variant="outline" size="sm" className="h-9 text-xs" onClick={handleDownload}>
                             <Download className="w-3.5 h-3.5 mr-1.5" />
-                            Download
+                            <span className="hidden sm:inline">Download</span>
                         </Button>
-                        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+                        <Button variant="outline" size="sm" className="h-9 text-xs" asChild>
                             <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                                Open
+                                <span className="hidden sm:inline">Open</span>
                             </a>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+                        <Button variant="ghost" size="icon" className="h-9 w-full sm:h-8 sm:w-8" onClick={onClose}>
                             <X className="w-4 h-4" />
                         </Button>
                     </div>

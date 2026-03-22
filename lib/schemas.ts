@@ -255,6 +255,9 @@ export const createOpnameSessionSchema = z.object({
     opnameTime: z.string().regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, "Time must be in HH:MM format"),
     location: z.string().min(1, "Location is required"),
     signatures: z.array(signatureEntrySchema).min(1, "At least one participant signature is required"),
+    selectedCategories: z.array(z.string()).optional().default([]),
+    notifyRoles: z.array(z.string()).optional().default([]),
+    notifyUserIds: z.array(z.string()).optional().default([]),
 })
 
 // Export TypeScript types

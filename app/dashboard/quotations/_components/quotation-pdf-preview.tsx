@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Printer, X, FileDown } from "lucide-react"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
+import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 
 type User = typeof user.$inferSelect
 
@@ -92,7 +93,13 @@ function formatDate(date: Date) {
 }
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
+    const viewportRef = useRef<HTMLDivElement>(null)
     const printRef = useRef<HTMLDivElement>(null)
+    const [isMobilePreview, setIsMobilePreview] = useState(false)
+    const [mobileScale, setMobileScale] = useState(1)
+    const [mobileScaledHeight, setMobileScaledHeight] = useState<number | null>(null)
+    const A4_PAGE_WIDTH = 794
+    const A4_PAGE_HEIGHT = 1123
 
     const itemsSubtotal = quotation.items.reduce((sum, item) => {
         return sum + (item.quantity * Number(item.unitPrice))
@@ -104,6 +111,47 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
     const taxAmount = Number(quotation.tax)
     const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
+
+    useEffect(() => {
+        if (!open) {
+            setMobileScale(1)
+            setMobileScaledHeight(null)
+            return
+        }
+
+        const updateMobilePreview = () => {
+            const mobile = window.innerWidth < 640
+            setIsMobilePreview(mobile)
+
+            if (!mobile) {
+                setMobileScale(1)
+                setMobileScaledHeight(null)
+                return
+            }
+
+            const source = printRef.current
+            const viewport = viewportRef.current
+            if (!source || !viewport) return
+
+            const nextScale = Math.min(Math.max((viewport.clientWidth - 8) / A4_PAGE_WIDTH, 0.1), 1)
+            const sourceHeight = Math.max(source.scrollHeight, A4_PAGE_HEIGHT)
+
+            setMobileScale(nextScale)
+            setMobileScaledHeight(sourceHeight * nextScale)
+        }
+
+        const frame = window.requestAnimationFrame(updateMobilePreview)
+
+        const handleResize = () => {
+            window.requestAnimationFrame(updateMobilePreview)
+        }
+
+        window.addEventListener("resize", handleResize)
+        return () => {
+            window.cancelAnimationFrame(frame)
+            window.removeEventListener("resize", handleResize)
+        }
+    }, [open, quotation])
 
     const handlePrint = () => {
         const printContent = printRef.current
@@ -234,38 +282,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                             </Button>
                             <Button size="sm" onClick={async () => {
                                 const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-                                await generateQuotationPdf({
-                                    quotationNumber: quotation.quotationNumber,
-                                    currentRevision: quotation.currentRevision,
-                                    quotationDate: quotation.quotationDate,
-                                    validUntil: quotation.validUntil,
-                                    salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
-                                    attn: quotation.attn,
-                                    address: quotation.address,
-                                    customer: quotation.customer,
-                                    currency: quotation.currency,
-                                    discountType: quotation.discountType,
-                                    discount: quotation.discount,
-                                    tax: quotation.tax,
-                                    shipping: quotation.shipping,
-                                    termsConditions: quotation.termsConditions,
-                                    clientNote: quotation.clientNote,
-                                    items: quotation.items.map((item) => ({
-                                        product: item.product,
-                                        description: item.description,
-                                        longDescription: item.longDescription,
-                                        quantity: item.quantity,
-                                        unitPrice: item.unitPrice,
-                                    })),
-                                    attachments: quotation.attachments?.map((attachment) => ({
-                                        title: attachment.title,
-                                        fileName: attachment.fileName,
-                                        fileUrl: attachment.fileUrl,
-                                        mimeType: attachment.mimeType,
-                                        kind: attachment.kind,
-                                        includeInPdf: attachment.includeInPdf,
-                                    })),
-                                })
+                                await generateQuotationPdf(buildQuotationPdfPayload(quotation))
                             }} className="w-full gap-2 sm:w-auto" variant="outline">
                                 <FileDown className="h-3.5 w-3.5" />
                                 Download PDF A4
@@ -278,12 +295,34 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                 </DialogHeader>
 
                 {/* PDF Content Area */}
-                <div className="flex justify-start overflow-x-auto bg-slate-50 p-3 sm:justify-center sm:p-8">
-                    <div className="bg-white shadow-2xl w-full max-w-[210mm] min-h-[297mm] ring-1 ring-slate-200 relative" ref={printRef}>
+                <div ref={viewportRef} className="h-[calc(100vh-12.5rem)] overflow-y-auto bg-slate-50 p-2 sm:h-auto sm:overflow-x-auto sm:overflow-y-visible sm:p-8">
+                    <div
+                        className={isMobilePreview ? "mx-auto overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-200" : "relative mx-auto w-full max-w-[210mm] shadow-2xl"}
+                        style={
+                            isMobilePreview && mobileScaledHeight
+                                ? { height: `${mobileScaledHeight}px` }
+                                : undefined
+                        }
+                    >
+                        <div
+                        className={isMobilePreview ? "origin-top-left" : "relative mx-auto w-full max-w-[210mm]"}
+                        ref={printRef}
+                        style={{
+                            width: isMobilePreview ? `${A4_PAGE_WIDTH}px` : undefined,
+                            minHeight: `${A4_PAGE_HEIGHT}px`,
+                            transform: isMobilePreview ? `scale(${mobileScale})` : undefined,
+                            backgroundColor: "#ffffff",
+                            color: "#1e293b",
+                            boxShadow: isMobilePreview ? "none" : "0 25px 50px -12px rgba(15, 23, 42, 0.18)",
+                            border: isMobilePreview ? "none" : "1px solid #e2e8f0",
+                            fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                            lineHeight: "1.5",
+                        }}
+                        >
                         {/* Background injected for online preview */}
                         <div className="absolute inset-0 z-0 pointer-events-none opacity-100" style={{
                             backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
-                            backgroundSize: "cover",
+                            backgroundSize: "100% 100%",
                             backgroundRepeat: "no-repeat"
                         }}></div>
                         
@@ -449,6 +488,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                         ) : null}
 
                         <div className="bank-info" style={{ marginTop: 30, paddingBottom: 20 }}>
+                        </div>
                         </div>
                         </div>
                     </div>

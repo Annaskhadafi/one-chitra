@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { approveQuotation, rejectQuotation, convertToSalesOrder } from "@/app/actions/quotation"
+import { convertToSalesOrder } from "@/app/actions/quotation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
 import {
     Table,
     TableBody,
@@ -27,15 +26,6 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import Link from "next/link"
 import {
@@ -61,6 +51,7 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview"
 import { ProductHistoryPopover } from "./product-history-popover"
 import { QuotationFileCenter } from "./quotation-file-center"
 import { QuotationHistoryPanel } from "./quotation-history-panel"
+import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
 import type { QuotationPoValidationSummary, QuotationRevisionSnapshot } from "@/db/schema/quotations"
 
 type User = typeof user.$inferSelect
@@ -179,11 +170,7 @@ function formatDateTime(date: Date) {
 
 export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDetailProps) {
     const router = useRouter()
-    const [isApproving, setIsApproving] = useState(false)
-    const [isRejecting, setIsRejecting] = useState(false)
     const [isConverting, setIsConverting] = useState(false)
-    const [rejectionReason, setRejectionReason] = useState("")
-    const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [pdfOpen, setPdfOpen] = useState(false)
 
     useEffect(() => {
@@ -195,8 +182,6 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     const config = statusConfig[quotation.status] || statusConfig.draft
     const StatusIcon = config.icon
     const isExpired = quotation.validUntil && new Date(quotation.validUntil) < new Date()
-    const canApprove = ["draft", "sent"].includes(quotation.status)
-    const canReject = ["draft", "sent"].includes(quotation.status)
     const poRequiresOcrReview = Boolean(
         quotation.customerPoNumber &&
         quotation.poValidationStatus &&
@@ -210,45 +195,6 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
         return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax))
     }, 0)
     const grandTotal = itemsSubtotal - Number(quotation.discount) + Number(quotation.tax) + Number(quotation.shipping)
-
-    const handleApprove = async () => {
-        setIsApproving(true)
-        try {
-            const result = await approveQuotation(quotation.id)
-            if (result.success) {
-                toast.success("Quotation approved successfully")
-                router.refresh()
-            } else {
-                toast.error(result.error || "Failed to approve")
-            }
-        } catch {
-            toast.error("Failed to approve quotation")
-        } finally {
-            setIsApproving(false)
-        }
-    }
-
-    const handleReject = async () => {
-        if (!rejectionReason.trim()) {
-            toast.error("Please provide a reason for rejection")
-            return
-        }
-        setIsRejecting(true)
-        try {
-            const result = await rejectQuotation(quotation.id, rejectionReason)
-            if (result.success) {
-                toast.success("Quotation rejected")
-                setRejectDialogOpen(false)
-                router.refresh()
-            } else {
-                toast.error(result.error || "Failed to reject")
-            }
-        } catch {
-            toast.error("Failed to reject quotation")
-        } finally {
-            setIsRejecting(false)
-        }
-    }
 
     const handleConvert = async () => {
         setIsConverting(true)
@@ -268,18 +214,18 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
     }
 
     return (
-        <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto w-full">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-3 sm:gap-5 sm:p-4 md:gap-6 md:p-8 lg:p-10">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
                     <Link href="/dashboard/quotations">
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" className="shrink-0">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                     </Link>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-bold tracking-tight">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <h1 className="min-w-0 break-words text-xl font-bold tracking-tight sm:text-2xl">
                                 {quotation.quotationNumber}
                             </h1>
                             <Badge variant={config.variant} className="gap-1">
@@ -293,12 +239,12 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                 </Badge>
                             )}
                         </div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="break-words text-xs text-muted-foreground sm:text-sm">
                             Dashboard &rsaquo; Quotations &rsaquo; {quotation.quotationNumber}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                     {canEdit && (
                         <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
                             <Button variant="outline" className="gap-2">
@@ -313,96 +259,11 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                     </Button>
                     <Button onClick={async () => {
                         const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-                        await generateQuotationPdf({
-                            quotationNumber: quotation.quotationNumber,
-                            currentRevision: quotation.currentRevision,
-                            quotationDate: quotation.quotationDate,
-                            validUntil: quotation.validUntil,
-                            salesPerson: quotation.salesPerson ? { name: quotation.salesPerson.name } : null,
-                            attn: quotation.attn,
-                            address: quotation.address,
-                            customer: quotation.customer,
-                            currency: quotation.currency,
-                            discountType: quotation.discountType,
-                            discount: quotation.discount,
-                            tax: quotation.tax,
-                            shipping: quotation.shipping,
-                            termsConditions: quotation.termsConditions,
-                            clientNote: quotation.clientNote,
-                            items: quotation.items.map((item) => ({
-                                product: item.product,
-                                description: item.description,
-                                longDescription: item.longDescription,
-                                quantity: item.quantity,
-                                unitPrice: item.unitPrice,
-                            })),
-                            attachments: quotation.attachments.map((attachment) => ({
-                                title: attachment.title,
-                                fileName: attachment.fileName,
-                                fileUrl: attachment.fileUrl,
-                                mimeType: attachment.mimeType,
-                                kind: attachment.kind,
-                                includeInPdf: attachment.includeInPdf,
-                            })),
-                        })
+                        await generateQuotationPdf(buildQuotationPdfPayload(quotation))
                     }} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
                         <FileDown className="h-4 w-4" />
                         Download PDF
                     </Button>
-                    {canApprove && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="default" className="gap-2 bg-green-600 hover:bg-green-700">
-                                    <CheckCircle className="h-4 w-4" />
-                                    Approve
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Approve Quotation?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This will mark quotation {quotation.quotationNumber} as approved. The customer can proceed with this quotation.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleApprove} disabled={isApproving}>
-                                        {isApproving ? "Approving..." : "Approve"}
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
-                    {canReject && (
-                        <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="destructive" className="gap-2">
-                                    <XCircle className="h-4 w-4" />
-                                    Reject
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Reject Quotation</DialogTitle>
-                                    <DialogDescription>
-                                        Please provide a reason for rejecting quotation {quotation.quotationNumber}.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <Textarea
-                                    placeholder="Reason for rejection..."
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                    rows={4}
-                                />
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
-                                    <Button variant="destructive" onClick={handleReject} disabled={isRejecting}>
-                                        {isRejecting ? "Rejecting..." : "Reject"}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    )}
                     {canConvert && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -439,16 +300,16 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
             </div>
 
             {/* Top Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3 lg:gap-6">
                 {/* Customer Info */}
                 <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <Building2 className="h-4 w-4" />
                             Customer Information
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-2 px-4 pb-4 sm:px-6 sm:pb-6">
                         <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span className="font-semibold">{quotation.customer.name}</span>
@@ -478,13 +339,13 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
                 {/* Quotation Info */}
                 <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <CalendarDays className="h-4 w-4" />
                             Quotation Details
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Date</span>
                             <span className="font-medium">{formatDate(quotation.quotationDate)}</span>
@@ -533,13 +394,13 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
                 {/* Status */}
                 <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <StatusIcon className={`h-4 w-4 ${config.color}`} />
                             Status
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
                         <div className="flex justify-between items-center">
                             <span className="text-sm text-muted-foreground">Status</span>
                             <Badge variant={config.variant} className="gap-1">
@@ -648,11 +509,65 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
             {/* Items Table */}
             <Card>
-                <CardHeader>
+                <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                     <CardTitle className="text-base">Items ({quotation.items.length})</CardTitle>
                 </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                <CardContent className="px-0 pb-0">
+                    <div className="space-y-3 px-4 pb-4 sm:hidden">
+                        {quotation.items.map((item, index) => {
+                            const lineSubtotal = item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax)
+                            return (
+                                <div key={item.id} className="rounded-xl border p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] text-muted-foreground">#{index + 1}</p>
+                                            <div className="mt-1 flex items-center gap-2 text-sm font-semibold">
+                                                <span className="truncate">{item.product.materialNumber}</span>
+                                                <ProductHistoryPopover
+                                                    materialNo={item.product.materialNumber}
+                                                    costSap={item.product.costSap || 0}
+                                                />
+                                            </div>
+                                            <p className="mt-1 break-words text-sm text-muted-foreground">
+                                                {item.product.materialDescription || "-"}
+                                            </p>
+                                            {item.description && (
+                                                <p className="mt-1 text-xs italic text-muted-foreground">{item.description}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/25 p-3">
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Qty</p>
+                                            <p className="mt-1 font-semibold">{item.quantity}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Unit Price</p>
+                                            <p className="mt-1 font-semibold">{formatCurrency(Number(item.unitPrice))}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Discount</p>
+                                            <p className="mt-1 font-semibold text-red-500">
+                                                {Number(item.discount) > 0 ? `-${formatCurrency(Number(item.discount))}` : "-"}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Tax</p>
+                                            <p className="mt-1 font-semibold">{Number(item.tax) > 0 ? formatCurrency(Number(item.tax)) : "-"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 flex items-center justify-between border-t pt-3">
+                                        <p className="text-sm text-muted-foreground">SubTotal</p>
+                                        <p className="text-base font-semibold">{formatCurrency(lineSubtotal)}</p>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+
+                    <div className="hidden overflow-x-auto sm:block">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/50">
@@ -704,13 +619,13 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
             </Card>
 
             {/* Footer: Terms & Financial Summary */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
                 {/* Terms & Notes */}
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                         <CardTitle className="text-base">Terms & Notes</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
                         {quotation.paymentTerms && (
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground mb-1">Payment Terms</p>
@@ -737,10 +652,10 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
 
                 {/* Financial Summary */}
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                         <CardTitle className="text-base">Financial Summary</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Items SubTotal</span>
                             <span className="font-medium">{formatCurrency(itemsSubtotal)}</span>

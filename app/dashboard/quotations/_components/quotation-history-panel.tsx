@@ -204,7 +204,7 @@ function getChanges(current: QuotationRevisionSnapshot, previous?: QuotationRevi
 export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps) {
     return (
         <Card>
-            <CardHeader className="space-y-2">
+            <CardHeader className="space-y-2 px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <CardTitle className="flex items-center gap-2 text-base">
                         <History className="h-4 w-4 text-primary" />
@@ -216,7 +216,7 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                     Setiap save, attachment, expiry, approval, dan konversi akan membuat snapshot baru.
                 </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
                 {revisions.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                         Belum ada revision history.
@@ -250,7 +250,7 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>
-                                        <div className="grid grid-cols-1 gap-4 rounded-xl border bg-muted/20 p-4 xl:grid-cols-3">
+                                        <div className="grid grid-cols-1 gap-3 rounded-xl border bg-muted/20 p-3 sm:gap-4 sm:p-4 xl:grid-cols-3">
                                             <div className="space-y-2">
                                                 <div className="flex items-center gap-2 text-sm font-medium">
                                                     <GitCompareArrows className="h-4 w-4 text-primary" />
@@ -275,9 +275,9 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                                         </div>
 
                                         {(changes.addedItems.length > 0 || changes.removedItems.length > 0 || changes.priceChanges.length > 0 || changes.quantityChanges.length > 0) && (
-                                            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
                                                 {changes.addedItems.length > 0 && (
-                                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:p-4">
                                                         <p className="mb-3 text-sm font-semibold text-emerald-900">Penambahan Item</p>
                                                         <div className="space-y-2 text-sm text-emerald-950">
                                                             {changes.addedItems.map((item) => (
@@ -293,7 +293,7 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                                                 )}
 
                                                 {changes.removedItems.length > 0 && (
-                                                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                                                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 sm:p-4">
                                                         <p className="mb-3 text-sm font-semibold text-rose-900">Pengurangan Item</p>
                                                         <div className="space-y-2 text-sm text-rose-950">
                                                             {changes.removedItems.map((item) => (
@@ -309,7 +309,7 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                                                 )}
 
                                                 {changes.priceChanges.length > 0 && (
-                                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
                                                         <p className="mb-3 text-sm font-semibold text-amber-900">Perubahan Harga Item</p>
                                                         <div className="space-y-2 text-sm text-amber-950">
                                                             {changes.priceChanges.map((change) => (
@@ -329,7 +329,7 @@ export function QuotationHistoryPanel({ revisions }: QuotationHistoryPanelProps)
                                                 )}
 
                                                 {changes.quantityChanges.length > 0 && (
-                                                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                                                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 sm:p-4">
                                                         <p className="mb-3 text-sm font-semibold text-sky-900">Perubahan Qty Item</p>
                                                         <div className="space-y-2 text-sm text-sky-950">
                                                             {changes.quantityChanges.map((change) => (

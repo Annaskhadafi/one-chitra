@@ -991,11 +991,11 @@ export default function ValidationSplit(props: {
 
                     {/* ── Form Sales Order ── */}
                     {initialData && (
-                        <Card>
-                            <CardHeader className="pb-2">
+                        <Card className="border-none shadow-none sm:border sm:shadow-sm">
+                            <CardHeader className="px-4 pb-2 sm:px-6">
                                 <CardTitle className="text-lg">Form Sales Order</CardTitle>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="px-0 pb-0 sm:px-6 sm:pb-6">
                                 <SalesOrderForm
                                     key={formVersion}
                                     customers={customers}

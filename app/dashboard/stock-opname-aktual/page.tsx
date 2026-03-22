@@ -14,9 +14,9 @@ export default async function StockOpnameAktualPage() {
     const closedCount = sessions.filter((s) => s.status === "closed").length
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+        <div className="flex flex-1 flex-col gap-5 p-4 sm:gap-6 sm:p-6 md:p-8 lg:p-10">
             <div className="flex flex-col gap-1">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-bold tracking-tight">Stock Opname Aktual</h1>
@@ -30,12 +30,14 @@ export default async function StockOpnameAktualPage() {
                             Snapshot menggunakan data stock aktual (stock internal), bukan data SAP.
                         </p>
                     </div>
-                    <CreateSessionDialogActual
-                        warehouses={warehouses}
-                        categories={setupData.categories}
-                        roleOptions={setupData.roles}
-                        users={setupData.users}
-                    />
+                    <div className="w-full sm:w-auto">
+                        <CreateSessionDialogActual
+                            warehouses={warehouses}
+                            categories={setupData.categories}
+                            roleOptions={setupData.roles}
+                            users={setupData.users}
+                        />
+                    </div>
                 </div>
             </div>
 

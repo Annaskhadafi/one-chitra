@@ -426,7 +426,7 @@ export function QuotationFileCenter({
 
     return (
         <Card>
-            <CardHeader className="space-y-2">
+            <CardHeader className="space-y-2 px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
                 <CardTitle className="flex items-center gap-2 text-base">
                     <FileStack className="h-4 w-4 text-primary" />
                     Attachment & Customer PO
@@ -435,9 +435,9 @@ export function QuotationFileCenter({
                     Upload attachment pendukung quotation, lalu upload PO customer untuk review OCR dan pembuatan Sales Order berbasis quotation.
                 </p>
             </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                    <div className="space-y-4 rounded-xl border p-4">
+            <CardContent className="space-y-4 px-4 pb-4 sm:space-y-6 sm:px-6 sm:pb-6">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
+                    <div className="space-y-3 rounded-xl border p-3 sm:space-y-4 sm:p-4">
                         <div>
                             <p className="font-medium">Supporting Attachment</p>
                             <p className="text-sm text-muted-foreground">Spesifikasi, drawing, brosur, atau lampiran tender. Bisa upload multi attachment sekaligus atau pilih dari Sales Document yang sudah ada.</p>
@@ -497,7 +497,7 @@ export function QuotationFileCenter({
                             </div>
                             <Switch checked={includeInPdf} onCheckedChange={setIncludeInPdf} />
                         </div>
-                        <div className="flex items-center gap-3 rounded-lg border border-dashed p-3">
+                        <div className="flex items-start gap-3 rounded-lg border border-dashed p-3">
                             <Checkbox
                                 id={`save-to-sales-document-${quotationId}`}
                                 checked={saveToSalesDocument}
@@ -517,7 +517,7 @@ export function QuotationFileCenter({
                             Upload Attachment
                         </Button>
 
-                        <div className="space-y-4 rounded-xl border border-dashed bg-muted/20 p-4">
+                        <div className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-3 sm:space-y-4 sm:p-4">
                             <div>
                                 <p className="font-medium">Pilih dari Sales Document</p>
                                 <p className="text-sm text-muted-foreground">
@@ -543,7 +543,7 @@ export function QuotationFileCenter({
                                     </div>
                                     <div className="space-y-2">
                                         {selectedSalesDocuments.map((document) => (
-                                            <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+                                            <div key={document.id} className="flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                                                 <div className="min-w-0">
                                                     <p className="truncate font-medium">{document.title}</p>
                                                     <p className="text-xs text-muted-foreground">
@@ -570,7 +570,7 @@ export function QuotationFileCenter({
                                 </p>
                             )}
                             {filteredSalesDocuments.length > 0 && (
-                                <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-background p-3">
+                                <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-background p-2 sm:p-3">
                                     {filteredSalesDocuments.map((document) => {
                                         const checked = selectedSalesDocumentIds.includes(document.id)
                                         const isAttached = supportingAttachments.some((attachment) => attachment.fileUrl === document.fileUrl)
@@ -584,22 +584,22 @@ export function QuotationFileCenter({
                                                         onCheckedChange={(value) => toggleSalesDocumentSelection(document.id, value === true)}
                                                         className="mt-0.5"
                                                     />
-                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                    <div className="min-w-0 flex-1 space-y-2">
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <p className="truncate font-medium">{document.title}</p>
                                                             <Badge variant="outline">{inferSalesDocumentFileType(document.fileName, document.fileType)}</Badge>
                                                             {isAttached && <Badge variant="secondary">Sudah Dipasang</Badge>}
                                                         </div>
-                                                        <p className="text-sm text-muted-foreground">
+                                                        <p className="break-words text-sm text-muted-foreground">
                                                             {document.description || document.fileName}
                                                         </p>
                                                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                            <span>{document.fileName}</span>
+                                                            <span className="break-all">{document.fileName}</span>
                                                             <span>•</span>
                                                             <span>{document.uploadedBy?.name || "Unknown"}</span>
                                                         </div>
                                                         <Link href={document.fileUrl} target="_blank" className="inline-flex">
-                                                            <Button type="button" variant="link" className="h-auto p-0 text-xs">
+                                                            <Button type="button" variant="outline" size="sm" className="h-8 px-3 text-xs">
                                                                 Open Document
                                                             </Button>
                                                         </Link>
@@ -624,7 +624,7 @@ export function QuotationFileCenter({
                         </div>
                     </div>
 
-                    <div className="space-y-4 rounded-xl border p-4">
+                    <div className="space-y-3 rounded-xl border p-3 sm:space-y-4 sm:p-4">
                         <div>
                             <p className="font-medium">Customer PO</p>
                             <p className="text-sm text-muted-foreground">
@@ -714,7 +714,7 @@ export function QuotationFileCenter({
                     ) : (
                         <div className="space-y-3">
                             {[...poAttachments, ...supportingAttachments].map((attachment) => (
-                                <div key={attachment.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div key={attachment.id} className="flex flex-col gap-3 rounded-xl border p-3 sm:p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="min-w-0 space-y-1">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <p className="truncate font-medium">{attachment.title}</p>

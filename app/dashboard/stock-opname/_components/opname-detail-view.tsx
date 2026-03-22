@@ -190,10 +190,10 @@ export function OpnameDetailView({
         setClosing(false)
         if (result.success) {
             toast.success("Sesi opname berhasil ditutup")
-            if (sourceType === "actual" && result.notification && !result.notification.sent) {
+            if (result.notification && !result.notification.sent) {
                 toast.warning(`Email notifikasi belum terkirim: ${result.notification.reason || "cek konfigurasi SMTP / penerima"}`)
             }
-            if (sourceType === "actual" && result.notification?.sent) {
+            if (result.notification?.sent) {
                 toast.success(`Email notifikasi terkirim ke ${result.notification.recipientCount ?? 0} penerima`)
             }
             router.push(basePath)
@@ -215,14 +215,14 @@ export function OpnameDetailView({
     }
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:gap-5">
             {/* Session Information */}
-            <Card>
+            <Card className="overflow-hidden">
                 <CardHeader className="py-3">
                     <CardTitle className="text-sm font-medium">Detail Form Stock Opname</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 pb-4">
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <div className="rounded-md border bg-muted/20 p-3">
                             <p className="text-[11px] text-muted-foreground">Tanggal Opname</p>
                             <p className="text-sm font-semibold mt-1">{formattedOpnameDate}</p>
@@ -264,9 +264,9 @@ export function OpnameDetailView({
             </Card>
 
             {/* Toolbar */}
-            <div className="flex flex-wrap items-center gap-3 justify-between">
-                <div className="flex flex-wrap gap-3 flex-1">
-                    <div className="relative min-w-[200px] flex-1">
+            <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                <div className="flex w-full flex-col gap-3 sm:flex-1 sm:flex-row sm:flex-wrap">
+                    <div className="relative min-w-0 flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Cari material..."
@@ -276,7 +276,7 @@ export function OpnameDetailView({
                         />
                     </div>
                     <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-44">
+                        <SelectTrigger className="w-full sm:w-44">
                             <SelectValue placeholder="Filter" />
                         </SelectTrigger>
                         <SelectContent>
@@ -288,12 +288,13 @@ export function OpnameDetailView({
                     </Select>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
                     {/* Print Checklist Button - for open sessions */}
                     {session.status === "open" && (
                         <Button 
                             variant="outline" 
                             size="sm" 
+                            className="w-full sm:w-auto"
                             onClick={() => window.open(`${basePath}/${session.id}/print-checklist`, '_blank')}
                         >
                             <FileText className="h-4 w-4 mr-1" />
@@ -303,7 +304,7 @@ export function OpnameDetailView({
 
                     {/* Print PDF Button - only show for closed sessions */}
                     {session.status === "closed" && (
-                        <Button variant="outline" size="sm" onClick={() => handlePrintPdf('report')}>
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => handlePrintPdf('report')}>
                             <FileText className="h-4 w-4 mr-1" />
                             Cetak PDF
                         </Button>
@@ -314,7 +315,7 @@ export function OpnameDetailView({
                             {/* Cancel Dialog */}
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="text-red-600">
+                                    <Button variant="ghost" size="sm" className="w-full text-red-600 sm:w-auto">
                                         <X className="h-4 w-4 mr-1" /> Batalkan
                                     </Button>
                                 </AlertDialogTrigger>
@@ -340,7 +341,7 @@ export function OpnameDetailView({
                             {/* Close Session Dialog */}
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button size="sm">
+                                    <Button size="sm" className="w-full sm:w-auto">
                                         <CheckCircle2 className="h-4 w-4 mr-1" />
                                         Tutup & Selesaikan
                                     </Button>
@@ -405,12 +406,12 @@ export function OpnameDetailView({
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="py-3">
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                         {documentUrl ? (
-                            <div className="flex items-center gap-2 bg-green-50 text-green-700 p-2 rounded-md border border-green-200 flex-1">
+                            <div className="flex flex-col gap-3 rounded-xl border border-green-200 bg-green-50 p-3 text-green-700 sm:flex-1 sm:flex-row sm:items-center sm:gap-2">
                                 <Paperclip className="h-4 w-4" />
-                                <span className="text-xs truncate flex-1">{documentFileName}</span>
-                                <Button variant="ghost" size="sm" className="h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-100" asChild>
+                                <span className="min-w-0 flex-1 truncate text-xs">{documentFileName}</span>
+                                <Button variant="ghost" size="sm" className="h-8 px-3 text-green-700 hover:bg-green-100 hover:text-green-800" asChild>
                                     <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                         <Download className="h-3 w-3 mr-1" />
                                         Lihat
@@ -424,13 +425,13 @@ export function OpnameDetailView({
                                         disabled={isUploading}
                                         accept=".pdf,image/*"
                                     />
-                                    <Button variant="outline" size="sm" className="h-7 px-2" disabled={isUploading}>
+                                    <Button variant="outline" size="sm" className="h-8 px-3" disabled={isUploading}>
                                         Ganti
                                     </Button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex-1 border-2 border-dashed border-gray-200 rounded-md p-4 text-center">
+                            <div className="flex-1 rounded-xl border-2 border-dashed border-gray-200 p-4 text-center">
                                 <p className="text-xs text-gray-500 mb-2">Belum ada dokumen yang diunggah</p>
                                 <div className="relative inline-block">
                                     <input
@@ -454,8 +455,127 @@ export function OpnameDetailView({
                 </CardContent>
             </Card>
 
+            {/* Items Mobile */}
+            <div className="space-y-3 md:hidden">
+                {filtered.length === 0 ? (
+                    <div className="rounded-xl border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+                        Tidak ada item.
+                    </div>
+                ) : (
+                    filtered.map((item, i) => {
+                        const isEditing = editingId === item.id
+                        const hasVariance = item.variance !== null && item.variance !== 0
+                        const isCounted = item.countedQty !== null
+
+                        return (
+                            <Card key={item.id} className={hasVariance ? "border-amber-200 bg-amber-50/30" : ""}>
+                                <CardContent className="space-y-3 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] text-muted-foreground">#{i + 1} · {item.product?.category ?? "-"}</p>
+                                            <p className="font-semibold">{item.product?.materialNumber ?? "-"}</p>
+                                            <p className="text-sm text-muted-foreground break-words">{item.product?.materialDescription ?? "-"}</p>
+                                        </div>
+                                        {!isCounted ? (
+                                            <span className="text-xs text-muted-foreground">Belum</span>
+                                        ) : hasVariance ? (
+                                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 gap-1 text-xs">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Selisih
+                                            </Badge>
+                                        ) : (
+                                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 gap-1 text-xs">
+                                                <CheckCircle2 className="h-3 w-3" />
+                                                OK
+                                            </Badge>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 rounded-xl bg-muted/30 p-3">
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">{sourceType === "actual" ? "Qty Aktual Sistem" : "Qty SAP"}</p>
+                                            <p className="mt-1 font-semibold">{item.systemQty}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Selisih</p>
+                                            <p className={`mt-1 font-semibold ${
+                                                item.variance == null
+                                                    ? "text-muted-foreground"
+                                                    : item.variance > 0
+                                                        ? "text-emerald-600"
+                                                        : item.variance < 0
+                                                            ? "text-red-600"
+                                                            : "text-foreground"
+                                            }`}>
+                                                {item.variance !== null ? `${item.variance > 0 ? "+" : ""}${item.variance}` : "—"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] text-muted-foreground">Qty Fisik</p>
+                                        {isEditing ? (
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="h-10"
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") saveEdit(item.id, item.systemQty)
+                                                        if (e.key === "Escape") setEditingId(null)
+                                                    }}
+                                                />
+                                                <Button
+                                                    size="icon"
+                                                    variant="outline"
+                                                    className="h-10 w-10 shrink-0"
+                                                    disabled={saving}
+                                                    onClick={() => saveEdit(item.id, item.systemQty)}
+                                                >
+                                                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full justify-between"
+                                                onClick={() => isOpen && startEdit(item.id, item.countedQty, item.notes)}
+                                                disabled={!isOpen}
+                                            >
+                                                <span>{isCounted ? item.countedQty : "Belum diinput"}</span>
+                                                {isOpen ? <span className="text-xs text-muted-foreground">Tap untuk edit</span> : null}
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] text-muted-foreground">Catatan</p>
+                                        {isEditing ? (
+                                            <Input
+                                                placeholder="catatan..."
+                                                value={editNotes}
+                                                onChange={(e) => setEditNotes(e.target.value)}
+                                                className="h-10 text-sm"
+                                            />
+                                        ) : (
+                                            <div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+                                                {item.notes?.trim() || "-"}
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )
+                    })
+                )}
+            </div>
+
             {/* Table */}
-            <div className="rounded-xl border overflow-hidden">
+            <div className="hidden overflow-hidden rounded-xl border md:block">
                 <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>

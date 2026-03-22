@@ -22,9 +22,9 @@ export default async function StockOpnameAktualDetailPage({ params }: Props) {
     const progress = totalItems > 0 ? Math.round((countedItems / totalItems) * 100) : 0
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+        <div className="flex flex-1 flex-col gap-5 p-4 sm:gap-6 sm:p-6 md:p-8 lg:p-10">
             <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <Link href="/dashboard/stock-opname-aktual" className="hover:underline">Stock Opname Aktual</Link>
                     <span>/</span>
                     <span className="text-foreground font-medium">{session.name}</span>
@@ -37,7 +37,7 @@ export default async function StockOpnameAktualDetailPage({ params }: Props) {
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                 <div className="rounded-xl border bg-card p-4 flex flex-col gap-1">
                     <p className="text-xs text-muted-foreground">Total Produk</p>
                     <p className="text-2xl font-bold">{totalItems}</p>

@@ -233,6 +233,11 @@ export function SalesOrderForm({
         () => warehouses.find(w => w.id === warehouseId),
         [warehouses, warehouseId]
     )
+    const getWarehouseLabel = useCallback(
+        (warehouse?: { sloc: string; description: string | null } | null) =>
+            warehouse?.description?.trim() || warehouse?.sloc || "Select Warehouse...",
+        []
+    )
     const defaultWarehouse = useMemo(
         () => warehouses.find((warehouse) => warehouse.sloc === "101"),
         [warehouses]
@@ -499,11 +504,11 @@ export function SalesOrderForm({
 
         if (quotationContext && !isEdit && typeof window !== "undefined") {
             const warehouseLabel = selectedWarehouse
-                ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}`
+                ? getWarehouseLabel(selectedWarehouse)
                 : "Belum dipilih"
             const defaultWarehouseNote =
                 defaultWarehouse && selectedWarehouse && selectedWarehouse.id !== defaultWarehouse.id
-                    ? `\n\nCatatan: warehouse default saat ini adalah ${defaultWarehouse.sloc} - ${defaultWarehouse.description}, tetapi Anda memilih warehouse yang berbeda.`
+                    ? `\n\nCatatan: warehouse default saat ini adalah ${getWarehouseLabel(defaultWarehouse)}, tetapi Anda memilih warehouse yang berbeda.`
                     : ""
 
             const confirmed = window.confirm(
@@ -643,10 +648,10 @@ export function SalesOrderForm({
     }
 
     return (
-        <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 max-w-[1400px] mx-auto w-full">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-0 sm:gap-5 sm:p-4 md:gap-6 md:p-8 lg:p-10">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                     <Link href="/dashboard/sales-orders">
                         <Button variant="ghost" size="icon">
                             <ArrowLeft className="h-4 w-4" />
@@ -661,7 +666,7 @@ export function SalesOrderForm({
                         </p>
                     </div>
                 </div>
-                <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2">
+                <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full gap-2 sm:w-auto">
                     <Save className="h-4 w-4" />
                     {isSubmitting ? "Saving..." : "Save"}
                 </Button>
@@ -670,7 +675,7 @@ export function SalesOrderForm({
             {/* Validation Alert */}
             {(!customerId || items.length === 0) && (
                 <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-4 sm:pt-6">
                         <div className="flex items-start gap-3">
                             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
                             <div className="flex-1">
@@ -718,7 +723,7 @@ export function SalesOrderForm({
 
             {/* Order Header Fields */}
             <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {/* Invoice Number */}
                         <div className="space-y-2">
@@ -885,7 +890,7 @@ export function SalesOrderForm({
                                         aria-expanded={whOpen}
                                         className="w-full justify-between font-normal"
                                     >
-                                        {selectedWarehouse ? selectedWarehouse.sloc : "Select Warehouse..."}
+                                        {selectedWarehouse ? getWarehouseLabel(selectedWarehouse) : "Select Warehouse..."}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
                                 </PopoverTrigger>
@@ -898,7 +903,7 @@ export function SalesOrderForm({
                                                 {warehouses.map(wh => (
                                                     <CommandItem
                                                         key={wh.id}
-                                                        value={wh.sloc}
+                                                        value={`${wh.description || ""} ${wh.sloc}`.trim()}
                                                         onSelect={() => {
                                                             setWarehouseId(wh.id)
                                                             setWhOpen(false)
@@ -906,8 +911,8 @@ export function SalesOrderForm({
                                                     >
                                                         <Check className={cn("mr-2 h-4 w-4", warehouseId === wh.id ? "opacity-100" : "opacity-0")} />
                                                         <div>
-                                                            <p className="font-medium">{wh.sloc}</p>
-                                                            <p className="text-xs text-muted-foreground">{wh.description}</p>
+                                                            <p className="font-medium">{getWarehouseLabel(wh)}</p>
+                                                            <p className="text-xs text-muted-foreground">{wh.sloc}</p>
                                                         </div>
                                                     </CommandItem>
                                                 ))}
@@ -920,7 +925,7 @@ export function SalesOrderForm({
                                 <p className="text-xs text-amber-700">
                                     Pastikan book warehouse sesuai dengan rencana pengiriman. Saat ini:
                                     {" "}
-                                    <span className="font-semibold">{selectedWarehouse ? `${selectedWarehouse.sloc} - ${selectedWarehouse.description}` : "belum dipilih"}</span>.
+                                    <span className="font-semibold">{selectedWarehouse ? getWarehouseLabel(selectedWarehouse) : "belum dipilih"}</span>.
                                 </p>
                             ) : null}
                         </div>
@@ -1100,7 +1105,7 @@ export function SalesOrderForm({
 
             {/* Product Search + Add */}
             <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                     <div className="space-y-4">
                         <Label className="font-semibold">Product</Label>
                         <div className="flex flex-col gap-2 sm:flex-row">
@@ -1151,8 +1156,95 @@ export function SalesOrderForm({
                             />
                         </div>
 
+                        {/* Items Mobile Cards */}
+                        <div className="space-y-3 md:hidden">
+                            {items.length === 0 ? (
+                                <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-md border text-muted-foreground">
+                                    <Package className="h-10 w-10 opacity-30" />
+                                    <p>No data</p>
+                                </div>
+                            ) : (
+                                items.map((item, index) => {
+                                    const lineSubtotal = item.quantity * item.unitPrice - item.discount + item.tax
+                                    return (
+                                        <div key={index} className="rounded-xl border bg-background p-4 shadow-sm">
+                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-semibold text-muted-foreground">#{index + 1}</p>
+                                                    <p className="break-words font-semibold text-foreground">{item.productName}</p>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
+                                                    onClick={() => removeItem(index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={1}
+                                                        value={item.quantity}
+                                                        onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
+                                                        className="h-10"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Unit Price</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        value={item.unitPrice}
+                                                        onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
+                                                        className="h-10"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs font-medium text-muted-foreground">Discount</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={item.discount}
+                                                            onChange={(e) => updateItem(index, "discount", Number(e.target.value))}
+                                                            className="h-10"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs font-medium text-muted-foreground">Tax</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={item.tax}
+                                                            onChange={(e) => updateItem(index, "tax", Number(e.target.value))}
+                                                            className="h-10"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
+                                                <span className="text-sm font-medium text-muted-foreground">SubTotal</span>
+                                                <span className="text-base font-semibold">{formatCurrency(lineSubtotal)}</span>
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            )}
+
+                            <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-3">
+                                <span className="font-semibold text-sm">SubTotal</span>
+                                <span className="text-right font-semibold">{formatCurrency(subTotal)}</span>
+                            </div>
+                        </div>
+
                         {/* Items Table */}
-                        <div className="rounded-md border overflow-hidden">
+                        <div className="hidden overflow-hidden rounded-md border md:block">
                             <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader>
@@ -1190,7 +1282,7 @@ export function SalesOrderForm({
                                                                 min={1}
                                                                 value={item.quantity}
                                                                 onChange={(e) => updateItem(index, "quantity", Number(e.target.value))}
-                                                                className="w-20 h-8"
+                                                                className="h-8 w-20"
                                                             />
                                                         </TableCell>
                                                         <TableCell>
@@ -1199,7 +1291,7 @@ export function SalesOrderForm({
                                                                 min={0}
                                                                 value={item.unitPrice}
                                                                 onChange={(e) => updateItem(index, "unitPrice", Number(e.target.value))}
-                                                                className="w-28 h-8"
+                                                                className="h-8 w-28"
                                                             />
                                                         </TableCell>
                                                         <TableCell>
@@ -1208,7 +1300,7 @@ export function SalesOrderForm({
                                                                 min={0}
                                                                 value={item.discount}
                                                                 onChange={(e) => updateItem(index, "discount", Number(e.target.value))}
-                                                                className="w-24 h-8"
+                                                                className="h-8 w-24"
                                                             />
                                                         </TableCell>
                                                         <TableCell>
@@ -1217,7 +1309,7 @@ export function SalesOrderForm({
                                                                 min={0}
                                                                 value={item.tax}
                                                                 onChange={(e) => updateItem(index, "tax", Number(e.target.value))}
-                                                                className="w-24 h-8"
+                                                                className="h-8 w-24"
                                                             />
                                                         </TableCell>
                                                         <TableCell className="font-medium">
@@ -1241,10 +1333,9 @@ export function SalesOrderForm({
                                 </Table>
                             </div>
 
-                            {/* SubTotal Row */}
-                            <div className="flex justify-end items-center gap-8 px-4 py-3 border-t bg-muted/20">
-                                <span className="font-semibold text-sm">SubTotal</span>
-                                <span className="font-semibold w-[140px] text-right">{formatCurrency(subTotal)}</span>
+                            <div className="flex items-center justify-end gap-8 border-t bg-muted/20 px-4 py-3">
+                                <span className="text-sm font-semibold">SubTotal</span>
+                                <span className="w-[140px] text-right font-semibold">{formatCurrency(subTotal)}</span>
                             </div>
                         </div>
                     </div>
@@ -1255,7 +1346,7 @@ export function SalesOrderForm({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left: Terms + Notes */}
                 <Card>
-                    <CardContent className="p-6 space-y-4">
+                    <CardContent className="space-y-4 p-4 sm:p-6">
                         <div className="space-y-2">
                             <Label className="text-blue-600 font-semibold">Terms & Conditions</Label>
                             <Textarea
@@ -1278,7 +1369,7 @@ export function SalesOrderForm({
 
                 {/* Right: Order Status + Financials */}
                 <Card>
-                    <CardContent className="p-6 space-y-4">
+                    <CardContent className="space-y-4 p-4 sm:p-6">
                         {/* Order Status */}
                         <div className="space-y-2">
                             <Label className="font-semibold">
