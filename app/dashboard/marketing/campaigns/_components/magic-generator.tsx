@@ -77,10 +77,10 @@ export function MagicGenerator({ onApply }: MagicGeneratorProps) {
             <div className="p-2 bg-indigo-100 rounded-lg">
                 <Sparkles className="h-5 w-5 text-indigo-600" />
             </div>
-            Magic Email Generator
+            Magic Draft Studio
           </DialogTitle>
           <p className="text-sm text-muted-foreground ml-11 -mt-1">
-            Gunakan kekuatan AI untuk membuat email HTML yang rapi & profesional dalam hitungan detik.
+            Susun email HTML yang rapi dan profesional dalam hitungan detik.
           </p>
         </DialogHeader>
         

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { getUsers } from "@/app/actions/users"
 import { getEmailGroups, getEmailContacts } from "@/app/actions/email-contacts"
+import { getMarketingSegmentOptions } from "@/app/actions/customer-segmentation"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,14 @@ type TargetConfig = {
     groupIds: number[]
     contactIds: number[]
     manual: string[]
+    segmentNames: string[]
+}
+
+type SegmentOption = {
+    segment: string
+    description: string
+    totalCustomers: number
+    matchedRecipients: number
 }
 
 interface RecipientSelectProps {
@@ -30,6 +39,7 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
     const [users, setUsers] = useState<any[]>([])
     const [groups, setGroups] = useState<any[]>([])
     const [contacts, setContacts] = useState<any[]>([])
+    const [segments, setSegments] = useState<SegmentOption[]>([])
     const [loading, setLoading] = useState(true)
     const [manualEmail, setManualEmail] = useState("")
     const [search, setSearch] = useState("")
@@ -39,11 +49,15 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
             const [u, g, c] = await Promise.all([
                 getUsers(),
                 getEmailGroups(),
-                getEmailContacts({})
+                getEmailContacts({}),
             ])
+            const segmentResult = await getMarketingSegmentOptions()
             setUsers(u)
             setGroups(g)
             setContacts(c)
+            if (segmentResult.success) {
+                setSegments(segmentResult.data)
+            }
             setLoading(false)
         }
         load()
@@ -81,7 +95,20 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
         onChange({ ...value, manual: value.manual.filter(e => e !== email) })
     }
 
-    const totalCount = value.userIds.length + value.groupIds.length + value.contactIds.length + value.manual.length
+    const toggleSegment = (segmentName: string) => {
+        const current = value.segmentNames || []
+        const newVal = current.includes(segmentName)
+            ? current.filter((item) => item !== segmentName)
+            : [...current, segmentName]
+        onChange({ ...value, segmentNames: newVal })
+    }
+
+    const totalCount =
+        value.userIds.length +
+        value.groupIds.length +
+        value.contactIds.length +
+        value.manual.length +
+        (value.segmentNames?.length || 0)
 
     return (
         <div className="space-y-2">
@@ -101,6 +128,12 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
                 })}
                 {value.manual.map(e => (
                     <Badge key={e} variant="outline" className="gap-1 border-dashed">{e} <X className="h-3 w-3 cursor-pointer" onClick={() => removeManual(e)} /></Badge>
+                ))}
+                {(value.segmentNames || []).map((segment) => (
+                    <Badge key={segment} variant="outline" className="gap-1 bg-amber-50 text-amber-700 border-amber-200">
+                        {segment}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => toggleSegment(segment)} />
+                    </Badge>
                 ))}
                 {totalCount === 0 && <span className="text-muted-foreground text-sm">Belum ada penerima terpilih...</span>}
                 
@@ -123,6 +156,7 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
                                 <TabsTrigger value="users" className="text-xs data-[state=active]:bg-muted">User</TabsTrigger>
                                 <TabsTrigger value="groups" className="text-xs data-[state=active]:bg-muted">Grup</TabsTrigger>
                                 <TabsTrigger value="contacts" className="text-xs data-[state=active]:bg-muted">Kontak</TabsTrigger>
+                                <TabsTrigger value="segments" className="text-xs data-[state=active]:bg-muted">Segmen</TabsTrigger>
                                 <TabsTrigger value="manual" className="text-xs data-[state=active]:bg-muted">Manual</TabsTrigger>
                             </TabsList>
                             <TabsContent value="users" className="m-0">
@@ -189,6 +223,42 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
                                         </div>
                                     </ScrollArea>
                                 </Tabs>
+                            </TabsContent>
+                            <TabsContent value="segments" className="m-0">
+                                <ScrollArea className="h-[240px]">
+                                    <div className="p-2 space-y-1">
+                                        {segments
+                                            .filter((segment) =>
+                                                segment.segment.toLowerCase().includes(search.toLowerCase())
+                                            )
+                                            .map((segment) => (
+                                                <div
+                                                    key={segment.segment}
+                                                    className="flex items-start space-x-2 p-2 hover:bg-muted rounded-md cursor-pointer"
+                                                    onClick={() => toggleSegment(segment.segment)}
+                                                >
+                                                    <Checkbox checked={(value.segmentNames || []).includes(segment.segment)} />
+                                                    <div className="flex flex-col flex-1 gap-1">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="text-sm font-medium">{segment.segment}</span>
+                                                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                                                                {segment.matchedRecipients} email
+                                                            </Badge>
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground leading-relaxed">{segment.description}</span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {segment.totalCustomers} customer terdeteksi, {segment.matchedRecipients} siap dikirimi
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        {!loading && segments.length === 0 && (
+                                            <div className="p-3 text-xs text-muted-foreground">
+                                                Segmentasi customer belum tersedia untuk dijadikan target.
+                                            </div>
+                                        )}
+                                    </div>
+                                </ScrollArea>
                             </TabsContent>
                             <TabsContent value="manual" className="p-4 space-y-2">
                                 <div className="flex gap-2">

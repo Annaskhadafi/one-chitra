@@ -1,12 +1,13 @@
 "use server"
 
 import { db } from "@/db"
-import { marketingCampaigns, campaignRecipients, customers, emailGroups, emailContacts, user, emailTemplates } from "@/db/schema"
+import { marketingCampaigns, campaignRecipients, customers, emailGroups, emailContacts, emailGroupMembers, user, emailTemplates } from "@/db/schema"
 import { eq, desc, isNotNull, like, and, sql, count, or, lte, inArray } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
 import { z } from "zod"
+import { getSegmentEmailRecipients } from "./customer-segmentation"
 
 const campaignSchema = z.object({
     name: z.string().min(3),
@@ -243,6 +244,16 @@ async function resolveEmails(configStr: string | null) {
         // 1. Manual Emails
         if (config.manual && Array.isArray(config.manual)) {
             config.manual.forEach((e: string) => add(e, "Recipient"));
+        }
+
+        // 1b. Segment-based customer recipients from customer segmentation
+        if (config.segmentNames && Array.isArray(config.segmentNames) && config.segmentNames.length > 0) {
+            const segmentRecipients = await getSegmentEmailRecipients(config.segmentNames);
+            if (segmentRecipients.success) {
+                segmentRecipients.data.forEach((recipient) =>
+                    add(recipient.email, recipient.name, recipient.company, recipient.position)
+                );
+            }
         }
 
         // 2. System Users

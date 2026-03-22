@@ -77,7 +77,8 @@ function parseTargetCount(targetConfig: string | null): number {
         const groupCount = (config.groupIds || []).length
         const contactCount = (config.contactIds || []).length
         const manualCount = (config.manual || []).length
-        return userCount + groupCount + contactCount + manualCount
+        const segmentCount = (config.segmentNames || []).length
+        return userCount + groupCount + contactCount + manualCount + segmentCount
     } catch {
         return 0
     }

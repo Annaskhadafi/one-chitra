@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { createCampaign, getEmailTemplates } from "@/app/actions/marketing-campaigns"
+import { getCustomerCampaignLaunchContext } from "@/app/actions/customer-segmentation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,23 +19,41 @@ import {
 import { RecipientSelect } from "../_components/recipient-select"
 import { FileAttachment } from "../_components/file-attachment"
 import { MagicGenerator } from "../_components/magic-generator"
+import { MagicAnalysis } from "../_components/magic-analysis"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
-const DEFAULT_TARGET = { userIds: [], groupIds: [], contactIds: [], manual: [] }
+type TargetConfig = {
+    userIds: string[]
+    groupIds: number[]
+    contactIds: number[]
+    manual: string[]
+    segmentNames: string[]
+}
+
+const DEFAULT_TARGET: TargetConfig = { userIds: [], groupIds: [], contactIds: [], manual: [], segmentNames: [] }
 
 export default function CreateCampaignPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(false)
-    const [targetConfig, setTargetConfig] = useState(DEFAULT_TARGET)
-    const [ccConfig, setCcConfig] = useState(DEFAULT_TARGET)
+    const [targetConfig, setTargetConfig] = useState<TargetConfig>(DEFAULT_TARGET)
+    const [ccConfig, setCcConfig] = useState<TargetConfig>(DEFAULT_TARGET)
     const [attachments, setAttachments] = useState<{ name: string; url: string }[]>([])
     const [dbTemplates, setDbTemplates] = useState<any[]>([])
+    const [detailsOpen, setDetailsOpen] = useState(true)
+    const [audienceOpen, setAudienceOpen] = useState(true)
+    const [contentOpen, setContentOpen] = useState(true)
     
     const [formData, setFormData] = useState({
         name: "",
         subject: "",
         content: "",
         description: "",
+        scheduledAt: "",
     })
+    const [magicInitialBrief, setMagicInitialBrief] = useState("")
+    const selectedCustomer = searchParams.get("customer") || ""
+    const selectedSegment = searchParams.get("segment") || ""
 
     useEffect(() => {
         getEmailTemplates().then(tpls => {
@@ -44,13 +64,48 @@ export default function CreateCampaignPage() {
         })
     }, [])
 
+    useEffect(() => {
+        const customer = searchParams.get("customer")
+        const segment = searchParams.get("segment")
+        if (!customer) return
+
+        let isMounted = true
+
+        getCustomerCampaignLaunchContext(customer, segment).then((result) => {
+            if (!isMounted || !result.success) return
+
+            setMagicInitialBrief(result.data.suggestedBrief)
+            setFormData((prev) => ({
+                ...prev,
+                name: prev.name || `Magic Campaign - ${result.data.customerName}`,
+                description: prev.description || `Campaign untuk customer ${result.data.customerName}${result.data.segment ? ` (${result.data.segment})` : ""}.`,
+            }))
+            setTargetConfig((prev) => ({
+                ...prev,
+                segmentNames: result.data.segment
+                    ? Array.from(new Set([...(prev.segmentNames || []), result.data.segment]))
+                    : prev.segmentNames,
+                manual: result.data.matchedEmail
+                    ? Array.from(new Set([...(prev.manual || []), result.data.matchedEmail]))
+                    : prev.manual,
+            }))
+            setDetailsOpen(true)
+            setAudienceOpen(true)
+        })
+
+        return () => {
+            isMounted = false
+        }
+    }, [searchParams])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         
         const hasRecipients = targetConfig.userIds.length > 0 || 
                              targetConfig.groupIds.length > 0 || 
                              targetConfig.contactIds.length > 0 || 
-                             targetConfig.manual.length > 0
+                             targetConfig.manual.length > 0 ||
+                             targetConfig.segmentNames.length > 0
 
         if (!hasRecipients) {
             return toast.error("Harap pilih setidaknya satu penerima.")
@@ -109,92 +164,194 @@ export default function CreateCampaignPage() {
                                 <CardTitle className="text-base text-primary">Detail & Penerima</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="grid gap-1.5">
-                                        <Label htmlFor="name">Nama Campaign (Internal)</Label>
-                                        <Input
-                                            id="name" placeholder="cth: Promo Akhir Tahun 2026"
-                                            value={formData.name}
-                                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="grid gap-1.5">
-                                        <Label htmlFor="subject">Subjek Email</Label>
-                                        <Input
-                                            id="subject" placeholder="cth: Penawaran Spesial!"
-                                            value={formData.subject}
-                                            onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                </div>
+                                <MagicAnalysis
+                                    initialBrief={magicInitialBrief}
+                                    autoRunOnMount={Boolean(magicInitialBrief)}
+                                    autoApplyOnAutoRun={Boolean(magicInitialBrief)}
+                                    autoRunKey={`${selectedCustomer}::${selectedSegment}::${magicInitialBrief}`}
+                                    focusCustomerName={selectedCustomer}
+                                    focusCustomerSegment={selectedSegment}
+                                    subject={formData.subject}
+                                    content={formData.content}
+                                    targetConfig={targetConfig}
+                                    onQuickDraft={async ({ name, description, subject, content, segmentNames, manualRecipients, scheduledAt }) => {
+                                        const nextTarget = {
+                                            ...targetConfig,
+                                            segmentNames: segmentNames || targetConfig.segmentNames,
+                                            manual: manualRecipients && manualRecipients.length > 0
+                                                ? Array.from(new Set([...(targetConfig.manual || []), ...manualRecipients]))
+                                                : targetConfig.manual,
+                                        }
 
-                                <div className="grid gap-1.5">
-                                    <Label htmlFor="description">Catatan Internal <span className="text-muted-foreground font-normal">(opsional)</span></Label>
-                                    <Input
-                                        id="description"
-                                        placeholder="Deskripsi singkat tujuan campaign ini..."
-                                        value={formData.description}
-                                        onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    />
-                                </div>
+                                        const response = await createCampaign({
+                                            name: name || formData.name || "Magic Campaign",
+                                            description: description || formData.description,
+                                            subject: subject || formData.subject || "Subject Campaign",
+                                            content: content || formData.content || "<p></p>",
+                                            scheduledAt: scheduledAt || formData.scheduledAt || undefined,
+                                            targetConfig: JSON.stringify(nextTarget),
+                                            ccEmails: JSON.stringify(ccConfig),
+                                            attachments: JSON.stringify(attachments),
+                                            segmentCriteria: "{}",
+                                        })
 
-                                <div className="space-y-4 pt-2 border-t">
-                                    <RecipientSelect 
-                                        label="Target Penerima"
-                                        value={targetConfig}
-                                        onChange={setTargetConfig}
-                                    />
-                                    
-                                    <RecipientSelect 
-                                        label="CC Email (opsional)"
-                                        value={ccConfig}
-                                        onChange={setCcConfig}
-                                    />
+                                        if (!response.success) {
+                                            throw new Error(response.error || "Gagal membuat draft cepat")
+                                        }
 
-                                    <div className="grid gap-1.5">
-                                        <Label>Lampiran File</Label>
-                                        <FileAttachment 
-                                            value={attachments}
-                                            onChange={setAttachments}
-                                        />
-                                    </div>
-                                </div>
+                                        router.push("/dashboard/marketing/campaigns")
+                                    }}
+                                    onApply={({ name, description, subject, content, segmentNames, manualRecipients, scheduledAt }) => {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            name: name || prev.name,
+                                            description: description || prev.description,
+                                            subject: subject || prev.subject,
+                                            content: content || prev.content,
+                                            scheduledAt: scheduledAt || prev.scheduledAt,
+                                        }))
+                                        setDetailsOpen(true)
+                                        setAudienceOpen(true)
+                                        setContentOpen(true)
+                                        if (segmentNames) {
+                                            setTargetConfig(prev => ({
+                                                ...prev,
+                                                segmentNames,
+                                                manual: manualRecipients && manualRecipients.length > 0
+                                                    ? Array.from(new Set([...(prev.manual || []), ...manualRecipients]))
+                                                    : prev.manual,
+                                            }))
+                                        } else if (manualRecipients && manualRecipients.length > 0) {
+                                            setTargetConfig(prev => ({
+                                                ...prev,
+                                                manual: Array.from(new Set([...(prev.manual || []), ...manualRecipients])),
+                                            }))
+                                        }
+                                    }}
+                                />
 
-                                {/* Email Content */}
-                                <div className="grid gap-1.5 pt-4 border-t">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <Label className="text-sm font-semibold">Konten Email</Label>
-                                        <div className="flex items-center gap-2">
-                                            <MagicGenerator onApply={(html) => setFormData({ ...formData, content: html })} />
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="outline" size="sm" className="h-8">
-                                                        Gunakan Template <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    {dbTemplates.map(tpl => (
-                                                        <DropdownMenuItem key={tpl.id} onClick={() => applyTemplate(tpl)}>
-                                                            {tpl.name}
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                    {dbTemplates.length === 0 && (
-                                                        <DropdownMenuItem disabled>Tidak ada template di database</DropdownMenuItem>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+                                    <CollapsibleTrigger asChild>
+                                        <Button type="button" variant="ghost" className="w-full justify-between border rounded-lg px-4">
+                                            Detail Campaign
+                                            <ChevronDown className={`h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="space-y-4 pt-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="grid gap-1.5">
+                                                <Label htmlFor="name">Nama Campaign (Internal)</Label>
+                                                <Input
+                                                    id="name" placeholder="cth: Promo Akhir Tahun 2026"
+                                                    value={formData.name}
+                                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="grid gap-1.5">
+                                                <Label htmlFor="subject">Subjek Email</Label>
+                                                <Input
+                                                    id="subject" placeholder="cth: Penawaran Spesial!"
+                                                    value={formData.subject}
+                                                    onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <EmailEditor
-                                        value={formData.content}
-                                        onChange={(html) => setFormData({ ...formData, content: html })}
-                                    />
-                                    <p className="text-[10px] text-muted-foreground italic">
-                                        Gunakan variable <code className="bg-muted px-1 rounded">{"{{name}}"}</code>, <code className="bg-muted px-1 rounded">{"{{company}}"}</code>, atau <code className="bg-muted px-1 rounded">{"{{position}}"}</code>.
-                                    </p>
-                                </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="grid gap-1.5">
+                                                <Label htmlFor="description">Catatan Internal <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                                                <Input
+                                                    id="description"
+                                                    placeholder="Deskripsi singkat tujuan campaign ini..."
+                                                    value={formData.description}
+                                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="grid gap-1.5">
+                                                <Label htmlFor="scheduledAt">Jadwal Kirim <span className="text-muted-foreground font-normal">(opsional)</span></Label>
+                                                <Input
+                                                    id="scheduledAt"
+                                                    type="datetime-local"
+                                                    value={formData.scheduledAt}
+                                                    onChange={e => setFormData({ ...formData, scheduledAt: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+
+                                <Collapsible open={audienceOpen} onOpenChange={setAudienceOpen}>
+                                    <CollapsibleTrigger asChild>
+                                        <Button type="button" variant="ghost" className="w-full justify-between border rounded-lg px-4">
+                                            Target & Lampiran
+                                            <ChevronDown className={`h-4 w-4 transition-transform ${audienceOpen ? "rotate-180" : ""}`} />
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="space-y-4 pt-4">
+                                        <RecipientSelect 
+                                            label="Target Penerima"
+                                            value={targetConfig}
+                                            onChange={setTargetConfig}
+                                        />
+                                        
+                                        <RecipientSelect 
+                                            label="CC Email (opsional)"
+                                            value={ccConfig}
+                                            onChange={setCcConfig}
+                                        />
+
+                                        <div className="grid gap-1.5">
+                                            <Label>Lampiran File</Label>
+                                            <FileAttachment 
+                                                value={attachments}
+                                                onChange={setAttachments}
+                                            />
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+
+                                <Collapsible open={contentOpen} onOpenChange={setContentOpen}>
+                                    <CollapsibleTrigger asChild>
+                                        <Button type="button" variant="ghost" className="w-full justify-between border rounded-lg px-4">
+                                            Konten Email
+                                            <ChevronDown className={`h-4 w-4 transition-transform ${contentOpen ? "rotate-180" : ""}`} />
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="grid gap-1.5 pt-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <Label className="text-sm font-semibold">Konten Email</Label>
+                                            <div className="flex items-center gap-2">
+                                                <MagicGenerator onApply={(html) => setFormData({ ...formData, content: html })} />
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="outline" size="sm" className="h-8">
+                                                            Gunakan Template <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        {dbTemplates.map(tpl => (
+                                                            <DropdownMenuItem key={tpl.id} onClick={() => applyTemplate(tpl)}>
+                                                                {tpl.name}
+                                                            </DropdownMenuItem>
+                                                        ))}
+                                                        {dbTemplates.length === 0 && (
+                                                            <DropdownMenuItem disabled>Tidak ada template di database</DropdownMenuItem>
+                                                        )}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
+                                        </div>
+                                        <EmailEditor
+                                            value={formData.content}
+                                            onChange={(html) => setFormData({ ...formData, content: html })}
+                                        />
+                                        <p className="text-[10px] text-muted-foreground italic">
+                                            Gunakan variable <code className="bg-muted px-1 rounded">{"{{name}}"}</code>, <code className="bg-muted px-1 rounded">{"{{company}}"}</code>, atau <code className="bg-muted px-1 rounded">{"{{position}}"}</code>.
+                                        </p>
+                                    </CollapsibleContent>
+                                </Collapsible>
                             </CardContent>
                         </Card>
 

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useCallback } from "react"
+import Link from "next/link"
 import {
     Users,
     TrendingUp,
@@ -12,7 +13,8 @@ import {
     Calendar,
     RefreshCw,
     ArrowUpRight,
-    ArrowUpDown
+    ArrowUpDown,
+    Wand2
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -349,6 +351,27 @@ export function CustomerSegmentationClient() {
                     >
                         Cek History
                     </Button>
+                )
+            }
+        },
+        {
+            id: "magicCampaign",
+            header: "Magic Campaign",
+            cell: ({ row }) => {
+                const cust = row.original
+                const href = `/dashboard/marketing/campaigns/create?customer=${encodeURIComponent(cust.name)}&segment=${encodeURIComponent(cust.segment)}`
+
+                return (
+                    <Link href={href}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                        >
+                            <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+                            Magic Campaign
+                        </Button>
+                    </Link>
                 )
             }
         },
