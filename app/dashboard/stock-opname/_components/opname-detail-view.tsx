@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, CheckCircle2, AlertTriangle, Loader2, X, FileText, Upload, Paperclip, Download } from "lucide-react"
 import { toast } from "sonner"
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
 import { Button } from "@/components/ui/button"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -52,6 +54,8 @@ interface OpnameDetailViewProps {
     sourceType?: OpnameSourceType
 }
 
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
+
 export function OpnameDetailView({
     session,
     basePath = "/dashboard/stock-opname",
@@ -70,9 +74,20 @@ export function OpnameDetailView({
     const [closing, setClosing] = useState(false)
     const [applyAdjustments, setApplyAdjustments] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<number, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
     const orderedSignatures = useMemo(
         () => [...(session.signatures ?? [])].sort((a, b) => a.order - b.order),
         [session.signatures]
+    )
+    const trackedProductIds = useMemo(
+        () => Array.from(new Set(items.map((item) => item.productId).filter((productId) => productId > 0))).sort((a, b) => a - b),
+        [items],
+    )
+    const trackedProductIdsKey = useMemo(() => trackedProductIds.join(","), [trackedProductIds])
+    const trackedItemCount = useMemo(
+        () => Object.values(trackingDecisions).filter((decision) => decision.trackingMode !== "manual_only").length,
+        [trackingDecisions],
     )
     const documentUrl = resolveUploadDocumentUrl(session.documentUrl)
     const documentFileName =
@@ -148,6 +163,51 @@ export function OpnameDetailView({
             return matchSearch && matchStatus
         })
     }, [items, search, filterStatus])
+
+    useEffect(() => {
+        let cancelled = false
+        const productIds = trackedProductIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+
+        if (!session.warehouseId || productIds.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        getTrackingDecisionPreview(session.warehouseId, productIds)
+            .then((decisions) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(
+                    Object.fromEntries(decisions.map((decision) => [decision.productId, decision])),
+                )
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load opname tracking decisions:", error)
+                setTrackingDecisions({})
+                toast.error("Gagal memuat aturan tracking untuk sesi opname ini")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [session.warehouseId, trackedProductIdsKey])
 
     function startEdit(itemId: number, currentCountedQty: number | null, currentNotes: string | null) {
         if (!isOpen) return
@@ -396,6 +456,17 @@ export function OpnameDetailView({
                 </div>
             )}
 
+            {trackedItemCount > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    {trackedItemCount} item pada sesi opname ini termasuk pilot RFID di warehouse terkait. Penghitungan manual tetap bisa dilakukan, dan saat sesi ditutup sistem akan membuat follow-up exception RFID untuk item yang belum dihitung atau masih selisih.
+                </div>
+            )}
+            {loadingTrackingDecisions && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    Menyelaraskan aturan tracking warehouse untuk sesi opname...
+                </div>
+            )}
+
             {/* Document Upload Section */}
             <Card className="mt-2">
                 <CardHeader className="py-3">
@@ -483,6 +554,7 @@ export function OpnameDetailView({
                                 const isEditing = editingId === item.id
                                 const hasVariance = item.variance !== null && item.variance !== 0
                                 const isCounted = item.countedQty !== null
+                                const trackingDecision = trackingDecisions[item.productId]
 
                                 return (
                                     <TableRow
@@ -497,9 +569,19 @@ export function OpnameDetailView({
                                             {item.product?.materialDescription ?? "-"}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="text-xs">
-                                                {item.product?.category ?? "-"}
-                                            </Badge>
+                                            <div className="flex flex-col gap-2">
+                                                <Badge variant="outline" className="w-fit text-xs">
+                                                    {item.product?.category ?? "-"}
+                                                </Badge>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <TrackingModeBadge mode={trackingDecision?.trackingMode ?? "manual_only"} />
+                                                    {trackingDecision?.serialRequired && (
+                                                        <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                                                            Serial / Tag Follow-up
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-right font-medium">{item.systemQty}</TableCell>
                                         <TableCell className="text-right">

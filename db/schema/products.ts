@@ -16,6 +16,10 @@ export const products = pgTable("products", {
     imageUrl: text("image_url"),
     isBundle: boolean("is_bundle").default(false).notNull(),
     isConsignment: boolean("is_consignment").default(false).notNull(),
+    defaultTrackingMode: varchar("default_tracking_mode", { length: 20 }).default("manual_only").notNull(),
+    serialRequired: boolean("serial_required").default(false).notNull(),
+    rfidCapable: boolean("rfid_capable").default(false).notNull(),
+    allowTagReuse: boolean("allow_tag_reuse").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

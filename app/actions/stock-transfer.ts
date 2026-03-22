@@ -8,6 +8,10 @@ import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { normalizeSlocFields } from "@/lib/sloc"
+import {
+    clearStockTransferRfidArtifacts,
+    syncStockTransferRfidLedger,
+} from "@/lib/rfid-transfer"
 
 type StockTransferTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -166,6 +170,25 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
                 })
             }
 
+            try {
+                await syncStockTransferRfidLedger(tx, {
+                    transferId: transfer.id,
+                    referenceNumber,
+                    fromWarehouseId: parsedData.sourceWarehouseId,
+                    toWarehouseId: parsedData.destinationWarehouseId,
+                    status: "completed",
+                    receivedStatus: "Received",
+                    userId,
+                    items: parsedData.items,
+                    captureMethod: "manual",
+                    notes: parsedData.notes,
+                    createTransferOut: true,
+                    createTransferIn: true,
+                })
+            } catch (rfidError) {
+                console.error("[CREATE STOCK TRANSFER] RFID sync skipped:", rfidError)
+            }
+
             return { success: true }
         })
     } catch (error: unknown) {
@@ -175,6 +198,10 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
         revalidatePath("/dashboard/stock-transfers")
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/warehouse")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
     }
 }
 
@@ -295,6 +322,31 @@ export async function syncStockTransferReceipt(
             updatedAt: new Date(),
         })
         .where(eq(stockTransfers.id, transfer.id))
+
+    try {
+        await syncStockTransferRfidLedger(tx, {
+            transferId: transfer.id,
+            referenceNumber,
+            fromWarehouseId: transfer.fromWarehouseId,
+            toWarehouseId: transfer.toWarehouseId,
+            status: "completed",
+            receivedStatus: "Received",
+            userId: data.userId,
+            items: transfer.items.map((item) => ({
+                productId: item.productId,
+                quantity: receivedQtyByProduct.has(item.productId)
+                    ? (receivedQtyByProduct.get(item.productId) || 0)
+                    : item.quantity,
+                stockTransferItemId: item.id,
+            })),
+            captureMethod: "manual",
+            notes: transfer.notes,
+            createTransferOut: !isAutomated,
+            createTransferIn: true,
+        })
+    } catch (rfidError) {
+        console.error("[SYNC STOCK TRANSFER RECEIPT] RFID sync skipped:", rfidError)
+    }
 
     return { success: true, alreadyReceived: false, transfer }
 }
@@ -418,6 +470,12 @@ export async function updateStockTransferStatus(id: number, data: {
                         notes: `Revert stok karena transfer ${referenceNumber} ditolak`,
                     })
                 }
+
+                try {
+                    await clearStockTransferRfidArtifacts(tx, transfer.id)
+                } catch (rfidError) {
+                    console.error("[UPDATE STOCK TRANSFER STATUS] RFID cleanup skipped:", rfidError)
+                }
             }
 
             return { success: true }
@@ -430,6 +488,10 @@ export async function updateStockTransferStatus(id: number, data: {
         try {
             revalidatePath("/dashboard/stock-transfers")
             revalidatePath("/dashboard/inventory")
+            revalidatePath("/dashboard/rfid-monitoring")
+            revalidatePath("/dashboard/rfid-exceptions")
+            revalidatePath("/dashboard/rfid-traceability")
+            revalidatePath("/dashboard/rfid-tagged-units")
         } catch (_e) { }
     }
 }

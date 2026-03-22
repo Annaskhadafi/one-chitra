@@ -128,7 +128,12 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
                 slocDescription: data.slocDescription ?? null,
                 typeWarehouse: data.typeWarehouse ?? null,
                 imageUrl: data.imageUrl ?? null,
+                isBundle: false,
                 isConsignment: false,
+                defaultTrackingMode: data.defaultTrackingMode ?? "manual_only",
+                serialRequired: data.serialRequired ?? false,
+                rfidCapable: data.rfidCapable ?? false,
+                allowTagReuse: data.allowTagReuse ?? false,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             }

@@ -9,6 +9,13 @@ import { z } from "zod"
 import { productSchema } from "@/lib/schemas"
 import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
+const normalizeTrackingMode = (value: string | null | undefined) => {
+    if (value === "required_rfid" || value === "optional_rfid") {
+        return value
+    }
+    return "manual_only"
+}
+
 export async function getProducts() {
     const aggregatedStock = db.select({
         productId: stockLevels.productId,
@@ -36,6 +43,10 @@ export async function getProducts() {
         updatedAt: products.updatedAt,
         isBundle: products.isBundle,
         isConsignment: products.isConsignment,
+        defaultTrackingMode: products.defaultTrackingMode,
+        serialRequired: products.serialRequired,
+        rfidCapable: products.rfidCapable,
+        allowTagReuse: products.allowTagReuse,
         totalStock: sql<number>`coalesce(${aggregatedStock.totalStockSum}, 0)`.mapWith(Number),
     })
         .from(products)
@@ -65,6 +76,10 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
             sloc: normalizeSloc(data.sloc),
             slocDescription: data.slocDescription?.trim() || null,
             imageUrl: data.imageUrl?.trim() || null,
+            defaultTrackingMode: normalizeTrackingMode(data.defaultTrackingMode),
+            serialRequired: Boolean(data.serialRequired),
+            rfidCapable: Boolean(data.rfidCapable),
+            allowTagReuse: Boolean(data.allowTagReuse),
         }
 
         if (id) {
@@ -88,6 +103,10 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                     sloc: normalizedData.sloc,
                     slocDescription: normalizedData.slocDescription,
                     imageUrl: normalizedData.imageUrl,
+                    defaultTrackingMode: normalizedData.defaultTrackingMode,
+                    serialRequired: normalizedData.serialRequired,
+                    rfidCapable: normalizedData.rfidCapable,
+                    allowTagReuse: normalizedData.allowTagReuse,
                     updatedAt: new Date()
                 })
                 .where(eq(products.id, id))
@@ -110,6 +129,10 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
                 sloc: normalizedData.sloc,
                 slocDescription: normalizedData.slocDescription,
                 imageUrl: normalizedData.imageUrl,
+                defaultTrackingMode: normalizedData.defaultTrackingMode,
+                serialRequired: normalizedData.serialRequired,
+                rfidCapable: normalizedData.rfidCapable,
+                allowTagReuse: normalizedData.allowTagReuse,
             })
         }
 
@@ -185,6 +208,10 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
                         slocDescription: sql`excluded.sloc_description`,
                         typeWarehouse: sql`excluded.type_warehouse`,
                         imageUrl: sql`excluded.image_url`,
+                        defaultTrackingMode: sql`excluded.default_tracking_mode`,
+                        serialRequired: sql`excluded.serial_required`,
+                        rfidCapable: sql`excluded.rfid_capable`,
+                        allowTagReuse: sql`excluded.allow_tag_reuse`,
                         updatedAt: new Date()
                     }
                 })
@@ -227,7 +254,7 @@ export async function importMaterialCk(data: { materialNumber: string, materialN
             // Drizzle doesn't have a bulk update with multiple different values easily without raw SQL CASE statements,
             // so we can loop or use a transaction. Given the context, executing individually in a Promise.all or sequentially is fine for typical sizes.
             await Promise.all(chunk.map(async ([matNum, ckNum]) => {
-                const res = await db.update(products)
+                await db.update(products)
                     .set({ materialNumberCk: ckNum, updatedAt: new Date() })
                     .where(ilike(products.materialNumber, matNum))
                 

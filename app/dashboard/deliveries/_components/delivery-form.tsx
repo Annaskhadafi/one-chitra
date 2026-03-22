@@ -6,7 +6,9 @@ import Image from "next/image"
 import { createDelivery, updateDelivery, checkStockAvailability, generateDeliveryNumber } from "@/app/actions/delivery"
 import { getDrivers, createDriver, getVehicles, createVehicle } from "@/app/actions/fleet"
 import { getCustomerAddresses } from "@/app/actions/customer"
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
 import { getStocks } from "@/app/actions/stock"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -102,6 +104,8 @@ interface DeliveryFormItem {
     deliveredQuantity: number
     serialNumbers: string[]
 }
+
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
 
 type StockListItem = Awaited<ReturnType<typeof getStocks>>[number]
 
@@ -221,6 +225,17 @@ interface DeliveryFormDraft {
     awbNumber: string
     shippingCost: string
     items: DeliveryFormItem[]
+}
+
+function isTyreCategory(category: string | null | undefined) {
+    return category?.trim().toUpperCase() === "TYRE"
+}
+
+function requiresSerialNumbers(
+    item: Pick<DeliveryFormItem, "productCategory">,
+    trackingDecision?: TrackingDecisionPreviewItem,
+) {
+    return Boolean(trackingDecision?.serialRequired ?? isTyreCategory(item.productCategory))
 }
 
 function isStaleServerActionError(error: unknown) {
@@ -344,11 +359,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                     orderedQuantity: item.quantity,
                     remainingQuantity: item.remainingQuantity,
                     deliveredQuantity: item.remainingQuantity,
-                    serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
+                    serialNumbers: isTyreCategory(item.product?.category) ? Array(item.remainingQuantity).fill("") : [],
                 }))
         }
         return []
     })
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<number, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
 
     // Stock check
     const [stockResults, setStockResults] = useState<StockResult[]>([])
@@ -382,6 +399,11 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
     const [savedAddresses, setSavedAddresses] = useState<{ id: number; address: string; label: string | null }[]>([])
     const [, setLoadingAddresses] = useState(false)
     const [draftHydrated, setDraftHydrated] = useState(isEdit)
+    const trackedProductIds = useMemo(
+        () => Array.from(new Set(items.map((item) => item.productId).filter((productId) => productId > 0))).sort((a, b) => a - b),
+        [items],
+    )
+    const trackedProductIdsKey = useMemo(() => trackedProductIds.join(","), [trackedProductIds])
 
     useEffect(() => {
         if (isEdit || typeof window === "undefined") {
@@ -568,6 +590,103 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         () => isUploadImageFile(selectedSO?.poDocument || null),
         [selectedSO?.poDocument]
     )
+    const getTrackingDecision = useCallback(
+        (productId: number) => trackingDecisions[productId],
+        [trackingDecisions],
+    )
+
+    useEffect(() => {
+        let cancelled = false
+        const productIds = trackedProductIdsKey
+            .split(",")
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+
+        if (!warehouseId || productIds.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        getTrackingDecisionPreview(warehouseId, productIds)
+            .then((decisions) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(
+                    Object.fromEntries(decisions.map((decision) => [decision.productId, decision])),
+                )
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load delivery tracking decisions:", error)
+                setTrackingDecisions({})
+
+                if (isStaleServerActionError(error) && typeof window !== "undefined") {
+                    window.sessionStorage.setItem(DELIVERY_FORM_RELOAD_REASON_KEY, "stale-server-action")
+                    window.location.reload()
+                    return
+                }
+
+                toast.error("Gagal memuat aturan tracking warehouse")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [trackedProductIdsKey, warehouseId])
+
+    useEffect(() => {
+        if (items.length === 0) {
+            return
+        }
+
+        setItems((prev) => {
+            let changed = false
+
+            const nextItems = prev.map((item) => {
+                const trackingDecision = trackingDecisions[item.productId]
+
+                if (!requiresSerialNumbers(item, trackingDecision)) {
+                    return item
+                }
+
+                if (item.deliveredQuantity > item.serialNumbers.length) {
+                    changed = true
+                    return {
+                        ...item,
+                        serialNumbers: [
+                            ...item.serialNumbers,
+                            ...Array(item.deliveredQuantity - item.serialNumbers.length).fill(""),
+                        ],
+                    }
+                }
+
+                if (item.deliveredQuantity < item.serialNumbers.length) {
+                    changed = true
+                    return {
+                        ...item,
+                        serialNumbers: item.serialNumbers.slice(0, item.deliveredQuantity),
+                    }
+                }
+
+                return item
+            })
+
+            return changed ? nextItems : prev
+        })
+    }, [items.length, trackingDecisions])
 
     // Load saved addresses when customer changes
     useEffect(() => {
@@ -600,7 +719,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                     orderedQuantity: item.quantity,
                     remainingQuantity: item.remainingQuantity,
                     deliveredQuantity: item.remainingQuantity, // Default: deliver all remaining
-                    serialNumbers: item.product?.category === "TYRE" ? Array(item.remainingQuantity).fill("") : [],
+                    serialNumbers: isTyreCategory(item.product?.category) ? Array(item.remainingQuantity).fill("") : [],
                 }))
             setItems(newItems)
 
@@ -661,16 +780,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             const newQty = Math.min(Math.max(0, qty), item.remainingQuantity)
             shouldResetStockResults = shouldResetStockResults || newQty !== item.deliveredQuantity
 
-            // Adjust serial numbers array size if it's a TYRE
+            const trackingDecision = trackingDecisions[item.productId]
+            const serialRequired = requiresSerialNumbers(item, trackingDecision)
+
             let newSerialNumbers = item.serialNumbers
-            if (item.productCategory === "TYRE") {
+            if (serialRequired) {
                 if (newQty > item.serialNumbers.length) {
-                    // Add empty strings
                     newSerialNumbers = [...item.serialNumbers, ...Array(newQty - item.serialNumbers.length).fill("")]
                 } else if (newQty < item.serialNumbers.length) {
-                    // Remove form end
                     newSerialNumbers = item.serialNumbers.slice(0, newQty)
                 }
+            } else if (newQty < item.serialNumbers.length) {
+                newSerialNumbers = item.serialNumbers.slice(0, newQty)
             }
 
             return { ...item, deliveredQuantity: newQty, serialNumbers: newSerialNumbers }
@@ -679,7 +800,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         if (shouldResetStockResults) {
             setStockResults([])
         }
-    }, [])
+    }, [trackingDecisions])
 
     const updateSN = useCallback((itemIndex: number, snIndex: number, value: string) => {
         setItems(prev => prev.map((item, i) => {
@@ -868,8 +989,9 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             }
 
             const productLabel = item.productName || `Produk #${item.productId}`
+            const trackingDecision = trackingDecisions[item.productId]
 
-            if (item.productCategory === "TYRE") {
+            if (requiresSerialNumbers(item, trackingDecision)) {
                 const filledSerials = item.serialNumbers.filter(sn => sn.trim())
                 if (filledSerials.length !== item.serialNumbers.length) {
                     validationErrors.push(`Serial number ${productLabel} masih ada yang kosong`)
@@ -938,7 +1060,16 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                 productId: item.productId,
                 orderedQuantity: item.orderedQuantity,
                 deliveredQuantity: item.deliveredQuantity,
-                serialNumbers: item.productCategory === "TYRE" ? item.serialNumbers : undefined,
+                serialNumbers: (() => {
+                    const trackingDecision = trackingDecisions[item.productId]
+                    if (!requiresSerialNumbers(item, trackingDecision) && !item.serialNumbers.some((sn) => sn.trim())) {
+                        return undefined
+                    }
+
+                    return item.serialNumbers
+                        .map((sn) => sn.trim().toUpperCase())
+                        .filter(Boolean)
+                })(),
             })),
         }
 
@@ -1019,7 +1150,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost, showSaveBlockedToast])
+    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, trackingDecisions, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost, showSaveBlockedToast])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -1293,28 +1424,37 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <CardTitle className="text-lg">Items to Deliver</CardTitle>
-                                        <CardDescription>Adjust quantities and enter serial numbers if required.</CardDescription>
+                                        <CardDescription>Adjust quantities and follow the effective manual/RFID rule for each item.</CardDescription>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleCheckStock}
-                                        disabled={checkingStock || !warehouseId}
-                                        className={cn(
-                                            "gap-2",
-                                            !warehouseId && "opacity-50 cursor-not-allowed"
+                                    <div className="flex flex-col items-end gap-2">
+                                        {loadingTrackingDecisions && warehouseId && (
+                                            <span className="text-xs text-muted-foreground">
+                                                Menyelaraskan aturan tracking warehouse...
+                                            </span>
                                         )}
-                                    >
-                                        {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
-                                        Check Stock
-                                    </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleCheckStock}
+                                            disabled={checkingStock || !warehouseId}
+                                            className={cn(
+                                                "gap-2",
+                                                !warehouseId && "opacity-50 cursor-not-allowed"
+                                            )}
+                                        >
+                                            {checkingStock ? <span className="animate-spin">⏳</span> : <Package className="h-4 w-4" />}
+                                            Check Stock
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0 w-full overflow-hidden">
                                 <div className="flex flex-col divide-y w-full">
                                     {items.map((item, idx) => {
                                         const stock = getStockStatus(item.productId)
-                                        const isTyre = item.productCategory === "TYRE"
+                                        const trackingDecision = getTrackingDecision(item.productId)
+                                        const trackingMode = trackingDecision?.trackingMode ?? "manual_only"
+                                        const serialRequired = requiresSerialNumbers(item, trackingDecision)
                                         const readyWarehouses = getReadyStockWarehouses(stock)
 
                                         return (
@@ -1332,12 +1472,23 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                             <Badge variant="secondary" className="text-[10px] sm:text-xs h-6 px-2">
                                                                 {item.productCategory}
                                                             </Badge>
-                                                            {isTyre && (
+                                                            <TrackingModeBadge mode={trackingMode} className="text-[10px] sm:text-xs h-6 px-2" />
+                                                            {serialRequired && (
                                                                 <Badge variant="outline" className="text-[10px] sm:text-xs h-6 px-2 border-orange-200 text-orange-700 bg-orange-50 dark:bg-orange-950/30">
                                                                     Serial No. Required
                                                                 </Badge>
                                                             )}
+                                                            {trackingDecision?.trackingMode === "required_rfid" && trackingDecision.allowManualFallback && (
+                                                                <Badge variant="outline" className="text-[10px] sm:text-xs h-6 px-2 border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-950/30">
+                                                                    Manual Fallback Allowed
+                                                                </Badge>
+                                                            )}
                                                         </div>
+                                                        {trackingDecision?.trackingMode !== "manual_only" && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {trackingDecision?.reason}
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                                     {/* 2. Controls & Stats */}
@@ -1463,7 +1614,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                 </div>
 
                                                 {/* BOTTOM SECTION: Serial Numbers (Full Width Block) */}
-                                                {isTyre && item.deliveredQuantity > 0 && (
+                                                {serialRequired && item.deliveredQuantity > 0 && (
                                                     <div className="flex flex-col mt-1">
                                                         
                                                         {/* Input Grid Box */}

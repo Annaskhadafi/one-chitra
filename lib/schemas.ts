@@ -1,5 +1,12 @@
 import { z } from "zod"
 
+export const trackingModeSchema = z.enum(["manual_only", "optional_rfid", "required_rfid"])
+export const trackingScopeTypeSchema = z.enum(["category", "product"])
+export const rfidTagStatusSchema = z.enum(["blank", "active", "damaged", "lost", "retired", "locked"])
+export const rfidWriteOperationSchema = z.enum(["register", "replace", "unbind", "reset", "verify"])
+export const rfidBindingOperationSchema = z.enum(["bind", "replace", "unbind"])
+export const rfidExceptionStatusSchema = z.enum(["open", "investigating", "resolved", "ignored"])
+
 export const customerSchema = z.object({
     customerCode: z.string().min(1, "Customer Code is required"),
     name: z.string().min(1, "Customer Name is required"),
@@ -24,12 +31,121 @@ export const productSchema = z.object({
     slocDescription: z.string().optional(),
     typeWarehouse: z.string().optional(),
     imageUrl: z.string().optional(),
+    defaultTrackingMode: trackingModeSchema.optional(),
+    serialRequired: z.boolean().optional(),
+    rfidCapable: z.boolean().optional(),
+    allowTagReuse: z.boolean().optional(),
 })
 
 export const warehouseSchema = z.object({
     sloc: z.string().min(1, "Sloc is required"),
     description: z.string().optional(),
     type: z.string().optional(),
+})
+
+export const warehouseRfidSettingSchema = z.object({
+    warehouseId: z.number().min(1, "Warehouse is required"),
+    isEnabled: z.boolean().default(false),
+    defaultTrackingMode: trackingModeSchema.default("manual_only"),
+    allowManualFallback: z.boolean().default(true),
+    requireInboundValidation: z.boolean().default(false),
+    requireOutboundValidation: z.boolean().default(false),
+    pilotNotes: z.string().optional().nullable(),
+})
+
+export const warehouseTrackingPolicySchema = z.object({
+    warehouseId: z.number().min(1, "Warehouse is required"),
+    scopeType: trackingScopeTypeSchema,
+    productId: z.number().optional().nullable(),
+    category: z.string().optional().nullable(),
+    trackingMode: trackingModeSchema.default("optional_rfid"),
+    allowManualFallback: z.boolean().default(true),
+    serialRequired: z.boolean().default(false),
+    isActive: z.boolean().default(true),
+    notes: z.string().optional().nullable(),
+}).superRefine((value, ctx) => {
+    if (value.scopeType === "product" && !value.productId) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Product wajib diisi untuk policy per produk",
+            path: ["productId"],
+        })
+    }
+
+    if (value.scopeType === "category" && !value.category?.trim()) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Category wajib diisi untuk policy per kategori",
+            path: ["category"],
+        })
+    }
+})
+
+export const rfidMonitoringTagSchema = z.object({
+    rfidTagId: z.number().optional().nullable(),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    deviceId: z.number().optional().nullable(),
+    epc: z.string().trim().min(1, "EPC wajib diisi"),
+    tid: z.string().trim().optional().nullable(),
+    tagSerial: z.string().trim().optional().nullable(),
+    tagType: z.string().trim().min(1, "Tag type wajib diisi").default("label"),
+    status: rfidTagStatusSchema.default("active"),
+    isReusable: z.boolean().default(false),
+    materialNumber: z.string().trim().optional().nullable(),
+    serialNumber: z.string().trim().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+})
+
+export const rfidReaderResetSchema = z.object({
+    rfidTagId: z.number().min(1, "RFID tag wajib dipilih"),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    deviceId: z.number().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+})
+
+export const rfidScanEventDeletionSchema = z.object({
+    scanEventId: z.number().min(1, "Scan event wajib dipilih"),
+})
+
+export const rfidExceptionStatusUpdateSchema = z.object({
+    exceptionId: z.number().min(1, "Exception wajib dipilih"),
+    status: rfidExceptionStatusSchema,
+    reviewNote: z.string().trim().optional().nullable(),
+})
+
+export const rfidTraceabilitySearchSchema = z.object({
+    query: z.string().trim().min(1, "Kata kunci pencarian wajib diisi"),
+    warehouseId: z.number().optional().nullable(),
+})
+
+export const rfidTagUnitBindingSchema = z.object({
+    operation: rfidBindingOperationSchema,
+    rfidTagId: z.number().min(1, "RFID tag wajib dipilih"),
+    warehouseId: z.number().min(1, "Warehouse wajib dipilih"),
+    productId: z.number().optional().nullable(),
+    serialNumber: z.string().trim().optional().nullable(),
+    deviceId: z.number().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+}).superRefine((value, ctx) => {
+    if (value.operation === "unbind") {
+        return
+    }
+
+    if (!value.productId) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Product wajib dipilih",
+            path: ["productId"],
+        })
+    }
+
+    if (!value.serialNumber?.trim()) {
+        ctx.addIssue({
+            code: "custom",
+            message: "Serial number / unit ID wajib diisi",
+            path: ["serialNumber"],
+        })
+    }
 })
 
 export const stockSchema = z.object({

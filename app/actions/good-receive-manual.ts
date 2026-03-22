@@ -1,13 +1,27 @@
 "use server"
 
 import { db } from "@/db"
-import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses } from "@/db/schema"
+import {
+    goodReceiveManual,
+    goodReceiveManualItems,
+    inventoryUnitEvents,
+    inventoryUnits,
+    me2lPurchDocsSap,
+    products,
+    rfidExceptions,
+    rfidTagBindings,
+    rfidTags,
+    stockLevels,
+    warehouses,
+} from "@/db/schema"
 import { revalidatePath } from "next/cache"
 import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
+import { resolveTrackingDecisionForProduct } from "@/lib/rfid-tracking"
+import { assertCurrentUserHasWarehouseAccessForAll } from "@/lib/warehouse-access"
 
 export type ManualGoodReceivePoOption = {
     poNumber: string
@@ -56,6 +70,54 @@ const normalizeStringArray = (value: unknown): string[] => {
     return value
         .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
         .filter(Boolean)
+}
+
+type ParsedRfidReceiptLine = {
+    serialNumber: string
+    epc: string
+    tid: string | null
+}
+
+const normalizeUpperText = (value: string | null | undefined) => {
+    const trimmed = value?.trim().toUpperCase()
+    return trimmed ? trimmed : null
+}
+
+function parseRfidReceiptLines(value: unknown): ParsedRfidReceiptLine[] {
+    if (typeof value !== "string") {
+        return []
+    }
+
+    const lines = value
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+    return lines.map((line, index) => {
+        const separator = line.includes("|") ? "|" : line.includes(";") ? ";" : ","
+        const parts = line
+            .split(separator)
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+
+        if (parts.length < 2) {
+            throw new Error(`Format RFID line ke-${index + 1} tidak valid. Gunakan SERIAL|EPC atau SERIAL|EPC|TID`)
+        }
+
+        const serialNumber = normalizeUpperText(parts[0])
+        const epc = normalizeUpperText(parts[1])
+        const tid = normalizeUpperText(parts[2] ?? null)
+
+        if (!serialNumber || !epc) {
+            throw new Error(`Serial number dan EPC wajib diisi pada RFID line ke-${index + 1}`)
+        }
+
+        return {
+            serialNumber,
+            epc,
+            tid,
+        }
+    })
 }
 
 const escapeHtml = (value: string) =>
@@ -323,19 +385,18 @@ export async function getGoodReceiveManualNotificationTargets() {
 
 export type CreateGoodReceiveManualInput = {
     poNumber: string
-    warehouseId: number
     receiveDate: Date
     deliveryType: "Partial" | "Complete"
     referenceDocument?: string
     notifyRoles?: string[]
     notifyUserIds?: string[]
     items: {
-        poItem: number
-        materialNumber: string
         productId: number
+        warehouseId: number
         quantity: number
-        openQty: number
         notes?: string
+        rfidLines?: string
+        manualOverrideReason?: string
     }[]
 }
 
@@ -345,9 +406,8 @@ type ManualGoodReceiveNotificationPayload = {
     receiveDate: string
     deliveryType: "Partial" | "Complete"
     referenceDocument: string | null | undefined
-    warehouseId: number
+    warehouseLabel: string
     items: Array<{
-        poItem: number
         materialNumber: string
         materialDescription: string
         quantity: number
@@ -360,139 +420,147 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
         const userId = session.user.id
         const notifyRoles = normalizeStringArray(input.notifyRoles)
         const notifyUserIds = normalizeStringArray(input.notifyUserIds)
+        const poNumber = input.poNumber.trim()
+        if (!poNumber) {
+            throw new Error("PO Number is required")
+        }
+
+        const positiveItems = input.items.filter((item) => Number(item.quantity) > 0)
+        if (positiveItems.length === 0) {
+            throw new Error("Minimal satu item harus memiliki quantity > 0")
+        }
+
+        const warehouseIds = Array.from(new Set(
+            positiveItems
+                .map((item) => Number(item.warehouseId))
+                .filter((warehouseId) => Number.isInteger(warehouseId) && warehouseId > 0),
+        ))
+
+        if (warehouseIds.length === 0) {
+            throw new Error("Warehouse wajib dipilih")
+        }
+
+        await assertCurrentUserHasWarehouseAccessForAll(warehouseIds, "edit")
+
+        const trackingDecisions = await Promise.all(
+            positiveItems.map(async (item) => ({
+                key: `${item.warehouseId}:${item.productId}`,
+                decision: await resolveTrackingDecisionForProduct(item.warehouseId, item.productId),
+            })),
+        )
+
+        const trackingDecisionByKey = new Map(
+            trackingDecisions
+                .filter((entry) => Boolean(entry.decision))
+                .map((entry) => [entry.key, entry.decision!]),
+        )
 
         const notificationPayload = await db.transaction<ManualGoodReceiveNotificationPayload>(async (tx) => {
-            const poNumber = input.poNumber.trim()
-            if (!poNumber) throw new Error("PO Number is required")
-            if (!input.warehouseId || input.warehouseId <= 0) {
-                throw new Error("Warehouse is required")
-            }
+            const productIds = Array.from(new Set(positiveItems.map((item) => item.productId)))
 
-            const poItems = input.items.map((item) => item.poItem)
-            const duplicatePoItem = poItems.find((poItem, idx) => poItems.indexOf(poItem) !== idx)
-            if (duplicatePoItem) {
-                throw new Error(`PO Item ${duplicatePoItem} selected more than once`)
-            }
+            const [existingProducts, warehouseRows] = await Promise.all([
+                tx.select({
+                    id: products.id,
+                    materialNumber: products.materialNumber,
+                    materialDescription: products.materialDescription,
+                    defaultTrackingMode: products.defaultTrackingMode,
+                    serialRequired: products.serialRequired,
+                    rfidCapable: products.rfidCapable,
+                })
+                    .from(products)
+                    .where(inArray(products.id, productIds)),
+                tx.select({
+                    id: warehouses.id,
+                    sloc: warehouses.sloc,
+                    description: warehouses.description,
+                })
+                    .from(warehouses)
+                    .where(inArray(warehouses.id, warehouseIds)),
+            ])
 
-            const sapRows = await tx.query.me2lPurchDocsSap.findMany({
-                where: and(
-                    eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                    inArray(me2lPurchDocsSap.item, poItems),
-                    isNotNull(me2lPurchDocsSap.material),
-                    ne(me2lPurchDocsSap.material, ""),
-                    ne(me2lPurchDocsSap.material, "-")
-                ),
-                orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
-            })
-
-            const latestByPoItem = new Map<number, Me2lRow>()
-            for (const row of sapRows) {
-                if (!row.item) continue
-                if (!latestByPoItem.has(row.item)) {
-                    latestByPoItem.set(row.item, row)
-                }
-            }
-
-            const productIds = Array.from(new Set(input.items.map((item) => item.productId)))
-            const existingProducts = await tx.select({
-                id: products.id,
-                materialNumber: products.materialNumber,
-            }).from(products).where(inArray(products.id, productIds))
-            const productById = new Map(existingProducts.map((p) => [p.id, p]))
-
-            const resolvedItems = input.items.map((item) => {
-                const sapLine = latestByPoItem.get(item.poItem)
-                if (!sapLine) {
-                    throw new Error(`PO Item ${item.poItem} tidak ditemukan di SAP untuk PO ${poNumber}`)
-                }
-                if (sapLine.grProcessedDate) {
-                    throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
-                }
-
-                const openQty = sanitizeOpenQty(sapLine.orderQty, sapLine.deliveredQty)
-                if (openQty <= 0) {
-                    throw new Error(`PO Item ${item.poItem} tidak memiliki qty open`)
-                }
-                if (item.quantity < 0) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
-                }
-                if (item.quantity > openQty) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi Open Qty (${openQty})`)
-                }
-
+            const productById = new Map(existingProducts.map((product) => [product.id, product]))
+            const warehouseById = new Map(warehouseRows.map((warehouse) => [warehouse.id, warehouse]))
+            const resolvedItems = positiveItems.map((item) => {
                 const product = productById.get(item.productId)
-                if (item.quantity > 0) {
-                    if (!product) {
-                        throw new Error(`Produk internal untuk PO Item ${item.poItem} tidak ditemukan`)
-                    }
+                const warehouse = warehouseById.get(item.warehouseId)
+
+                if (!product) {
+                    throw new Error(`Produk internal ${item.productId} tidak ditemukan`)
+                }
+
+                if (!warehouse) {
+                    throw new Error(`Warehouse ${item.warehouseId} tidak ditemukan`)
+                }
+
+                const decision = trackingDecisionByKey.get(`${item.warehouseId}:${item.productId}`) ?? null
+                const rfidLines = parseRfidReceiptLines(item.rfidLines)
+                const manualOverrideReason = item.manualOverrideReason?.trim() || null
+
+                if (rfidLines.length > item.quantity) {
+                    throw new Error(`Jumlah RFID line untuk ${product.materialNumber} melebihi quantity penerimaan`)
+                }
+
+                if (decision?.trackingMode !== "manual_only" && decision?.serialRequired && rfidLines.length > 0 && rfidLines.length !== item.quantity) {
+                    throw new Error(`Item ${product.materialNumber} membutuhkan 1 serial + EPC per quantity yang diterima`)
+                }
+
+                if (decision?.trackingMode === "required_rfid" && !decision.allowManualFallback && rfidLines.length === 0) {
+                    throw new Error(`Item ${product.materialNumber} wajib ditag RFID saat goods receive`)
+                }
+
+                if (decision?.trackingMode !== "manual_only" && rfidLines.length === 0 && !manualOverrideReason) {
+                    throw new Error(`Item ${product.materialNumber} belum ditag RFID. Isi alasan manual override / follow-up tagging.`)
+                }
+
+                const duplicateSerial = rfidLines.find(
+                    (line, index) => rfidLines.findIndex((candidate) => candidate.serialNumber === line.serialNumber) !== index,
+                )
+                if (duplicateSerial) {
+                    throw new Error(`Serial ${duplicateSerial.serialNumber} duplikat pada input RFID ${product.materialNumber}`)
+                }
+
+                const duplicateEpc = rfidLines.find(
+                    (line, index) => rfidLines.findIndex((candidate) => candidate.epc === line.epc) !== index,
+                )
+                if (duplicateEpc) {
+                    throw new Error(`EPC ${duplicateEpc.epc} duplikat pada input RFID ${product.materialNumber}`)
                 }
 
                 return {
                     ...item,
-                    poItem: item.poItem,
-                    vendorName: sapLine.vendorName?.trim() || "Unknown Vendor",
-                    materialDescription: sapLine.shortText?.trim() || "-",
+                    notes: item.notes?.trim() || null,
+                    manualOverrideReason,
+                    rfidLines,
+                    product,
+                    warehouse,
+                    decision,
                 }
             })
 
-            const vendorName = resolvedItems[0]?.vendorName || "Unknown Vendor"
-            const hasPositiveQty = resolvedItems.some((item) => item.quantity > 0)
-            if (!hasPositiveQty) {
-                throw new Error("Minimal satu item harus memiliki quantity > 0")
-            }
-
-            // 1. Create Header
             const [header] = await tx.insert(goodReceiveManual).values({
-                supplier: vendorName,
+                supplier: input.supplier.trim(),
                 poNumber,
                 receiveDate: input.receiveDate.toISOString(),
                 deliveryType: input.deliveryType,
-                referenceDocument: input.referenceDocument,
+                referenceDocument: input.referenceDocument?.trim() || null,
             }).returning()
 
-            const payload: ManualGoodReceiveNotificationPayload = {
-                poNumber,
-                supplier: vendorName,
-                receiveDate: input.receiveDate.toISOString(),
-                deliveryType: input.deliveryType,
-                referenceDocument: input.referenceDocument,
-                warehouseId: input.warehouseId,
-                items: resolvedItems
-                    .filter((item) => item.quantity > 0)
-                    .map((item) => ({
-                        poItem: item.poItem,
-                        materialNumber: item.materialNumber,
-                        materialDescription: item.materialDescription,
-                        quantity: item.quantity,
-                    })),
-            }
-
-            // 2. Create Items and Update Stock
             for (const item of resolvedItems) {
-                if (item.productId <= 0 && item.quantity <= 0) {
-                    continue
-                }
-
                 await tx.insert(goodReceiveManualItems).values({
                     headerId: header.id,
                     productId: item.productId,
-                    warehouseId: input.warehouseId,
+                    warehouseId: item.warehouseId,
                     quantity: item.quantity,
-                    notes: item.notes?.trim() || null,
+                    notes: item.notes,
                 })
 
-                if (item.quantity <= 0) {
-                    continue
-                }
-
-                // 3. Update or Insert Stock Level
                 const existingStock = await tx.select()
                     .from(stockLevels)
                     .where(
                         and(
                             eq(stockLevels.productId, item.productId),
-                            eq(stockLevels.warehouseId, input.warehouseId)
-                        )
+                            eq(stockLevels.warehouseId, item.warehouseId),
+                        ),
                     )
                     .limit(1)
 
@@ -500,63 +568,249 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     await tx.update(stockLevels)
                         .set({
                             totalStock: existingStock[0].totalStock + item.quantity,
-                            updatedAt: new Date()
+                            updatedAt: new Date(),
                         })
                         .where(eq(stockLevels.id, existingStock[0].id))
                 } else {
                     await tx.insert(stockLevels).values({
                         productId: item.productId,
-                        warehouseId: input.warehouseId,
-                        totalStock: item.quantity, // Initial stock
+                        warehouseId: item.warehouseId,
+                        totalStock: item.quantity,
                         bookedStock: 0,
                         minStock: 0,
                         valuationValue: "0",
                     })
                 }
 
-                // 4. Record Movement
                 await recordStockMovement(tx, {
                     productId: item.productId,
-                    warehouseId: input.warehouseId,
+                    warehouseId: item.warehouseId,
                     quantity: item.quantity,
                     type: "GR_MANUAL",
-                    referenceNumber: `PO: ${header.poNumber} Item: ${item.poItem}`,
+                    referenceNumber: `GR MANUAL: ${header.poNumber}`,
                     recordedBy: userId,
                 })
 
-                // 5. Mark SAP line as processed to prevent duplicate stock posting from GR SAP
-                await tx.update(me2lPurchDocsSap)
-                    .set({
-                        grProcessedDate: new Date(),
-                        grWarehouseId: input.warehouseId,
+                for (const rfidLine of item.rfidLines) {
+                    const existingUnit = await tx.query.inventoryUnits.findFirst({
+                        where: eq(inventoryUnits.serialNumber, rfidLine.serialNumber),
+                        columns: {
+                            id: true,
+                            productId: true,
+                            warehouseId: true,
+                            currentTagId: true,
+                            status: true,
+                        },
                     })
-                    .where(and(
-                        eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                        eq(me2lPurchDocsSap.item, item.poItem)
-                    ))
+
+                    if (existingUnit && existingUnit.productId !== item.productId) {
+                        throw new Error(`Serial ${rfidLine.serialNumber} sudah terdaftar untuk product lain`)
+                    }
+
+                    if (existingUnit && existingUnit.currentTagId) {
+                        throw new Error(`Serial ${rfidLine.serialNumber} sudah punya RFID tag aktif`)
+                    }
+
+                    let tag = await tx.query.rfidTags.findFirst({
+                        where: eq(rfidTags.epc, rfidLine.epc),
+                        columns: {
+                            id: true,
+                            epc: true,
+                            status: true,
+                        },
+                    })
+
+                    if (tag) {
+                        const activeBinding = await tx.query.rfidTagBindings.findFirst({
+                            where: and(
+                                eq(rfidTagBindings.rfidTagId, tag.id),
+                                eq(rfidTagBindings.status, "active"),
+                            ),
+                            columns: {
+                                id: true,
+                                inventoryUnitId: true,
+                            },
+                        })
+
+                        if (activeBinding && activeBinding.inventoryUnitId !== existingUnit?.id) {
+                            throw new Error(`Tag ${rfidLine.epc} masih aktif pada unit lain`)
+                        }
+
+                        await tx.update(rfidTags)
+                            .set({
+                                status: "active",
+                                tid: rfidLine.tid,
+                                memoryMaterialNumber: item.product.materialNumber,
+                                memorySerialNumber: rfidLine.serialNumber,
+                                lastSeenWarehouseId: item.warehouseId,
+                                lastSeenAt: new Date(),
+                                updatedAt: new Date(),
+                            })
+                            .where(eq(rfidTags.id, tag.id))
+                    } else {
+                        const createdTag = await tx.insert(rfidTags)
+                            .values({
+                                epc: rfidLine.epc,
+                                tid: rfidLine.tid,
+                                status: "active",
+                                isReusable: false,
+                                memoryMaterialNumber: item.product.materialNumber,
+                                memorySerialNumber: rfidLine.serialNumber,
+                                lastSeenWarehouseId: item.warehouseId,
+                                lastSeenAt: new Date(),
+                            })
+                            .returning({
+                                id: rfidTags.id,
+                                epc: rfidTags.epc,
+                                status: rfidTags.status,
+                            })
+
+                        tag = createdTag[0]
+                    }
+
+                    const inventoryUnit = existingUnit
+                        ? (
+                            await tx.update(inventoryUnits)
+                                .set({
+                                    productId: item.productId,
+                                    warehouseId: item.warehouseId,
+                                    serialNumber: rfidLine.serialNumber,
+                                    currentTagId: tag.id,
+                                    trackingMode: item.decision?.trackingMode ?? "optional_rfid",
+                                    status: "received",
+                                    lastMovementAt: new Date(),
+                                    updatedAt: new Date(),
+                                    notes: item.notes,
+                                })
+                                .where(eq(inventoryUnits.id, existingUnit.id))
+                                .returning({
+                                    id: inventoryUnits.id,
+                                    serialNumber: inventoryUnits.serialNumber,
+                                })
+                        )[0]
+                        : (
+                            await tx.insert(inventoryUnits)
+                                .values({
+                                    productId: item.productId,
+                                    warehouseId: item.warehouseId,
+                                    serialNumber: rfidLine.serialNumber,
+                                    currentTagId: tag.id,
+                                    trackingMode: item.decision?.trackingMode ?? "optional_rfid",
+                                    status: "received",
+                                    originDocumentType: "good_receive_manual",
+                                    originDocumentId: header.id,
+                                    lastMovementAt: new Date(),
+                                    notes: item.notes,
+                                })
+                                .returning({
+                                    id: inventoryUnits.id,
+                                    serialNumber: inventoryUnits.serialNumber,
+                                })
+                        )[0]
+
+                    const existingBinding = await tx.query.rfidTagBindings.findFirst({
+                        where: and(
+                            eq(rfidTagBindings.rfidTagId, tag.id),
+                            eq(rfidTagBindings.inventoryUnitId, inventoryUnit.id),
+                            eq(rfidTagBindings.status, "active"),
+                        ),
+                        columns: {
+                            id: true,
+                        },
+                    })
+
+                    if (!existingBinding) {
+                        await tx.insert(rfidTagBindings).values({
+                            rfidTagId: tag.id,
+                            inventoryUnitId: inventoryUnit.id,
+                            status: "active",
+                            writeOperation: "register",
+                            boundBy: userId,
+                            notes: `Bound from GR Manual ${header.poNumber}`,
+                        })
+                    }
+
+                    await tx.insert(inventoryUnitEvents).values({
+                        inventoryUnitId: inventoryUnit.id,
+                        productId: item.productId,
+                        warehouseId: item.warehouseId,
+                        rfidTagId: tag.id,
+                        operationType: "inbound",
+                        documentType: "good_receive_manual",
+                        documentId: header.id,
+                        captureMethod: "manual",
+                        referenceNumber: header.poNumber,
+                        quantity: 1,
+                        notes: item.notes ?? "Unit diterima melalui Good Receive Manual",
+                        metadata: {
+                            source: "good_receive_manual",
+                            receiveDate: input.receiveDate.toISOString(),
+                            deliveryType: input.deliveryType,
+                        },
+                        createdBy: userId,
+                    })
+                }
+
+                const missingTagCount = item.quantity - item.rfidLines.length
+                if (item.decision?.trackingMode !== "manual_only" && missingTagCount > 0) {
+                    await tx.insert(rfidExceptions).values({
+                        warehouseId: item.warehouseId,
+                        productId: item.productId,
+                        exceptionType: missingTagCount === item.quantity ? "gr_manual_missing_rfid" : "gr_manual_partial_rfid",
+                        severity: item.decision.trackingMode === "required_rfid" ? "high" : "medium",
+                        status: "open",
+                        documentType: "good_receive_manual",
+                        documentId: header.id,
+                        referenceNumber: header.poNumber,
+                        notes: item.manualOverrideReason ?? `Masih ada ${missingTagCount} unit menunggu tagging setelah GR manual`,
+                        metadata: {
+                            quantity: item.quantity,
+                            taggedCount: item.rfidLines.length,
+                            missingTagCount,
+                            materialNumber: item.product.materialNumber,
+                            trackingDecision: item.decision,
+                        },
+                    })
+                }
             }
 
-            return payload
+            const warehouseLabel = warehouseIds.length === 1
+                ? (() => {
+                    const warehouse = warehouseById.get(warehouseIds[0])
+                    return warehouse?.sloc
+                        ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
+                        : "-"
+                })()
+                : `${warehouseIds.length} warehouse`
+
+            return {
+                poNumber,
+                supplier: input.supplier.trim(),
+                receiveDate: input.receiveDate.toISOString(),
+                deliveryType: input.deliveryType,
+                referenceDocument: input.referenceDocument,
+                warehouseLabel,
+                items: resolvedItems.map((item) => ({
+                    materialNumber: item.product.materialNumber,
+                    materialDescription: item.product.materialDescription || "-",
+                    quantity: item.quantity,
+                })),
+            }
         })
 
         revalidatePath("/dashboard/good-receive-manual")
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/stock-movements")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-tagged-units")
+        revalidatePath("/dashboard/rfid-traceability")
 
         let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
         if (notifyRoles.length > 0 || notifyUserIds.length > 0) {
             try {
                 const payload = notificationPayload
-                const [recipients, warehouse] = await Promise.all([
-                    getNotificationRecipientEmails(notifyRoles, notifyUserIds),
-                    db.query.warehouses.findFirst({
-                        where: eq(warehouses.id, payload.warehouseId),
-                        columns: {
-                            sloc: true,
-                            description: true,
-                        },
-                    }),
-                ])
+                const recipients = await getNotificationRecipientEmails(notifyRoles, notifyUserIds)
 
                 if (recipients.length > 0) {
                     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "")
@@ -567,16 +821,12 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         month: "long",
                         year: "numeric",
                     })
-                    const warehouseLabel = warehouse?.sloc
-                        ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
-                        : "-"
-
                     const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
                         poNumber: payload.poNumber,
                         supplier: payload.supplier,
                         receiveDate: receiveDateText,
                         deliveryType: payload.deliveryType,
-                        warehouseLabel,
+                        warehouseLabel: payload.warehouseLabel,
                         referenceDocument: payload.referenceDocument,
                         detailUrl,
                         items: payload.items,
@@ -590,7 +840,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                             supplier: payload.supplier,
                             receiveDate: receiveDateText,
                             deliveryType: payload.deliveryType,
-                            warehouseLabel,
+                            warehouseLabel: payload.warehouseLabel,
                             referenceDocument: payload.referenceDocument?.trim() || "-",
                             detailUrl,
                             itemsTableRows,

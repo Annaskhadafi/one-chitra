@@ -1,17 +1,14 @@
 import { GoodReceiveForm } from "../_components/good-receive-form";
 import { getWarehouses } from "@/app/actions/warehouse";
-import { getGoodReceiveManualNotificationTargets, getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
 import { getProducts } from "@/app/actions/product";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 
 export default async function CreateGoodReceiveManualPage() {
-    const [warehouses, poOptionsResult, products, notificationTargets] = await Promise.all([
+    const [warehouses, products] = await Promise.all([
         getWarehouses(),
-        getManualGoodReceivePoOptions(),
         getProducts(),
-        getGoodReceiveManualNotificationTargets(),
     ])
 
     const formattedWarehouses = warehouses.map(w => ({
@@ -52,12 +49,8 @@ export default async function CreateGoodReceiveManualPage() {
 
             {/* Form */}
             <GoodReceiveForm
+                products={productOptions}
                 warehouses={formattedWarehouses}
-                poOptions={poOptionsResult.success ? poOptionsResult.data.poOptions : []}
-                poLineOptions={poOptionsResult.success ? poOptionsResult.data.poLineOptions : []}
-                productOptions={productOptions}
-                notificationRoles={notificationTargets.roles}
-                notificationUsers={notificationTargets.users}
             />
         </div>
     );

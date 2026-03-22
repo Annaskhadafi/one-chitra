@@ -10,6 +10,7 @@ import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
+import { clearDeliveryRfidArtifacts, syncDeliveryRfidLedger } from "@/lib/rfid-delivery"
 import { sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
 import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
@@ -625,6 +626,22 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
             }
 
+            try {
+                await syncDeliveryRfidLedger(tx, {
+                    deliveryId: newDelivery.id,
+                    deliveryNumber,
+                    warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
+                    status: data.status,
+                    userId,
+                    items: data.items,
+                    captureMethod: "manual",
+                    notes: data.notes,
+                })
+            } catch (rfidError) {
+                console.error("[CREATE DELIVERY] RFID sync skipped:", rfidError)
+            }
+
             // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
             await syncDeliveryTypesForSO(tx, data.salesOrderId)
 
@@ -637,6 +654,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/deliveries/create")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
 
             console.log("[CREATE DELIVERY] Transaction completed successfully")
@@ -902,6 +923,22 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                 }
             }
 
+            try {
+                await syncDeliveryRfidLedger(tx, {
+                    deliveryId: id,
+                    deliveryNumber: data.deliveryNumber ?? originalDelivery.deliveryNumber,
+                    warehouseId: data.warehouseId,
+                    warehouseToId: data.warehouseToId,
+                    status: data.status,
+                    userId,
+                    items: data.items,
+                    captureMethod: "manual",
+                    notes: data.notes,
+                })
+            } catch (rfidError) {
+                console.error("[UPDATE DELIVERY] RFID sync skipped:", rfidError)
+            }
+
             // Enforce: jika SO punya >1 delivery aktif, semua harus 'partial'
             await syncDeliveryTypesForSO(tx, data.salesOrderId)
 
@@ -912,6 +949,10 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/deliveries/create")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return {
                 success: true as const,
@@ -994,6 +1035,12 @@ export async function deleteDelivery(id: number) {
             // Permanent deletion of stock transfers
             await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
 
+            try {
+                await clearDeliveryRfidArtifacts(tx, id)
+            } catch (rfidError) {
+                console.error("[DELETE DELIVERY] RFID cleanup skipped:", rfidError)
+            }
+
             // Permanent deletion of items
             await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
             // Permanent deletion of the delivery record
@@ -1002,6 +1049,10 @@ export async function deleteDelivery(id: number) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return { success: true }
         })
@@ -1067,6 +1118,11 @@ export async function bulkDeleteDeliveries(ids: number[]) {
 
                 // 3. Delete items, transfers and record
                 await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
+                try {
+                    await clearDeliveryRfidArtifacts(tx, id)
+                } catch (rfidError) {
+                    console.error("[BULK DELETE DELIVERY] RFID cleanup skipped:", rfidError)
+                }
                 await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
                 await tx.delete(deliveries).where(eq(deliveries.id, id))
             }
@@ -1074,6 +1130,10 @@ export async function bulkDeleteDeliveries(ids: number[]) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return { success: true }
         })
@@ -1198,6 +1258,22 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
                     .set({ status, updatedAt: new Date() })
                     .where(eq(deliveries.id, id))
 
+                try {
+                    await syncDeliveryRfidLedger(tx, {
+                        deliveryId: delivery.id,
+                        deliveryNumber: delivery.deliveryNumber,
+                        warehouseId: delivery.warehouseId,
+                        warehouseToId: delivery.warehouseToId,
+                        status,
+                        userId,
+                        items: delivery.items,
+                        captureMethod: "manual",
+                        notes: delivery.notes,
+                    })
+                } catch (rfidError) {
+                    console.error("[BULK UPDATE DELIVERY STATUS] RFID sync skipped:", rfidError)
+                }
+
                 if (status === "delivered") {
                     await checkAndCompleteSalesOrder(tx, delivery.salesOrderId)
                     if (delivery.status !== "delivered") {
@@ -1209,6 +1285,10 @@ export async function bulkUpdateDeliveryStatus(ids: number[], status: string) {
             try {
                 revalidatePath("/dashboard/deliveries")
                 revalidatePath("/dashboard/inventory")
+                revalidatePath("/dashboard/rfid-monitoring")
+                revalidatePath("/dashboard/rfid-exceptions")
+                revalidatePath("/dashboard/rfid-traceability")
+                revalidatePath("/dashboard/rfid-tagged-units")
             } catch (_e) { }
             return { success: true as const, deliveredNotificationIds }
         })

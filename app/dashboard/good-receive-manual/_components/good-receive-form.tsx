@@ -1,6 +1,7 @@
 "use client"
 
-import { useForm, useFieldArray, type Resolver } from "react-hook-form"
+import { useEffect, useMemo, useState } from "react"
+import { useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
@@ -8,9 +9,12 @@ import { CalendarIcon, Trash2, Plus, Loader2, PackagePlus, FileText } from "luci
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
+import { getTrackingDecisionPreview } from "@/app/actions/rfid"
 
 import { Button } from "@/components/ui/button"
+import { TrackingModeBadge } from "@/components/rfid/tracking-mode-badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
     Form,
     FormControl,
@@ -61,6 +65,8 @@ const formSchema = z.object({
         warehouseId: z.coerce.number().min(1, "Warehouse is required"),
         quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
         notes: z.string().optional(),
+        rfidLines: z.string().optional(),
+        manualOverrideReason: z.string().optional(),
     })).min(1, "At least one item is required"),
 })
 
@@ -77,6 +83,12 @@ type GoodReceiveFormProps = {
     }[]
 }
 
+type TrackingDecisionPreviewItem = Awaited<ReturnType<typeof getTrackingDecisionPreview>>[number]
+
+function buildTrackingDecisionKey(warehouseId: number, productId: number) {
+    return `${warehouseId}:${productId}`
+}
+
 export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) {
     const router = useRouter()
     const form = useForm<z.infer<typeof formSchema>>({
@@ -84,7 +96,7 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
         defaultValues: {
             receiveDate: new Date(),
             deliveryType: "Complete",
-            items: [{ productId: 0, warehouseId: 0, quantity: 0, notes: "" }],
+            items: [{ productId: 0, warehouseId: 0, quantity: 0, notes: "", rfidLines: "", manualOverrideReason: "" }],
         },
     })
 
@@ -92,6 +104,104 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
         control: form.control,
         name: "items",
     })
+    const watchedItems = useWatch({
+        control: form.control,
+        name: "items",
+    })
+    const [trackingDecisions, setTrackingDecisions] = useState<Record<string, TrackingDecisionPreviewItem>>({})
+    const [loadingTrackingDecisions, setLoadingTrackingDecisions] = useState(false)
+    const groupedTrackingQueries = useMemo(() => {
+        const grouped = new Map<number, Set<number>>()
+
+        for (const item of watchedItems ?? []) {
+            const warehouseId = Number(item?.warehouseId)
+            const productId = Number(item?.productId)
+
+            if (!Number.isInteger(warehouseId) || warehouseId <= 0 || !Number.isInteger(productId) || productId <= 0) {
+                continue
+            }
+
+            if (!grouped.has(warehouseId)) {
+                grouped.set(warehouseId, new Set<number>())
+            }
+
+            grouped.get(warehouseId)?.add(productId)
+        }
+
+        return Array.from(grouped.entries())
+            .map(([warehouseId, productIds]) => ({
+                warehouseId,
+                productIds: Array.from(productIds).sort((a, b) => a - b),
+            }))
+            .sort((a, b) => a.warehouseId - b.warehouseId)
+    }, [watchedItems])
+    const groupedTrackingQueriesKey = useMemo(
+        () => groupedTrackingQueries.map((group) => `${group.warehouseId}:${group.productIds.join(",")}`).join("|"),
+        [groupedTrackingQueries],
+    )
+    const trackedItemCount = useMemo(
+        () => Object.values(trackingDecisions).filter((decision) => decision.trackingMode !== "manual_only").length,
+        [trackingDecisions],
+    )
+
+    useEffect(() => {
+        let cancelled = false
+        const requestMatrix = groupedTrackingQueriesKey
+            .split("|")
+            .filter(Boolean)
+            .map((entry) => {
+                const [warehouseIdPart, productIdsPart = ""] = entry.split(":")
+
+                return {
+                    warehouseId: Number(warehouseIdPart),
+                    productIds: productIdsPart
+                        .split(",")
+                        .map((value) => Number(value))
+                        .filter((value) => Number.isInteger(value) && value > 0),
+                }
+            })
+            .filter((entry) => Number.isInteger(entry.warehouseId) && entry.warehouseId > 0 && entry.productIds.length > 0)
+
+        if (requestMatrix.length === 0) {
+            setTrackingDecisions({})
+            setLoadingTrackingDecisions(false)
+            return
+        }
+
+        setLoadingTrackingDecisions(true)
+
+        Promise.all(
+            requestMatrix.map(async (entry) => {
+                const decisions = await getTrackingDecisionPreview(entry.warehouseId, entry.productIds)
+                return decisions.map((decision) => [buildTrackingDecisionKey(entry.warehouseId, decision.productId), decision] as const)
+            }),
+        )
+            .then((decisionGroups) => {
+                if (cancelled) {
+                    return
+                }
+
+                setTrackingDecisions(Object.fromEntries(decisionGroups.flat()))
+            })
+            .catch((error) => {
+                if (cancelled) {
+                    return
+                }
+
+                console.error("Failed to load good receive tracking decisions:", error)
+                setTrackingDecisions({})
+                toast.error("Gagal memuat aturan tracking untuk item GR")
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setLoadingTrackingDecisions(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [groupedTrackingQueriesKey])
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
@@ -249,7 +359,7 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => append({ productId: 0, warehouseId: 0, quantity: 1, notes: "" })}
+                                    onClick={() => append({ productId: 0, warehouseId: 0, quantity: 1, notes: "", rfidLines: "", manualOverrideReason: "" })}
                                     className="border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
                                 >
                                     <Plus className="mr-2 h-4 w-4" />
@@ -262,6 +372,16 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                         </CardHeader>
                         <Separator />
                         <CardContent className="pt-0 px-0 pb-0">
+                            {trackedItemCount > 0 && (
+                                <div className="mx-6 mt-5 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                                    {trackedItemCount} kombinasi item-gudang di penerimaan ini ikut pilot RFID. GR manual tetap boleh diproses, lalu lanjutkan tagging/registrasi material sesuai badge tiap baris.
+                                </div>
+                            )}
+                            {loadingTrackingDecisions && (
+                                <div className="mx-6 mt-5 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                    Menyelaraskan aturan tracking warehouse...
+                                </div>
+                            )}
                             <div className="rounded-b-lg overflow-hidden">
                                 <Table>
                                     <TableHeader>
@@ -270,6 +390,7 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                                             <TableHead className="w-[300px] text-xs font-semibold text-muted-foreground">Product</TableHead>
                                             <TableHead className="w-[200px] text-xs font-semibold text-muted-foreground">Warehouse</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
+                                            <TableHead className="w-[320px] text-xs font-semibold text-muted-foreground">RFID / Serial</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
                                             <TableHead className="w-[50px]"></TableHead>
                                         </TableRow>
@@ -284,11 +405,18 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                                                         name={`items.${index}.productId`}
                                                         render={({ field }) => (
                                                             <FormItem className="space-y-0">
-                                                                <Select
-                                                                    onValueChange={(val) => field.onChange(parseInt(val))}
-                                                                    value={field.value?.toString() === "0" ? "" : field.value?.toString()}
-                                                                >
-                                                                    <FormControl>
+                                                                {(() => {
+                                                                    const selectedWarehouseId = Number(form.getValues(`items.${index}.warehouseId`) || 0)
+                                                                    const selectedProductId = Number(field.value || 0)
+                                                                    const trackingDecision = trackingDecisions[buildTrackingDecisionKey(selectedWarehouseId, selectedProductId)]
+
+                                                                    return (
+                                                                        <>
+                                                                        <Select
+                                                                            onValueChange={(val) => field.onChange(parseInt(val))}
+                                                                            value={field.value?.toString() === "0" ? "" : field.value?.toString()}
+                                                                        >
+                                                                            <FormControl>
                                                                         <SelectTrigger className="focus:ring-indigo-500">
                                                                             <SelectValue placeholder="Select product" />
                                                                         </SelectTrigger>
@@ -298,9 +426,32 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                                                                             <SelectItem key={product.id} value={product.id.toString()}>
                                                                                 {product.materialNumber} - {product.materialDescription}
                                                                             </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                            {trackingDecision ? (
+                                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                                    <TrackingModeBadge mode={trackingDecision.trackingMode} />
+                                                                                    {trackingDecision.serialRequired && (
+                                                                                        <span className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                                                                                            Serial / Tag Follow-up
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {trackingDecision.trackingMode === "required_rfid" && trackingDecision.allowManualFallback && (
+                                                                                        <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">
+                                                                                            Manual OK
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : null}
+                                                                            {trackingDecision?.trackingMode !== "manual_only" && (
+                                                                                <p className="mt-2 text-xs text-muted-foreground">
+                                                                                    {trackingDecision.reason}
+                                                                                </p>
+                                                                            )}
+                                                                        </>
+                                                                    )
+                                                                })()}
                                                                 <FormMessage />
                                                             </FormItem>
                                                         )}
@@ -352,6 +503,68 @@ export function GoodReceiveForm({ products, warehouses }: GoodReceiveFormProps) 
                                                             </FormItem>
                                                         )}
                                                     />
+                                                </TableCell>
+                                                <TableCell>
+                                                    {(() => {
+                                                        const selectedWarehouseId = Number(form.getValues(`items.${index}.warehouseId`) || 0)
+                                                        const selectedProductId = Number(form.getValues(`items.${index}.productId`) || 0)
+                                                        const trackingDecision = trackingDecisions[buildTrackingDecisionKey(selectedWarehouseId, selectedProductId)]
+
+                                                        if (!trackingDecision || trackingDecision.trackingMode === "manual_only") {
+                                                            return (
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Item ini masih manual-only, jadi serial/EPC RFID belum diperlukan.
+                                                                </div>
+                                                            )
+                                                        }
+
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                <FormField
+                                                                    control={form.control}
+                                                                    name={`items.${index}.rfidLines`}
+                                                                    render={({ field }) => (
+                                                                        <FormItem className="space-y-1">
+                                                                            <FormControl>
+                                                                                <Textarea
+                                                                                    {...field}
+                                                                                    rows={4}
+                                                                                    className="text-xs font-mono focus-visible:ring-indigo-500"
+                                                                                    placeholder={"Format per line:\nSERIAL-001|E280...\nSERIAL-002|E280...|TID-OPTIONAL"}
+                                                                                />
+                                                                            </FormControl>
+                                                                            <p className="text-[11px] text-muted-foreground">
+                                                                                Satu baris = satu unit. Pakai format <span className="font-mono">SERIAL|EPC</span> atau <span className="font-mono">SERIAL|EPC|TID</span>.
+                                                                            </p>
+                                                                            <FormMessage />
+                                                                        </FormItem>
+                                                                    )}
+                                                                />
+
+                                                                <FormField
+                                                                    control={form.control}
+                                                                    name={`items.${index}.manualOverrideReason`}
+                                                                    render={({ field }) => (
+                                                                        <FormItem className="space-y-1">
+                                                                            <FormControl>
+                                                                                <Input
+                                                                                    {...field}
+                                                                                    placeholder="Alasan jika tagging ditunda / manual override"
+                                                                                    className="h-8 text-xs focus-visible:ring-indigo-500"
+                                                                                />
+                                                                            </FormControl>
+                                                                            {trackingDecision.trackingMode === "required_rfid" ? (
+                                                                                <p className="text-[11px] text-muted-foreground">
+                                                                                    Untuk item pilot RFID, isi alasan ini jika barang diterima dulu dan tagging menyusul.
+                                                                                </p>
+                                                                            ) : null}
+                                                                            <FormMessage />
+                                                                        </FormItem>
+                                                                    )}
+                                                                />
+                                                            </div>
+                                                        )
+                                                    })()}
                                                 </TableCell>
                                                 <TableCell>
                                                     <FormField

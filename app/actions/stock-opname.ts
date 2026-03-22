@@ -11,6 +11,10 @@ import type { OpnamePdfReportData } from "@/lib/types"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { formatWarehouseLabel, normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
+import {
+    clearStockOpnameRfidArtifacts,
+    syncStockOpnameRfidReview,
+} from "@/lib/rfid-opname"
 
 type SapStockRow = {
     material_no: string | null
@@ -836,12 +840,38 @@ export async function closeStockOpnameSession(
                     updatedAt: new Date(),
                 })
                 .where(eq(stockOpnameSessions.id, sessionId))
+
+            try {
+                await syncStockOpnameRfidReview(tx, {
+                    sessionId,
+                    sessionName: opnameSession.name,
+                    warehouseId: opnameSession.warehouseId,
+                    sourceType: opnameSession.sourceType,
+                    status: "closed",
+                    applyAdjustments,
+                    userId,
+                    items: opnameSession.items.map((item) => ({
+                        itemId: item.id,
+                        productId: item.productId,
+                        systemQty: item.systemQty,
+                        countedQty: item.countedQty,
+                        variance: item.variance,
+                        notes: item.notes,
+                    })),
+                })
+            } catch (rfidError) {
+                console.error("[CLOSE STOCK OPNAME] RFID sync skipped:", rfidError)
+            }
         })
 
         revalidatePath("/dashboard/stock-opname")
         revalidatePath("/dashboard/stock-opname-aktual")
         revalidatePath(`/dashboard/stock-opname/${sessionId}`)
         revalidatePath(`/dashboard/stock-opname-aktual/${sessionId}`)
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
 
         let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
         if (opnameSession.sourceType === "actual") {
@@ -877,13 +907,25 @@ export async function cancelStockOpnameSession(sessionId: number, expectedSource
 
         await getOpnameAuthSession(normalizeOpnameSourceType(opnameSession.sourceType), "edit")
 
-        await db
-            .update(stockOpnameSessions)
-            .set({ status: "cancelled", updatedAt: new Date() })
-            .where(eq(stockOpnameSessions.id, sessionId))
+        await db.transaction(async (tx) => {
+            await tx
+                .update(stockOpnameSessions)
+                .set({ status: "cancelled", updatedAt: new Date() })
+                .where(eq(stockOpnameSessions.id, sessionId))
+
+            try {
+                await clearStockOpnameRfidArtifacts(tx, sessionId)
+            } catch (rfidError) {
+                console.error("[CANCEL STOCK OPNAME] RFID cleanup skipped:", rfidError)
+            }
+        })
 
         revalidatePath("/dashboard/stock-opname")
         revalidatePath("/dashboard/stock-opname-aktual")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
         return { success: true }
     } catch (error) {
         console.error("Cancel opname session error:", error)
@@ -910,6 +952,11 @@ export async function deleteStockOpnameSession(sessionId: number, expectedSource
             // Delete related items and signatures (cascade should handle this, but explicit is safer)
             await tx.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, sessionId))
             await tx.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, sessionId))
+            try {
+                await clearStockOpnameRfidArtifacts(tx, sessionId)
+            } catch (rfidError) {
+                console.error("[DELETE STOCK OPNAME] RFID cleanup skipped:", rfidError)
+            }
             
             // Delete the session
             await tx.delete(stockOpnameSessions).where(eq(stockOpnameSessions.id, sessionId))
@@ -917,6 +964,10 @@ export async function deleteStockOpnameSession(sessionId: number, expectedSource
 
         revalidatePath("/dashboard/stock-opname")
         revalidatePath("/dashboard/stock-opname-aktual")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
         return { success: true }
     } catch (error) {
         console.error("Delete opname session error:", error)
@@ -950,6 +1001,11 @@ export async function bulkDeleteStockOpnameSessions(sessionIds: number[], expect
                 }
                 await tx.delete(stockOpnameItems).where(eq(stockOpnameItems.sessionId, sessionId))
                 await tx.delete(stockOpnameSignatures).where(eq(stockOpnameSignatures.sessionId, sessionId))
+                try {
+                    await clearStockOpnameRfidArtifacts(tx, sessionId)
+                } catch (rfidError) {
+                    console.error("[BULK DELETE STOCK OPNAME] RFID cleanup skipped:", rfidError)
+                }
                 await tx.delete(stockOpnameSessions).where(eq(stockOpnameSessions.id, sessionId))
                 deletedCount++
             }
@@ -957,6 +1013,10 @@ export async function bulkDeleteStockOpnameSessions(sessionIds: number[], expect
 
         revalidatePath("/dashboard/stock-opname")
         revalidatePath("/dashboard/stock-opname-aktual")
+        revalidatePath("/dashboard/rfid-monitoring")
+        revalidatePath("/dashboard/rfid-exceptions")
+        revalidatePath("/dashboard/rfid-traceability")
+        revalidatePath("/dashboard/rfid-tagged-units")
         return { success: true, deletedCount }
     } catch (error) {
         console.error("Bulk delete opname sessions error:", error)

@@ -64,7 +64,11 @@ const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNa
 }
 
 const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
-  const allowedMasterDataUrls = new Set(["/dashboard/products", "/dashboard/warehouse"])
+  const allowedMasterDataUrls = new Set([
+    "/dashboard/products",
+    "/dashboard/warehouse",
+    "/dashboard/rfid-setup",
+  ])
 
   return sections.map((section) => ({
     ...section,
@@ -85,10 +89,99 @@ const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[
           return true
         })
 
+      const hasWarehouse = filteredItems.some((subItem) => subItem.url === "/dashboard/warehouse")
+      const hasRfidSetup = filteredItems.some((subItem) => subItem.url === "/dashboard/rfid-setup")
+
+      const mergedItems = [...filteredItems]
+      if (!hasWarehouse) {
+        mergedItems.push({
+          id: `${item.id}-warehouse`,
+          title: "Warehouse",
+          url: "/dashboard/warehouse",
+          resource: "warehouses",
+          hidden: false,
+        })
+      }
+      if (!hasRfidSetup) {
+        mergedItems.push({
+          id: `${item.id}-rfid-setup`,
+          title: "RFID Setup",
+          url: "/dashboard/rfid-setup",
+          resource: "warehouses",
+          hidden: false,
+        })
+      }
+
       return {
         ...item,
         url: "#",
-        items: filteredItems,
+        items: mergedItems,
+      }
+    }),
+  }))
+}
+
+const ensureInventoryControlMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => {
+      const isInventoryGroup = item.title === "Inventory Control" || item.resource === "inventory-control"
+      if (!isInventoryGroup) {
+        return item
+      }
+
+      const existingItems = item.items ?? []
+      const hasRfidMonitoring = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-monitoring")
+      const hasRfidExceptions = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-exceptions")
+      const hasRfidTaggedUnits = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-tagged-units")
+      const hasRfidTraceability = existingItems.some((subItem) => subItem.url === "/dashboard/rfid-traceability")
+
+      if (hasRfidMonitoring && hasRfidExceptions && hasRfidTaggedUnits && hasRfidTraceability) {
+        return item
+      }
+
+      const mergedItems = [...existingItems]
+      if (!hasRfidMonitoring) {
+        mergedItems.push({
+          id: `${item.id}-rfid-monitoring`,
+          title: "RFID Monitoring",
+          url: "/dashboard/rfid-monitoring",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidExceptions) {
+        mergedItems.push({
+          id: `${item.id}-rfid-exceptions`,
+          title: "RFID Exceptions",
+          url: "/dashboard/rfid-exceptions",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidTaggedUnits) {
+        mergedItems.push({
+          id: `${item.id}-rfid-tagged-units`,
+          title: "RFID Tagged Units",
+          url: "/dashboard/rfid-tagged-units",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+      if (!hasRfidTraceability) {
+        mergedItems.push({
+          id: `${item.id}-rfid-traceability`,
+          title: "RFID Traceability",
+          url: "/dashboard/rfid-traceability",
+          resource: "inventory",
+          hidden: false,
+        })
+      }
+
+      return {
+        ...item,
+        url: "#",
+        items: mergedItems,
       }
     }),
   }))
@@ -121,8 +214,10 @@ export default async function DashboardLayout({
     getNavbarTheme(),
     getNavbarMenuSettingsAction(),
   ])
-  const runtimeNavigationSections = ensureMasterDataMenu(
-    ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+  const runtimeNavigationSections = ensureInventoryControlMenu(
+    ensureMasterDataMenu(
+      ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+    ),
   )
 
   const user = session?.user as {
