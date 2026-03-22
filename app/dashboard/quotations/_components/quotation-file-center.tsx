@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createQuotationAttachment, deleteQuotationAttachment, uploadQuotationCustomerPo } from "@/app/actions/quotation"
+import { attachSalesDocumentsToQuotation, createQuotationAttachment, deleteQuotationAttachment, uploadQuotationCustomerPo } from "@/app/actions/quotation"
 import { createSalesDocument, getSalesDocuments } from "@/app/actions/sales-document"
 import { uploadFile } from "@/app/actions/upload"
 import { Badge } from "@/components/ui/badge"
@@ -364,25 +364,25 @@ export function QuotationFileCenter({
 
         setIsAddingFromSalesDocument(true)
         try {
-            for (const document of selectedSalesDocuments) {
-                const result = await createQuotationAttachment({
-                    quotationId,
-                    title: attachmentTitle.trim() || document.title,
-                    fileUrl: document.fileUrl,
-                    fileName: document.fileName,
-                    mimeType: document.fileType || null,
-                    fileSize: 0,
-                    description: attachmentDescription.trim() || document.description || null,
-                    includeInPdf,
-                    kind: "supporting",
-                })
+            const result = await attachSalesDocumentsToQuotation({
+                quotationId,
+                salesDocumentIds: selectedSalesDocuments.map((document) => document.id),
+                title: attachmentTitle.trim() || null,
+                description: attachmentDescription.trim() || null,
+                includeInPdf,
+            })
 
-                if (!result.success) {
-                    throw new Error(result.error || `Sales Document ${document.title} gagal ditambahkan`)
-                }
+            if (!result.success) {
+                throw new Error(result.error || "Sales Document gagal ditambahkan")
             }
 
-            toast.success(`${selectedSalesDocuments.length} Sales Document berhasil ditambahkan ke quotation`)
+            if (result.skippedCount > 0) {
+                toast.warning(
+                    `${result.attachedCount} Sales Document berhasil ditambahkan. ${result.failures.slice(0, 2).join("; ")}${result.failures.length > 2 ? `; +${result.failures.length - 2} lainnya` : ""}`,
+                )
+            } else {
+                toast.success(`${result.attachedCount} Sales Document berhasil ditambahkan ke quotation`)
+            }
             setAttachmentTitle("")
             setAttachmentDescription("")
             setSelectedSalesDocumentIds([])

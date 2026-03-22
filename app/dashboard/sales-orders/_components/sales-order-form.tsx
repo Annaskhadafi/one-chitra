@@ -1103,18 +1103,21 @@ export function SalesOrderForm({
                 <CardContent className="p-6">
                     <div className="space-y-4">
                         <Label className="font-semibold">Product</Label>
-                        <div className="flex gap-2">
-                            <Popover open={productOpen} onOpenChange={setProductOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" className="flex-1 justify-start font-normal text-muted-foreground">
-                                        <Search className="mr-2 h-4 w-4" />
-                                        Search Product Name / Item Code / Scan bar code
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[500px] p-0" align="start">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <div className="min-w-0 flex-1">
+                                <Popover open={productOpen} onOpenChange={setProductOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" className="w-full min-w-0 justify-start overflow-hidden font-normal text-muted-foreground">
+                                            <Search className="mr-2 h-4 w-4 shrink-0" />
+                                            <span className="truncate text-left">
+                                                Search Product Name / Item Code / Scan bar code
+                                            </span>
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[calc(100vw-2rem)] max-w-[500px] p-0" align="start">
                                     <Command>
-                                        <CommandInput placeholder="Search products..." />
-                                        <CommandList>
+                                        <CommandInput placeholder="Search products..." className="min-w-0" />
+                                        <CommandList className="max-h-[50vh]">
                                             <CommandEmpty>No product found.</CommandEmpty>
                                             <CommandGroup>
                                                 {uniqueProducts.map(product => (
@@ -1124,20 +1127,21 @@ export function SalesOrderForm({
                                                         onSelect={() => addProduct(product)}
                                                     >
                                                         <Package className="mr-2 h-4 w-4 text-muted-foreground" />
-                                                        <div>
-                                                            <p className="font-medium">
-                                                                {product.materialNumber} 
-                                                                {product.materialNumberCk && <span className="text-orange-600 ml-2">| CK: {product.materialNumberCk}</span>}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">{product.materialDescription}</p>
+                                                        <div className="min-w-0">
+                                                            <p className="truncate font-medium">{product.materialNumber}</p>
+                                                            {product.materialNumberCk ? (
+                                                                <p className="truncate text-xs text-orange-600">CK: {product.materialNumberCk}</p>
+                                                            ) : null}
+                                                            <p className="line-clamp-2 break-words text-xs text-muted-foreground">{product.materialDescription}</p>
                                                         </div>
                                                     </CommandItem>
                                                 ))}
                                             </CommandGroup>
                                         </CommandList>
                                     </Command>
-                                </PopoverContent>
-                            </Popover>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                             <QuickAddProductDialog
                                 warehouses={warehouses}
                                 onProductCreated={(product) => {

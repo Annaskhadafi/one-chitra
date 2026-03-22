@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, type UseFormReturn } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { 
     Dialog, 
@@ -47,14 +47,31 @@ import {
 } from "@/lib/schemas"
 import { saveBundle } from "@/app/actions/product-bundle"
 import { toast } from "sonner"
-import { Plus, Trash2, Search, Check, ChevronsUpDown } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { Plus, Trash2, Check, ChevronsUpDown } from "lucide-react"
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 
+type BundleProductOption = {
+    id: number
+    materialNumber: string
+    materialDescription: string | null
+    isBundle?: boolean
+}
+
+type BundleDialogBundle = {
+    id: number
+    materialNumber: string
+    materialDescription: string
+    category: string
+    bundleItems: Array<{
+        childProductId: number
+        quantity: number
+    }>
+}
+
 interface BundleDialogProps {
-    bundle?: any
-    allProducts: any[]
+    bundle?: BundleDialogBundle
+    allProducts: BundleProductOption[]
     onSuccess?: () => void
     trigger?: React.ReactNode
 }
@@ -69,7 +86,7 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
             materialNumber: bundle?.materialNumber || "",
             materialDescription: bundle?.materialDescription || "",
             category: bundle?.category || "TYRE",
-            items: bundle?.bundleItems?.map((bi: any) => ({
+            items: bundle?.bundleItems?.map((bi) => ({
                 childProductId: bi.childProductId,
                 quantity: bi.quantity
             })) || [{ childProductId: 0, quantity: 1 }]
@@ -102,7 +119,7 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                 materialNumber: bundle.materialNumber,
                 materialDescription: bundle.materialDescription,
                 category: bundle.category,
-                items: bundle.bundleItems.map((bi: any) => ({
+                items: bundle.bundleItems.map((bi) => ({
                     childProductId: bi.childProductId,
                     quantity: bi.quantity
                 }))
@@ -128,7 +145,7 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
             } else {
                 toast.error(res.error || "Failed to save bundle")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred")
         } finally {
             setIsSubmitting(false)
@@ -142,14 +159,14 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
             <DialogTrigger asChild>
                 {trigger || <Button variant="outline">Edit Bundle</Button>}
             </DialogTrigger>
-            <DialogContent className="max-w-3xl overflow-y-auto max-h-[90vh]">
+            <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{bundle ? "Edit" : "Create"} Product Bundle</DialogTitle>
                 </DialogHeader>
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <FormField
                                 control={form.control}
                                 name="materialNumber"
@@ -202,12 +219,13 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                         />
 
                         <div className="space-y-4">
-                            <div className="flex justify-between items-center px-1">
+                            <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
                                 <h3 className="text-sm font-semibold">Bundle Components</h3>
                                 <Button 
                                     type="button" 
                                     variant="outline" 
                                     size="sm"
+                                    className="w-full sm:w-auto"
                                     onClick={() => append({ childProductId: 0, quantity: 1 })}
                                 >
                                     <Plus className="mr-2 h-4 w-4" />
@@ -217,8 +235,8 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
 
                             <div className="space-y-3">
                                 {fields.map((itemField, index) => (
-                                    <div key={itemField.id} className="flex gap-4 items-end bg-muted/30 p-3 rounded-lg border border-dashed">
-                                        <div className="flex-1 space-y-1">
+                                    <div key={itemField.id} className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/30 p-3 sm:flex-row sm:items-end sm:gap-4">
+                                        <div className="min-w-0 flex-1 space-y-1">
                                             <FormLabel className="text-[10px] uppercase font-bold text-muted-foreground">Product</FormLabel>
                                             <ProductSelectRow 
                                                 form={form} 
@@ -227,7 +245,7 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                                                 productMap={productMap} 
                                             />
                                         </div>
-                                        <div className="w-24 space-y-1">
+                                        <div className="w-full space-y-1 sm:w-24">
                                             <FormLabel className="text-[10px] uppercase font-bold text-muted-foreground">QTY</FormLabel>
                                             <FormField
                                                 control={form.control}
@@ -249,13 +267,14 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                                         </div>
                                         <Button 
                                             type="button" 
-                                            variant="ghost" 
-                                            size="icon"
-                                            className="text-destructive"
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full text-destructive sm:w-auto"
                                             onClick={() => remove(index)}
                                             disabled={fields.length === 1}
                                         >
                                             <Trash2 className="h-4 w-4" />
+                                            <span className="ml-2 sm:hidden">Remove Item</span>
                                         </Button>
                                     </div>
                                 ))}
@@ -263,10 +282,10 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                         </div>
 
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setIsOpen(false)}>
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={isSubmitting}>
+                            <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
                                 {isSubmitting ? "Saving..." : (bundle ? "Update Bundle" : "Create Bundle")}
                             </Button>
                         </DialogFooter>
@@ -278,10 +297,10 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
 }
 
 function ProductSelectRow({ form, index, uniqueProducts, productMap }: { 
-    form: any, 
+    form: UseFormReturn<ProductBundleInput>, 
     index: number, 
-    uniqueProducts: any[], 
-    productMap: Map<number, any> 
+    uniqueProducts: BundleProductOption[], 
+    productMap: Map<number, BundleProductOption> 
 }) {
     const [open, setOpen] = useState(false)
 
@@ -298,21 +317,23 @@ function ProductSelectRow({ form, index, uniqueProducts, productMap }: {
                                     variant="outline"
                                     role="combobox"
                                     className={cn(
-                                        "w-full justify-between font-normal",
+                                        "w-full min-w-0 justify-between font-normal",
                                         !field.value && "text-muted-foreground"
                                     )}
                                 >
-                                    {field.value && field.value !== 0
-                                        ? `${productMap.get(field.value)?.materialNumber || ""} - ${productMap.get(field.value)?.materialDescription || ""}`
-                                        : "Select Product..."}
+                                    <span className="truncate text-left">
+                                        {field.value && field.value !== 0
+                                            ? `${productMap.get(field.value)?.materialNumber || ""} - ${productMap.get(field.value)?.materialDescription || ""}`
+                                            : "Select Product..."}
+                                    </span>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[400px] p-0" align="start">
+                        <PopoverContent className="w-[calc(100vw-2rem)] max-w-[400px] p-0" align="start">
                             <Command>
                                 <CommandInput placeholder="Search product..." />
-                                <CommandList>
+                                <CommandList className="max-h-[50vh]">
                                     <CommandEmpty>No product found.</CommandEmpty>
                                     <CommandGroup>
                                         {uniqueProducts.map((p) => (
@@ -330,7 +351,7 @@ function ProductSelectRow({ form, index, uniqueProducts, productMap }: {
                                                         p.id === field.value ? "opacity-100" : "opacity-0"
                                                     )}
                                                 />
-                                                <div className="flex flex-col">
+                                                <div className="min-w-0 flex flex-col">
                                                     <span className="font-bold text-blue-700">{p.materialNumber}</span>
                                                     <span className="text-xs text-muted-foreground line-clamp-1">{p.materialDescription}</span>
                                                 </div>

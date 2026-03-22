@@ -8,6 +8,7 @@ import {
     quotationItems,
     quotationRevisions,
     quotations,
+    salesDocuments,
     salesOrderItems,
     salesOrders,
 } from "@/db/schema"
@@ -19,10 +20,10 @@ import { quotationSchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { deleteFile } from "./upload"
-import { readManagedUpload } from "@/lib/upload-storage"
+import { deleteManagedUpload, readManagedUpload, saveManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
-import { extractUploadFilename } from "@/lib/upload-url"
+import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 type QuotationInput = z.infer<typeof quotationSchema>
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -31,6 +32,57 @@ type QuotationItemRecord = typeof quotationItems.$inferSelect
 type QuotationAttachmentRecord = typeof quotationAttachments.$inferSelect
 type SalesOrderRecord = typeof salesOrders.$inferSelect
 type QuotationPoValidationStatus = QuotationPoValidationSummary["status"]
+
+function buildAbsoluteAppUrl(pathname: string) {
+    const baseUrl =
+        process.env.BETTER_AUTH_URL ||
+        process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        "http://localhost:3000"
+
+    return new URL(pathname, baseUrl).toString()
+}
+
+async function readAttachmentSourceFile(fileUrl: string) {
+    const managedUpload = await readManagedUpload(fileUrl)
+    if (managedUpload) {
+        return managedUpload
+    }
+
+    const resolvedUrl = resolveUploadDocumentUrl(fileUrl)
+    const candidateUrls = Array.from(
+        new Set(
+            [resolvedUrl, /^https?:\/\//i.test(fileUrl) ? fileUrl : null]
+                .filter((value): value is string => Boolean(value))
+                .map((value) => (/^https?:\/\//i.test(value) ? value : buildAbsoluteAppUrl(value))),
+        ),
+    )
+
+    for (const candidateUrl of candidateUrls) {
+        try {
+            const response = await fetch(candidateUrl, {
+                cache: "no-store",
+                signal: AbortSignal.timeout(15000),
+            })
+
+            if (!response.ok) {
+                continue
+            }
+
+            const buffer = Buffer.from(await response.arrayBuffer())
+            return {
+                filename: extractUploadFilename(fileUrl) || extractUploadFilename(candidateUrl) || "attachment",
+                buffer,
+                contentType: response.headers.get("content-type") || "application/octet-stream",
+                source: "local" as const,
+            }
+        } catch {
+            // Try the next candidate URL.
+        }
+    }
+
+    return null
+}
 
 const quotationAttachmentSchema = z.object({
     quotationId: z.number().int().positive(),
@@ -1570,6 +1622,105 @@ export async function createQuotationAttachment(input: z.infer<typeof quotationA
     } catch (error) {
         console.error("Failed to create quotation attachment:", error)
         return { success: false as const, error: error instanceof Error ? error.message : "Failed to create attachment" }
+    }
+}
+
+export async function attachSalesDocumentsToQuotation(input: {
+    quotationId: number
+    salesDocumentIds: string[]
+    title?: string | null
+    description?: string | null
+    includeInPdf?: boolean
+}) {
+    try {
+        const userId = await getAuthenticatedUserId()
+        if (!userId) {
+            return { success: false as const, error: "Unauthorized" }
+        }
+
+        const quotationId = toValidQuotationId(input.quotationId)
+        const salesDocumentIds = Array.from(
+            new Set((input.salesDocumentIds || []).map((id) => id.trim()).filter(Boolean)),
+        )
+
+        if (!quotationId) {
+            return { success: false as const, error: "Quotation tidak valid" }
+        }
+
+        if (salesDocumentIds.length === 0) {
+            return { success: false as const, error: "Pilih minimal satu Sales Document" }
+        }
+
+        const documents = await db.query.salesDocuments.findMany({
+            where: inArray(salesDocuments.id, salesDocumentIds),
+            orderBy: [desc(salesDocuments.createdAt)],
+        })
+
+        if (documents.length === 0) {
+            return { success: false as const, error: "Sales Document tidak ditemukan" }
+        }
+
+        const failures: string[] = []
+        let attachedCount = 0
+
+        for (const document of documents) {
+            const sourceFile = await readAttachmentSourceFile(document.fileUrl)
+            if (!sourceFile) {
+                failures.push(`${document.title}: file sumber tidak bisa dibaca`)
+                continue
+            }
+
+            const extension = document.fileName.split(".").pop()?.trim()
+            const storedFilename = extension
+                ? `${crypto.randomUUID()}.${extension}`
+                : crypto.randomUUID()
+
+            const savedUpload = await saveManagedUpload({
+                filename: storedFilename,
+                buffer: sourceFile.buffer,
+                contentType: document.fileType || sourceFile.contentType,
+            })
+
+            const attachmentResult = await createQuotationAttachment({
+                quotationId,
+                title: normalizeText(input.title) || document.title,
+                fileUrl: savedUpload.url,
+                fileName: document.fileName,
+                mimeType: document.fileType || sourceFile.contentType,
+                fileSize: sourceFile.buffer.length,
+                description: normalizeText(input.description) || normalizeText(document.description),
+                includeInPdf: input.includeInPdf ?? true,
+                kind: "supporting",
+            })
+
+            if (!attachmentResult.success) {
+                await deleteManagedUpload(savedUpload.url)
+                failures.push(`${document.title}: ${attachmentResult.error || "gagal ditambahkan ke quotation"}`)
+                continue
+            }
+
+            attachedCount += 1
+        }
+
+        if (attachedCount === 0) {
+            return {
+                success: false as const,
+                error: failures[0] || "Sales Document gagal ditambahkan ke quotation",
+            }
+        }
+
+        revalidatePath(`/dashboard/quotations/${quotationId}`)
+        revalidatePath("/dashboard/quotations")
+
+        return {
+            success: true as const,
+            attachedCount,
+            skippedCount: failures.length,
+            failures,
+        }
+    } catch (error) {
+        console.error("Failed to attach sales documents to quotation:", error)
+        return { success: false as const, error: "Sales Document gagal ditambahkan ke quotation" }
     }
 }
 

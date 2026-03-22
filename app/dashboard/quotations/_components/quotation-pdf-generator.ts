@@ -1,5 +1,6 @@
 import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 interface QuotationPdfData {
     quotationNumber: string | null
@@ -537,13 +538,15 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         const TITLE_SPACE = 24
 
         for (const attachment of includedAttachments) {
-            if (!attachment.fileUrl) {
+            const resolvedAttachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
+
+            if (!resolvedAttachmentUrl) {
                 skippedAttachments.push(`${attachment.title}: file URL tidak tersedia`)
                 continue
             }
 
             try {
-                const response = await fetch(attachment.fileUrl, { cache: "no-store" })
+                const response = await fetch(resolvedAttachmentUrl, { cache: "no-store" })
                 if (!response.ok) {
                     skippedAttachments.push(`${attachment.title}: file tidak bisa diakses`)
                     continue

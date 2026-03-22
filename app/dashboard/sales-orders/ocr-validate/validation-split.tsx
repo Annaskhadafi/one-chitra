@@ -18,7 +18,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, Copy, CheckCheck, AlertTriangle, Link2 } from "lucide-react"
+import { Check, ChevronsUpDown, Copy, CheckCheck, AlertTriangle, Link2, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SalesOrderForm } from "../_components/sales-order-form"
 import type { Customer, Product, Warehouse, User } from "@/lib/types"
@@ -102,6 +102,9 @@ type QuotationValidationContext = {
     }>
 }
 
+type ComparisonRow = NonNullable<QuotationPoValidationSummary["comparisons"]>[number]
+type UnmatchedQuotationItem = NonNullable<QuotationPoValidationSummary["unmatchedQuotationItems"]>[number]
+
 /* ─── Helpers ────────────────────────────────────────────────────── */
 function useCopy(text: string, timeout = 1500) {
     const [copied, setCopied] = useState(false)
@@ -118,12 +121,12 @@ function useCopy(text: string, timeout = 1500) {
 function CopyableCell({ value }: { value: string }) {
     const { copied, copy } = useCopy(value)
     return (
-        <div className="flex items-center gap-1 group">
-            <span className="select-all cursor-text">{value || "-"}</span>
+        <div className="group flex items-start gap-1">
+            <span className="cursor-text break-words select-all">{value || "-"}</span>
             {value && (
                 <button
                     onClick={copy}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 text-muted-foreground hover:text-foreground"
+                    className="ml-1 text-muted-foreground opacity-100 transition-opacity hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
                     title="Copy"
                 >
                     {copied ? <CheckCheck className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -137,6 +140,92 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
     if (confidence >= 0.8) return <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0">Tinggi {(confidence * 100).toFixed(0)}%</Badge>
     if (confidence >= 0.5) return <Badge className="bg-yellow-500 text-white text-[10px] px-1.5 py-0">Sedang {(confidence * 100).toFixed(0)}%</Badge>
     return <Badge className="bg-red-500 text-white text-[10px] px-1.5 py-0">Rendah {(confidence * 100).toFixed(0)}%</Badge>
+}
+
+function getComparisonStatusLabel(status: ComparisonRow["status"]) {
+    switch (status) {
+        case "matched":
+            return "Matched"
+        case "partial_qty":
+            return "Partial Qty"
+        case "price_changed":
+            return "Price Changed"
+        case "qty_exceeds":
+            return "Qty Exceeds"
+        default:
+            return "Unmatched OCR"
+    }
+}
+
+function getComparisonStatusVariant(status: ComparisonRow["status"]): "default" | "secondary" | "destructive" {
+    if (status === "matched") return "default"
+    if (status === "partial_qty") return "secondary"
+    return "destructive"
+}
+
+function getComparisonNote(row: ComparisonRow) {
+    if (row.status === "matched") return "Siap divalidasi"
+    if (row.status === "partial_qty") return `PO lebih kecil ${Math.abs(row.quantityDelta || 0)}`
+    if (row.status === "price_changed") return `${row.priceDeltaPercent != null ? `${row.priceDeltaPercent}%` : "Harga"} berbeda`
+    if (row.status === "qty_exceeds") return `PO lebih besar ${row.quantityDelta || 0}`
+    return "Item PO belum ditemukan di quotation"
+}
+
+function PdfPreviewCard({
+    pdfUrl,
+    fileName,
+    viewerClassName,
+    description,
+}: {
+    pdfUrl: string
+    fileName: string | null
+    viewerClassName: string
+    description?: string
+}) {
+    return (
+        <Card className="overflow-hidden border-slate-200 shadow-sm">
+            <CardHeader className="border-b bg-slate-50/70 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                        <CardTitle className="text-base">Preview Dokumen PO</CardTitle>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {fileName || "Dokumen customer"}
+                        </p>
+                        {description ? (
+                            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+                        ) : null}
+                    </div>
+                    <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                        <a href={pdfUrl} target="_blank" rel="noreferrer">
+                            Buka PDF Penuh
+                            <ExternalLink className="ml-2 h-4 w-4" />
+                        </a>
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="p-2 sm:p-3">
+                <div className="overflow-hidden rounded-lg border bg-muted/20">
+                    <object
+                        data={pdfUrl}
+                        type="application/pdf"
+                        className={cn("w-full", viewerClassName)}
+                    >
+                        <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 p-6 text-center">
+                            <p className="text-sm text-muted-foreground">
+                                Preview PDF tidak tersedia di perangkat ini.
+                            </p>
+                            <Button asChild variant="secondary" size="sm">
+                                <a href={pdfUrl} target="_blank" rel="noreferrer">
+                                    Buka PDF
+                                    <ExternalLink className="ml-2 h-4 w-4" />
+                                </a>
+                            </Button>
+                        </div>
+                    </object>
+                </div>
+            </CardContent>
+        </Card>
+    )
 }
 
 /* ─── Product Picker per baris ───────────────────────────────────── */
@@ -178,7 +267,7 @@ function ProductPickerCell({
     }, [products])
 
     return (
-        <div className="space-y-1 min-w-[220px]">
+        <div className="min-w-0 space-y-1 md:min-w-[220px]">
             {/* OCR original name */}
             <div className="text-xs text-muted-foreground">OCR: <span className="italic">{ocrName}</span></div>
 
@@ -203,7 +292,7 @@ function ProductPickerCell({
                         <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50 ml-1" />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[380px] p-0" align="start">
+                <PopoverContent className="w-[calc(100vw-2rem)] max-w-[380px] p-0" align="start">
                     <Command>
                         <CommandInput placeholder="Cari nama / material number..." />
                         <CommandList className="max-h-60">
@@ -268,6 +357,7 @@ export default function ValidationSplit(props: {
     /* Product overrides: index → productId (manual override) */
     const [productOverrides, setProductOverrides] = useState<Record<number, number>>({})
     const [formVersion, setFormVersion] = useState(0)
+    const [mobileView, setMobileView] = useState<"review" | "preview">("review")
 
     const handleProductOverride = useCallback((index: number, productId: number) => {
         setProductOverrides(prev => ({ ...prev, [index]: productId }))
@@ -410,26 +500,10 @@ export default function ValidationSplit(props: {
         )
     }
 
-    return (
-        <PanelGroup direction="horizontal">
-            <Panel defaultSize={50}>
-                <div className="p-4">
-                    <Card>
-                        <CardContent className="p-2">
-                            <object
-                                data={`/api/uploads/${encodeURIComponent(session.fileUrl)}`}
-                                type="application/pdf"
-                                className="w-full h-[70vh]"
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
-            </Panel>
+    const pdfUrl = `/api/uploads/${encodeURIComponent(session.fileUrl)}`
 
-            <PanelResizeHandle className="w-1 bg-muted" />
-
-            <Panel defaultSize={50}>
-                <div className="p-4 space-y-4 overflow-auto h-[calc(100vh-2rem)]">
+    const reviewContent = (
+        <div className="space-y-4">
 
                     {/* ── Hasil Ekstraksi OCR ── */}
                     {extracted && (
@@ -488,12 +562,12 @@ export default function ValidationSplit(props: {
                                         <PopoverTrigger asChild>
                                             <Button variant="outline" role="combobox" aria-expanded={customerPickerOpen} className="w-full justify-between font-normal">
                                                 {selectedCustomer
-                                                    ? <span>{selectedCustomer.name} <span className="text-muted-foreground text-xs">({selectedCustomer.customerCode})</span></span>
+                                                    ? <span className="min-w-0 truncate text-left">{selectedCustomer.name} <span className="text-muted-foreground text-xs">({selectedCustomer.customerCode})</span></span>
                                                     : "Cari & pilih customer..."}
                                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                             </Button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-[400px] p-0" align="start">
+                                        <PopoverContent className="w-[calc(100vw-2rem)] max-w-[400px] p-0" align="start">
                                             <Command>
                                                 <CommandInput placeholder="Cari nama / kode customer..." />
                                                 <CommandList>
@@ -539,7 +613,7 @@ export default function ValidationSplit(props: {
 
                                 {/* Tabel Produk dengan Product Picker */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-2">
+                                    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <h4 className="text-sm font-semibold">Daftar Produk</h4>
                                         {unmappedCount > 0 && (
                                             <p className="text-xs text-yellow-700">
@@ -547,7 +621,66 @@ export default function ValidationSplit(props: {
                                             </p>
                                         )}
                                     </div>
-                                    <div className="rounded-md border overflow-x-auto">
+                                    <div className="space-y-3 md:hidden">
+                                        {extracted.items?.map((item, index) => {
+                                            const mappedItem = mapped?.items?.[index]
+                                            const override = productOverrides[index] ?? null
+                                            const displayProductId = override ?? mappedItem?.matchedProductId ?? null
+                                            const displayMatchName = override
+                                                ? (products.find(p => p.id === override)?.materialDescription || null)
+                                                : mappedItem?.matchedProductName ?? null
+                                            const conf = override ? 1 : (mappedItem?.matchConfidence ?? 0)
+
+                                            return (
+                                                <div key={`mobile-item-${index}`} className="rounded-xl border bg-card p-4 shadow-sm">
+                                                    <div className="space-y-3">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Item {index + 1}</p>
+                                                                <p className="mt-1 break-words text-sm font-medium">{item.productName}</p>
+                                                                {item.productCode ? (
+                                                                    <p className="text-xs text-muted-foreground">{item.productCode}</p>
+                                                                ) : null}
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total</p>
+                                                                <p className="mt-1 text-sm font-semibold">
+                                                                    {formatCurrency(item.totalPrice || item.quantity * item.unitPrice)}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <ProductPickerCell
+                                                            ocrName={item.productName}
+                                                            selectedProductId={displayProductId}
+                                                            matchedProductName={displayMatchName}
+                                                            matchConfidence={conf}
+                                                            products={products}
+                                                            onSelect={(pid) => handleProductOverride(index, pid)}
+                                                        />
+
+                                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                                            <div className="rounded-lg bg-muted/40 p-3">
+                                                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Qty</p>
+                                                                <p className="mt-1 font-semibold">{item.quantity}</p>
+                                                            </div>
+                                                            <div className="rounded-lg bg-muted/40 p-3">
+                                                                <p className="text-xs uppercase tracking-wide text-muted-foreground">Unit Price</p>
+                                                                <p className="mt-1 font-semibold">{formatCurrency(item.unitPrice)}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+
+                                        <div className="flex items-center justify-between rounded-xl border bg-muted/50 p-4 text-sm font-semibold">
+                                            <span>Grand Total</span>
+                                            <span>{formatCurrency(totalAmount)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="hidden rounded-md border overflow-x-auto md:block">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow className="bg-muted/40">
@@ -699,7 +832,83 @@ export default function ValidationSplit(props: {
                                 </div>
 
                                 {comparisonRows.length > 0 ? (
-                                    <div className="rounded-md border overflow-x-auto">
+                                    <>
+                                    <div className="space-y-3 md:hidden">
+                                        {comparisonRows.map((row, index) => (
+                                            <div key={`mobile-comparison-${row.key}-${index}`} className="rounded-xl border bg-card p-4 shadow-sm">
+                                                <div className="space-y-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
+                                                            <Badge variant={getComparisonStatusVariant(row.status)} className="mt-2">
+                                                                {getComparisonStatusLabel(row.status)}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">Baris {index + 1}</p>
+                                                    </div>
+
+                                                    <div className="rounded-lg border p-3">
+                                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Item PO OCR</p>
+                                                        <p className="mt-1 break-words font-medium">{row.ocrName}</p>
+                                                        <p className="text-xs text-muted-foreground">{row.ocrCode || "-"}</p>
+                                                    </div>
+
+                                                    <div className="rounded-lg border p-3">
+                                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Item Quotation</p>
+                                                        <p className="mt-1 break-words font-medium">{row.quotationDescription || "-"}</p>
+                                                        <p className="text-xs text-muted-foreground">{row.quotationMaterialNumber || "-"}</p>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                                        <div className="rounded-lg bg-muted/40 p-3">
+                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Qty</p>
+                                                            <p className="mt-1 font-semibold">PO {row.ocrQuantity}</p>
+                                                            <p className="text-xs text-muted-foreground">QT {row.quotationQuantity ?? "-"}</p>
+                                                        </div>
+                                                        <div className="rounded-lg bg-muted/40 p-3">
+                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Unit Price</p>
+                                                            <p className="mt-1 font-semibold">{formatCurrency(Number(row.ocrUnitPrice || 0))}</p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                QT {row.quotationUnitPrice ? formatCurrency(Number(row.quotationUnitPrice)) : "-"}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                                                        {getComparisonNote(row)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {unmatchedQuotationItems.map((item: UnmatchedQuotationItem) => (
+                                            <div key={`mobile-quotation-only-${item.quotationItemId}`} className="rounded-xl border bg-card p-4 shadow-sm">
+                                                <div className="space-y-3">
+                                                    <Badge variant="secondary">Quotation Only</Badge>
+                                                    <div className="rounded-lg border p-3">
+                                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Item Quotation</p>
+                                                        <p className="mt-1 break-words font-medium">{item.description || "-"}</p>
+                                                        <p className="text-xs text-muted-foreground">{item.materialNumber || "-"}</p>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                                        <div className="rounded-lg bg-muted/40 p-3">
+                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Qty</p>
+                                                            <p className="mt-1 font-semibold">{item.quantity}</p>
+                                                        </div>
+                                                        <div className="rounded-lg bg-muted/40 p-3">
+                                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Unit Price</p>
+                                                            <p className="mt-1 font-semibold">{formatCurrency(Number(item.unitPrice || 0))}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                                                        Item quotation ini tidak ada di PO customer.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="hidden rounded-md border overflow-x-auto md:block">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow className="bg-muted/40">
@@ -715,16 +924,8 @@ export default function ValidationSplit(props: {
                                                 {comparisonRows.map((row, index) => (
                                                     <TableRow key={`${row.key}-${index}`}>
                                                         <TableCell>
-                                                            <Badge variant={row.status === "matched" ? "default" : row.status === "partial_qty" ? "secondary" : "destructive"}>
-                                                                {row.status === "matched"
-                                                                    ? "Matched"
-                                                                    : row.status === "partial_qty"
-                                                                        ? "Partial Qty"
-                                                                        : row.status === "price_changed"
-                                                                            ? "Price Changed"
-                                                                            : row.status === "qty_exceeds"
-                                                                                ? "Qty Exceeds"
-                                                                                : "Unmatched OCR"}
+                                                            <Badge variant={getComparisonStatusVariant(row.status)}>
+                                                                {getComparisonStatusLabel(row.status)}
                                                             </Badge>
                                                         </TableCell>
                                                         <TableCell>
@@ -754,15 +955,7 @@ export default function ValidationSplit(props: {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-sm text-muted-foreground">
-                                                            {row.status === "matched"
-                                                                ? "Siap divalidasi"
-                                                                : row.status === "partial_qty"
-                                                                    ? `PO lebih kecil ${Math.abs(row.quantityDelta || 0)}`
-                                                                    : row.status === "price_changed"
-                                                                        ? `${row.priceDeltaPercent != null ? `${row.priceDeltaPercent}%` : "Harga"} berbeda`
-                                                                        : row.status === "qty_exceeds"
-                                                                            ? `PO lebih besar ${row.quantityDelta || 0}`
-                                                                            : "Item PO belum ditemukan di quotation"}
+                                                            {getComparisonNote(row)}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -786,6 +979,7 @@ export default function ValidationSplit(props: {
                                             </TableBody>
                                         </Table>
                                     </div>
+                                    </>
                                 ) : (
                                     <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                                         Belum ada hasil komparasi otomatis. User tetap bisa review OCR dan quotation sebelum membuat Sales Order.
@@ -819,8 +1013,69 @@ export default function ValidationSplit(props: {
                         </Card>
                     )}
 
+        </div>
+    )
+
+    return (
+        <>
+            <div className="lg:hidden">
+                <div className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
+                    <div className="flex gap-2">
+                        <Button
+                            variant={mobileView === "review" ? "default" : "outline"}
+                            className="flex-1"
+                            onClick={() => setMobileView("review")}
+                        >
+                            Matching & Verifikasi
+                        </Button>
+                        <Button
+                            variant={mobileView === "preview" ? "default" : "outline"}
+                            className="flex-1"
+                            onClick={() => setMobileView("preview")}
+                        >
+                            Preview PDF
+                        </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Di mobile panel dibuat bergantian agar preview PDF dan area verifikasi sama-sama tampil besar.
+                    </p>
                 </div>
-            </Panel>
-        </PanelGroup>
+
+                <div className="p-4">
+                    {mobileView === "preview" ? (
+                        <PdfPreviewCard
+                            pdfUrl={pdfUrl}
+                            fileName={session.fileName}
+                            viewerClassName="h-[70vh] min-h-[420px]"
+                            description="Preview dibuat full width agar isi PO tetap nyaman dibaca di layar kecil."
+                        />
+                    ) : (
+                        reviewContent
+                    )}
+                </div>
+            </div>
+
+            <div className="hidden lg:block">
+                <PanelGroup direction="horizontal">
+                    <Panel defaultSize={48} minSize={35}>
+                        <div className="h-[calc(100vh-2rem)] p-4">
+                            <PdfPreviewCard
+                                pdfUrl={pdfUrl}
+                                fileName={session.fileName}
+                                viewerClassName="h-[calc(100vh-8rem)]"
+                            />
+                        </div>
+                    </Panel>
+
+                    <PanelResizeHandle className="w-1 bg-muted" />
+
+                    <Panel defaultSize={52} minSize={35}>
+                        <div className="h-[calc(100vh-2rem)] overflow-auto p-4">
+                            {reviewContent}
+                        </div>
+                    </Panel>
+                </PanelGroup>
+            </div>
+        </>
     )
 }
