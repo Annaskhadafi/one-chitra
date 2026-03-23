@@ -1,13 +1,5 @@
-import dynamic from "next/dynamic"
 import { getSecurityRoles, getAllSecurityPermissions } from "@/app/actions/security"
-
-const RolesMatrix = dynamic(
-    () => import("./_components/roles-matrix").then((module) => module.RolesMatrix),
-    {
-        ssr: false,
-        loading: () => <div className="text-muted-foreground text-sm">Loading roles…</div>,
-    }
-)
+import { RolesMatrixShell } from "./_components/roles-matrix-shell"
 
 export default async function SecurityRolesPage() {
     const [roles, allPermissions] = await Promise.all([
@@ -23,7 +15,7 @@ export default async function SecurityRolesPage() {
                     Create roles, assign permissions, and control what each role can access.
                 </p>
             </div>
-            <RolesMatrix roles={roles} allPermissions={allPermissions} />
+            <RolesMatrixShell roles={roles} allPermissions={allPermissions} />
         </div>
     )
 }
