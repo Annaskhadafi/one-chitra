@@ -10,6 +10,7 @@ import {
     NAVBAR_MENU_SETTING_KEY,
     parseNavigationConfigFromSetting,
 } from "../../lib/navigation-menu"
+import { collectDashboardPermissionResources } from "@/lib/route-permissions"
 
 export async function getAllPermissions() {
     await getAuthenticatedSession("roles", "view")
@@ -58,12 +59,21 @@ export async function syncPermissions() {
         const editableConfig = parseNavigationConfigFromSetting(navbarMenuSetting[0]?.value ?? null)
         const dynamicResources = collectResourcesFromEditableConfig(editableConfig)
         dynamicResources.forEach((resource) => resources.add(resource))
+        collectDashboardPermissionResources().forEach((resource) => resources.add(resource))
 
         // Ensure newly introduced settlement permission is always present even on older navbar configs.
         resources.add("cost-settlements")
         resources.add("evhs")
         resources.add("stock-opname-aktual")
         resources.add("bundling")
+        resources.add("roles")
+        resources.add("users")
+        resources.add("bundling-calculator")
+        resources.add("cover-letter")
+        resources.add("customer-segmentation")
+        resources.add("customers")
+        resources.add("forecasts")
+        resources.add("forms-surveys")
 
         // Also add standard resources that might not be in nav or are special
         // resources.add('users') // Already in nav

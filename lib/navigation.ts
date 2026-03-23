@@ -245,7 +245,7 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Form & Survey Builder",
                         url: "/dashboard/forms",
-                        resource: "marketing",
+                        resource: "forms-surveys",
                     },
                 ],
             },

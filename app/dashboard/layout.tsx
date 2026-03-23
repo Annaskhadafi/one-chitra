@@ -19,6 +19,7 @@ import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
+import { getDashboardRouteResource } from "@/lib/route-permissions"
 
 const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
   return sections.map((section) => ({
@@ -105,8 +106,9 @@ export default async function DashboardLayout({
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true"
 
   // Fetch session server-side
+  const requestHeaders = await headers()
   const session = await auth.api.getSession({
-    headers: await headers()
+    headers: requestHeaders
   })
 
   // Redirect unauthenticated users (defense-in-depth — middleware also handles this)
@@ -147,8 +149,13 @@ export default async function DashboardLayout({
   }
 
   const isAdminRole = roleLower === 'admin' || roleLower === 'superuser'
+  const currentPathname = requestHeaders.get("x-pathname") ?? "/dashboard"
+  const currentRouteResource = getDashboardRouteResource(currentPathname)
   const canViewResource = (resource?: string, url?: string) => {
     if (isAdminRole) {
+      return true
+    }
+    if (resource === "dashboard" || url === "/dashboard") {
       return true
     }
     if (url === "/dashboard/approvals") {
@@ -158,6 +165,10 @@ export default async function DashboardLayout({
       return true
     }
     return permissions.includes(`${resource}:view`)
+  }
+
+  if (currentRouteResource && !canViewResource(currentRouteResource, currentPathname)) {
+    redirect("/dashboard")
   }
 
   const navigationSections: RuntimeNavSection[] = runtimeNavigationSections

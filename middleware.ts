@@ -47,6 +47,9 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
+        const forwardedHeaders = new Headers(request.headers)
+        forwardedHeaders.set("x-pathname", pathname)
+
         // Determine the base URL for internal session check:
         // 1. Use BETTER_AUTH_URL env var (works in production/Dokploy)
         // 2. Fall back to localhost with PORT (for local dev)
@@ -70,7 +73,11 @@ export async function middleware(request: NextRequest) {
                 console.warn("[middleware] Session endpoint returned no user despite auth cookies. Allowing request to continue for server-side verification.", {
                     pathname,
                 })
-                return NextResponse.next()
+                return NextResponse.next({
+                    request: {
+                        headers: forwardedHeaders,
+                    },
+                })
             }
 
             const signInUrl = new URL("/sign-in", request.url)
@@ -78,7 +85,11 @@ export async function middleware(request: NextRequest) {
             return NextResponse.redirect(signInUrl)
         }
 
-        return NextResponse.next()
+        return NextResponse.next({
+            request: {
+                headers: forwardedHeaders,
+            },
+        })
     } catch (err) {
         // Log the error so we can debug in production logs
         console.error("[middleware] Session check failed:", err)
@@ -86,7 +97,13 @@ export async function middleware(request: NextRequest) {
         // If auth cookies exist but the middleware session check fails, allow the
         // request to continue and let the server layout verify the session.
         if (hasAuthCookies) {
-            return NextResponse.next()
+            const forwardedHeaders = new Headers(request.headers)
+            forwardedHeaders.set("x-pathname", pathname)
+            return NextResponse.next({
+                request: {
+                    headers: forwardedHeaders,
+                },
+            })
         }
 
         const signInUrl = new URL("/sign-in", request.url)

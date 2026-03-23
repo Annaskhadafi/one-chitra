@@ -1,6 +1,13 @@
-import { Suspense } from "react"
+import dynamic from "next/dynamic"
 import { getSecurityRoles, getAllSecurityPermissions } from "@/app/actions/security"
-import { RolesMatrix } from "./_components/roles-matrix"
+
+const RolesMatrix = dynamic(
+    () => import("./_components/roles-matrix").then((module) => module.RolesMatrix),
+    {
+        ssr: false,
+        loading: () => <div className="text-muted-foreground text-sm">Loading roles…</div>,
+    }
+)
 
 export default async function SecurityRolesPage() {
     const [roles, allPermissions] = await Promise.all([
@@ -16,9 +23,7 @@ export default async function SecurityRolesPage() {
                     Create roles, assign permissions, and control what each role can access.
                 </p>
             </div>
-            <Suspense fallback={<div className="text-muted-foreground text-sm">Loading roles…</div>}>
-                <RolesMatrix roles={roles} allPermissions={allPermissions} />
-            </Suspense>
+            <RolesMatrix roles={roles} allPermissions={allPermissions} />
         </div>
     )
 }

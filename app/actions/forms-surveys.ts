@@ -18,6 +18,8 @@ import {
 } from "@/lib/forms-surveys"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 
+const FORM_SURVEY_RESOURCE = "forms-surveys"
+
 function isMissingSurveyTableError(error: unknown) {
     if (!(error instanceof Error)) {
         return false
@@ -77,7 +79,7 @@ function sanitizeFormPayload(input: SaveSurveyFormInput) {
 }
 
 export async function listSurveyForms() {
-    await checkPermission("marketing", "view")
+    await checkPermission(FORM_SURVEY_RESOURCE, "view")
 
     try {
         const rows = await db
@@ -120,7 +122,7 @@ export async function listSurveyForms() {
 }
 
 export async function getSurveyFormById(id: string) {
-    await checkPermission("marketing", "view")
+    await checkPermission(FORM_SURVEY_RESOURCE, "view")
 
     let form = null
     try {
@@ -146,7 +148,7 @@ export async function getSurveyFormById(id: string) {
 }
 
 export async function createSurveyForm() {
-    const session = await getAuthenticatedSession("marketing", "create")
+    const session = await getAuthenticatedSession(FORM_SURVEY_RESOURCE, "create")
     const schema = defaultFormSchema()
     const slug = await ensureUniqueSlug("customer-feedback")
 
@@ -183,7 +185,7 @@ export async function createSurveyForm() {
 }
 
 export async function createSurveyFormFromTemplate(templateKey: "feedback" | "registration" | "event-rsvp") {
-    const session = await getAuthenticatedSession("marketing", "create")
+    const session = await getAuthenticatedSession(FORM_SURVEY_RESOURCE, "create")
     const schema = buildTemplateSchema(templateKey)
     const titleMap = {
         feedback: "Customer Feedback",
@@ -231,7 +233,7 @@ export async function createSurveyFormFromTemplate(templateKey: "feedback" | "re
 }
 
 export async function saveSurveyForm(input: SaveSurveyFormInput) {
-    await checkPermission("marketing", "edit")
+    await checkPermission(FORM_SURVEY_RESOURCE, "edit")
 
     const payload = sanitizeFormPayload(input)
     const slug = await ensureUniqueSlug(payload.slug, input.id)
@@ -273,7 +275,7 @@ export async function saveSurveyForm(input: SaveSurveyFormInput) {
 }
 
 export async function deleteSurveyForm(id: string) {
-    await checkPermission("marketing", "delete")
+    await checkPermission(FORM_SURVEY_RESOURCE, "delete")
 
     try {
         await db.delete(surveyForms).where(eq(surveyForms.id, id))
@@ -290,7 +292,7 @@ export async function deleteSurveyForm(id: string) {
 }
 
 export async function duplicateSurveyForm(id: string) {
-    await checkPermission("marketing", "create")
+    await checkPermission(FORM_SURVEY_RESOURCE, "create")
 
     const source = await db.query.surveyForms.findFirst({
         where: (table, { eq }) => eq(table.id, id),
@@ -301,7 +303,7 @@ export async function duplicateSurveyForm(id: string) {
     }
 
     const slug = await ensureUniqueSlug(`${source.slug}-copy`)
-    const session = await getAuthenticatedSession("marketing", "create")
+    const session = await getAuthenticatedSession(FORM_SURVEY_RESOURCE, "create")
 
     const [created] = await db
         .insert(surveyForms)
@@ -328,7 +330,7 @@ export async function duplicateSurveyForm(id: string) {
 }
 
 export async function getSurveyAnalytics(formId: string) {
-    await checkPermission("marketing", "view")
+    await checkPermission(FORM_SURVEY_RESOURCE, "view")
 
     let form = null
     try {
@@ -536,7 +538,7 @@ function toCsvValue(value: unknown) {
 }
 
 export async function exportSurveyResponsesCsv(formId: string) {
-    await checkPermission("marketing", "view")
+    await checkPermission(FORM_SURVEY_RESOURCE, "view")
 
     const form = await db.query.surveyForms.findFirst({
         where: (table, { eq }) => eq(table.id, formId),
