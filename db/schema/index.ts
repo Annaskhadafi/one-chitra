@@ -63,6 +63,14 @@ export { ocrPoSessions } from "./ocr-po-sessions";
 export { competitorPrices, competitorActivities, lostSales } from "./competitor-new";
 export { stockMovements, stockMovementsRelations } from "./stock-movements";
 export { portalItems } from "./portal-items";
+export {
+    surveyFormKindEnum,
+    surveyFormStatusEnum,
+    surveyForms,
+    surveyResponses,
+    surveyFormsRelations,
+    surveyResponsesRelations,
+} from "./forms-surveys";
 export { smtpSettings, emailTemplates, emailLogs, emailTemplateTypeEnum, emailRecipientRoleEnum, emailNotificationRules, emailNotificationRuleStates, emailNotificationRuleLogs } from "./email";
 export { calendarEvents, calendarEventTypeEnum } from "./calendar-events";
 export {
