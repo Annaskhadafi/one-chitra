@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { uploadFile } from "@/app/actions/upload"
 import { createSalesDocument } from "@/app/actions/sales-document"
 import { toast } from "sonner"
 
@@ -57,7 +56,17 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
             const formData = new FormData()
             formData.append("file", values.file)
 
-            const uploadResult = await uploadFile(formData)
+            const uploadResponse = await fetch("/api/sales-documents/upload", {
+                method: "POST",
+                body: formData,
+            })
+
+            const uploadResult = await uploadResponse.json() as {
+                success: boolean
+                url?: string
+                error?: string
+            }
+
             if (!uploadResult.success || !uploadResult.url) {
                 throw new Error(uploadResult.error || "Upload failed")
             }

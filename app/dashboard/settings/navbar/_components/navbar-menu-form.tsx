@@ -319,7 +319,7 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                     const isExternal = item.linkType === "external"
 
                                     return (
-                                        <Collapsible key={item.id} defaultOpen={itemIndex === 0} className="rounded-md border p-3">
+                                        <Collapsible key={item.id} defaultOpen={false} className="rounded-md border p-3">
                                             <div className="flex flex-wrap items-center justify-between gap-2">
                                                 <div className="flex items-center gap-2">
                                                     <CollapsibleTrigger asChild>
