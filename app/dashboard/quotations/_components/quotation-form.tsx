@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { createQuotation, updateQuotation } from "@/app/actions/quotation"
 import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
@@ -40,7 +40,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -115,6 +115,26 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+function ceilToThousand(value: number) {
+    return Math.ceil(value / 1000) * 1000
+}
+
+function resolveItemCostIdr(item: Pick<QuotationItemRow, "costSap" | "costIdr">, exchangeRate: number) {
+    if (item.costSap && item.costSap > 0) {
+        return item.costSap * exchangeRate
+    }
+
+    return item.costIdr || 0
+}
+
+function calculateSellingPrice(costIdr: number, margin: number) {
+    const rawPrice = margin > 0
+        ? costIdr + (costIdr * margin / 100)
+        : costIdr
+
+    return ceilToThousand(rawPrice)
+}
+
 export function QuotationForm({ customers, products, users, currentUserId, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
@@ -154,6 +174,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
     const [globalMargin, setGlobalMargin] = useState<number>(0)
     const [exchangeRate, setExchangeRate] = useState<number>(1)
+    const [isApplyingMargin, startApplyingMarginTransition] = useTransition()
 
     useEffect(() => {
         const fetchRate = async () => {
@@ -236,8 +257,6 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         return <div className="flex items-center">{content}</div>
     }, [resolveProductReference])
 
-    const ceilToThousand = (val: number) => Math.ceil(val / 1000) * 1000
-
     // Add product
     const addProduct = useCallback(async (product: Product) => {
         if (product.isBundle) {
@@ -250,11 +269,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         const costSap = Number(childProduct.costSap || 0)
                         const costIdr = costSap * exchangeRate
                         
-                        let unitPrice = costIdr
-                        if (globalMargin > 0) {
-                            unitPrice = costIdr + (costIdr * globalMargin / 100)
-                        }
-                        unitPrice = ceilToThousand(unitPrice)
+                        const unitPrice = calculateSellingPrice(costIdr, globalMargin)
 
                         const existingIdx = nextItems.findIndex(i => i.productId === bi.childProductId)
                         if (existingIdx > -1) {
@@ -292,13 +307,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         const costSap = Number(product.costSap || 0)
         const costIdr = costSap * exchangeRate
         // Auto calculate price if global margin is set
-        let unitPrice = costIdr
-        if (globalMargin > 0) {
-            unitPrice = costIdr + (costIdr * globalMargin / 100)
-        }
-
-        // Always round UP to thousand for selling price
-        unitPrice = ceilToThousand(unitPrice)
+        const unitPrice = calculateSellingPrice(costIdr, globalMargin)
 
         if (existing) {
             setItems(prev =>
@@ -337,25 +346,40 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         }])
     }
 
-    const applyGlobalMargin = () => {
+    const applyGlobalMargin = useCallback(() => {
         if (globalMargin <= 0) {
             toast.error("Please set a margin greater than 0")
             return
         }
-        setItems(prev => prev.map(item => {
-            const currentCostIdr = item.costSap ? item.costSap * exchangeRate : (item.costIdr || 0)
-            if (currentCostIdr > 0) {
-                const rawPrice = currentCostIdr + (currentCostIdr * globalMargin / 100)
-                return {
-                    ...item,
-                    costIdr: currentCostIdr,
-                    unitPrice: ceilToThousand(rawPrice)
-                }
-            }
-            return item
-        }))
-        toast.success(`Applied ${globalMargin}% margin (rounded up to thousand)`)
-    }
+
+        startApplyingMarginTransition(() => {
+            setItems(prev => {
+                let hasChanges = false
+                const nextItems = prev.map(item => {
+                    const currentCostIdr = resolveItemCostIdr(item, exchangeRate)
+                    if (currentCostIdr <= 0) {
+                        return item
+                    }
+
+                    const nextUnitPrice = calculateSellingPrice(currentCostIdr, globalMargin)
+                    if (item.costIdr === currentCostIdr && item.unitPrice === nextUnitPrice) {
+                        return item
+                    }
+
+                    hasChanges = true
+                    return {
+                        ...item,
+                        costIdr: currentCostIdr,
+                        unitPrice: nextUnitPrice,
+                    }
+                })
+
+                return hasChanges ? nextItems : prev
+            })
+
+            toast.success(`Applied ${globalMargin}% margin (rounded up to thousand)`)
+        })
+    }, [exchangeRate, globalMargin])
 
     const removeItem = (index: number) => {
         setItems(prev => prev.filter((_, i) => i !== index))
@@ -861,9 +885,11 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                         variant="secondary"
                         size="sm"
                         onClick={applyGlobalMargin}
+                        disabled={isApplyingMargin}
                         className="h-8 bg-blue-600 text-white hover:bg-blue-700 font-bold px-4"
                     >
-                        SET MARGIN
+                        {isApplyingMargin ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {isApplyingMargin ? "APPLYING..." : "SET MARGIN"}
                     </Button>
                 </div>
                 <Button

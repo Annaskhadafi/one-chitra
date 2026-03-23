@@ -150,6 +150,10 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 async function convertImageBlobToPdfPngBytes(blob: Blob) {
+    if (blob.type === "image/png") {
+        return await blob.arrayBuffer()
+    }
+
     const imageUrl = URL.createObjectURL(blob)
 
     try {
@@ -186,6 +190,67 @@ async function convertImageBlobToPdfPngBytes(blob: Blob) {
         return await convertedBlob.arrayBuffer()
     } finally {
         URL.revokeObjectURL(imageUrl)
+    }
+}
+
+type MergeReadyAttachment =
+    | {
+        status: "ready"
+        attachment: NonNullable<QuotationPdfData["attachments"]>[number]
+        detectedMimeType: string
+        blob: Blob
+        bytes: ArrayBuffer
+    }
+    | {
+        status: "skipped"
+        attachmentTitle: string
+        reason: string
+    }
+
+async function prepareAttachmentForMerge(
+    attachment: NonNullable<QuotationPdfData["attachments"]>[number],
+): Promise<MergeReadyAttachment> {
+    const resolvedAttachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
+
+    if (!resolvedAttachmentUrl) {
+        return {
+            status: "skipped",
+            attachmentTitle: attachment.title,
+            reason: "file URL tidak tersedia",
+        }
+    }
+
+    try {
+        const response = await fetch(resolvedAttachmentUrl, { cache: "no-store" })
+        if (!response.ok) {
+            return {
+                status: "skipped",
+                attachmentTitle: attachment.title,
+                reason: "file tidak bisa diakses",
+            }
+        }
+
+        const attachmentBlob = await response.blob()
+        const attachmentBytes = await attachmentBlob.arrayBuffer()
+        const detectedMimeType = inferMimeType(
+            attachment.fileName,
+            attachmentBlob.type || response.headers.get("content-type") || attachment.mimeType,
+        )
+
+        return {
+            status: "ready",
+            attachment,
+            detectedMimeType,
+            blob: attachmentBlob,
+            bytes: attachmentBytes,
+        }
+    } catch (error) {
+        console.error(`Failed to prepare attachment ${attachment.fileName}:`, error)
+        return {
+            status: "skipped",
+            attachmentTitle: attachment.title,
+            reason: "gagal diambil",
+        }
     }
 }
 
@@ -605,37 +670,28 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         const PAGE_MARGIN = 24
         const TITLE_SPACE = 24
 
-        for (const attachment of includedAttachments) {
-            const resolvedAttachmentUrl = resolveUploadDocumentUrl(attachment.fileUrl)
+        const preparedAttachments = await Promise.all(
+            includedAttachments.map((attachment) => prepareAttachmentForMerge(attachment)),
+        )
 
-            if (!resolvedAttachmentUrl) {
-                skippedAttachments.push(`${attachment.title}: file URL tidak tersedia`)
+        for (const preparedAttachment of preparedAttachments) {
+            if (preparedAttachment.status === "skipped") {
+                skippedAttachments.push(`${preparedAttachment.attachmentTitle}: ${preparedAttachment.reason}`)
                 continue
             }
 
+            const { attachment, detectedMimeType, blob, bytes } = preparedAttachment
+
             try {
-                const response = await fetch(resolvedAttachmentUrl, { cache: "no-store" })
-                if (!response.ok) {
-                    skippedAttachments.push(`${attachment.title}: file tidak bisa diakses`)
-                    continue
-                }
-
-                const attachmentBlob = await response.blob()
-                const attachmentBytes = await attachmentBlob.arrayBuffer()
-                const detectedMimeType = inferMimeType(
-                    attachment.fileName,
-                    attachmentBlob.type || response.headers.get("content-type") || attachment.mimeType,
-                )
-
                 if (detectedMimeType.includes("pdf")) {
-                    const attachmentPdf = await PDFDocument.load(attachmentBytes)
+                    const attachmentPdf = await PDFDocument.load(bytes)
                     const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPdf.getPageIndices())
                     copiedPages.forEach((page) => mergedPdf.addPage(page))
                     continue
                 }
 
                 if (detectedMimeType.startsWith("image/")) {
-                    const convertedImageBytes = await convertImageBlobToPdfPngBytes(attachmentBlob)
+                    const convertedImageBytes = await convertImageBlobToPdfPngBytes(blob)
                     const image = await mergedPdf.embedPng(convertedImageBytes)
 
                     const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT])
