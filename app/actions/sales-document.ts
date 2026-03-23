@@ -4,9 +4,8 @@ import { db } from "@/db"
 import { salesDocuments } from "@/db/schema"
 import { eq, desc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
 import { deleteFile } from "./upload"
+import { getAuthenticatedSession } from "@/lib/rbac"
 
 export async function getSalesDocuments() {
     return await db.query.salesDocuments.findMany({
@@ -25,14 +24,8 @@ export async function createSalesDocument(data: {
     fileType: string
 }) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        })
-        const userId = session?.user?.id
-
-        if (!userId) {
-            return { success: false, error: "Unauthorized" }
-        }
+        const session = await getAuthenticatedSession("sales-documents", "create")
+        const userId = session.user.id
 
         const [newDoc] = await db.insert(salesDocuments)
             .values({
@@ -49,7 +42,10 @@ export async function createSalesDocument(data: {
         return { success: true, data: newDoc }
     } catch (error) {
         console.error("Failed to create sales document:", error)
-        return { success: false, error: "Failed to create sales document" }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to create sales document",
+        }
     }
 }
 

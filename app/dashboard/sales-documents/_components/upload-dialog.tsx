@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Plus, Upload, FileText, X } from "lucide-react"
+import { Plus, Upload, FileText, X, PlusCircle } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,8 +39,10 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
     const [items, setItems] = useState<PendingUploadItem[]>([])
     const [uploadProgress, setUploadProgress] = useState(0)
     const [uploadMessage, setUploadMessage] = useState("Uploading documents...")
+    const [uploadErrors, setUploadErrors] = useState<string[]>([])
 
     const selectedCount = items.length
+    const hasItems = selectedCount > 0
 
     const canSubmit = useMemo(() => {
         if (items.length === 0) return false
@@ -52,6 +54,7 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
         setIsUploading(false)
         setUploadProgress(0)
         setUploadMessage("Uploading documents...")
+        setUploadErrors([])
     }
 
     function upsertFiles(fileList: FileList | null) {
@@ -91,6 +94,7 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
         }
 
         setIsUploading(true)
+        setUploadErrors([])
         setUploadProgress(5)
         setUploadMessage(`Preparing ${items.length} file...`)
         try {
@@ -160,6 +164,7 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
 
             throw new Error(failures[0] || "Upload failed")
         } catch (error) {
+            setUploadErrors(error instanceof Error ? [error.message] : ["Something went wrong"])
             toast.error(error instanceof Error ? error.message : "Something went wrong")
         } finally {
             setIsUploading(false)
@@ -187,6 +192,34 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                             <ProgressLoading
                                 value={uploadProgress}
                                 message={uploadMessage}
+                            />
+                        </div>
+                    ) : hasItems ? (
+                        <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-4 py-3">
+                            <div>
+                                <p className="text-sm font-medium">{selectedCount} file dipilih</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Anda masih bisa ubah title, description, atau tambah file lain.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => document.getElementById("file-upload")?.click()}
+                            >
+                                <PlusCircle className="w-4 h-4 mr-2" />
+                                Tambah File Lagi
+                            </Button>
+                            <Input
+                                id="file-upload"
+                                type="file"
+                                className="hidden"
+                                accept=".pdf,.xlsx,.xls,.csv,.doc,.docx"
+                                multiple
+                                onChange={(e) => {
+                                    upsertFiles(e.target.files)
+                                    e.currentTarget.value = ""
+                                }}
                             />
                         </div>
                     ) : (
@@ -267,6 +300,12 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                             {isUploading ? "Uploading..." : `Save ${selectedCount > 1 ? `${selectedCount} Documents` : "Document"}`}
                         </Button>
                     </div>
+
+                    {uploadErrors.length > 0 && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                            {uploadErrors[0]}
+                        </div>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>
