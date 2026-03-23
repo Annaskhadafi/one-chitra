@@ -242,6 +242,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/calendar",
                         resource: "calendar-events",
                     },
+                    {
+                        title: "Form & Survey Builder",
+                        url: "/dashboard/forms",
+                        resource: "marketing",
+                    },
                 ],
             },
             {
