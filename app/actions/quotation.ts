@@ -20,7 +20,7 @@ import { quotationSchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { deleteFile } from "./upload"
-import { createManagedUploadFilename, deleteManagedUpload, readManagedUpload, saveManagedUpload } from "@/lib/upload-storage"
+import { readManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
 import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -82,6 +82,29 @@ async function readAttachmentSourceFile(fileUrl: string) {
     }
 
     return null
+}
+
+async function hasOtherFileReferences(fileUrl: string, options?: { excludeAttachmentId?: number }) {
+    const salesDocumentReference = await db.query.salesDocuments.findFirst({
+        where: eq(salesDocuments.fileUrl, fileUrl),
+        columns: { id: true },
+    })
+
+    if (salesDocumentReference) {
+        return true
+    }
+
+    const attachmentReference = await db.query.quotationAttachments.findFirst({
+        where: options?.excludeAttachmentId
+            ? and(
+                eq(quotationAttachments.fileUrl, fileUrl),
+                sql`${quotationAttachments.id} <> ${options.excludeAttachmentId}`,
+            )
+            : eq(quotationAttachments.fileUrl, fileUrl),
+        columns: { id: true },
+    })
+
+    return Boolean(attachmentReference)
 }
 
 const quotationAttachmentSchema = z.object({
@@ -1664,37 +1687,47 @@ export async function attachSalesDocumentsToQuotation(input: {
         let attachedCount = 0
 
         for (const document of documents) {
-            const sourceFile = await readAttachmentSourceFile(document.fileUrl)
-            if (!sourceFile) {
-                failures.push(`${document.title}: file sumber tidak bisa dibaca`)
+            const attachmentTitle = normalizeText(input.title) || document.title
+            if (!attachmentTitle) {
+                failures.push(`${document.fileName}: title attachment tidak valid`)
                 continue
             }
 
-            const storedFilename = createManagedUploadFilename(document.fileName)
-
-            const savedUpload = await saveManagedUpload({
-                filename: storedFilename,
-                buffer: sourceFile.buffer,
-                contentType: document.fileType || sourceFile.contentType,
+            const duplicateAttachment = await db.query.quotationAttachments.findFirst({
+                where: and(
+                    eq(quotationAttachments.quotationId, quotationId),
+                    eq(quotationAttachments.fileUrl, document.fileUrl),
+                    eq(quotationAttachments.kind, "supporting"),
+                ),
+                columns: { id: true },
             })
 
-            const attachmentResult = await createQuotationAttachment({
-                quotationId,
-                title: normalizeText(input.title) || document.title,
-                fileUrl: savedUpload.url,
-                fileName: document.fileName,
-                mimeType: document.fileType || sourceFile.contentType,
-                fileSize: sourceFile.buffer.length,
-                description: normalizeText(input.description) || normalizeText(document.description),
-                includeInPdf: input.includeInPdf ?? true,
-                kind: "supporting",
-            })
-
-            if (!attachmentResult.success) {
-                await deleteManagedUpload(savedUpload.url)
-                failures.push(`${document.title}: ${attachmentResult.error || "gagal ditambahkan ke quotation"}`)
+            if (duplicateAttachment) {
+                failures.push(`${document.title}: sudah terpasang pada quotation ini`)
                 continue
             }
+
+            const fileInfo = await readAttachmentSourceFile(document.fileUrl)
+            const mimeType = document.fileType || fileInfo?.contentType || null
+            const fileSize = fileInfo?.buffer.length ?? 0
+
+            await db.transaction(async (tx) => {
+                await tx.insert(quotationAttachments)
+                    .values({
+                        quotationId,
+                        title: attachmentTitle,
+                        fileUrl: document.fileUrl,
+                        fileName: document.fileName,
+                        mimeType: normalizeText(mimeType),
+                        fileSize,
+                        description: normalizeText(input.description) || normalizeText(document.description),
+                        kind: "supporting",
+                        includeInPdf: input.includeInPdf ?? true,
+                        uploadedBy: userId,
+                    })
+
+                await createNextRevision(tx, quotationId, userId, `Attachment added from Sales Document: ${attachmentTitle}`)
+            })
 
             attachedCount += 1
         }
@@ -1775,7 +1808,13 @@ export async function deleteQuotationAttachment(attachmentId: number) {
             await createNextRevision(tx, attachment.quotationId, userId, `Attachment removed: ${attachment.title}`)
         })
 
-        await deleteFile(attachment.fileUrl)
+        const hasOtherReferences = await hasOtherFileReferences(attachment.fileUrl, {
+            excludeAttachmentId: attachmentId,
+        })
+
+        if (!hasOtherReferences) {
+            await deleteFile(attachment.fileUrl)
+        }
 
         revalidatePath(`/dashboard/quotations/${attachment.quotationId}`)
         revalidatePath("/dashboard/quotations")

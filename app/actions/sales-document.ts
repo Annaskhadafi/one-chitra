@@ -1,11 +1,32 @@
 "use server"
 
 import { db } from "@/db"
-import { salesDocuments } from "@/db/schema"
-import { eq, desc } from "drizzle-orm"
+import { quotationAttachments, salesDocuments } from "@/db/schema"
+import { eq, desc, and, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { deleteFile } from "./upload"
 import { getAuthenticatedSession } from "@/lib/rbac"
+
+async function hasOtherFileReferences(fileUrl: string, salesDocumentId: string) {
+    const otherSalesDocument = await db.query.salesDocuments.findFirst({
+        where: and(
+            eq(salesDocuments.fileUrl, fileUrl),
+            sql`${salesDocuments.id} <> ${salesDocumentId}`,
+        ),
+        columns: { id: true },
+    })
+
+    if (otherSalesDocument) {
+        return true
+    }
+
+    const quotationAttachment = await db.query.quotationAttachments.findFirst({
+        where: eq(quotationAttachments.fileUrl, fileUrl),
+        columns: { id: true },
+    })
+
+    return Boolean(quotationAttachment)
+}
 
 export async function getSalesDocuments() {
     return await db.query.salesDocuments.findMany({
@@ -83,8 +104,10 @@ export async function deleteSalesDocument(id: string) {
         // Physically delete from database
         await db.delete(salesDocuments).where(eq(salesDocuments.id, id))
 
-        // Delete file from storage
-        await deleteFile(doc.fileUrl)
+        const fileStillReferenced = await hasOtherFileReferences(doc.fileUrl, doc.id)
+        if (!fileStillReferenced) {
+            await deleteFile(doc.fileUrl)
+        }
 
         revalidatePath("/dashboard/sales-documents")
         return { success: true }

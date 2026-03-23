@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockLevels, products } from "@/db/schema"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
@@ -188,10 +188,48 @@ export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
 }
 
 // ─── Export Inventory Comparison to Excel ──────────────────────────────────────
+async function resolveProductForStockLookup({
+    productId,
+    materialNumber,
+}: {
+    productId?: number | null
+    materialNumber?: string | null
+}) {
+    if (productId) {
+        return await db.query.products.findFirst({
+            where: eq(products.id, productId),
+        })
+    }
+
+    const normalizedMaterialNumber = materialNumber?.trim()
+    if (!normalizedMaterialNumber) {
+        return null
+    }
+
+    return await db.query.products.findFirst({
+        where: or(
+            eq(products.materialNumber, normalizedMaterialNumber),
+            eq(products.materialNumberCk, normalizedMaterialNumber),
+            eq(products.oldMaterialNo, normalizedMaterialNumber)
+        )
+    })
+}
+
 export async function getStockByMaterialNumber(materialNumber: string) {
+    return getStockByProductReference({ materialNumber })
+}
+
+export async function getStockByProductReference({
+    productId,
+    materialNumber,
+}: {
+    productId?: number | null
+    materialNumber?: string | null
+}) {
     try {
-        const product = await db.query.products.findFirst({
-            where: eq(products.materialNumber, materialNumber)
+        const product = await resolveProductForStockLookup({
+            productId,
+            materialNumber,
         })
         
         if (!product) {

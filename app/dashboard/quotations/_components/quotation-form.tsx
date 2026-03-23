@@ -189,6 +189,52 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         () => customers.find(c => c.id === customerId),
         [customers, customerId]
     )
+    const productById = useMemo(
+        () => new Map(products.map(product => [product.id, product])),
+        [products]
+    )
+
+    const resolveProductReference = useCallback((item: QuotationItemRow) => {
+        const product = item.productId ? productById.get(item.productId) : undefined
+        const materialNo =
+            item.materialNumber?.trim() ||
+            product?.materialNumber?.trim() ||
+            product?.materialNumberCk?.trim() ||
+            product?.oldMaterialNo?.trim() ||
+            ""
+
+        return {
+            productId: item.productId,
+            materialNo,
+        }
+    }, [productById])
+
+    const renderItemInsights = useCallback((item: QuotationItemRow, compact = false) => {
+        const stockReference = resolveProductReference(item)
+
+        if (!stockReference.productId && !stockReference.materialNo) {
+            return null
+        }
+
+        const content = (
+            <>
+                <ProductHistoryPopover
+                    materialNo={stockReference.materialNo}
+                    costSap={item.costSap || 0}
+                />
+                <StockCheckPopover
+                    productId={stockReference.productId}
+                    materialNo={stockReference.materialNo}
+                />
+            </>
+        )
+
+        if (compact) {
+            return content
+        }
+
+        return <div className="flex items-center">{content}</div>
+    }, [resolveProductReference])
 
     const ceilToThousand = (val: number) => Math.ceil(val / 1000) * 1000
 
@@ -901,17 +947,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                             <div className="bg-blue-600 px-4 py-2 flex justify-between items-center text-white">
                                                 <span className="font-bold text-sm">Item #{index + 1}</span>
                                                 <div className="flex items-center space-x-2">
-                                                    {item.materialNumber && (
-                                                        <div className="flex items-center">
-                                                            <ProductHistoryPopover
-                                                                materialNo={item.materialNumber}
-                                                                costSap={item.costSap || 0}
-                                                            />
-                                                            <StockCheckPopover
-                                                                materialNo={item.materialNumber}
-                                                            />
-                                                        </div>
-                                                    )}
+                                                    {renderItemInsights(item)}
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
@@ -1021,17 +1057,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                                                     <TableRow key={index} className="group">
                                                         <TableCell className="font-mono text-muted-foreground">                                                            <div className="flex flex-col items-center gap-1">
                                                             {index + 1}
-                                                            {item.materialNumber && (
-                                                                <>
-                                                                    <ProductHistoryPopover
-                                                                        materialNo={item.materialNumber}
-                                                                        costSap={item.costSap || 0}
-                                                                    />
-                                                                    <StockCheckPopover
-                                                                        materialNo={item.materialNumber}
-                                                                    />
-                                                                </>
-                                                            )}
+                                                            {renderItemInsights(item, true)}
                                                         </div></TableCell>
                                                         <TableCell>
                                                             <div className="space-y-2">

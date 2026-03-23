@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect } from "react"
-import { Package, AlertCircle, TrendingUp } from "lucide-react"
+import { Package, AlertCircle } from "lucide-react"
 import {
     Popover,
     PopoverContent,
@@ -11,11 +11,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ProgressLoading } from "@/components/ui/progress-loading"
-import { getStockByMaterialNumber } from "@/app/actions/stock"
+import { getStockByProductReference } from "@/app/actions/stock"
 import { cn } from "@/lib/utils"
 
 interface StockCheckPopoverProps {
-    materialNo: string
+    productId?: number | null
+    materialNo?: string | null
     className?: string
 }
 
@@ -27,22 +28,24 @@ interface StockItem {
     totalStock: number
 }
 
-export function StockCheckPopover({ materialNo, className }: StockCheckPopoverProps) {
+type StockActionItem = StockItem
+
+export function StockCheckPopover({ productId, materialNo, className }: StockCheckPopoverProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [stocks, setStocks] = useState<StockItem[]>([])
     const [error, setError] = useState<string | null>(null)
 
     const fetchStock = React.useCallback(async () => {
-        if (!materialNo) return
+        if (!productId && !materialNo) return
 
         setIsLoading(true)
         setError(null)
         try {
-            const result = await getStockByMaterialNumber(materialNo)
+            const result = await getStockByProductReference({ productId, materialNumber: materialNo })
             if (result.success && result.data) {
                 // Filter ready stock (>0)
-                const availableStocks = (result.data as any[]).filter(s => s.totalStock > 0).map(s => ({
+                const availableStocks = (result.data as StockActionItem[]).filter(s => s.totalStock > 0).map(s => ({
                     warehouse: s.warehouse,
                     totalStock: s.totalStock
                 }))
@@ -57,7 +60,7 @@ export function StockCheckPopover({ materialNo, className }: StockCheckPopoverPr
         } finally {
             setIsLoading(false)
         }
-    }, [materialNo])
+    }, [materialNo, productId])
 
     useEffect(() => {
         if (open) {
@@ -85,7 +88,7 @@ export function StockCheckPopover({ materialNo, className }: StockCheckPopoverPr
                             Ready Stock
                         </h4>
                         <Badge variant="outline" className="text-[10px] font-mono">
-                            {materialNo}
+                            {materialNo || "-"}
                         </Badge>
                     </div>
                 </div>

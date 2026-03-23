@@ -512,7 +512,7 @@ export function QuotationFileCenter({
                                 </p>
                             </div>
                         </div>
-                        <Button onClick={handleUploadAttachment} disabled={isUploadingAttachment} className="w-full gap-2">
+                        <Button type="button" onClick={handleUploadAttachment} disabled={isUploadingAttachment} className="w-full gap-2">
                             {isUploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                             Upload Attachment
                         </Button>
@@ -612,6 +612,7 @@ export function QuotationFileCenter({
                             )}
                             <div className="flex flex-col gap-2 sm:flex-row">
                                 <Button
+                                    type="button"
                                     onClick={handleAttachSalesDocument}
                                     disabled={isLoadingSalesDocuments || salesDocuments.length === 0 || selectedSalesDocuments.length === 0 || isAddingFromSalesDocument}
                                     className="w-full gap-2 sm:flex-1"
@@ -645,7 +646,7 @@ export function QuotationFileCenter({
                         <p className="text-xs text-muted-foreground">
                             File PO customer tidak ikut digabung ke paket attachment quotation.
                         </p>
-                        <Button onClick={handleUploadPo} disabled={isUploadingPo} className="w-full gap-2">
+                        <Button type="button" onClick={handleUploadPo} disabled={isUploadingPo} className="w-full gap-2">
                             {isUploadingPo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                             Upload PO & Validate OCR
                         </Button>
