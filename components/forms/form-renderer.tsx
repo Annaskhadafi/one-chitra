@@ -127,7 +127,7 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
     }
 
     return (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="grid gap-6">
             <Card
                 className="overflow-hidden border-0 shadow-2xl bg-cover bg-center"
                 style={{
@@ -393,40 +393,6 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
                     </Button>
                 </CardContent>
             </Card>
-
-            <div className="space-y-4">
-                <Card className="border-0 shadow-xl">
-                    <CardHeader>
-                        <CardTitle className="text-lg">Form Summary</CardTitle>
-                        <CardDescription>Ringkasan cepat sebelum responden mengirim jawaban</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="rounded-2xl border p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Questions</p>
-                            <p className="mt-1 text-2xl font-bold">{fields.length}</p>
-                        </div>
-                        <div className="rounded-2xl border p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Required</p>
-                            <p className="mt-1 text-2xl font-bold">{totalRequired}</p>
-                        </div>
-                        <div className="rounded-2xl border p-4">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
-                            <p className="mt-1 text-lg font-semibold">{mode === "preview" ? "Builder Preview" : "Live Public Form"}</p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-xl">
-                    <CardHeader>
-                        <CardTitle className="text-lg">Why This Feels Better</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm text-muted-foreground">
-                        <p>Layout dibuat lebih editorial dengan hero, summary rail, dan kartu pertanyaan yang rapi.</p>
-                        <p>Warna aksen mengikuti branding form supaya tiap survey terasa punya identitas sendiri.</p>
-                        <p>Progress dan hierarchy pertanyaan dibuat jelas agar completion rate lebih tinggi.</p>
-                    </CardContent>
-                </Card>
-            </div>
         </div>
     )
 }
