@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
-import { v4 as uuidv4 } from "uuid"
 
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { saveManagedUpload } from "@/lib/upload-storage"
+import { createManagedUploadFilename, saveManagedUpload } from "@/lib/upload-storage"
 
 export async function POST(request: Request) {
     try {
@@ -19,8 +18,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "No file uploaded" }, { status: 400 })
         }
 
-        const extension = file.name.includes(".") ? file.name.split(".").pop() : ""
-        const filename = extension ? `${uuidv4()}.${extension}` : uuidv4()
+        const filename = createManagedUploadFilename(file.name)
         const bytes = await file.arrayBuffer()
 
         const savedFile = await saveManagedUpload({

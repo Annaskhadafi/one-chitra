@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover"
 import { Check, ChevronsUpDown, Copy, CheckCheck, AlertTriangle, Link2, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 import { SalesOrderForm } from "../_components/sales-order-form"
 import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import type { CkMasterPriceReference } from "@/lib/ck-master-price"
@@ -500,7 +501,10 @@ export default function ValidationSplit(props: {
         )
     }
 
-    const pdfUrl = `/api/uploads/${encodeURIComponent(session.fileUrl)}`
+    const pdfUrl = resolveUploadDocumentUrl(session.fileUrl)
+    if (!pdfUrl) {
+        return null
+    }
 
     const reviewContent = (
         <div className="space-y-4">

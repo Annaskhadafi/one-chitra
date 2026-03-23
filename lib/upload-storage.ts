@@ -2,6 +2,7 @@ import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectComm
 import { existsSync } from "fs"
 import { mkdir, readFile, unlink, writeFile } from "fs/promises"
 import { join, resolve } from "path"
+import { v7 as uuidv7 } from "uuid"
 
 import { extractUploadFilename } from "@/lib/upload-url"
 
@@ -79,6 +80,15 @@ function normalizeObjectStorageEndpoint(value: string) {
 function normalizeUploadFilename(value: string | null | undefined) {
     const filename = (value ?? "").trim().replace(/^.*[\\/]/, "")
     return filename || null
+}
+
+export function createManagedUploadFilename(originalFilename: string | null | undefined) {
+    const normalizedOriginal = normalizeUploadFilename(originalFilename)
+    const extension = normalizedOriginal?.includes(".")
+        ? normalizedOriginal.split(".").pop()?.trim().toLowerCase()
+        : null
+
+    return extension ? `${uuidv7()}.${extension}` : uuidv7()
 }
 
 async function toBuffer(body: unknown): Promise<Buffer> {

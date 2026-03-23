@@ -20,7 +20,7 @@ import { quotationSchema } from "@/lib/schemas"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { deleteFile } from "./upload"
-import { deleteManagedUpload, readManagedUpload, saveManagedUpload } from "@/lib/upload-storage"
+import { createManagedUploadFilename, deleteManagedUpload, readManagedUpload, saveManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
 import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -1670,10 +1670,7 @@ export async function attachSalesDocumentsToQuotation(input: {
                 continue
             }
 
-            const extension = document.fileName.split(".").pop()?.trim()
-            const storedFilename = extension
-                ? `${crypto.randomUUID()}.${extension}`
-                : crypto.randomUUID()
+            const storedFilename = createManagedUploadFilename(document.fileName)
 
             const savedUpload = await saveManagedUpload({
                 filename: storedFilename,

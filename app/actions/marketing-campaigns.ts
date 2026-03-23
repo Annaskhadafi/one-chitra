@@ -6,6 +6,7 @@ import { eq, desc, isNotNull, like, and, sql, count, or, lte, inArray } from "dr
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
+import { readManagedUpload } from "@/lib/upload-storage"
 import { z } from "zod"
 import { getSegmentEmailRecipients } from "./customer-segmentation"
 
@@ -20,6 +21,42 @@ const campaignSchema = z.object({
     attachments: z.string().optional(), // New attachments [{name, url}]
     scheduledAt: z.string().optional(), // ISO string
 })
+
+async function resolveCampaignAttachments(attachmentsJson: string | null) {
+    if (!attachmentsJson) return [] as Array<{
+        filename: string
+        content: Buffer
+        contentType?: string
+    }>
+
+    let attachments: Array<{ name?: string; url?: string }> = []
+
+    try {
+        attachments = JSON.parse(attachmentsJson)
+    } catch {
+        return []
+    }
+
+    const resolvedAttachments = await Promise.all(
+        attachments.map(async (attachment) => {
+            if (!attachment?.url) return null
+
+            const storedFile = await readManagedUpload(attachment.url)
+            if (!storedFile) {
+                console.warn("[MarketingCampaign] Attachment not found in managed storage:", attachment.url)
+                return null
+            }
+
+            return {
+                filename: attachment.name || storedFile.filename,
+                content: storedFile.buffer,
+                contentType: storedFile.contentType,
+            }
+        })
+    )
+
+    return resolvedAttachments.filter((attachment): attachment is NonNullable<typeof attachment> => Boolean(attachment))
+}
 
 // ─── READ ────────────────────────────────────────────────────────────────────
 
@@ -357,9 +394,7 @@ export async function sendCampaignNow(id: number) {
             return { success: false, error: "Penerima tidak ditemukan. Pilih setidaknya satu target." };
         }
 
-        // Parse Attachments
-        let attachments: any[] = [];
-        try { attachments = JSON.parse(campaign.attachments || '[]'); } catch {}
+        const attachments = await resolveCampaignAttachments(campaign.attachments)
 
         let successCount = 0;
         let failedCount = 0;
@@ -378,11 +413,8 @@ export async function sendCampaignNow(id: number) {
                     subject: campaign.subject,
                     html: htmlContent,
                     cc: ccList.length > 0 ? ccList.map(c => c.email).join(", ") : undefined,
-                    attachments: attachments.map(a => ({
-                        filename: a.name,
-                        path: `${process.cwd()}/public${a.url}` // Adjust based on how uploadFile returns path
-                    }))
-                } as any);
+                    attachments,
+                })
 
                 recipientLogs.push({
                     campaignId: id,

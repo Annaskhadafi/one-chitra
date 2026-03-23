@@ -33,6 +33,7 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "navbar:sync-approvals": "npx tsx scripts/sync-navbar-approvals.ts",
+    "storage:smoke": "npx tsx scripts/test-object-storage-smoke.ts",
     "storage:migrate": "npx tsx scripts/migrate-uploads-to-object-storage.ts",
     "prepare": "husky",
     "check-types": "tsc --noEmit"

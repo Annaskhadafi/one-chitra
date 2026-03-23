@@ -275,6 +275,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/history-order",
                         resource: "history-order",
                     },
+                    {
+                        title: "Harga Acuan Minerba",
+                        url: "/dashboard/harga-acuan-minerba",
+                        resource: "sales-documents",
+                    },
                 ],
             },
             {

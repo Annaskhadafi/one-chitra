@@ -32,6 +32,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/forms", resource: "forms-surveys" },
     { prefix: "/dashboard/good-receive-manual", resource: "good-receive-manual" },
     { prefix: "/dashboard/good-receive", resource: "good-receive" },
+    { prefix: "/dashboard/harga-acuan-minerba", resource: "sales-documents" },
     { prefix: "/dashboard/history-order", resource: "history-order" },
     { prefix: "/dashboard/inventory-ml/settings", resource: "inventory" },
     { prefix: "/dashboard/inventory-ml", resource: "inventory" },
