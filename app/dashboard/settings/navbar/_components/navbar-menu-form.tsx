@@ -145,6 +145,71 @@ export function NavbarMenuForm({ initialConfig }: Props) {
         }))
     }
 
+    const moveSubItemToItem = (
+        sourceSectionId: string,
+        sourceItemId: string,
+        subItemId: string,
+        targetSectionId: string,
+        targetItemId: string,
+    ) => {
+        if (sourceSectionId === targetSectionId && sourceItemId === targetItemId) {
+            return
+        }
+
+        setSections((prev) => {
+            let pickedSubItem: EditableNavSubItem | null = null
+
+            const sectionsWithoutSubItem = prev.map((section) => {
+                if (section.id !== sourceSectionId) {
+                    return section
+                }
+
+                return {
+                    ...section,
+                    items: section.items.map((item) => {
+                        if (item.id !== sourceItemId) {
+                            return item
+                        }
+
+                        const targetSubItem = item.items.find((subItem) => subItem.id === subItemId)
+                        if (targetSubItem) {
+                            pickedSubItem = targetSubItem
+                        }
+
+                        return {
+                            ...item,
+                            items: item.items.filter((subItem) => subItem.id !== subItemId),
+                        }
+                    }),
+                }
+            })
+
+            if (!pickedSubItem) {
+                return prev
+            }
+
+            return sectionsWithoutSubItem.map((section) => {
+                if (section.id !== targetSectionId) {
+                    return section
+                }
+
+                return {
+                    ...section,
+                    items: section.items.map((item) => {
+                        if (item.id !== targetItemId) {
+                            return item
+                        }
+
+                        return {
+                            ...item,
+                            items: [...item.items, pickedSubItem as EditableNavSubItem],
+                        }
+                    }),
+                }
+            })
+        })
+    }
+
     const addCustomItem = (sectionId: string) => {
         setSections((prev) =>
             prev.map((section) => {
@@ -616,6 +681,12 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                                     <div className="space-y-3">
                                                         {item.items.map((subItem, subIndex) => {
                                                             const subIsExternal = subItem.linkType === "external"
+                                                            const parentMenuOptions = sections.flatMap((sectionOption) =>
+                                                                sectionOption.items.map((itemOption) => ({
+                                                                    value: `${sectionOption.id}::${itemOption.id}`,
+                                                                    label: `${sectionOption.title} / ${itemOption.title}`,
+                                                                })),
+                                                            )
 
                                                             return (
                                                                 <Collapsible key={subItem.id} defaultOpen={false} className="rounded-md border p-2">
@@ -671,6 +742,39 @@ export function NavbarMenuForm({ initialConfig }: Props) {
                                                                     </div>
 
                                                                     <CollapsibleContent className="space-y-2 pt-2">
+
+                                                                    <div className="space-y-1">
+                                                                        <Label>Pindah ke Section / Menu</Label>
+                                                                        <Select
+                                                                            value={`${section.id}::${item.id}`}
+                                                                            onValueChange={(value) => {
+                                                                                const [targetSectionId, targetItemId] = value.split("::")
+                                                                                if (!targetSectionId || !targetItemId) {
+                                                                                    return
+                                                                                }
+
+                                                                                moveSubItemToItem(
+                                                                                    section.id,
+                                                                                    item.id,
+                                                                                    subItem.id,
+                                                                                    targetSectionId,
+                                                                                    targetItemId,
+                                                                                )
+                                                                            }}
+                                                                            disabled={isBusy}
+                                                                        >
+                                                                            <SelectTrigger>
+                                                                                <SelectValue placeholder="Pilih section dan menu tujuan" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {parentMenuOptions.map((option) => (
+                                                                                    <SelectItem key={option.value} value={option.value}>
+                                                                                        {option.label}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
 
                                                                     <div className="grid gap-2 md:grid-cols-2">
                                                                         <Input
