@@ -3,6 +3,8 @@ export type FormFieldType =
     | "long-text"
     | "email"
     | "number"
+    | "file-upload"
+    | "image-choice"
     | "select"
     | "radio"
     | "checkbox"
@@ -12,6 +14,7 @@ export type FormFieldOption = {
     id: string
     label: string
     value: string
+    imageUrl?: string
 }
 
 export type FormFieldDefinition = {
@@ -28,6 +31,8 @@ export type FormTheme = {
     accentColor: string
     surfaceColor: string
     textColor: string
+    backgroundImageUrl?: string
+    headerImageUrl?: string
 }
 
 export type FormSettings = {
@@ -59,6 +64,8 @@ export const defaultFormTheme: FormTheme = {
     accentColor: "#1d4ed8",
     surfaceColor: "#ffffff",
     textColor: "#0f172a",
+    backgroundImageUrl: "",
+    headerImageUrl: "",
 }
 
 export const defaultFormSettings: FormSettings = {
@@ -135,6 +142,7 @@ export function ensureFormSchema(value: unknown): FormBuilderSchema {
                         id: option.id || crypto.randomUUID(),
                         label: option.label || "Option",
                         value: option.value || slugifyFormTitle(option.label || "option"),
+                        imageUrl: option.imageUrl || "",
                     }))
                     : undefined,
             }))
@@ -143,6 +151,8 @@ export function ensureFormSchema(value: unknown): FormBuilderSchema {
             accentColor: candidate.theme?.accentColor || defaultFormTheme.accentColor,
             surfaceColor: candidate.theme?.surfaceColor || defaultFormTheme.surfaceColor,
             textColor: candidate.theme?.textColor || defaultFormTheme.textColor,
+            backgroundImageUrl: candidate.theme?.backgroundImageUrl || defaultFormTheme.backgroundImageUrl,
+            headerImageUrl: candidate.theme?.headerImageUrl || defaultFormTheme.headerImageUrl,
         },
         settings: {
             collectEmail: candidate.settings?.collectEmail ?? defaultFormSettings.collectEmail,
@@ -156,11 +166,11 @@ export function ensureFormSchema(value: unknown): FormBuilderSchema {
 }
 
 export function fieldSupportsOptions(type: FormFieldType) {
-    return type === "select" || type === "radio" || type === "checkbox"
+    return type === "select" || type === "radio" || type === "checkbox" || type === "image-choice"
 }
 
 export function fieldSupportsPlaceholder(type: FormFieldType) {
-    return type !== "radio" && type !== "checkbox" && type !== "select" && type !== "rating"
+    return type !== "radio" && type !== "checkbox" && type !== "select" && type !== "rating" && type !== "image-choice"
 }
 
 export function buildTemplateSchema(template: "feedback" | "registration" | "event-rsvp"): FormBuilderSchema {

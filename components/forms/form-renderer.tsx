@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { submitSurveyResponse } from "@/app/actions/forms-surveys"
+import { uploadFile } from "@/app/actions/upload"
 import { cn } from "@/lib/utils"
 import { type FormBuilderSchema } from "@/lib/forms-surveys"
 
@@ -64,6 +66,29 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
         updateAnswer(fieldId, next)
     }
 
+    const handleUploadAnswerFile = (fieldId: string, file: File | null) => {
+        if (!file) {
+            return
+        }
+
+        setError(null)
+        startTransition(async () => {
+            try {
+                const formData = new FormData()
+                formData.append("file", file)
+                const result = await uploadFile(formData)
+
+                if (!result.success) {
+                    throw new Error(result.error || "Upload file gagal")
+                }
+
+                updateAnswer(fieldId, result.url)
+            } catch (uploadError) {
+                setError(uploadError instanceof Error ? uploadError.message : "Upload file gagal")
+            }
+        })
+    }
+
     const handleSubmit = () => {
         if (mode === "preview") {
             return
@@ -103,7 +128,16 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
 
     return (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <Card className="overflow-hidden border-0 shadow-2xl" style={{ backgroundColor: theme.surfaceColor, color: theme.textColor }}>
+            <Card
+                className="overflow-hidden border-0 shadow-2xl bg-cover bg-center"
+                style={{
+                    backgroundColor: theme.surfaceColor,
+                    color: theme.textColor,
+                    backgroundImage: theme.backgroundImageUrl
+                        ? `linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.92)), url(${theme.backgroundImageUrl})`
+                        : undefined,
+                }}
+            >
                 <div
                     className="relative px-6 py-8 md:px-8"
                     style={{
@@ -120,6 +154,16 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
                     />
                     <CardTitle className="text-3xl">{form.title}</CardTitle>
                     {form.description ? <CardDescription className="mt-3 max-w-2xl text-base">{form.description}</CardDescription> : null}
+                    {theme.headerImageUrl ? (
+                        <div className="relative mt-6 h-48 overflow-hidden rounded-3xl border">
+                            <Image
+                                src={theme.headerImageUrl}
+                                alt="Form header"
+                                fill
+                                className="object-cover"
+                            />
+                        </div>
+                    ) : null}
                 </div>
                 <CardHeader className="space-y-3">
                     {settings.showProgress ? (
@@ -256,6 +300,59 @@ export function FormRenderer({ form, mode = "public" }: FormRendererProps) {
                                             </div>
                                         )
                                     })}
+                                </div>
+                            ) : null}
+
+                            {field.type === "image-choice" ? (
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {(field.options ?? []).map((option) => {
+                                        const active = String(answers[field.id] ?? "") === option.label
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => updateAnswer(field.id, option.label)}
+                                                className={cn(
+                                                    "overflow-hidden rounded-2xl border text-left transition",
+                                                    active ? "shadow-lg" : "hover:border-primary/50",
+                                                )}
+                                                style={active ? { borderColor: theme.accentColor } : undefined}
+                                            >
+                                                {option.imageUrl ? (
+                                                    <div className="relative h-40 w-full">
+                                                        <Image
+                                                            src={option.imageUrl}
+                                                            alt={option.label}
+                                                            fill
+                                                            className="object-cover"
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                                <div className="p-4">
+                                                    <p className="font-medium">{option.label}</p>
+                                                </div>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            ) : null}
+
+                            {field.type === "file-upload" ? (
+                                <div className="space-y-3">
+                                    <Input
+                                        type="file"
+                                        onChange={(event) => handleUploadAnswerFile(field.id, event.target.files?.[0] ?? null)}
+                                    />
+                                    {typeof answers[field.id] === "string" && String(answers[field.id]).length > 0 ? (
+                                        <a
+                                            href={String(answers[field.id])}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-sm text-primary underline"
+                                        >
+                                            File uploaded, lihat file
+                                        </a>
+                                    ) : null}
                                 </div>
                             ) : null}
 

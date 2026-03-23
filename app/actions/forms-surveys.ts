@@ -364,7 +364,12 @@ export async function getSurveyAnalytics(formId: string) {
     const schema = ensureFormSchema(form.schema)
 
     const choiceBreakdown = schema.fields
-        .filter((field) => field.type === "select" || field.type === "radio" || field.type === "checkbox" || field.type === "rating")
+        .filter((field) =>
+            field.type === "select"
+            || field.type === "radio"
+            || field.type === "checkbox"
+            || field.type === "rating"
+            || field.type === "image-choice")
         .map((field) => {
             const bucket = new Map<string, number>()
 

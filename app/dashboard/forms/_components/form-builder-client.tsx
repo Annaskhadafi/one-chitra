@@ -33,6 +33,7 @@ import {
     getSurveyFormById,
     saveSurveyForm,
 } from "@/app/actions/forms-surveys"
+import { uploadFile } from "@/app/actions/upload"
 import { FormRenderer } from "@/components/forms/form-renderer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -107,6 +108,8 @@ const fieldTemplates: Array<{ type: FormFieldType; label: string }> = [
     { type: "long-text", label: "Paragraph" },
     { type: "email", label: "Email" },
     { type: "number", label: "Number" },
+    { type: "file-upload", label: "File Upload" },
+    { type: "image-choice", label: "Image Choice" },
     { type: "select", label: "Dropdown" },
     { type: "radio", label: "Single Choice" },
     { type: "checkbox", label: "Multiple Choice" },
@@ -205,6 +208,22 @@ export function FormBuilderClient({
 
     const updateSchema = (updater: (schema: FormBuilderSchema) => FormBuilderSchema) => {
         setDraft((current) => (current ? { ...current, schema: updater(current.schema) } : current))
+    }
+
+    const handleUploadAsset = async (file: File | null) => {
+        if (!file) {
+            return null
+        }
+
+        const formData = new FormData()
+        formData.append("file", file)
+        const result = await uploadFile(formData)
+
+        if (!result.success) {
+            throw new Error(result.error || "Upload gagal")
+        }
+
+        return result.url
     }
 
     const handleCreateScratch = () => {
@@ -668,6 +687,76 @@ export function FormBuilderClient({
                                             }
                                         />
                                     </div>
+                                    <div className="space-y-3 md:col-span-2">
+                                        <Label>Background Image</Label>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <Input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(event) => {
+                                                    const file = event.target.files?.[0] ?? null
+                                                    startTransition(async () => {
+                                                        try {
+                                                            const url = await handleUploadAsset(file)
+                                                            if (!url) return
+                                                            updateSchema((schema) => ({
+                                                                ...schema,
+                                                                theme: { ...schema.theme, backgroundImageUrl: url },
+                                                            }))
+                                                            toast.success("Background image uploaded")
+                                                        } catch (error) {
+                                                            toast.error(error instanceof Error ? error.message : "Upload gagal")
+                                                        }
+                                                    })
+                                                }}
+                                            />
+                                            {draft.schema.theme.backgroundImageUrl ? (
+                                                <a
+                                                    href={draft.schema.theme.backgroundImageUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-sm text-primary underline"
+                                                >
+                                                    Preview background
+                                                </a>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3 md:col-span-2">
+                                        <Label>Header Image</Label>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <Input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(event) => {
+                                                    const file = event.target.files?.[0] ?? null
+                                                    startTransition(async () => {
+                                                        try {
+                                                            const url = await handleUploadAsset(file)
+                                                            if (!url) return
+                                                            updateSchema((schema) => ({
+                                                                ...schema,
+                                                                theme: { ...schema.theme, headerImageUrl: url },
+                                                            }))
+                                                            toast.success("Header image uploaded")
+                                                        } catch (error) {
+                                                            toast.error(error instanceof Error ? error.message : "Upload gagal")
+                                                        }
+                                                    })
+                                                }}
+                                            />
+                                            {draft.schema.theme.headerImageUrl ? (
+                                                <a
+                                                    href={draft.schema.theme.headerImageUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-sm text-primary underline"
+                                                >
+                                                    Preview header
+                                                </a>
+                                            ) : null}
+                                        </div>
+                                    </div>
                                     <div className="flex items-center justify-between rounded-2xl border p-4">
                                         <div>
                                             <p className="font-medium">Collect Email</p>
@@ -954,53 +1043,100 @@ export function FormBuilderClient({
                                                         </Button>
                                                     </div>
                                                     {(field.options ?? []).map((option) => (
-                                                        <div key={option.id} className="flex gap-2">
-                                                            <Input
-                                                                value={option.label}
-                                                                onChange={(event) =>
-                                                                    updateSchema((schema) => ({
-                                                                        ...schema,
-                                                                        fields: schema.fields.map((item) =>
-                                                                            item.id === field.id
-                                                                                ? {
-                                                                                    ...item,
-                                                                                    options: (item.options ?? []).map((currentOption) =>
-                                                                                        currentOption.id === option.id
-                                                                                            ? {
-                                                                                                ...currentOption,
-                                                                                                label: event.target.value,
-                                                                                                value: slugifyFormTitle(event.target.value),
-                                                                                            }
-                                                                                            : currentOption,
-                                                                                    ),
+                                                        <div key={option.id} className="space-y-2 rounded-2xl border p-3">
+                                                            <div className="flex gap-2">
+                                                                <Input
+                                                                    value={option.label}
+                                                                    onChange={(event) =>
+                                                                        updateSchema((schema) => ({
+                                                                            ...schema,
+                                                                            fields: schema.fields.map((item) =>
+                                                                                item.id === field.id
+                                                                                    ? {
+                                                                                        ...item,
+                                                                                        options: (item.options ?? []).map((currentOption) =>
+                                                                                            currentOption.id === option.id
+                                                                                                ? {
+                                                                                                    ...currentOption,
+                                                                                                    label: event.target.value,
+                                                                                                    value: slugifyFormTitle(event.target.value),
+                                                                                                }
+                                                                                                : currentOption,
+                                                                                        ),
+                                                                                    }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                />
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    onClick={() =>
+                                                                        updateSchema((schema) => ({
+                                                                            ...schema,
+                                                                            fields: schema.fields.map((item) =>
+                                                                                item.id === field.id
+                                                                                    ? {
+                                                                                        ...item,
+                                                                                        options: (item.options ?? []).filter(
+                                                                                            (currentOption) => currentOption.id !== option.id,
+                                                                                        ),
+                                                                                    }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                            {field.type === "image-choice" ? (
+                                                                <div className="flex flex-wrap items-center gap-3">
+                                                                    <Input
+                                                                        type="file"
+                                                                        accept="image/*"
+                                                                        onChange={(event) => {
+                                                                            const file = event.target.files?.[0] ?? null
+                                                                            startTransition(async () => {
+                                                                                try {
+                                                                                    const url = await handleUploadAsset(file)
+                                                                                    if (!url) return
+                                                                                    updateSchema((schema) => ({
+                                                                                        ...schema,
+                                                                                        fields: schema.fields.map((item) =>
+                                                                                            item.id === field.id
+                                                                                                ? {
+                                                                                                    ...item,
+                                                                                                    options: (item.options ?? []).map((currentOption) =>
+                                                                                                        currentOption.id === option.id
+                                                                                                            ? { ...currentOption, imageUrl: url }
+                                                                                                            : currentOption,
+                                                                                                    ),
+                                                                                                }
+                                                                                                : item,
+                                                                                        ),
+                                                                                    }))
+                                                                                    toast.success("Option image uploaded")
+                                                                                } catch (error) {
+                                                                                    toast.error(error instanceof Error ? error.message : "Upload gagal")
                                                                                 }
-                                                                                : item,
-                                                                        ),
-                                                                    }))
-                                                                }
-                                                            />
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="ghost"
-                                                                onClick={() =>
-                                                                    updateSchema((schema) => ({
-                                                                        ...schema,
-                                                                        fields: schema.fields.map((item) =>
-                                                                            item.id === field.id
-                                                                                ? {
-                                                                                    ...item,
-                                                                                    options: (item.options ?? []).filter(
-                                                                                        (currentOption) => currentOption.id !== option.id,
-                                                                                    ),
-                                                                                }
-                                                                                : item,
-                                                                        ),
-                                                                    }))
-                                                                }
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
+                                                                            })
+                                                                        }}
+                                                                    />
+                                                                    {option.imageUrl ? (
+                                                                        <a
+                                                                            href={option.imageUrl}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="text-sm text-primary underline"
+                                                                        >
+                                                                            Preview image
+                                                                        </a>
+                                                                    ) : null}
+                                                                </div>
+                                                            ) : null}
                                                         </div>
                                                     ))}
                                                 </div>
