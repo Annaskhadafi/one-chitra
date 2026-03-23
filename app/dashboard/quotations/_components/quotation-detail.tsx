@@ -44,6 +44,7 @@ import {
     MapPin,
     ExternalLink,
     FileDown,
+    Loader2,
 } from "lucide-react"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
@@ -171,6 +172,7 @@ function formatDateTime(date: Date) {
 export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDetailProps) {
     const router = useRouter()
     const [isConverting, setIsConverting] = useState(false)
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
     const [pdfOpen, setPdfOpen] = useState(false)
 
     useEffect(() => {
@@ -178,6 +180,26 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
             setPdfOpen(true)
         }
     }, [autoOpenPdf])
+
+    const handleDownloadPdf = async () => {
+        if (isDownloadingPdf) {
+            return
+        }
+
+        setIsDownloadingPdf(true)
+        toast.info("Sedang menyiapkan PDF quotation...")
+
+        try {
+            const { generateQuotationPdf } = await import("./quotation-pdf-generator")
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation))
+            toast.success("PDF quotation berhasil dibuat")
+        } catch (error) {
+            console.error("Failed to download quotation PDF:", error)
+            toast.error(error instanceof Error ? error.message : "Download PDF gagal")
+        } finally {
+            setIsDownloadingPdf(false)
+        }
+    }
 
     const config = statusConfig[quotation.status] || statusConfig.draft
     const StatusIcon = config.icon
@@ -257,12 +279,9 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                         <FileText className="h-4 w-4" />
                         Preview
                     </Button>
-                    <Button onClick={async () => {
-                        const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-                        await generateQuotationPdf(buildQuotationPdfPayload(quotation))
-                    }} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-                        <FileDown className="h-4 w-4" />
-                        Download PDF
+                    <Button onClick={handleDownloadPdf} disabled={isDownloadingPdf} variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+                        {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                        {isDownloadingPdf ? "Preparing PDF..." : "Download PDF"}
                     </Button>
                     {canConvert && (
                         <AlertDialog>

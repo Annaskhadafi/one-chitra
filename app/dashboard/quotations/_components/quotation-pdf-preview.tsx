@@ -8,7 +8,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, X, FileDown } from "lucide-react"
+import { Printer, X, FileDown, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import type { Customer, Product } from "@/lib/types"
 import { user } from "@/db/schema"
 import { buildQuotationPdfPayload } from "./quotation-pdf-generator"
@@ -98,6 +99,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
     const [isMobilePreview, setIsMobilePreview] = useState(false)
     const [mobileScale, setMobileScale] = useState(1)
     const [mobileScaledHeight, setMobileScaledHeight] = useState<number | null>(null)
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false)
     const A4_PAGE_WIDTH = 794
     const A4_PAGE_HEIGHT = 1123
 
@@ -269,6 +271,26 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         })
     }
 
+    const handleDownloadPdf = async () => {
+        if (isDownloadingPdf) {
+            return
+        }
+
+        setIsDownloadingPdf(true)
+        toast.info("Sedang menyiapkan PDF A4...")
+
+        try {
+            const { generateQuotationPdf } = await import("./quotation-pdf-generator")
+            await generateQuotationPdf(buildQuotationPdfPayload(quotation))
+            toast.success("PDF A4 berhasil dibuat")
+        } catch (error) {
+            console.error("Failed to download quotation preview PDF:", error)
+            toast.error(error instanceof Error ? error.message : "Download PDF A4 gagal")
+        } finally {
+            setIsDownloadingPdf(false)
+        }
+    }
+
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="max-h-[95vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto bg-slate-50 p-0 sm:max-w-7xl">
@@ -280,12 +302,9 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 <Printer className="h-3.5 w-3.5" />
                                 Browser Print
                             </Button>
-                            <Button size="sm" onClick={async () => {
-                                const { generateQuotationPdf } = await import("./quotation-pdf-generator")
-                                await generateQuotationPdf(buildQuotationPdfPayload(quotation))
-                            }} className="w-full gap-2 sm:w-auto" variant="outline">
-                                <FileDown className="h-3.5 w-3.5" />
-                                Download PDF A4
+                            <Button size="sm" onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="w-full gap-2 sm:w-auto" variant="outline">
+                                {isDownloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                                {isDownloadingPdf ? "Preparing PDF..." : "Download PDF A4"}
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
                                 <X className="h-4 w-4" />
