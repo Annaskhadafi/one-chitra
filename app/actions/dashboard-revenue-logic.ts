@@ -11,27 +11,25 @@ export interface DashboardRevenueFilters {
     range?: "this-week" | "this-month" | "this-quarter";
 }
 
-function getRangeBounds(range: "this-week" | "this-month" | "this-quarter") {
-    const now = new Date();
-    const endDate = new Date(now);
+function getPeriodBounds(period: string) {
+    const isYearlyView = !period.includes(".");
 
-    if (range === "this-week") {
-        const startDate = new Date(now);
-        startDate.setDate(now.getDate() - 6);
-        startDate.setHours(0, 0, 0, 0);
-        return { startDate, endDate };
+    if (isYearlyView) {
+        const year = Number(period);
+        return {
+            startDate: new Date(year, 0, 1),
+            endDate: new Date(year, 11, 31),
+        };
     }
 
-    if (range === "this-quarter") {
-        const startMonth = Math.floor(now.getMonth() / 3) * 3;
-        const startDate = new Date(now.getFullYear(), startMonth, 1);
-        startDate.setHours(0, 0, 0, 0);
-        return { startDate, endDate };
-    }
+    const [monthStr, yearStr] = period.split(".");
+    const month = Number(monthStr);
+    const year = Number(yearStr);
 
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    startDate.setHours(0, 0, 0, 0);
-    return { startDate, endDate };
+    return {
+        startDate: new Date(year, month - 1, 1),
+        endDate: new Date(year, month, 0),
+    };
 }
 
 // Mat grp desc for Prime Product (Tires)
@@ -51,10 +49,9 @@ const PA_MAT_GRPS = [
 
 export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFilters) {
     const periodStr = filters.period;
-    const range = filters.range || "this-month";
     const isYearlyView = !periodStr.includes('.');
     const [, year] = isYearlyView ? ["", periodStr] : periodStr.split('.');
-    const { startDate, endDate } = getRangeBounds(range);
+    const { startDate, endDate } = getPeriodBounds(periodStr);
     const rangeDateFilter = and(
         sql`${salesRevenueSap.billingDate} >= ${startDate.toISOString().slice(0, 10)}`,
         sql`${salesRevenueSap.billingDate} <= ${endDate.toISOString().slice(0, 10)}`,
@@ -335,13 +332,23 @@ export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters)
     try {
         const periodStr = filters.period || "02.2026";
         const isYearlyView = !periodStr.includes('.');
+        const { startDate, endDate } = getPeriodBounds(periodStr);
 
         // Date filter
         const dateFormat = isYearlyView ? 'YYYY' : 'MM.YYYY';
         const dateFilter = sql`to_char(${salesRevenueSap.billingDate}, ${dateFormat}) = ${periodStr}`;
+        const rangeDateFilter = and(
+            sql`${salesRevenueSap.billingDate} >= ${startDate.toISOString().slice(0, 10)}`,
+            sql`${salesRevenueSap.billingDate} <= ${endDate.toISOString().slice(0, 10)}`,
+        );
+        const salesRevenueFilter = and(
+            isNotNull(salesRevenueSap.billingDate),
+            dateFilter,
+            rangeDateFilter,
+        );
 
         // Fetch all data
-        const rawData = await db.select().from(salesRevenueSap).where(dateFilter);
+        const rawData = await db.select().from(salesRevenueSap).where(salesRevenueFilter);
         const allData = rawData.map(row => ({
             ...row,
             billingNo: row.billingNo?.endsWith('.0') ? row.billingNo.slice(0, -2) : row.billingNo
@@ -350,7 +357,7 @@ export async function fetchAllSalesRevenueData(filters: DashboardRevenueFilters)
         // Calculate total revenue_in_loc_curr
         const totalResult = await db.select({
             total: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`
-        }).from(salesRevenueSap).where(dateFilter);
+        }).from(salesRevenueSap).where(salesRevenueFilter);
 
         const totalRevenue = Number(totalResult[0]?.total || 0);
 
