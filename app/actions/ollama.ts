@@ -112,24 +112,51 @@ export async function generateEmailHtml(prompt: string, history: { role: string;
     let html = await callOllamaChat([
       {
         role: "system",
-        content: `You are a World-Class Professional Email Designer and Copywriter Expert for "One Chitra" (a company specializing in Tires/Ban and industrial equipment). 
-            Your expertise covers both high-converting marketing campaigns and clear, professional notification emails.
-            
-            Key Capabilities & Requirements:
-            1. Visual Excellence: Create stunning, modern, and mobile-responsive HTML layouts. Use professional color palettes, clean typography (Arial/sans-serif), and balanced whitespace.
-            2. Professional Copywriting: Write persuasive, engaging, and professional copy in the language requested (defaulting to Indonesian if not specified).
-            3. Responsive Design: Use solid inline CSS to ensure the email looks perfect on all devices and email clients.
-            4. Dynamic Personalization: Naturally integrate placeholders like {{name}}, {{company}}, or {{position}}.
-            5. Design Aesthetics: Use rounded corners, subtle borders. 
-            6. Minimalist Branding: The header and footer MUST ONLY contain the text "One Chitra". DO NOT include website links, "Contact Us", social media icons, or copyright notices unless explicitly asked.
-            7. Editor Compatibility: Avoid using complex <table> layouts if possible. Use simple, clean semantic HTML (headers, paragraphs, lists) with inline styles on these elements. This ensures the user can edit the content easily in a visual editor.
-            
-            Strict Rules:
-            - ONLY output the raw HTML code. 
-            - DO NOT include any preamble, introduction, or post-explanation.
-            - DO NOT wrap the code in markdown backticks (\`\`\`).
-            - Ensure the design feels premium and state-of-the-art.
-            `,
+        content: `You are a world-class email designer and copywriter for One Chitra.
+Create polished, structured, professional email HTML in Indonesian.
+
+Hard requirements:
+1. Output ONLY raw HTML.
+2. No markdown fences, no explanation text.
+3. Use a complete email-friendly structure with:
+   - outer wrapper background
+   - centered main card/container max width around 640px
+   - branded header
+   - clear title / intro section
+   - tidy content sections
+   - 1-2 clear CTA buttons
+   - short footer
+4. Use inline CSS everywhere important.
+5. Use Arial, Helvetica, sans-serif.
+6. The result must look neat even inside an iframe preview.
+7. Never output plain text blocks that rely on browser default styling.
+8. Keep spacing balanced and readable on mobile.
+9. If products are mentioned, show them as tidy highlight cards or bullet rows, not messy plain paragraphs.
+10. Keep the footer minimal and elegant with only "One Chitra".
+
+Visual direction:
+- background: soft light gray or warm neutral
+- card: white with rounded corners
+- accent color: professional amber / orange / dark slate
+- headings: strong and clean
+- body text: compact and readable
+- CTA buttons: clearly styled, rounded, with strong contrast
+
+Content direction:
+- professional, concise, persuasive
+- avoid exaggerated claims
+- keep paragraphs short
+- use placeholders like {{name}}, {{company}}, {{position}} naturally
+- if stock or product codes exist, present them in clean labels, not raw clutter
+
+Strictly avoid:
+- giant unstyled headings
+- long uninterrupted text walls
+- raw browser-blue links without button styling
+- duplicate brand signature blocks
+- overly generic lorem-ipsum style layout
+- tables with harsh borders unless really needed
+        `,
       },
       ...history,
       { role: "user", content: prompt },
@@ -328,6 +355,7 @@ export async function generateMarketingMagicAnalysis(input: {
   selectedSegments?: string[]
   focusCustomerName?: string
   focusCustomerSegment?: string
+  emailStyle?: string
 }) {
   try {
     const [segmentResult, deadStockResult, reorderAlerts, contextRecords, focusedLaunchContext] = await Promise.all([
@@ -420,12 +448,14 @@ Rules:
 - Recommended segments must come from the provided segment list.
 - Use the fleet and order-history fuzzy matches as semi-raw signals, not as exact truth.
 - If there is a meaningful connection between fleet needs, order history, and stock availability, mention it in the reasoning.
+- Align the campaign tone and structure with the requested email style.
 - Use concise Indonesian.`,
       },
       {
         role: "user",
         content: JSON.stringify({
           brief: input.brief,
+          emailStyle: input.emailStyle || "Promosi",
           currentSubject: input.subject || "",
           currentContentSummary: (input.content || "").slice(0, 1500),
           segmentSummary,
@@ -463,7 +493,8 @@ Rules:
     const segmentForDraft = Array.isArray(parsed.recommendedSegments) ? parsed.recommendedSegments.join(", ") : ""
 
     const draftPrompt = [
-      `Buat email marketing HTML profesional untuk One Chitra dalam bahasa Indonesia.`,
+      `Buat email marketing HTML profesional untuk One Chitra dalam bahasa Indonesia yang sangat rapi dan siap kirim.`,
+      `Tipe email yang harus dipakai: ${input.emailStyle || "Promosi"}.`,
       `Tujuan campaign: ${input.brief}`,
       `Nama campaign internal: ${parsed.campaignName || "Campaign Baru"}`,
       `Catatan internal: ${parsed.description || ""}`,
@@ -472,7 +503,10 @@ Rules:
       `CTA utama: ${ctaForDraft}`,
       `Fokus stok/produk: ${stockFocusForDraft}`,
       `Gunakan placeholder {{name}}, {{company}}, dan {{position}} secara natural.`,
-      `Buat struktur yang ringkas, jelas, dan langsung siap dipakai di editor email.`
+      `Buat struktur yang ringkas, jelas, dan langsung siap dipakai di editor email.`,
+      `Susun layout dengan urutan: header brand, judul utama, pembuka singkat, maksimum 2 blok highlight produk/layanan, value proposition singkat, CTA button, penutup singkat, footer minimal.`,
+      `Jangan tampilkan list produk sebagai teks mentah panjang. Gunakan kartu produk yang rapi dengan label part number, stok, dan manfaat secara singkat.`,
+      `Tampilan harus premium, bersih, mobile-friendly, dan tidak berantakan.`
     ].join("\n")
 
     const emailDraftResult = await generateEmailHtml(draftPrompt)

@@ -43,6 +43,7 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
     const [loading, setLoading] = useState(true)
     const [manualEmail, setManualEmail] = useState("")
     const [search, setSearch] = useState("")
+    const [isManualEditOpen, setIsManualEditOpen] = useState(false)
 
     useEffect(() => {
         const load = async () => {
@@ -95,6 +96,12 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
         onChange({ ...value, manual: value.manual.filter(e => e !== email) })
     }
 
+    const replaceManualAt = (index: number, email: string) => {
+        const next = [...value.manual]
+        next[index] = email
+        onChange({ ...value, manual: Array.from(new Set(next.filter(Boolean))) })
+    }
+
     const toggleSegment = (segmentName: string) => {
         const current = value.segmentNames || []
         const newVal = current.includes(segmentName)
@@ -110,9 +117,31 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
         value.manual.length +
         (value.segmentNames?.length || 0)
 
+    const clearAll = () => {
+        onChange({
+            userIds: [],
+            groupIds: [],
+            contactIds: [],
+            manual: [],
+            segmentNames: [],
+        })
+    }
+
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
+            <div className="flex items-center justify-between gap-2">
+                <Label>{label}</Label>
+                {totalCount > 0 && (
+                    <div className="flex items-center gap-2">
+                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsManualEditOpen((prev) => !prev)}>
+                            {isManualEditOpen ? "Tutup Revisi" : "Revisi Target"}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive" onClick={clearAll}>
+                            Kosongkan
+                        </Button>
+                    </div>
+                )}
+            </div>
             <div className="flex flex-wrap gap-2 p-3 border rounded-md min-h-[42px] bg-background">
                 {value.userIds.map(id => {
                     const u = users.find(u => u.id === id)
@@ -276,6 +305,46 @@ export function RecipientSelect({ value, onChange, label = "Penerima" }: Recipie
                     </PopoverContent>
                 </Popover>
             </div>
+
+            {isManualEditOpen && (
+                <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">Revisi Target Penerima</p>
+                        <span className="text-xs text-muted-foreground">Anda bisa hapus, tambah, atau koreksi email hasil Magic.</span>
+                    </div>
+
+                    {value.manual.length > 0 ? (
+                        <div className="space-y-2">
+                            {value.manual.map((email, index) => (
+                                <div key={`${email}-${index}`} className="flex gap-2">
+                                    <Input
+                                        value={email}
+                                        onChange={(e) => replaceManualAt(index, e.target.value.trim())}
+                                        placeholder="email@contoh.com"
+                                    />
+                                    <Button type="button" variant="outline" size="sm" onClick={() => removeManual(email)}>
+                                        Hapus
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Belum ada email manual. Tambahkan dari tombol plus atau kolom di bawah.</p>
+                    )}
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                            placeholder="Tambahkan email penerima lain..."
+                            value={manualEmail}
+                            onChange={(e) => setManualEmail(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addManual())}
+                        />
+                        <Button type="button" onClick={addManual} className="sm:w-auto">
+                            Tambah Email
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

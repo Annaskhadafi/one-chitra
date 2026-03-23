@@ -17,6 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { EMAIL_STYLE_OPTIONS, getEmailStyleMeta } from "./email-style-options"
 
 type TargetConfig = {
   userIds: string[]
@@ -33,6 +35,8 @@ interface MagicAnalysisProps {
   autoRunKey?: string
   focusCustomerName?: string
   focusCustomerSegment?: string
+  emailStyle?: string
+  onEmailStyleChange?: (value: string) => void
   subject: string
   content: string
   targetConfig: TargetConfig
@@ -63,6 +67,8 @@ export function MagicAnalysis({
   autoRunKey = "",
   focusCustomerName = "",
   focusCustomerSegment = "",
+  emailStyle = "promosi",
+  onEmailStyleChange,
   subject,
   content,
   targetConfig,
@@ -209,6 +215,7 @@ export function MagicAnalysis({
 
     setLoading(true)
     try {
+      const styleMeta = getEmailStyleMeta(emailStyle)
       const response = await generateMarketingMagicAnalysis({
         brief: effectiveBrief,
         subject,
@@ -216,6 +223,7 @@ export function MagicAnalysis({
         selectedSegments: targetConfig.segmentNames,
         focusCustomerName: focusCustomerName || undefined,
         focusCustomerSegment: focusCustomerSegment || undefined,
+        emailStyle: styleMeta.label,
       })
 
       if (!response.success) {
@@ -330,14 +338,35 @@ export function MagicAnalysis({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Tujuan Campaign</label>
-          <Textarea
-            value={brief}
-            onChange={(event) => setBrief(event.target.value)}
-            placeholder="Contoh: Saya ingin mendorong repeat order untuk customer yang mulai pasif, sambil membantu menggerakkan stok oli yang lama tidak bergerak."
-            className="min-h-[110px] bg-white"
-          />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tipe Email</label>
+            <Select value={emailStyle} onValueChange={(value) => onEmailStyleChange?.(value)}>
+              <SelectTrigger className="bg-white">
+                <SelectValue placeholder="Pilih tipe email" />
+              </SelectTrigger>
+              <SelectContent>
+                {EMAIL_STYLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {getEmailStyleMeta(emailStyle).description}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tujuan Campaign</label>
+            <Textarea
+              value={brief}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder="Contoh: Saya ingin mendorong repeat order untuk customer yang mulai pasif, sambil membantu menggerakkan stok oli yang lama tidak bergerak."
+              className="min-h-[110px] bg-white"
+            />
+          </div>
         </div>
 
         <Button
@@ -389,9 +418,9 @@ export function MagicAnalysis({
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-semibold">Segmen Direkomendasikan</p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={applySegments}>
                     Terapkan Segmen
                   </Button>
@@ -418,7 +447,7 @@ export function MagicAnalysis({
             {result.recommendedRecipients.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Penerima Rekomendasi</p>
-                <div className="overflow-hidden rounded-lg border">
+                <div className="overflow-x-auto rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -492,7 +521,7 @@ export function MagicAnalysis({
             {focusProducts.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Produk Fokus Rekomendasi</p>
-                <div className="overflow-hidden rounded-lg border">
+                <div className="overflow-x-auto rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>

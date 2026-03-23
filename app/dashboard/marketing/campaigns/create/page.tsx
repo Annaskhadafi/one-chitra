@@ -21,6 +21,7 @@ import { FileAttachment } from "../_components/file-attachment"
 import { MagicGenerator } from "../_components/magic-generator"
 import { MagicAnalysis } from "../_components/magic-analysis"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { EMAIL_STYLE_OPTIONS, getEmailStyleMeta } from "../_components/email-style-options"
 
 type TargetConfig = {
     userIds: string[]
@@ -43,6 +44,7 @@ export default function CreateCampaignPage() {
     const [detailsOpen, setDetailsOpen] = useState(true)
     const [audienceOpen, setAudienceOpen] = useState(true)
     const [contentOpen, setContentOpen] = useState(true)
+    const [emailStyle, setEmailStyle] = useState(EMAIL_STYLE_OPTIONS[0].value)
     
     const [formData, setFormData] = useState({
         name: "",
@@ -143,9 +145,9 @@ export default function CreateCampaignPage() {
     }
 
     return (
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-4 sm:p-6">
             {/* Header */}
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <Link href="/dashboard/marketing/campaigns">
                     <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
                 </Link>
@@ -156,7 +158,7 @@ export default function CreateCampaignPage() {
             </div>
 
             <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-5">
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
                     {/* LEFT: Form */}
                     <div className="space-y-4">
                         <Card>
@@ -171,6 +173,8 @@ export default function CreateCampaignPage() {
                                     autoRunKey={`${selectedCustomer}::${selectedSegment}::${magicInitialBrief}`}
                                     focusCustomerName={selectedCustomer}
                                     focusCustomerSegment={selectedSegment}
+                                    emailStyle={emailStyle}
+                                    onEmailStyleChange={setEmailStyle}
                                     subject={formData.subject}
                                     content={formData.content}
                                     targetConfig={targetConfig}
@@ -279,6 +283,13 @@ export default function CreateCampaignPage() {
                                                 />
                                             </div>
                                         </div>
+
+                                        <div className="rounded-lg border bg-muted/30 p-3">
+                                            <p className="text-sm font-medium">Tipe Email Aktif</p>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {getEmailStyleMeta(emailStyle).label} - {getEmailStyleMeta(emailStyle).description}
+                                            </p>
+                                        </div>
                                     </CollapsibleContent>
                                 </Collapsible>
 
@@ -320,13 +331,16 @@ export default function CreateCampaignPage() {
                                         </Button>
                                     </CollapsibleTrigger>
                                     <CollapsibleContent className="grid gap-1.5 pt-4">
-                                        <div className="flex items-center justify-between mb-2">
+                                        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <Label className="text-sm font-semibold">Konten Email</Label>
-                                            <div className="flex items-center gap-2">
-                                                <MagicGenerator onApply={(html) => setFormData({ ...formData, content: html })} />
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <MagicGenerator
+                                                    emailStyle={emailStyle}
+                                                    onApply={(html) => setFormData({ ...formData, content: html })}
+                                                />
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="outline" size="sm" className="h-8">
+                                                        <Button variant="outline" size="sm" className="h-8 w-full sm:w-auto">
                                                             Gunakan Template <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
@@ -355,11 +369,11 @@ export default function CreateCampaignPage() {
                             </CardContent>
                         </Card>
 
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                             <Link href="/dashboard/marketing/campaigns">
-                                <Button variant="outline" type="button">Batal</Button>
+                                <Button variant="outline" type="button" className="w-full sm:w-auto">Batal</Button>
                             </Link>
-                            <Button type="submit" disabled={loading} className="bg-primary hover:bg-primary/90">
+                            <Button type="submit" disabled={loading} className="w-full bg-primary hover:bg-primary/90 sm:w-auto">
                                 <Save className="mr-2 h-4 w-4" />
                                 {loading ? "Menyimpan..." : "Simpan Draft"}
                             </Button>
@@ -368,14 +382,14 @@ export default function CreateCampaignPage() {
 
                     {/* RIGHT: Live Preview */}
                     <div className="space-y-3">
-                        <Card className="sticky top-6 border-primary/20 shadow-sm">
+                        <Card className="border-primary/20 shadow-sm xl:sticky xl:top-6">
                             <CardHeader className="pb-2 bg-primary/5">
                                 <CardTitle className="text-sm flex items-center gap-2">
                                     <Eye className="h-4 w-4 text-primary" />Preview Email
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-0 pb-3">
-                                <div className="mx-3 mt-3 rounded border overflow-hidden">
+                                <div className="mx-3 mt-3 overflow-hidden rounded border">
                                     <div className="bg-muted/50 border-b px-3 py-2 text-[10px] text-muted-foreground space-y-0.5">
                                         <p><span className="font-semibold text-foreground">Dari:</span> One Chitra &lt;noreply@onechitragroup.com&gt;</p>
                                         <p><span className="font-semibold text-foreground">Kepada:</span> (Target Terpilih)</p>
