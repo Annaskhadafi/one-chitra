@@ -151,6 +151,25 @@ export async function updateCampaign(id: number, data: z.infer<typeof campaignSc
     try {
         await getAuthenticatedSession("marketing", "edit");
 
+        const current = await db.select({
+            id: marketingCampaigns.id,
+            status: marketingCampaigns.status,
+        }).from(marketingCampaigns).where(eq(marketingCampaigns.id, id)).then((rows) => rows[0] ?? null)
+
+        if (!current) {
+            return { success: false, error: "Campaign tidak ditemukan" };
+        }
+
+        if (current.status === "processing") {
+            return { success: false, error: "Campaign sedang diproses dan belum bisa diedit" };
+        }
+
+        const shouldResetForResend = current.status === "sent"
+
+        if (shouldResetForResend) {
+            await db.delete(campaignRecipients).where(eq(campaignRecipients.campaignId, id))
+        }
+
         await db.update(marketingCampaigns)
             .set({
                 name: data.name,
@@ -161,12 +180,20 @@ export async function updateCampaign(id: number, data: z.infer<typeof campaignSc
                 targetConfig: data.targetConfig || null,
                 attachments: data.attachments || null,
                 scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+                status: shouldResetForResend ? "draft" : current.status,
+                sentAt: shouldResetForResend ? null : undefined,
+                totalRecipients: shouldResetForResend ? 0 : undefined,
+                successCount: shouldResetForResend ? 0 : undefined,
+                failureCount: shouldResetForResend ? 0 : undefined,
                 updatedAt: new Date(),
             })
             .where(eq(marketingCampaigns.id, id));
 
         revalidatePath("/dashboard/marketing/campaigns");
-        return { success: true };
+        return {
+            success: true,
+            resetForResend: shouldResetForResend,
+        };
     } catch (error) {
         return { success: false, error: "Failed to update campaign" };
     }

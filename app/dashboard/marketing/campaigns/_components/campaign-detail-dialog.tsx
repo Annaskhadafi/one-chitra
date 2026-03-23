@@ -127,7 +127,7 @@ export function CampaignDetailDialog({ campaign, open, onClose }: Props) {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-                            {campaign.status === "draft" && (
+                            {(campaign.status === "draft" || campaign.status === "sent") && (
                                 <Link href={`/dashboard/marketing/campaigns/${campaign.id}/edit`}>
                                     <Button size="sm" variant="outline">
                                         <Edit className="h-3 w-3 mr-1" />Edit

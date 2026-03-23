@@ -383,9 +383,9 @@ export default function MarketingCampaignsPage() {
                                                 </AlertDialog>
                                             )}
 
-                                            {/* Edit (draft only) */}
+                                            {/* Edit (draft or sent) */}
                                             <Link href={`/dashboard/marketing/campaigns/${c.id}/edit`}>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={c.status !== "draft"}>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={c.status !== "draft" && c.status !== "sent"}>
                                                     <Edit2 className="h-3.5 w-3.5" />
                                                 </Button>
                                             </Link>

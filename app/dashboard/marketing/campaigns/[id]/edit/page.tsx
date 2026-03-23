@@ -66,8 +66,8 @@ export default function EditCampaignPage({ params }: PageProps) {
                 router.push("/dashboard/marketing/campaigns")
                 return 
             }
-            if (campaign.status !== "draft") { 
-                toast.error("Hanya campaign berstatus Draft yang bisa diedit")
+            if (campaign.status !== "draft" && campaign.status !== "sent") {
+                toast.error("Hanya campaign Draft atau Terkirim yang bisa diedit")
                 router.push("/dashboard/marketing/campaigns")
                 return 
             }
@@ -123,7 +123,11 @@ export default function EditCampaignPage({ params }: PageProps) {
                 segmentCriteria: "{}", // Legacy compatibility
             })
             if (res.success) {
-                toast.success("Campaign berhasil diperbarui")
+                toast.success(
+                    res.resetForResend
+                        ? "Campaign diperbarui dan direset ke draft agar bisa dikirim ulang"
+                        : "Campaign berhasil diperbarui"
+                )
                 router.push("/dashboard/marketing/campaigns")
             } else {
                 toast.error(res.error || "Gagal memperbarui campaign")
