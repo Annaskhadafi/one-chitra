@@ -37,6 +37,8 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
     const [open, setOpen] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [items, setItems] = useState<PendingUploadItem[]>([])
+    const [uploadProgress, setUploadProgress] = useState(0)
+    const [uploadMessage, setUploadMessage] = useState("Uploading documents...")
 
     const selectedCount = items.length
 
@@ -48,6 +50,8 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
     function resetState() {
         setItems([])
         setIsUploading(false)
+        setUploadProgress(0)
+        setUploadMessage("Uploading documents...")
     }
 
     function upsertFiles(fileList: FileList | null) {
@@ -87,11 +91,20 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
         }
 
         setIsUploading(true)
+        setUploadProgress(5)
+        setUploadMessage(`Preparing ${items.length} file...`)
         try {
             let successCount = 0
             const failures: string[] = []
 
-            for (const item of items) {
+            for (const [index, item] of items.entries()) {
+                const itemStart = Math.round((index / items.length) * 100)
+                const itemMid = Math.min(95, itemStart + Math.round(60 / items.length))
+                const itemEnd = Math.min(98, itemStart + Math.round(90 / items.length))
+
+                setUploadProgress(Math.max(5, itemStart + 5))
+                setUploadMessage(`Uploading ${item.file.name}...`)
+
                 const formData = new FormData()
                 formData.append("file", item.file)
 
@@ -111,6 +124,9 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                     continue
                 }
 
+                setUploadProgress(itemMid)
+                setUploadMessage(`Saving ${item.title.trim() || item.file.name}...`)
+
                 const docResult = await createSalesDocument({
                     title: item.title.trim(),
                     description: item.description.trim() || null,
@@ -125,9 +141,12 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                 }
 
                 successCount++
+                setUploadProgress(itemEnd)
             }
 
             if (successCount > 0) {
+                setUploadProgress(100)
+                setUploadMessage("Upload complete")
                 toast.success(
                     failures.length > 0
                         ? `${successCount} document berhasil diupload. ${failures.slice(0, 2).join("; ")}${failures.length > 2 ? `; +${failures.length - 2} lainnya` : ""}`
@@ -165,7 +184,10 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                 <div className="space-y-4">
                     {isUploading ? (
                         <div className="py-2">
-                            <ProgressLoading message={`Uploading ${selectedCount} file...`} />
+                            <ProgressLoading
+                                value={uploadProgress}
+                                message={uploadMessage}
+                            />
                         </div>
                     ) : (
                         <div
