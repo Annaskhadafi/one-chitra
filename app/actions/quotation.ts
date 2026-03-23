@@ -23,7 +23,7 @@ import { deleteFile } from "./upload"
 import { readManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
-import { extractUploadFilename, resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { extractUploadFilename } from "@/lib/upload-url"
 
 type QuotationInput = z.infer<typeof quotationSchema>
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -32,57 +32,6 @@ type QuotationItemRecord = typeof quotationItems.$inferSelect
 type QuotationAttachmentRecord = typeof quotationAttachments.$inferSelect
 type SalesOrderRecord = typeof salesOrders.$inferSelect
 type QuotationPoValidationStatus = QuotationPoValidationSummary["status"]
-
-function buildAbsoluteAppUrl(pathname: string) {
-    const baseUrl =
-        process.env.BETTER_AUTH_URL ||
-        process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        "http://localhost:3000"
-
-    return new URL(pathname, baseUrl).toString()
-}
-
-async function readAttachmentSourceFile(fileUrl: string) {
-    const managedUpload = await readManagedUpload(fileUrl)
-    if (managedUpload) {
-        return managedUpload
-    }
-
-    const resolvedUrl = resolveUploadDocumentUrl(fileUrl)
-    const candidateUrls = Array.from(
-        new Set(
-            [resolvedUrl, /^https?:\/\//i.test(fileUrl) ? fileUrl : null]
-                .filter((value): value is string => Boolean(value))
-                .map((value) => (/^https?:\/\//i.test(value) ? value : buildAbsoluteAppUrl(value))),
-        ),
-    )
-
-    for (const candidateUrl of candidateUrls) {
-        try {
-            const response = await fetch(candidateUrl, {
-                cache: "no-store",
-                signal: AbortSignal.timeout(15000),
-            })
-
-            if (!response.ok) {
-                continue
-            }
-
-            const buffer = Buffer.from(await response.arrayBuffer())
-            return {
-                filename: extractUploadFilename(fileUrl) || extractUploadFilename(candidateUrl) || "attachment",
-                buffer,
-                contentType: response.headers.get("content-type") || "application/octet-stream",
-                source: "local" as const,
-            }
-        } catch {
-            // Try the next candidate URL.
-        }
-    }
-
-    return null
-}
 
 async function hasOtherFileReferences(fileUrl: string, options?: { excludeAttachmentId?: number }) {
     const salesDocumentReference = await db.query.salesDocuments.findFirst({
@@ -1683,8 +1632,19 @@ export async function attachSalesDocumentsToQuotation(input: {
             return { success: false as const, error: "Sales Document tidak ditemukan" }
         }
 
+        const existingAttachments = await db.query.quotationAttachments.findMany({
+            where: and(
+                eq(quotationAttachments.quotationId, quotationId),
+                eq(quotationAttachments.kind, "supporting"),
+            ),
+            columns: {
+                fileUrl: true,
+            },
+        })
+
+        const existingFileUrls = new Set(existingAttachments.map((attachment) => attachment.fileUrl))
         const failures: string[] = []
-        let attachedCount = 0
+        const attachmentsToInsert: Array<typeof quotationAttachments.$inferInsert> = []
 
         for (const document of documents) {
             const attachmentTitle = normalizeText(input.title) || document.title
@@ -1693,44 +1653,40 @@ export async function attachSalesDocumentsToQuotation(input: {
                 continue
             }
 
-            const duplicateAttachment = await db.query.quotationAttachments.findFirst({
-                where: and(
-                    eq(quotationAttachments.quotationId, quotationId),
-                    eq(quotationAttachments.fileUrl, document.fileUrl),
-                    eq(quotationAttachments.kind, "supporting"),
-                ),
-                columns: { id: true },
-            })
-
-            if (duplicateAttachment) {
+            if (existingFileUrls.has(document.fileUrl)) {
                 failures.push(`${document.title}: sudah terpasang pada quotation ini`)
                 continue
             }
 
-            const fileInfo = await readAttachmentSourceFile(document.fileUrl)
-            const mimeType = document.fileType || fileInfo?.contentType || null
-            const fileSize = fileInfo?.buffer.length ?? 0
-
-            await db.transaction(async (tx) => {
-                await tx.insert(quotationAttachments)
-                    .values({
-                        quotationId,
-                        title: attachmentTitle,
-                        fileUrl: document.fileUrl,
-                        fileName: document.fileName,
-                        mimeType: normalizeText(mimeType),
-                        fileSize,
-                        description: normalizeText(input.description) || normalizeText(document.description),
-                        kind: "supporting",
-                        includeInPdf: input.includeInPdf ?? true,
-                        uploadedBy: userId,
-                    })
-
-                await createNextRevision(tx, quotationId, userId, `Attachment added from Sales Document: ${attachmentTitle}`)
+            existingFileUrls.add(document.fileUrl)
+            attachmentsToInsert.push({
+                quotationId,
+                title: attachmentTitle,
+                fileUrl: document.fileUrl,
+                fileName: document.fileName,
+                mimeType: normalizeText(document.fileType),
+                fileSize: 0,
+                description: normalizeText(input.description) || normalizeText(document.description),
+                kind: "supporting",
+                includeInPdf: input.includeInPdf ?? true,
+                uploadedBy: userId,
             })
-
-            attachedCount += 1
         }
+
+        if (attachmentsToInsert.length > 0) {
+            await db.transaction(async (tx) => {
+                await tx.insert(quotationAttachments).values(attachmentsToInsert)
+
+                const summary =
+                    attachmentsToInsert.length === 1
+                        ? `Attachment added from Sales Document: ${attachmentsToInsert[0].title}`
+                        : `${attachmentsToInsert.length} attachments added from Sales Document`
+
+                await createNextRevision(tx, quotationId, userId, summary)
+            })
+        }
+
+        const attachedCount = attachmentsToInsert.length
 
         if (attachedCount === 0) {
             return {
