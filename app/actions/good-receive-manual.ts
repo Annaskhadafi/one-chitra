@@ -14,7 +14,7 @@ export type ManualGoodReceivePoOption = {
     poNumber: string
     vendorName: string
     poDate: string | null
-    totalOpenQty: number
+    totalPoQty: number
     itemCount: number
 }
 
@@ -24,6 +24,7 @@ export type ManualGoodReceivePoLineOption = {
     poItem: number
     materialNumber: string
     materialDescription: string
+    poQty: number
     openQty: number
     productId: number | null
 }
@@ -143,17 +144,6 @@ function buildGoodReceiveManualNotificationContent(params: {
 
 export async function getManualGoodReceivePoOptions() {
     try {
-        const existingManualHeaders = await db.query.goodReceiveManual.findMany({
-            columns: {
-                poNumber: true,
-            },
-        })
-        const existingManualPoNumbers = new Set(
-            existingManualHeaders
-                .map((entry) => entry.poNumber?.trim())
-                .filter((poNumber): poNumber is string => Boolean(poNumber))
-        )
-
         const sapRows = await db.query.me2lPurchDocsSap.findMany({
             where: and(
                 isNull(me2lPurchDocsSap.grProcessedDate),
@@ -167,10 +157,7 @@ export async function getManualGoodReceivePoOptions() {
         })
 
         const latestByPoItem = buildLatestPoItemMap(sapRows)
-        const latestRows = Array.from(latestByPoItem.values()).filter((row) =>
-            sanitizeOpenQty(row.orderQty, row.deliveredQty) > 0
-            && !existingManualPoNumbers.has(row.purchasingDoc?.trim() || "")
-        )
+        const latestRows = Array.from(latestByPoItem.values())
 
         const materialNumbers = Array.from(new Set(
             latestRows
@@ -228,6 +215,7 @@ export async function getManualGoodReceivePoOptions() {
             const materialNumber = row.material?.trim() || ""
             const storageLoc = row.storageLoc?.trim() || ""
             const vendorName = row.vendorName?.trim() || "Unknown Vendor"
+            const poQty = Number(row.orderQty || 0)
             const openQty = sanitizeOpenQty(row.orderQty, row.deliveredQty)
             const productId = productByMaterialSloc.get(`${materialNumber}::${storageLoc}`)
                 ?? fallbackProductByMaterial.get(materialNumber)
@@ -241,6 +229,7 @@ export async function getManualGoodReceivePoOptions() {
                 poItem,
                 materialNumber,
                 materialDescription: row.shortText?.trim() || "-",
+                poQty,
                 openQty,
                 productId,
             }
@@ -255,7 +244,7 @@ export async function getManualGoodReceivePoOptions() {
             if (!poNumber) return
 
             const vendorName = row.vendorName?.trim() || "Unknown Vendor"
-            const openQty = sanitizeOpenQty(row.orderQty, row.deliveredQty)
+            const poQty = Number(row.orderQty || 0)
             const poDate = row.docDate ? String(row.docDate) : null
 
             const current = poMap.get(poNumber)
@@ -264,14 +253,14 @@ export async function getManualGoodReceivePoOptions() {
                     poNumber,
                     vendorName,
                     poDate,
-                    totalOpenQty: openQty,
+                    totalPoQty: poQty,
                     itemCount: 1,
                 })
                 return
             }
 
             current.itemCount += 1
-            current.totalOpenQty += openQty
+            current.totalPoQty += poQty
             if ((!current.vendorName || current.vendorName === "Unknown Vendor") && vendorName) {
                 current.vendorName = vendorName
             }

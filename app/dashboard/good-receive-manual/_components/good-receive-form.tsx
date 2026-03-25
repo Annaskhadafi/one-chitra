@@ -46,8 +46,8 @@ const formSchema = z.object({
 
 type GoodReceiveFormProps = {
     warehouses?: { id: number; sloc: string; description: string | null }[]
-    poOptions?: { poNumber: string; vendorName: string; poDate: string | null; totalOpenQty: number; itemCount: number }[]
-    poLineOptions?: { poNumber: string; vendorName: string; poItem: number; materialNumber: string; materialDescription: string; openQty: number; productId: number | null }[]
+    poOptions?: { poNumber: string; vendorName: string; poDate: string | null; totalPoQty: number; itemCount: number }[]
+    poLineOptions?: { poNumber: string; vendorName: string; poItem: number; materialNumber: string; materialDescription: string; poQty: number; openQty: number; productId: number | null }[]
     productOptions?: { id: number; materialNumber: string; materialDescription: string | null; oldMaterialNo: string | null; materialNumberCk: string | null; sloc: string | null }[]
     notificationRoles?: string[]
     notificationUsers?: { id: string; name: string | null; email: string | null; role: string | null }[]
@@ -259,7 +259,7 @@ export function GoodReceiveForm({
                                                                         <div className="flex min-w-0 flex-col">
                                                                             <span className="truncate">{po.poNumber} - {po.vendorName}</span>
                                                                             <span className="text-xs text-muted-foreground">
-                                                                                {po.itemCount} items, open qty {po.totalOpenQty}
+                                                                                {po.itemCount} items, PO Qty {po.totalPoQty}
                                                                             </span>
                                                                         </div>
                                                                     </CommandItem>
@@ -476,7 +476,7 @@ export function GoodReceiveForm({
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs">
-                                Semua open item dari PO terpilih akan muncul otomatis di sini.
+                                Semua item dari PO terpilih akan muncul otomatis di sini.
                             </CardDescription>
                         </CardHeader>
                         <Separator />
@@ -548,10 +548,10 @@ export function GoodReceiveForm({
                                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                         <div>
                                                             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                                                Open Qty
+                                                                PO Qty
                                                             </p>
                                                             <p className="mt-1 text-sm font-medium">
-                                                                {selectedLine?.openQty ?? 0}
+                                                                {selectedLine?.poQty ?? 0}
                                                             </p>
                                                         </div>
 
@@ -607,7 +607,7 @@ export function GoodReceiveForm({
                                             <TableHead className="w-[40px] text-xs font-semibold text-muted-foreground pl-4">#</TableHead>
                                             <TableHead className="w-[320px] text-xs font-semibold text-muted-foreground">PO Item</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Internal Product</TableHead>
-                                            <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Open Qty</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">PO Qty</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
                                         </TableRow>
@@ -657,7 +657,7 @@ export function GoodReceiveForm({
                                                                 : "-"}
                                                     </TableCell>
                                                     <TableCell className="text-sm font-medium">
-                                                        {selectedLine?.openQty ?? 0}
+                                                        {selectedLine?.poQty ?? 0}
                                                     </TableCell>
                                                     <TableCell>
                                                         <FormField
