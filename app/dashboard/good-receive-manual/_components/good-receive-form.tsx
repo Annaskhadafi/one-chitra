@@ -476,7 +476,7 @@ export function GoodReceiveForm({
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs">
-                                Semua item dari PO terpilih akan muncul otomatis di sini.
+                                Yang muncul di sini hanya sisa item yang belum di-GR manual.
                             </CardDescription>
                         </CardHeader>
                         <Separator />
@@ -555,6 +555,17 @@ export function GoodReceiveForm({
                                                             </p>
                                                         </div>
 
+                                                        <div>
+                                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                Sisa Qty
+                                                            </p>
+                                                            <p className="mt-1 text-sm font-medium">
+                                                                {selectedLine?.openQty ?? 0}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                         <FormField
                                                             control={form.control}
                                                             name={`items.${index}.quantity`}
@@ -608,6 +619,7 @@ export function GoodReceiveForm({
                                             <TableHead className="w-[320px] text-xs font-semibold text-muted-foreground">PO Item</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Internal Product</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">PO Qty</TableHead>
+                                            <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Sisa Qty</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
                                         </TableRow>
@@ -658,6 +670,9 @@ export function GoodReceiveForm({
                                                     </TableCell>
                                                     <TableCell className="text-sm font-medium">
                                                         {selectedLine?.poQty ?? 0}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-medium">
+                                                        {selectedLine?.openQty ?? 0}
                                                     </TableCell>
                                                     <TableCell>
                                                         <FormField

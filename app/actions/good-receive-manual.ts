@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses } from "@/db/schema"
+import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements } from "@/db/schema"
 import { revalidatePath } from "next/cache"
 import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
@@ -30,6 +30,41 @@ export type ManualGoodReceivePoLineOption = {
 }
 
 type Me2lRow = Awaited<ReturnType<typeof db.query.me2lPurchDocsSap.findMany>>[number]
+
+function parseManualGrReference(referenceNumber: string | null | undefined) {
+    const normalized = referenceNumber?.trim() || ""
+    const match = normalized.match(/^PO:\s*(.+?)\s+Item:\s*(\d+)$/i)
+    if (!match) return null
+
+    const poNumber = match[1]?.trim()
+    const poItem = Number(match[2])
+    if (!poNumber || !Number.isFinite(poItem) || poItem <= 0) {
+        return null
+    }
+
+    return { poNumber, poItem }
+}
+
+async function getManualReceivedQtyByPoItem() {
+    const movements = await db.query.stockMovements.findMany({
+        where: eq(stockMovements.type, "GR_MANUAL"),
+        columns: {
+            referenceNumber: true,
+            quantity: true,
+        },
+    })
+
+    const receivedByPoItem = new Map<string, number>()
+    for (const movement of movements) {
+        const parsed = parseManualGrReference(movement.referenceNumber)
+        if (!parsed) continue
+
+        const key = `${parsed.poNumber}-${parsed.poItem}`
+        receivedByPoItem.set(key, (receivedByPoItem.get(key) ?? 0) + Number(movement.quantity || 0))
+    }
+
+    return receivedByPoItem
+}
 
 function buildLatestPoItemMap(rows: Me2lRow[]) {
     const latestByPoItem = new Map<string, Me2lRow>()
@@ -156,6 +191,7 @@ export async function getManualGoodReceivePoOptions() {
             orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
         })
 
+        const manualReceivedByPoItem = await getManualReceivedQtyByPoItem()
         const latestByPoItem = buildLatestPoItemMap(sapRows)
         const latestRows = Array.from(latestByPoItem.values())
 
@@ -216,7 +252,9 @@ export async function getManualGoodReceivePoOptions() {
             const storageLoc = row.storageLoc?.trim() || ""
             const vendorName = row.vendorName?.trim() || "Unknown Vendor"
             const poQty = Number(row.orderQty || 0)
-            const openQty = sanitizeOpenQty(row.orderQty, row.deliveredQty)
+            const sapOpenQty = sanitizeOpenQty(row.orderQty, row.deliveredQty)
+            const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
+            const openQty = Math.max(0, sapOpenQty - manualReceivedQty)
             const productId = productByMaterialSloc.get(`${materialNumber}::${storageLoc}`)
                 ?? fallbackProductByMaterial.get(materialNumber)
                 ?? productByOldMaterialNo.get(materialNumber)
@@ -233,7 +271,7 @@ export async function getManualGoodReceivePoOptions() {
                 openQty,
                 productId,
             }
-        }).sort((a, b) => {
+        }).filter((line) => line.openQty > 0).sort((a, b) => {
             if (a.poNumber === b.poNumber) return a.poItem - b.poItem
             return a.poNumber.localeCompare(b.poNumber)
         })
@@ -373,16 +411,6 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 throw new Error("Warehouse is required")
             }
 
-            const existingManualHeader = await tx.query.goodReceiveManual.findFirst({
-                where: eq(goodReceiveManual.poNumber, poNumber),
-                columns: {
-                    id: true,
-                },
-            })
-            if (existingManualHeader) {
-                throw new Error(`PO ${poNumber} sudah pernah dibuat di GR Manual`)
-            }
-
             const poItems = input.items.map((item) => item.poItem)
             const duplicatePoItem = poItems.find((poItem, idx) => poItems.indexOf(poItem) !== idx)
             if (duplicatePoItem) {
@@ -408,6 +436,23 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 }
             }
 
+            const manualMovements = await tx.query.stockMovements.findMany({
+                where: eq(stockMovements.type, "GR_MANUAL"),
+                columns: {
+                    referenceNumber: true,
+                    quantity: true,
+                },
+            })
+            const manualReceivedByPoItem = new Map<number, number>()
+            for (const movement of manualMovements) {
+                const parsed = parseManualGrReference(movement.referenceNumber)
+                if (!parsed || parsed.poNumber !== poNumber || !poItems.includes(parsed.poItem)) continue
+                manualReceivedByPoItem.set(
+                    parsed.poItem,
+                    (manualReceivedByPoItem.get(parsed.poItem) ?? 0) + Number(movement.quantity || 0)
+                )
+            }
+
             const productIds = Array.from(new Set(input.items.map((item) => item.productId)))
             const existingProducts = await tx.select({
                 id: products.id,
@@ -424,15 +469,17 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
                 }
 
-                const openQty = sanitizeOpenQty(sapLine.orderQty, sapLine.deliveredQty)
-                if (openQty <= 0) {
-                    throw new Error(`PO Item ${item.poItem} tidak memiliki qty open`)
+                const sapOpenQty = sanitizeOpenQty(sapLine.orderQty, sapLine.deliveredQty)
+                const manualReceivedQty = manualReceivedByPoItem.get(item.poItem) ?? 0
+                const remainingQty = Math.max(0, sapOpenQty - manualReceivedQty)
+                if (remainingQty <= 0) {
+                    throw new Error(`PO Item ${item.poItem} tidak memiliki sisa qty untuk GR Manual`)
                 }
                 if (item.quantity < 0) {
                     throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
                 }
-                if (item.quantity > openQty) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi Open Qty (${openQty})`)
+                if (item.quantity > remainingQty) {
+                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi sisa qty (${remainingQty})`)
                 }
 
                 const product = productById.get(item.productId)
@@ -541,16 +588,21 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     recordedBy: userId,
                 })
 
-                // 5. Mark SAP line as processed to prevent duplicate stock posting from GR SAP
-                await tx.update(me2lPurchDocsSap)
-                    .set({
-                        grProcessedDate: new Date(),
-                        grWarehouseId: input.warehouseId,
-                    })
-                    .where(and(
-                        eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                        eq(me2lPurchDocsSap.item, item.poItem)
-                    ))
+                const sapOpenQty = sanitizeOpenQty(latestByPoItem.get(item.poItem)?.orderQty ?? 0, latestByPoItem.get(item.poItem)?.deliveredQty ?? 0)
+                const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
+                const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
+
+                if (remainingQtyAfterSubmit <= 0) {
+                    await tx.update(me2lPurchDocsSap)
+                        .set({
+                            grProcessedDate: new Date(),
+                            grWarehouseId: input.warehouseId,
+                        })
+                        .where(and(
+                            eq(me2lPurchDocsSap.purchasingDoc, poNumber),
+                            eq(me2lPurchDocsSap.item, item.poItem)
+                        ))
+                }
             }
 
             return payload
