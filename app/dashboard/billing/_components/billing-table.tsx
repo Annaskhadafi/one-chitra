@@ -110,6 +110,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     const [matGrpFilter, setMatGrpFilter] = React.useState<string[]>([])
     const [matGrpDescFilter, setMatGrpDescFilter] = React.useState<string[]>([])
     const [noInvSapFilter, setNoInvSapFilter] = React.useState<string[]>([])
+    const [modeDeliveryFilter, setModeDeliveryFilter] = React.useState<string[]>([])
     const [viewMode, setViewMode] = React.useState<"standard" | "sheet">("standard")
     const [sheetSelection, setSheetSelection] = React.useState<SheetSelection | null>(null)
     const [isSelectingRange, setIsSelectingRange] = React.useState(false)
@@ -321,6 +322,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             if (matGrpFilter.length > 0 && (!record.materialGroup || !matGrpFilter.includes(record.materialGroup))) return false;
             if (matGrpDescFilter.length > 0 && (!record.matGrpDesc || !matGrpDescFilter.includes(record.matGrpDesc))) return false;
             if (noInvSapFilter.length > 0 && (!record.noInvSap || !noInvSapFilter.includes(record.noInvSap))) return false;
+            if (modeDeliveryFilter.length > 0 && (!record.modeDelivery || !modeDeliveryFilter.includes(record.modeDelivery))) return false;
 
             if (globalFilter) {
                 const search = globalFilter.toLowerCase();
@@ -341,7 +343,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
 
             return true;
         });
-    }, [records, dateRange, customerFilter, revTypeFilter, plantFilter, yearFilter, monthFilter, matGrpFilter, matGrpDescFilter, noInvSapFilter, globalFilter]);
+    }, [records, dateRange, customerFilter, revTypeFilter, plantFilter, yearFilter, monthFilter, matGrpFilter, matGrpDescFilter, noInvSapFilter, modeDeliveryFilter, globalFilter]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uniqueCustomers = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.customer).filter(Boolean))) as string[], [records])
@@ -359,6 +361,8 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     const uniqueMatGrpDescs = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.matGrpDesc).filter(Boolean))) as string[], [records])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uniqueNoInvSaps = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.noInvSap).filter(Boolean))) as string[], [records])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uniqueModeDeliveries = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.modeDelivery).filter(Boolean))) as string[], [records])
 
     const table = useReactTable<BillingRecordDisplay>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -704,6 +708,14 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                             options={uniqueNoInvSaps}
                             selectedValues={noInvSapFilter}
                             onFilterChange={setNoInvSapFilter}
+                        />
+                    )}
+                    {uniqueModeDeliveries.length > 0 && (
+                        <DataTableFacetedFilter
+                            title="Mode Delivery"
+                            options={uniqueModeDeliveries}
+                            selectedValues={modeDeliveryFilter}
+                            onFilterChange={setModeDeliveryFilter}
                         />
                     )}
                 </div>
