@@ -45,6 +45,8 @@ import type { BillingRecordDisplay } from "@/lib/types"
 import { normalizeCodeValue } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 
+const BLANK_MODE_DELIVERY_FILTER = "(Blank)"
+
 const EDITABLE_COLUMN_CONFIG: Record<string, { type: "text" | "date" | "select"; options?: string[] }> = {
     noInvSap: { type: "text" },
     dateInvoice: { type: "date" },
@@ -322,7 +324,12 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             if (matGrpFilter.length > 0 && (!record.materialGroup || !matGrpFilter.includes(record.materialGroup))) return false;
             if (matGrpDescFilter.length > 0 && (!record.matGrpDesc || !matGrpDescFilter.includes(record.matGrpDesc))) return false;
             if (noInvSapFilter.length > 0 && (!record.noInvSap || !noInvSapFilter.includes(record.noInvSap))) return false;
-            if (modeDeliveryFilter.length > 0 && (!record.modeDelivery || !modeDeliveryFilter.includes(record.modeDelivery))) return false;
+            if (modeDeliveryFilter.length > 0) {
+                const modeDelivery = record.modeDelivery?.trim()
+                const matchesBlank = !modeDelivery && modeDeliveryFilter.includes(BLANK_MODE_DELIVERY_FILTER)
+                const matchesValue = Boolean(modeDelivery) && modeDeliveryFilter.includes(modeDelivery)
+                if (!matchesBlank && !matchesValue) return false;
+            }
 
             if (globalFilter) {
                 const search = globalFilter.toLowerCase();
@@ -361,8 +368,18 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     const uniqueMatGrpDescs = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.matGrpDesc).filter(Boolean))) as string[], [records])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uniqueNoInvSaps = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.noInvSap).filter(Boolean))) as string[], [records])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const uniqueModeDeliveries = React.useMemo(() => Array.from(new Set(records.map((r: any) => r.modeDelivery).filter(Boolean))) as string[], [records])
+    const uniqueModeDeliveries = React.useMemo(() => {
+        const normalizedValues = Array.from(new Set(
+            records
+                .map((r: BillingRecordDisplay) => r.modeDelivery?.trim())
+                .filter(Boolean)
+        )) as string[]
+        const hasBlankModeDelivery = records.some((r: BillingRecordDisplay) => !r.modeDelivery || !String(r.modeDelivery).trim())
+
+        return hasBlankModeDelivery
+            ? [BLANK_MODE_DELIVERY_FILTER, ...normalizedValues]
+            : normalizedValues
+    }, [records])
 
     const table = useReactTable<BillingRecordDisplay>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

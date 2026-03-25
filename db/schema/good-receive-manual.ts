@@ -10,6 +10,7 @@ export const goodReceiveManual = pgTable("good_receive_manual", {
     receiveDate: date("receive_date").notNull(),
     deliveryType: text("delivery_type", { enum: ["Partial", "Complete"] }).notNull(),
     referenceDocument: text("reference_document"),
+    vendorDoUrl: text("vendor_do_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

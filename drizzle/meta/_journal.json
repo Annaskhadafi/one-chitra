@@ -246,6 +246,13 @@
       "when": 1773600000000,
       "tag": "0034_stock_opname_actual_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1774429447688,
+      "tag": "0035_icy_toad",
+      "breakpoints": true
     }
   ]
 }

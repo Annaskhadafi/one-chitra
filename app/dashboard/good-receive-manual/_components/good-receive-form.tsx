@@ -5,10 +5,11 @@ import { useForm, useFieldArray, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Loader2, PackagePlus, FileText, Check, ChevronsUpDown } from "lucide-react"
+import { CalendarIcon, Loader2, PackagePlus, FileText, Check, ChevronsUpDown, ImageIcon, Mail, ExternalLink, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
+import { uploadFile } from "@/app/actions/upload"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -18,6 +19,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Calendar } from "@/components/ui/calendar"
 import { Separator } from "@/components/ui/separator"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -28,6 +30,7 @@ const formSchema = z.object({
     receiveDate: z.date(),
     deliveryType: z.enum(["Partial", "Complete"]),
     referenceDocument: z.string().optional(),
+    vendorDoUrl: z.string().optional(),
     notifyRoles: z.array(z.string()).optional(),
     notifyUserIds: z.array(z.string()).optional(),
     items: z.array(z.object({
@@ -49,9 +52,17 @@ type GoodReceiveFormProps = {
     notificationUsers?: { id: string; name: string | null; email: string | null; role: string | null }[]
 }
 
-export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions = [], productOptions = [] }: GoodReceiveFormProps) {
+export function GoodReceiveForm({
+    warehouses = [],
+    poOptions = [],
+    poLineOptions = [],
+    productOptions = [],
+    notificationRoles = [],
+    notificationUsers = [],
+}: GoodReceiveFormProps) {
     const router = useRouter()
     const [poOpen, setPoOpen] = useState(false)
+    const [isUploadingVendorDo, setIsUploadingVendorDo] = useState(false)
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
         defaultValues: {
@@ -60,6 +71,7 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
             receiveDate: new Date(),
             deliveryType: "Complete",
             referenceDocument: "",
+            vendorDoUrl: "",
             notifyRoles: [],
             notifyUserIds: [],
             items: [],
@@ -77,6 +89,9 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
     const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === selectedWarehouseId)
     const availableLines = poLineOptions.filter((line) => line.poNumber === selectedPoNumber)
     const productMap = new Map(productOptions.map((product) => [product.id, product]))
+    const vendorDoUrl = form.watch("vendorDoUrl")
+    const selectedNotifyRoles = form.watch("notifyRoles") ?? []
+    const selectedNotifyUserIds = form.watch("notifyUserIds") ?? []
 
     useEffect(() => {
         if (!selectedPoNumber) {
@@ -120,7 +135,13 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
         try {
             const result = await createGoodReceiveManual(values)
             if (result.success) {
-                toast.success("Good receive created successfully")
+                if (result.notification?.sent) {
+                    toast.success(`Good receive created successfully and email sent to ${result.notification.recipientCount ?? 0} recipient(s)`)
+                } else if (result.notification && !result.notification.sent) {
+                    toast.warning(`Good receive saved, but email was not sent${result.notification.reason ? `: ${result.notification.reason}` : ""}`)
+                } else {
+                    toast.success("Good receive created successfully")
+                }
                 router.refresh()
                 router.push("/dashboard/good-receive-manual")
             } else {
@@ -132,6 +153,38 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
     }
 
     const isSubmitting = form.formState.isSubmitting
+    const vendorDoIsPdf = /\.pdf($|\?)/i.test(vendorDoUrl || "")
+
+    const toggleSelection = (fieldName: "notifyRoles" | "notifyUserIds", value: string, checked: boolean) => {
+        const current = form.getValues(fieldName) ?? []
+        const next = checked ? Array.from(new Set([...current, value])) : current.filter((entry) => entry !== value)
+        form.setValue(fieldName, next, { shouldDirty: true })
+    }
+
+    const handleVendorDoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsUploadingVendorDo(true)
+        try {
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const result = await uploadFile(formData)
+            if (!result.success || !result.url) {
+                toast.error(result.error || "Failed to upload Foto DO Vendor")
+                return
+            }
+
+            form.setValue("vendorDoUrl", result.url, { shouldDirty: true, shouldValidate: true })
+            toast.success("Foto DO Vendor uploaded")
+        } catch {
+            toast.error("An error occurred while uploading Foto DO Vendor")
+        } finally {
+            setIsUploadingVendorDo(false)
+            event.target.value = ""
+        }
+    }
 
     return (
         <Form {...form}>
@@ -325,6 +378,83 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                         </FormItem>
                                     )}
                                 />
+
+                                <FormField
+                                    control={form.control}
+                                    name="vendorDoUrl"
+                                    render={() => (
+                                        <FormItem className="md:col-span-2">
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</FormLabel>
+                                            <div className="rounded-lg border border-dashed p-4 space-y-3">
+                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium">Upload foto atau PDF DO vendor</p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            File ini akan tampil di tabel GR Manual dan ikut dikirim sebagai attachment email jika notifikasi dipilih.
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Input
+                                                            type="file"
+                                                            accept="image/*,application/pdf"
+                                                            onChange={handleVendorDoUpload}
+                                                            disabled={isUploadingVendorDo || isSubmitting}
+                                                            className="max-w-[280px] text-xs"
+                                                        />
+                                                        {isUploadingVendorDo && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                                                    </div>
+                                                </div>
+
+                                                {vendorDoUrl ? (
+                                                    <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                                                        <div className="flex flex-wrap items-center gap-2 justify-between">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <ImageIcon className="h-4 w-4 text-indigo-500" />
+                                                                <span className="text-sm font-medium truncate">DO Vendor uploaded</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Button type="button" variant="outline" size="sm" asChild>
+                                                                    <a href={vendorDoUrl} target="_blank" rel="noreferrer">
+                                                                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                                                                        View File
+                                                                    </a>
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => form.setValue("vendorDoUrl", "", { shouldDirty: true, shouldValidate: true })}
+                                                                >
+                                                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                                                    Remove
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                        {vendorDoIsPdf ? (
+                                                            <iframe
+                                                                src={vendorDoUrl}
+                                                                title="Vendor DO Preview"
+                                                                className="w-full h-[320px] rounded-md border bg-white"
+                                                            />
+                                                        ) : (
+                                                            // eslint-disable-next-line @next/next/no-img-element
+                                                            <img
+                                                                src={vendorDoUrl}
+                                                                alt="Foto DO Vendor"
+                                                                className="max-h-[320px] rounded-md border object-contain bg-white"
+                                                            />
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Belum ada file DO vendor yang diunggah.
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
                         </CardContent>
                     </Card>
@@ -459,6 +589,71 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                     {form.formState.errors.items.root.message}
                                 </p>
                             )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4 text-indigo-500" />
+                                <CardTitle className="text-base">Email Notification</CardTitle>
+                            </div>
+                            <CardDescription className="text-xs">
+                                Pilih penerima email. Ringkasan hasil GR manual dan file Foto DO Vendor akan ikut dikirim saat submit.
+                            </CardDescription>
+                        </CardHeader>
+                        <Separator />
+                        <CardContent className="pt-5 space-y-5">
+                            <div className="grid gap-5 lg:grid-cols-2">
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-sm font-medium">Notify Roles</p>
+                                        <p className="text-xs text-muted-foreground">Semua user dengan role yang dipilih akan menerima email.</p>
+                                    </div>
+                                    <div className="rounded-lg border p-3 space-y-3">
+                                        {notificationRoles.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">Tidak ada role yang tersedia.</p>
+                                        ) : (
+                                            notificationRoles.map((role) => (
+                                                <label key={role} className="flex items-start gap-3 text-sm">
+                                                    <Checkbox
+                                                        checked={selectedNotifyRoles.includes(role)}
+                                                        onCheckedChange={(checked) => toggleSelection("notifyRoles", role, checked === true)}
+                                                    />
+                                                    <span>{role}</span>
+                                                </label>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-sm font-medium">Notify Users</p>
+                                        <p className="text-xs text-muted-foreground">Tambahkan penerima spesifik di luar atau di samping role di atas.</p>
+                                    </div>
+                                    <div className="rounded-lg border p-3 space-y-3 max-h-[240px] overflow-y-auto">
+                                        {notificationUsers.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">Tidak ada user yang tersedia.</p>
+                                        ) : (
+                                            notificationUsers.map((user) => (
+                                                <label key={user.id} className="flex items-start gap-3 text-sm">
+                                                    <Checkbox
+                                                        checked={selectedNotifyUserIds.includes(user.id)}
+                                                        onCheckedChange={(checked) => toggleSelection("notifyUserIds", user.id, checked === true)}
+                                                    />
+                                                    <span className="flex flex-col">
+                                                        <span>{user.name || user.email || user.id}</span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {user.email || "Tanpa email"}{user.role ? ` • ${user.role}` : ""}
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
 

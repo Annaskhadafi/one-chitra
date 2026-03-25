@@ -8,6 +8,7 @@ import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
+import { readManagedUpload } from "@/lib/upload-storage"
 
 export type ManualGoodReceivePoOption = {
     poNumber: string
@@ -100,6 +101,7 @@ function buildGoodReceiveManualNotificationContent(params: {
     deliveryType: "Partial" | "Complete"
     warehouseLabel: string
     referenceDocument?: string | null
+    vendorDoUrl?: string | null
     detailUrl: string
     items: Array<{
         poItem: number
@@ -327,6 +329,7 @@ export type CreateGoodReceiveManualInput = {
     receiveDate: Date
     deliveryType: "Partial" | "Complete"
     referenceDocument?: string
+    vendorDoUrl?: string
     notifyRoles?: string[]
     notifyUserIds?: string[]
     items: {
@@ -345,6 +348,7 @@ type ManualGoodReceiveNotificationPayload = {
     receiveDate: string
     deliveryType: "Partial" | "Complete"
     referenceDocument: string | null | undefined
+    vendorDoUrl: string | null | undefined
     warehouseId: number
     items: Array<{
         poItem: number
@@ -448,6 +452,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 receiveDate: input.receiveDate.toISOString(),
                 deliveryType: input.deliveryType,
                 referenceDocument: input.referenceDocument,
+                vendorDoUrl: input.vendorDoUrl,
             }).returning()
 
             const payload: ManualGoodReceiveNotificationPayload = {
@@ -456,6 +461,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 receiveDate: input.receiveDate.toISOString(),
                 deliveryType: input.deliveryType,
                 referenceDocument: input.referenceDocument,
+                vendorDoUrl: input.vendorDoUrl,
                 warehouseId: input.warehouseId,
                 items: resolvedItems
                     .filter((item) => item.quantity > 0)
@@ -570,6 +576,26 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     const warehouseLabel = warehouse?.sloc
                         ? `${warehouse.sloc}${warehouse.description ? ` - ${warehouse.description}` : ""}`
                         : "-"
+                    const vendorDoUrl = payload.vendorDoUrl?.trim() || ""
+                    const vendorDoLink = vendorDoUrl
+                        ? `<a href="${escapeHtml(vendorDoUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto DO Vendor</a>`
+                        : "-"
+                    const attachments: Array<{
+                        filename: string
+                        content: Buffer
+                        contentType?: string
+                    }> = []
+
+                    if (vendorDoUrl) {
+                        const vendorDoUpload = await readManagedUpload(vendorDoUrl)
+                        if (vendorDoUpload) {
+                            attachments.push({
+                                filename: vendorDoUpload.filename,
+                                content: vendorDoUpload.buffer,
+                                contentType: vendorDoUpload.contentType,
+                            })
+                        }
+                    }
 
                     const { itemsTableRows, itemsTextRows } = buildGoodReceiveManualNotificationContent({
                         poNumber: payload.poNumber,
@@ -578,6 +604,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                         deliveryType: payload.deliveryType,
                         warehouseLabel,
                         referenceDocument: payload.referenceDocument,
+                        vendorDoUrl,
                         detailUrl,
                         items: payload.items,
                     })
@@ -592,10 +619,13 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                             deliveryType: payload.deliveryType,
                             warehouseLabel,
                             referenceDocument: payload.referenceDocument?.trim() || "-",
+                            vendorDoLink,
+                            vendorDoText: vendorDoUrl || "-",
                             detailUrl,
                             itemsTableRows,
                             itemsTextRows,
                         },
+                        attachments,
                     })
 
                     if (!emailResult.success) {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, PackageOpen, CheckCircle2, Clock3, Inbox } from "lucide-react";
+import { Plus, PackageOpen, CheckCircle2, Clock3, Inbox, ExternalLink, ImageIcon } from "lucide-react";
 import Link from "next/link";
 import {
     Table,
@@ -15,7 +15,47 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
+
+function VendorDoViewer({ url }: { url: string | null }) {
+    if (!url) {
+        return <span className="text-muted-foreground/50">—</span>;
+    }
+
+    const isPdf = /\.pdf($|\?)/i.test(url);
+
+    return (
+        <Dialog>
+            <div className="flex items-center gap-2">
+                <DialogTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                        <ImageIcon className="mr-2 h-3.5 w-3.5" />
+                        View DO
+                    </Button>
+                </DialogTrigger>
+                <Button type="button" variant="ghost" size="icon" asChild className="h-8 w-8">
+                    <a href={url} target="_blank" rel="noreferrer" aria-label="Open DO Vendor in new tab">
+                        <ExternalLink className="h-4 w-4" />
+                    </a>
+                </Button>
+            </div>
+            <DialogContent className="sm:max-w-4xl h-[85vh] p-0 overflow-hidden flex flex-col">
+                <DialogHeader className="px-6 pt-6 pb-2">
+                    <DialogTitle>Foto DO Vendor</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 px-6 pb-6">
+                    {isPdf ? (
+                        <iframe src={url} title="Vendor DO Preview" className="h-full w-full rounded-md border bg-white" />
+                    ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={url} alt="Foto DO Vendor" className="h-full w-full rounded-md border object-contain bg-white" />
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 export default async function GoodReceiveManualPage() {
     const data = await db.query.goodReceiveManual.findMany({
@@ -143,6 +183,12 @@ export default async function GoodReceiveManualPage() {
                                             <p className="text-[11px] text-muted-foreground">Ref. Doc</p>
                                             <p className="text-xs font-mono break-all">{item.referenceDocument || "—"}</p>
                                         </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Foto DO Vendor</p>
+                                            <div className="mt-1">
+                                                <VendorDoViewer url={item.vendorDoUrl} />
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -156,6 +202,7 @@ export default async function GoodReceiveManualPage() {
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delivery Type</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ref. Doc</TableHead>
+                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Created At</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -188,6 +235,9 @@ export default async function GoodReceiveManualPage() {
                                                 </TableCell>
                                                 <TableCell className="text-sm text-muted-foreground font-mono text-xs">
                                                     {item.referenceDocument || <span className="text-muted-foreground/50">—</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <VendorDoViewer url={item.vendorDoUrl} />
                                                 </TableCell>
                                                 <TableCell className="text-right text-xs text-muted-foreground">
                                                     {format(new Date(item.createdAt), "dd MMM yyyy HH:mm")}

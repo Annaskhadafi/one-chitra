@@ -194,6 +194,7 @@ const goodReceiveTemplate = createEmailShell({
         { label: "Delivery Type", value: "{{deliveryType}}" },
         { label: "Warehouse", value: "{{warehouseLabel}}" },
         { label: "Ref. Document", value: "{{referenceDocument}}" },
+        { label: "Foto DO Vendor", value: "{{vendorDoLink}}" },
         { label: "Detail URL", value: "{{detailUrl}}" },
       ])}
       <h3 style="margin:0 0 10px;font-size:16px;color:#0f172a;">Detail Item Diterima</h3>
@@ -605,7 +606,7 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplateDefinition[] = [
         name: "Good Receive Manual Notification",
         type: "notification",
         subject: "[GR Manual] Barang datang untuk PO {{poNumber}}",
-        variables: ["poNumber", "supplier", "receiveDate", "deliveryType", "warehouseLabel", "referenceDocument", "detailUrl", "itemsTableRows", "itemsTextRows"],
+        variables: ["poNumber", "supplier", "receiveDate", "deliveryType", "warehouseLabel", "referenceDocument", "vendorDoLink", "vendorDoText", "detailUrl", "itemsTableRows", "itemsTextRows"],
         recipientRoles: ["admin", "manager", "staff"],
         recipientUserIds: [],
         ccEmails: [],
@@ -618,6 +619,7 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplateDefinition[] = [
             "Delivery Type: {{deliveryType}}",
             "Warehouse: {{warehouseLabel}}",
             "Ref. Document: {{referenceDocument}}",
+            "Foto DO Vendor: {{vendorDoText}}",
             "Detail URL: {{detailUrl}}",
             "",
             "Detail Item Diterima:",
