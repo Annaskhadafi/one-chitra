@@ -222,14 +222,16 @@ export function GoodReceiveForm({
                                                             role="combobox"
                                                             aria-expanded={poOpen}
                                                             className={cn(
-                                                                "w-full justify-between font-normal focus-visible:ring-indigo-500",
+                                                                "h-auto min-h-10 w-full justify-between gap-2 whitespace-normal text-left font-normal focus-visible:ring-indigo-500",
                                                                 !field.value && "text-muted-foreground"
                                                             )}
                                                         >
-                                                            {field.value
-                                                                ? `${field.value} - ${selectedPo?.vendorName ?? ""}`
-                                                                : "Search PO number"}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            <span className="min-w-0 break-words">
+                                                                {field.value
+                                                                    ? `${field.value} - ${selectedPo?.vendorName ?? ""}`
+                                                                    : "Search PO number"}
+                                                            </span>
+                                                            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                                                         </Button>
                                                     </FormControl>
                                                 </PopoverTrigger>
@@ -480,6 +482,125 @@ export function GoodReceiveForm({
                         <Separator />
                         <CardContent className="pt-0 px-0 pb-0">
                             <div className="rounded-b-lg overflow-hidden">
+                                <div className="divide-y md:hidden">
+                                    {fields.map((field, index) => {
+                                        const selectedPoItem = form.watch(`items.${index}.poItem`)
+                                        const selectedLine = availableLines.find((line) => line.poItem === selectedPoItem)
+                                        const selectedProduct = productMap.get(form.watch(`items.${index}.productId`))
+
+                                        return (
+                                            <div key={field.id} className="space-y-4 p-4">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 space-y-1">
+                                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            Item {index + 1}
+                                                        </p>
+                                                        <p className="font-mono text-sm font-semibold break-all">
+                                                            {selectedLine?.materialNumber ?? "-"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                                                        PO Item {selectedPoItem || "-"}
+                                                    </div>
+                                                </div>
+
+                                                <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                                                    <div>
+                                                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            Description
+                                                        </p>
+                                                        <p className="mt-1 text-sm break-words">
+                                                            {selectedLine?.materialDescription ?? "-"}
+                                                        </p>
+                                                    </div>
+
+                                                    <div>
+                                                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            Internal Product
+                                                        </p>
+                                                        <div className="mt-1 text-sm text-muted-foreground break-words">
+                                                            {selectedProduct
+                                                                ? `${selectedProduct.materialNumber} - ${selectedProduct.materialDescription ?? "-"}`
+                                                                : selectedLine
+                                                                    ? (
+                                                                        <div className="space-y-2">
+                                                                            <p>No internal product mapping</p>
+                                                                            <ProductDialog
+                                                                                initialValues={{
+                                                                                    materialNumber: selectedLine.materialNumber,
+                                                                                    materialDescription: selectedLine.materialDescription,
+                                                                                    sloc: selectedWarehouse?.sloc ?? "",
+                                                                                    slocDescription: selectedWarehouse?.description ?? "",
+                                                                                }}
+                                                                                onSuccess={() => router.refresh()}
+                                                                                trigger={
+                                                                                    <Button type="button" variant="outline" size="sm" className="w-full">
+                                                                                        Register Product
+                                                                                    </Button>
+                                                                                }
+                                                                            />
+                                                                        </div>
+                                                                    )
+                                                                    : "-"}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                        <div>
+                                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                Open Qty
+                                                            </p>
+                                                            <p className="mt-1 text-sm font-medium">
+                                                                {selectedLine?.openQty ?? 0}
+                                                            </p>
+                                                        </div>
+
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`items.${index}.quantity`}
+                                                            render={({ field }) => (
+                                                                <FormItem className="space-y-2">
+                                                                    <FormLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                        Quantity
+                                                                    </FormLabel>
+                                                                    <FormControl>
+                                                                        <Input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            max={selectedLine?.openQty ?? 0}
+                                                                            className="focus-visible:ring-indigo-500"
+                                                                            {...field}
+                                                                            onChange={(e) => field.onChange(Number(e.target.value))}
+                                                                        />
+                                                                    </FormControl>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+                                                    </div>
+
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`items.${index}.notes`}
+                                                        render={({ field }) => (
+                                                            <FormItem className="space-y-2">
+                                                                <FormLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                    Notes
+                                                                </FormLabel>
+                                                                <FormControl>
+                                                                    <Input placeholder="Optional notes..." className="focus-visible:ring-indigo-500" {...field} />
+                                                                </FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                <div className="hidden md:block">
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -578,6 +699,7 @@ export function GoodReceiveForm({
                                         })}
                                     </TableBody>
                                 </Table>
+                                </div>
                             </div>
                             {!selectedPoNumber && (
                                 <p className="px-4 py-3 text-sm text-muted-foreground">

@@ -143,6 +143,17 @@ function buildGoodReceiveManualNotificationContent(params: {
 
 export async function getManualGoodReceivePoOptions() {
     try {
+        const existingManualHeaders = await db.query.goodReceiveManual.findMany({
+            columns: {
+                poNumber: true,
+            },
+        })
+        const existingManualPoNumbers = new Set(
+            existingManualHeaders
+                .map((entry) => entry.poNumber?.trim())
+                .filter((poNumber): poNumber is string => Boolean(poNumber))
+        )
+
         const sapRows = await db.query.me2lPurchDocsSap.findMany({
             where: and(
                 isNull(me2lPurchDocsSap.grProcessedDate),
@@ -158,6 +169,7 @@ export async function getManualGoodReceivePoOptions() {
         const latestByPoItem = buildLatestPoItemMap(sapRows)
         const latestRows = Array.from(latestByPoItem.values()).filter((row) =>
             sanitizeOpenQty(row.orderQty, row.deliveredQty) > 0
+            && !existingManualPoNumbers.has(row.purchasingDoc?.trim() || "")
         )
 
         const materialNumbers = Array.from(new Set(
@@ -370,6 +382,16 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
             if (!poNumber) throw new Error("PO Number is required")
             if (!input.warehouseId || input.warehouseId <= 0) {
                 throw new Error("Warehouse is required")
+            }
+
+            const existingManualHeader = await tx.query.goodReceiveManual.findFirst({
+                where: eq(goodReceiveManual.poNumber, poNumber),
+                columns: {
+                    id: true,
+                },
+            })
+            if (existingManualHeader) {
+                throw new Error(`PO ${poNumber} sudah pernah dibuat di GR Manual`)
             }
 
             const poItems = input.items.map((item) => item.poItem)
