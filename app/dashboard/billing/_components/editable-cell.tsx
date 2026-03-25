@@ -6,10 +6,18 @@ import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { normalizeCodeValue } from "@/lib/formatters"
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ClipboardPaste } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { BillingRecordDisplay } from "@/lib/types"
+
+interface EditableTableMeta {
+    isSheetMode?: boolean
+    isCellSelected?: (rowIndex: number, columnId: string) => boolean
+    handleCellMouseDown?: (rowIndex: number, columnId: string) => void
+    handleCellMouseEnter?: (rowIndex: number, columnId: string) => void
+    updateData?: (poNo: string, columnId: string, value: unknown) => void
+    onMassUpdate?: (rowIndex: number, columnId: string, values: string[]) => void
+}
 
 interface EditableCellProps {
     row: {
@@ -19,7 +27,7 @@ interface EditableCellProps {
     column: string
     type?: "text" | "number" | "date" | "select"
     options?: string[]
-    tableMeta?: any
+    tableMeta?: EditableTableMeta
     rowIndex?: number
 }
 
@@ -27,6 +35,12 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
     const initialValue = row.getValue(column)
     const [value, setValue] = useState(initialValue)
     const [isEditing, setIsEditing] = useState(false)
+    const isSheetMode = Boolean(tableMeta?.isSheetMode)
+    const isSelected = Boolean(
+        isSheetMode &&
+        rowIndex !== undefined &&
+        tableMeta?.isCellSelected?.(rowIndex, column)
+    )
 
     useEffect(() => {
         setValue(initialValue)
@@ -199,9 +213,27 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
         <div
             className={cn(
                 "group relative flex h-8 min-h-[2rem] w-full cursor-pointer items-center justify-between truncate rounded px-2 hover:bg-muted",
-                !value && "text-muted-foreground italic"
+                !value && "text-muted-foreground italic",
+                isSheetMode && "h-9 rounded-sm border border-transparent px-1.5",
+                isSelected && "bg-emerald-100 ring-1 ring-emerald-500 hover:bg-emerald-100"
             )}
-            onClick={() => setIsEditing(true)}
+            onClick={() => {
+                if (!isSheetMode) {
+                    setIsEditing(true)
+                }
+            }}
+            onDoubleClick={() => setIsEditing(true)}
+            onMouseDown={(event) => {
+                if (isSheetMode && rowIndex !== undefined) {
+                    event.preventDefault()
+                    tableMeta?.handleCellMouseDown?.(rowIndex, column)
+                }
+            }}
+            onMouseEnter={() => {
+                if (isSheetMode && rowIndex !== undefined) {
+                    tableMeta?.handleCellMouseEnter?.(rowIndex, column)
+                }
+            }}
         >
             <span className="truncate pr-6">
                 {type === "date" && value
@@ -213,7 +245,10 @@ export function EditableCell({ row, column, type = "text", options, tableMeta, r
             <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-1 h-6 w-6 opacity-0 transition-opacity bg-background/80 hover:bg-background group-hover:opacity-100 shadow-sm"
+                className={cn(
+                    "absolute right-1 h-6 w-6 opacity-0 transition-opacity bg-background/80 hover:bg-background group-hover:opacity-100 shadow-sm",
+                    isSheetMode && "hidden"
+                )}
                 onClick={handleDirectPaste}
                 title="Paste isi Clipboard ke sel ini"
             >

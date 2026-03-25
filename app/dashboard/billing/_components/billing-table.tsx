@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { DataTableFacetedFilter } from "./data-table-faceted-filter"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Table,
     TableBody,
@@ -42,6 +43,33 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { BillingRecordDisplay } from "@/lib/types"
 import { normalizeCodeValue } from "@/lib/formatters"
+import { cn } from "@/lib/utils"
+
+const EDITABLE_COLUMN_CONFIG: Record<string, { type: "text" | "date" | "select"; options?: string[] }> = {
+    noInvSap: { type: "text" },
+    dateInvoice: { type: "date" },
+    custId: { type: "text" },
+    salesName: { type: "text" },
+    ddpAddress: { type: "text" },
+    paymentType: { type: "text" },
+    nomorDoSap: { type: "text" },
+    actualNoDo: { type: "text" },
+    tglDoFaktur: { type: "date" },
+    dateSendInvoice: { type: "date" },
+    modeDelivery: { type: "select", options: ["JNE", "PORTAL", "HANDCARRY", "PANDUSIWI", "CENDANA", "BYEMAIL", "TIKI", "WAHANA", "POS"] },
+    noResi: { type: "text" },
+    statusDelivery: { type: "text" },
+    receiverDate: { type: "date" },
+    recvDateApproved: { type: "date" },
+    eFaktur: { type: "text" },
+}
+
+type SheetSelection = {
+    startRowIndex: number
+    endRowIndex: number
+    startColumnId: string
+    endColumnId: string
+}
 
 export function BillingTable({ data: initialData }: { data: BillingRecordDisplay[] }) {
     const queryClient = useQueryClient();
@@ -82,22 +110,28 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
     const [matGrpFilter, setMatGrpFilter] = React.useState<string[]>([])
     const [matGrpDescFilter, setMatGrpDescFilter] = React.useState<string[]>([])
     const [noInvSapFilter, setNoInvSapFilter] = React.useState<string[]>([])
+    const [viewMode, setViewMode] = React.useState<"standard" | "sheet">("standard")
+    const [sheetSelection, setSheetSelection] = React.useState<SheetSelection | null>(null)
+    const [isSelectingRange, setIsSelectingRange] = React.useState(false)
 
     // Sheet State
     const [sheetOpen, setSheetOpen] = React.useState(false)
     const [selectedRecord, setSelectedRecord] = React.useState<BillingRecordDisplay | null>(null)
     const router = useRouter()
+    const parentRef = React.useRef<HTMLDivElement>(null)
+    const currentRowsRef = React.useRef<Array<{ index: number; original: BillingRecordDisplay }>>([])
+    const visibleEditableColumnIdsRef = React.useRef<string[]>([])
 
-    const handleEdit = (record: BillingRecordDisplay) => {
+    const handleEdit = React.useCallback((record: BillingRecordDisplay) => {
         setSelectedRecord(record)
         setSheetOpen(true)
-    }
+    }, [])
 
-    const handleView = (record: BillingRecordDisplay) => {
+    const handleView = React.useCallback((record: BillingRecordDisplay) => {
         router.push(`/dashboard/billing/${encodeURIComponent(record.poNo)}`)
-    }
+    }, [router])
 
-    const handleDelete = async (poNo: string) => {
+    const handleDelete = React.useCallback(async (poNo: string) => {
         if (confirm("Are you sure you want to delete the billing data for this PO? This will reset custom fields.")) {
             try {
                 const result = await deleteBillingRecord(poNo)
@@ -111,7 +145,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 toast.error("Failed to delete billing data")
             }
         }
-    }
+    }, [refetch])
 
     const [isRefreshingJne, setIsRefreshingJne] = React.useState(false)
 
@@ -135,14 +169,14 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         let failed = 0
         const toastId = toast.loading(`Refreshing 0/${toRefresh.length} resi JNE...`)
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const r of toRefresh) {
             try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const result = await trackJneResi(String((r as any).noResi).trim())
+                const result = await trackJneResi(String(r.noResi).trim())
                 if (result.success && result.data) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const updates: any = { poNo: (r as any).poNo, statusDelivery: result.data.statusAction }
+                    const updates: { poNo: string; statusDelivery: string; receiverDate?: string | null } = {
+                        poNo: r.poNo,
+                        statusDelivery: result.data.statusAction,
+                    }
                     if (result.data.receiverDate) updates.receiverDate = result.data.receiverDate
                     await updateBillingRecord(updates)
                     success++
@@ -199,6 +233,70 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         document.body.removeChild(link)
     }
 
+    const normalizeSelection = React.useCallback((selection: SheetSelection | null) => {
+        if (!selection) return null
+
+        const rowIndexes = currentRowsRef.current.map((row) => row.index)
+        const startRowPosition = rowIndexes.indexOf(selection.startRowIndex)
+        const endRowPosition = rowIndexes.indexOf(selection.endRowIndex)
+        const startColumnPosition = visibleEditableColumnIdsRef.current.indexOf(selection.startColumnId)
+        const endColumnPosition = visibleEditableColumnIdsRef.current.indexOf(selection.endColumnId)
+
+        if (startRowPosition === -1 || endRowPosition === -1 || startColumnPosition === -1 || endColumnPosition === -1) {
+            return null
+        }
+
+        return {
+            top: Math.min(startRowPosition, endRowPosition),
+            bottom: Math.max(startRowPosition, endRowPosition),
+            left: Math.min(startColumnPosition, endColumnPosition),
+            right: Math.max(startColumnPosition, endColumnPosition),
+        }
+    }, [])
+
+    const handleCellMouseDown = React.useCallback((rowIndex: number, columnId: string) => {
+        if (viewMode !== "sheet" || !EDITABLE_COLUMN_CONFIG[columnId]) return
+
+        parentRef.current?.focus()
+        setIsSelectingRange(true)
+        setSheetSelection({
+            startRowIndex: rowIndex,
+            endRowIndex: rowIndex,
+            startColumnId: columnId,
+            endColumnId: columnId,
+        })
+    }, [viewMode])
+
+    const handleCellMouseEnter = React.useCallback((rowIndex: number, columnId: string) => {
+        if (!isSelectingRange || viewMode !== "sheet" || !EDITABLE_COLUMN_CONFIG[columnId]) return
+
+        setSheetSelection((previous) => {
+            if (!previous) return previous
+            return {
+                ...previous,
+                endRowIndex: rowIndex,
+                endColumnId: columnId,
+            }
+        })
+    }, [isSelectingRange, viewMode])
+
+    const isCellSelected = React.useCallback((rowIndex: number, columnId: string) => {
+        const normalized = normalizeSelection(sheetSelection)
+        if (!normalized) return false
+
+        const rowPosition = currentRowsRef.current.findIndex((row) => row.index === rowIndex)
+        const columnPosition = visibleEditableColumnIdsRef.current.indexOf(columnId)
+
+        if (rowPosition === -1 || columnPosition === -1) return false
+
+        return (
+            rowPosition >= normalized.top &&
+            rowPosition <= normalized.bottom &&
+            columnPosition >= normalized.left &&
+            columnPosition <= normalized.right
+        )
+    }, [normalizeSelection, sheetSelection])
+
     const { hasResourcePermission } = usePermissions()
     const canCreate = hasResourcePermission('billing', 'create')
     const canEdit = hasResourcePermission('billing', 'edit')
@@ -208,7 +306,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         canEdit ? handleEdit : () => toast.error("No permission"),
         canDelete ? handleDelete : () => toast.error("No permission"),
         handleView
-    ), [canEdit, canDelete, handleDelete])
+    ), [canEdit, canDelete, handleDelete, handleEdit, handleView])
 
     // Manual client-side filter
     const filteredRecords = React.useMemo(() => {
@@ -288,8 +386,12 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             pagination,
         },
         meta: {
-            updateData: (poNo: string, columnId: string, value: any) => {
-                queryClient.setQueryData(["billing-records"], (old: any[]) => {
+            isSheetMode: viewMode === "sheet",
+            handleCellMouseDown,
+            handleCellMouseEnter,
+            isCellSelected,
+            updateData: (poNo: string, columnId: string, value: unknown) => {
+                queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
                     if (!old) return old;
                     return old.map(record => {
                         if (record.poNo === poNo) return { ...record, [columnId]: value }
@@ -341,7 +443,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 }
 
                 // Optimistic Local Query Cache update
-                queryClient.setQueryData(["billing-records"], (old: any[]) => {
+                queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
                     if (!old) return old;
                     return old.map(record => {
                         if (poNosToUpdate.has(record.poNo)) {
@@ -365,6 +467,8 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         }
     })
 
+    const { rows } = table.getRowModel()
+
     // Auto expand rows if Mat Grp Desc filter is active
     React.useEffect(() => {
         if (matGrpDescFilter.length > 0) {
@@ -372,9 +476,29 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         }
     }, [matGrpDescFilter, table]);
 
-    // Virtualization
-    const parentRef = React.useRef<HTMLDivElement>(null)
-    const { rows } = table.getRowModel()
+    React.useEffect(() => {
+        currentRowsRef.current = rows.map((row) => ({
+            index: row.index,
+            original: row.original,
+        }))
+        visibleEditableColumnIdsRef.current = table
+            .getVisibleLeafColumns()
+            .map((column) => column.id)
+            .filter((columnId) => Boolean(EDITABLE_COLUMN_CONFIG[columnId]))
+    }, [table, rows, columnVisibility])
+
+    React.useEffect(() => {
+        const stopSelection = () => setIsSelectingRange(false)
+        window.addEventListener("mouseup", stopSelection)
+        return () => window.removeEventListener("mouseup", stopSelection)
+    }, [])
+
+    React.useEffect(() => {
+        if (viewMode !== "sheet") {
+            setSheetSelection(null)
+            setIsSelectingRange(false)
+        }
+    }, [viewMode])
 
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
@@ -392,6 +516,80 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
 
     const isAllExpanded = table.getIsAllRowsExpanded()
     const toggleAllExpanded = () => table.toggleAllRowsExpanded(!isAllExpanded)
+    const isSheetView = viewMode === "sheet"
+
+    const handleSheetPaste = React.useCallback(async (event: React.ClipboardEvent<HTMLDivElement>) => {
+        if (!isSheetView) return
+
+        const normalized = normalizeSelection(sheetSelection)
+        if (!normalized) return
+
+        const clipboardText = event.clipboardData.getData("text")
+        if (!clipboardText) return
+
+        event.preventDefault()
+
+        const pastedRows = clipboardText
+            .split(/\r?\n/)
+            .filter((row) => row.length > 0)
+            .map((row) => row.split("\t"))
+
+        if (pastedRows.length === 0) return
+
+        const targetRows = currentRowsRef.current.slice(normalized.top, normalized.bottom + 1)
+        const targetColumns = visibleEditableColumnIdsRef.current.slice(normalized.left, normalized.right + 1)
+
+        if (targetRows.length === 0 || targetColumns.length === 0) return
+
+        const updatesByPoNo = new Map<string, Partial<BillingRecordDisplay>>()
+
+        targetRows.forEach((row, rowOffset) => {
+            targetColumns.forEach((columnId, columnOffset) => {
+                const pastedRow = pastedRows[Math.min(rowOffset, pastedRows.length - 1)]
+                const rawValue =
+                    pastedRows.length === 1 && pastedRows[0].length === 1
+                        ? pastedRows[0][0]
+                        : pastedRow?.[Math.min(columnOffset, pastedRow.length - 1)]
+
+                if (rawValue === undefined) return
+
+                const normalizedValue =
+                    columnId === "noInvSap" || columnId === "nomorDoSap" || columnId === "plant"
+                        ? normalizeCodeValue(rawValue)
+                        : rawValue
+
+                const currentPayload = updatesByPoNo.get(row.original.poNo) ?? {}
+                currentPayload[columnId as keyof BillingRecordDisplay] = normalizedValue as never
+                updatesByPoNo.set(row.original.poNo, currentPayload)
+            })
+        })
+
+        if (updatesByPoNo.size === 0) return
+
+        queryClient.setQueryData<BillingRecordDisplay[]>(["billing-records"], (old) => {
+            if (!old) return old
+            return old.map((record) => {
+                const pendingUpdates = updatesByPoNo.get(record.poNo)
+                return pendingUpdates ? { ...record, ...pendingUpdates } : record
+            })
+        })
+
+        const requests = Array.from(updatesByPoNo.entries()).map(([poNo, values]) =>
+            updateBillingRecord({
+                poNo,
+                ...values,
+            })
+        )
+
+        toast.promise(Promise.all(requests), {
+            loading: `Pasting into ${updatesByPoNo.size} row(s)...`,
+            success: () => {
+                refetch()
+                return `Paste berhasil ke ${updatesByPoNo.size} row(s)`
+            },
+            error: "Paste massal gagal",
+        })
+    }, [isSheetView, normalizeSelection, queryClient, refetch, sheetSelection])
 
     if (isLoading) {
         return (
@@ -429,6 +627,19 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                             className="w-[130px] border-0 h-9 p-1 shadow-none focus-visible:ring-0"
                         />
                     </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "standard" | "sheet")} className="gap-0">
+                        <TabsList>
+                            <TabsTrigger value="standard">Standard View</TabsTrigger>
+                            <TabsTrigger value="sheet">Excel-like / Sheet View</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                    <p className="text-xs text-muted-foreground">
+                        {isSheetView
+                            ? "Sheet view mendukung drag-select beberapa sel lalu paste sekali untuk isi blok seperti spreadsheet."
+                            : "Standard view cocok untuk baca detail dengan spacing yang lebih lega."}
+                    </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     {uniqueCustomers.length > 0 && (
@@ -551,17 +762,40 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                 </div>
             </div>
 
-            <div className="rounded-md border bg-card overflow-hidden">
+            <div
+                className={cn(
+                    "overflow-hidden rounded-md border",
+                    isSheetView ? "bg-background shadow-inner" : "bg-card"
+                )}
+            >
                 <div
                     ref={parentRef}
-                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
+                    className={cn(
+                        "relative overflow-auto scrollbar-thin scrollbar-thumb-accent",
+                        isSheetView ? "h-[680px] bg-muted/20" : "h-[600px]"
+                    )}
+                    tabIndex={isSheetView ? 0 : -1}
+                    onPaste={handleSheetPaste}
+                    onMouseUp={() => setIsSelectingRange(false)}
                 >
-                    <Table>
-                        <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                    <Table
+                        className={cn(
+                            isSheetView && "[&_td]:border-r [&_td]:border-border/70 [&_th]:border-r [&_th]:border-border/80 [&_tr]:border-border/80"
+                        )}
+                    >
+                        <TableHeader
+                            className={cn(
+                                "sticky top-0 z-10 shadow-sm",
+                                isSheetView ? "bg-slate-100/95 backdrop-blur supports-[backdrop-filter]:bg-slate-100/80" : "bg-background"
+                            )}
+                        >
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
                                     {headerGroup.headers.map((header) => (
-                                        <TableHead key={header.id}>
+                                        <TableHead
+                                            key={header.id}
+                                            className={cn(isSheetView && "h-9 px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-700")}
+                                        >
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -591,10 +825,16 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                                         >
                                             <TableRow
                                                 data-state={row.getIsSelected() && "selected"}
-                                                className="border-none"
+                                                className={cn(
+                                                    "border-none",
+                                                    isSheetView && "hover:bg-white data-[state=selected]:bg-emerald-50/80"
+                                                )}
                                             >
                                                 {row.getVisibleCells().map((cell) => (
-                                                    <TableCell key={cell.id}>
+                                                    <TableCell
+                                                        key={cell.id}
+                                                        className={cn(isSheetView && "px-2 py-1 text-xs align-top")}
+                                                    >
                                                         {flexRender(
                                                             cell.column.columnDef.cell,
                                                             cell.getContext()
@@ -604,8 +844,19 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                                             </TableRow>
                                             {row.getIsExpanded() && (
                                                 <TableRow className="border-none">
-                                                    <TableCell colSpan={columns.length} className="bg-muted/10 p-0 border-none">
-                                                        <div className="p-4 m-2 rounded-md bg-background border shadow-sm">
+                                                    <TableCell
+                                                        colSpan={columns.length}
+                                                        className={cn(
+                                                            "p-0 border-none",
+                                                            isSheetView ? "bg-white/80" : "bg-muted/10"
+                                                        )}
+                                                    >
+                                                        <div
+                                                            className={cn(
+                                                                "p-4 m-2 rounded-md bg-background border",
+                                                                isSheetView ? "shadow-none" : "shadow-sm"
+                                                            )}
+                                                        >
                                                             <h4 className="font-semibold text-sm mb-3">Item Details (PO: {row.original.poNo})</h4>
                                                             {(() => {
                                                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -614,32 +865,32 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
 
                                                                 return (
                                                                     <div className="rounded-md border overflow-hidden">
-                                                                        <Table>
-                                                                            <TableHeader className="bg-muted">
+                                                                        <Table className={cn(isSheetView && "[&_td]:border-r [&_th]:border-r [&_tr]:border-border/70")}>
+                                                                            <TableHeader className={cn(isSheetView ? "bg-slate-100" : "bg-muted")}>
                                                                                 <TableRow>
-                                                                                    <TableHead>Material No</TableHead>
-                                                                                    <TableHead>Description</TableHead>
-                                                                                    <TableHead>Mat Group</TableHead>
-                                                                                    <TableHead>Mat Grp Desc</TableHead>
-                                                                                    <TableHead className="text-right">Qty</TableHead>
-                                                                                    <TableHead>UOM</TableHead>
-                                                                                    <TableHead>Curr</TableHead>
-                                                                                    <TableHead className="text-right">Price</TableHead>
-                                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>Material No</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>Description</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>Mat Group</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>Mat Grp Desc</TableHead>
+                                                                                    <TableHead className={cn("text-right", isSheetView && "h-8 px-2 text-[10px] uppercase")}>Qty</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>UOM</TableHead>
+                                                                                    <TableHead className={cn(isSheetView && "h-8 px-2 text-[10px] uppercase")}>Curr</TableHead>
+                                                                                    <TableHead className={cn("text-right", isSheetView && "h-8 px-2 text-[10px] uppercase")}>Price</TableHead>
+                                                                                    <TableHead className={cn("text-right", isSheetView && "h-8 px-2 text-[10px] uppercase")}>Total</TableHead>
                                                                                 </TableRow>
                                                                             </TableHeader>
                                                                             <TableBody>
                                                                                 {items.map((item, idx) => (
                                                                                     <TableRow key={idx}>
-                                                                                        <TableCell className="font-medium text-xs md:text-sm">{item.materialNumber}</TableCell>
-                                                                                        <TableCell className="text-xs md:text-sm max-w-[200px] truncate" title={item.materialDescription}>{item.materialDescription}</TableCell>
-                                                                                        <TableCell className="text-xs md:text-sm">{item.materialGroup}</TableCell>
-                                                                                        <TableCell className="text-xs md:text-sm">{item.matGrpDesc}</TableCell>
-                                                                                        <TableCell className="text-right text-xs md:text-sm">{item.qty}</TableCell>
-                                                                                        <TableCell className="text-xs md:text-sm">{item.uom}</TableCell>
-                                                                                        <TableCell className="text-xs md:text-sm">{item.curr}</TableCell>
-                                                                                        <TableCell className="text-right text-xs md:text-sm">{item.price ? Number(item.price).toLocaleString('id-ID') : 0}</TableCell>
-                                                                                        <TableCell className="text-right font-medium text-xs md:text-sm">{item.totalPrice ? Number(item.totalPrice).toLocaleString('id-ID') : 0}</TableCell>
+                                                                                        <TableCell className={cn("font-medium text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.materialNumber}</TableCell>
+                                                                                        <TableCell className={cn("text-xs md:text-sm max-w-[200px] truncate", isSheetView && "px-2 py-1 text-[11px]")} title={item.materialDescription}>{item.materialDescription}</TableCell>
+                                                                                        <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.materialGroup}</TableCell>
+                                                                                        <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.matGrpDesc}</TableCell>
+                                                                                        <TableCell className={cn("text-right text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.qty}</TableCell>
+                                                                                        <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.uom}</TableCell>
+                                                                                        <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.curr}</TableCell>
+                                                                                        <TableCell className={cn("text-right text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.price ? Number(item.price).toLocaleString('id-ID') : 0}</TableCell>
+                                                                                        <TableCell className={cn("text-right font-medium text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.totalPrice ? Number(item.totalPrice).toLocaleString('id-ID') : 0}</TableCell>
                                                                                     </TableRow>
                                                                                 ))}
                                                                             </TableBody>
