@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { Separator } from "@/components/ui/separator"
@@ -63,6 +64,10 @@ export function GoodReceiveForm({
     const router = useRouter()
     const [poOpen, setPoOpen] = useState(false)
     const [isUploadingVendorDo, setIsUploadingVendorDo] = useState(false)
+    const defaultNotifyRoles = notificationRoles.filter((role) => {
+        const normalizedRole = role.trim().toLowerCase()
+        return normalizedRole === "admin" || normalizedRole === "billing"
+    })
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
         defaultValues: {
@@ -72,7 +77,7 @@ export function GoodReceiveForm({
             deliveryType: "Complete",
             referenceDocument: "",
             vendorDoUrl: "",
-            notifyRoles: [],
+            notifyRoles: defaultNotifyRoles,
             notifyUserIds: [],
             items: [],
         },
@@ -593,68 +598,78 @@ export function GoodReceiveForm({
                     </Card>
 
                     <Card className="shadow-sm">
-                        <CardHeader className="pb-4">
-                            <div className="flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-indigo-500" />
-                                <CardTitle className="text-base">Email Notification</CardTitle>
-                            </div>
-                            <CardDescription className="text-xs">
-                                Pilih penerima email. Ringkasan hasil GR manual dan file Foto DO Vendor akan ikut dikirim saat submit.
-                            </CardDescription>
-                        </CardHeader>
-                        <Separator />
-                        <CardContent className="pt-5 space-y-5">
-                            <div className="grid gap-5 lg:grid-cols-2">
-                                <div className="space-y-3">
-                                    <div>
-                                        <p className="text-sm font-medium">Notify Roles</p>
-                                        <p className="text-xs text-muted-foreground">Semua user dengan role yang dipilih akan menerima email.</p>
-                                    </div>
-                                    <div className="rounded-lg border p-3 space-y-3">
-                                        {notificationRoles.length === 0 ? (
-                                            <p className="text-sm text-muted-foreground">Tidak ada role yang tersedia.</p>
-                                        ) : (
-                                            notificationRoles.map((role) => (
-                                                <label key={role} className="flex items-start gap-3 text-sm">
-                                                    <Checkbox
-                                                        checked={selectedNotifyRoles.includes(role)}
-                                                        onCheckedChange={(checked) => toggleSelection("notifyRoles", role, checked === true)}
-                                                    />
-                                                    <span>{role}</span>
-                                                </label>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
+                        <Accordion type="single" collapsible className="w-full">
+                            <AccordionItem value="email-notification" className="border-b-0">
+                                <CardHeader className="pb-0">
+                                    <AccordionTrigger className="py-0 hover:no-underline">
+                                        <div className="text-left">
+                                            <div className="flex items-center gap-2">
+                                                <Mail className="h-4 w-4 text-indigo-500" />
+                                                <CardTitle className="text-base">Email Notification</CardTitle>
+                                            </div>
+                                            <CardDescription className="mt-2 text-xs">
+                                                Pilih penerima email. Ringkasan hasil GR manual dan file Foto DO Vendor akan ikut dikirim saat submit.
+                                            </CardDescription>
+                                        </div>
+                                    </AccordionTrigger>
+                                </CardHeader>
+                                <AccordionContent>
+                                    <Separator className="mt-4" />
+                                    <CardContent className="pt-5 space-y-5">
+                                        <div className="grid gap-5 lg:grid-cols-2">
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <p className="text-sm font-medium">Notify Roles</p>
+                                                    <p className="text-xs text-muted-foreground">Semua user dengan role yang dipilih akan menerima email.</p>
+                                                </div>
+                                                <div className="rounded-lg border p-3 space-y-3">
+                                                    {notificationRoles.length === 0 ? (
+                                                        <p className="text-sm text-muted-foreground">Tidak ada role yang tersedia.</p>
+                                                    ) : (
+                                                        notificationRoles.map((role) => (
+                                                            <label key={role} className="flex items-start gap-3 text-sm">
+                                                                <Checkbox
+                                                                    checked={selectedNotifyRoles.includes(role)}
+                                                                    onCheckedChange={(checked) => toggleSelection("notifyRoles", role, checked === true)}
+                                                                />
+                                                                <span>{role}</span>
+                                                            </label>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                <div className="space-y-3">
-                                    <div>
-                                        <p className="text-sm font-medium">Notify Users</p>
-                                        <p className="text-xs text-muted-foreground">Tambahkan penerima spesifik di luar atau di samping role di atas.</p>
-                                    </div>
-                                    <div className="rounded-lg border p-3 space-y-3 max-h-[240px] overflow-y-auto">
-                                        {notificationUsers.length === 0 ? (
-                                            <p className="text-sm text-muted-foreground">Tidak ada user yang tersedia.</p>
-                                        ) : (
-                                            notificationUsers.map((user) => (
-                                                <label key={user.id} className="flex items-start gap-3 text-sm">
-                                                    <Checkbox
-                                                        checked={selectedNotifyUserIds.includes(user.id)}
-                                                        onCheckedChange={(checked) => toggleSelection("notifyUserIds", user.id, checked === true)}
-                                                    />
-                                                    <span className="flex flex-col">
-                                                        <span>{user.name || user.email || user.id}</span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {user.email || "Tanpa email"}{user.role ? ` • ${user.role}` : ""}
-                                                        </span>
-                                                    </span>
-                                                </label>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <p className="text-sm font-medium">Notify Users</p>
+                                                    <p className="text-xs text-muted-foreground">Tambahkan penerima spesifik di luar atau di samping role di atas.</p>
+                                                </div>
+                                                <div className="rounded-lg border p-3 space-y-3 max-h-[240px] overflow-y-auto">
+                                                    {notificationUsers.length === 0 ? (
+                                                        <p className="text-sm text-muted-foreground">Tidak ada user yang tersedia.</p>
+                                                    ) : (
+                                                        notificationUsers.map((user) => (
+                                                            <label key={user.id} className="flex items-start gap-3 text-sm">
+                                                                <Checkbox
+                                                                    checked={selectedNotifyUserIds.includes(user.id)}
+                                                                    onCheckedChange={(checked) => toggleSelection("notifyUserIds", user.id, checked === true)}
+                                                                />
+                                                                <span className="flex flex-col">
+                                                                    <span>{user.name || user.email || user.id}</span>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {user.email || "Tanpa email"}{user.role ? ` • ${user.role}` : ""}
+                                                                    </span>
+                                                                </span>
+                                                            </label>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </Card>
 
                     <div className="flex items-center justify-end gap-3 pt-2">
