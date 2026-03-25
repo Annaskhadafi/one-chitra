@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useForm, useFieldArray, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { format } from "date-fns"
-import { CalendarIcon, Trash2, Plus, Loader2, PackagePlus, FileText } from "lucide-react"
+import { CalendarIcon, Loader2, PackagePlus, FileText, Check, ChevronsUpDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { createGoodReceiveManual } from "@/app/actions/good-receive-manual"
@@ -14,10 +14,11 @@ import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { Separator } from "@/components/ui/separator"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -32,7 +33,7 @@ const formSchema = z.object({
     items: z.array(z.object({
         poItem: z.coerce.number().min(1, "PO item is required"),
         materialNumber: z.string().min(1, "Material number is required"),
-        productId: z.coerce.number().min(1, "Internal product mapping is required"),
+        productId: z.coerce.number().min(0),
         openQty: z.coerce.number().min(0),
         quantity: z.coerce.number().min(0, "Quantity cannot be negative"),
         notes: z.string().optional(),
@@ -48,10 +49,9 @@ type GoodReceiveFormProps = {
     notificationUsers?: { id: string; name: string | null; email: string | null; role: string | null }[]
 }
 
-const emptyItem = { poItem: 0, materialNumber: "", productId: 0, openQty: 0, quantity: 0, notes: "" }
-
 export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions = [], productOptions = [] }: GoodReceiveFormProps) {
     const router = useRouter()
+    const [poOpen, setPoOpen] = useState(false)
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema) as Resolver<z.infer<typeof formSchema>>,
         defaultValues: {
@@ -62,44 +62,57 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
             referenceDocument: "",
             notifyRoles: [],
             notifyUserIds: [],
-            items: [emptyItem],
+            items: [],
         },
     })
 
-    const { fields, append, remove, replace } = useFieldArray({
+    const { fields, replace } = useFieldArray({
         control: form.control,
         name: "items",
     })
 
     const selectedPoNumber = form.watch("poNumber")
+    const selectedWarehouseId = form.watch("warehouseId")
     const selectedPo = poOptions.find((po) => po.poNumber === selectedPoNumber)
+    const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === selectedWarehouseId)
     const availableLines = poLineOptions.filter((line) => line.poNumber === selectedPoNumber)
     const productMap = new Map(productOptions.map((product) => [product.id, product]))
 
     useEffect(() => {
+        if (!selectedPoNumber) {
+            if (form.getValues("items").length > 0) {
+                replace([])
+            }
+            return
+        }
+
         const currentItems = form.getValues("items")
-        const nextItems = currentItems.map((item) => {
-            const matchingLine = availableLines.find((line) => line.poItem === item.poItem)
-            if (!matchingLine) {
-                return { ...emptyItem, quantity: item.quantity > 0 ? item.quantity : 0, notes: item.notes ?? "" }
-            }
-
+        const currentItemMap = new Map(currentItems.map((item) => [item.poItem, item]))
+        const nextItems = availableLines.map((line) => {
+            const currentItem = currentItemMap.get(line.poItem)
             return {
-                ...item,
-                poItem: matchingLine.poItem,
-                materialNumber: matchingLine.materialNumber,
-                productId: matchingLine.productId ?? 0,
-                openQty: matchingLine.openQty,
+                poItem: line.poItem,
+                materialNumber: line.materialNumber,
+                productId: line.productId ?? 0,
+                openQty: line.openQty,
+                quantity: currentItem?.quantity ?? 0,
+                notes: currentItem?.notes ?? "",
             }
         })
 
-        const shouldReset = nextItems.some((item, index) => {
-            const current = currentItems[index]
-            return current.poItem !== item.poItem || current.materialNumber !== item.materialNumber || current.productId !== item.productId || current.openQty !== item.openQty
+        const hasChanged = currentItems.length !== nextItems.length || currentItems.some((item, index) => {
+            const nextItem = nextItems[index]
+            return !nextItem
+                || item.poItem !== nextItem.poItem
+                || item.materialNumber !== nextItem.materialNumber
+                || item.productId !== nextItem.productId
+                || item.openQty !== nextItem.openQty
+                || item.quantity !== nextItem.quantity
+                || (item.notes ?? "") !== (nextItem.notes ?? "")
         })
 
-        if (shouldReset) {
-            replace(nextItems.length > 0 ? nextItems : [emptyItem])
+        if (hasChanged) {
+            replace(nextItems)
         }
     }, [availableLines, form, replace, selectedPoNumber])
 
@@ -121,9 +134,8 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
     const isSubmitting = form.formState.isSubmitting
 
     return (
-        <TooltipProvider>
-            <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                     <Card className="shadow-sm">
                         <CardHeader className="pb-4">
                             <div className="flex items-center gap-2">
@@ -143,26 +155,60 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PO Number</FormLabel>
-                                            <Select
-                                                onValueChange={(value) => {
-                                                    field.onChange(value)
-                                                    replace([emptyItem])
-                                                }}
-                                                value={field.value}
-                                            >
-                                                <FormControl>
-                                                    <SelectTrigger className="focus:ring-indigo-500">
-                                                        <SelectValue placeholder="Select PO number" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {poOptions.map((po) => (
-                                                        <SelectItem key={po.poNumber} value={po.poNumber}>
-                                                            {po.poNumber} - {po.vendorName}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Popover open={poOpen} onOpenChange={setPoOpen}>
+                                                <PopoverTrigger asChild>
+                                                    <FormControl>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            role="combobox"
+                                                            aria-expanded={poOpen}
+                                                            className={cn(
+                                                                "w-full justify-between font-normal focus-visible:ring-indigo-500",
+                                                                !field.value && "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {field.value
+                                                                ? `${field.value} - ${selectedPo?.vendorName ?? ""}`
+                                                                : "Search PO number"}
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                        </Button>
+                                                    </FormControl>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search PO number or supplier..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>No PO found.</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {poOptions.map((po) => (
+                                                                    <CommandItem
+                                                                        key={po.poNumber}
+                                                                        value={`${po.poNumber} ${po.vendorName} ${po.poDate ?? ""}`}
+                                                                        onSelect={() => {
+                                                                            field.onChange(po.poNumber)
+                                                                            setPoOpen(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check
+                                                                            className={cn(
+                                                                                "mr-2 h-4 w-4",
+                                                                                field.value === po.poNumber ? "opacity-100" : "opacity-0"
+                                                                            )}
+                                                                        />
+                                                                        <div className="flex min-w-0 flex-col">
+                                                                            <span className="truncate">{po.poNumber} - {po.vendorName}</span>
+                                                                            <span className="text-xs text-muted-foreground">
+                                                                                {po.itemCount} items, open qty {po.totalOpenQty}
+                                                                            </span>
+                                                                        </div>
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -285,27 +331,15 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
 
                     <Card className="shadow-sm">
                         <CardHeader className="pb-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <PackagePlus className="h-4 w-4 text-indigo-500" />
-                                    <CardTitle className="text-base">
-                                        Items
-                                        <span className="ml-2 inline-flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold w-5 h-5">{fields.length}</span>
-                                    </CardTitle>
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => append(emptyItem)}
-                                    className="border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
-                                >
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add Item
-                                </Button>
+                            <div className="flex items-center gap-2">
+                                <PackagePlus className="h-4 w-4 text-indigo-500" />
+                                <CardTitle className="text-base">
+                                    Items
+                                    <span className="ml-2 inline-flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-semibold w-5 h-5">{fields.length}</span>
+                                </CardTitle>
                             </div>
                             <CardDescription className="text-xs">
-                                Select open PO lines for the chosen receipt.
+                                Semua open item dari PO terpilih akan muncul otomatis di sini.
                             </CardDescription>
                         </CardHeader>
                         <Separator />
@@ -320,7 +354,6 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Open Qty</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
-                                            <TableHead className="w-[50px]"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -333,43 +366,9 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                                 <TableRow key={field.id} className="hover:bg-muted/30 transition-colors">
                                                     <TableCell className="pl-4 text-sm text-muted-foreground font-medium">{index + 1}</TableCell>
                                                     <TableCell>
-                                                        <FormField
-                                                            control={form.control}
-                                                            name={`items.${index}.poItem`}
-                                                            render={({ field }) => (
-                                                                <FormItem className="space-y-0">
-                                                                    <Select
-                                                                        onValueChange={(value) => {
-                                                                            const poItem = parseInt(value, 10)
-                                                                            const line = availableLines.find((entry) => entry.poItem === poItem)
-                                                                            field.onChange(poItem)
-                                                                            form.setValue(`items.${index}.materialNumber`, line?.materialNumber ?? "")
-                                                                            form.setValue(`items.${index}.productId`, line?.productId ?? 0)
-                                                                            form.setValue(`items.${index}.openQty`, line?.openQty ?? 0)
-                                                                        }}
-                                                                        value={field.value > 0 ? field.value.toString() : ""}
-                                                                    >
-                                                                        <FormControl>
-                                                                            <SelectTrigger className="focus:ring-indigo-500">
-                                                                                <SelectValue placeholder={selectedPoNumber ? "Select PO item" : "Choose PO first"} />
-                                                                            </SelectTrigger>
-                                                                        </FormControl>
-                                                                        <SelectContent>
-                                                                            {availableLines.map((line) => (
-                                                                                <SelectItem
-                                                                                    key={`${line.poNumber}-${line.poItem}`}
-                                                                                    value={line.poItem.toString()}
-                                                                                    disabled={!line.productId}
-                                                                                >
-                                                                                    Item {line.poItem} - {line.materialNumber} - Open {line.openQty}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                    <FormMessage />
-                                                                </FormItem>
-                                                            )}
-                                                        />
+                                                        <div className="text-sm font-medium">
+                                                            {selectedLine?.materialNumber ?? "-"}
+                                                        </div>
                                                         {selectedLine && (
                                                             <p className="mt-2 text-xs text-muted-foreground">
                                                                 {selectedLine.materialDescription}
@@ -380,7 +379,25 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                                         {selectedProduct
                                                             ? `${selectedProduct.materialNumber} - ${selectedProduct.materialDescription ?? "-"}`
                                                             : selectedLine
-                                                                ? "No internal product mapping"
+                                                                ? (
+                                                                    <div className="space-y-2">
+                                                                        <p>No internal product mapping</p>
+                                                                        <ProductDialog
+                                                                            initialValues={{
+                                                                                materialNumber: selectedLine.materialNumber,
+                                                                                materialDescription: selectedLine.materialDescription,
+                                                                                sloc: selectedWarehouse?.sloc ?? "",
+                                                                                slocDescription: selectedWarehouse?.description ?? "",
+                                                                            }}
+                                                                            onSuccess={() => router.refresh()}
+                                                                            trigger={
+                                                                                <Button type="button" variant="outline" size="sm">
+                                                                                    Register Product
+                                                                                </Button>
+                                                                            }
+                                                                        />
+                                                                    </div>
+                                                                )
                                                                 : "-"}
                                                     </TableCell>
                                                     <TableCell className="text-sm font-medium">
@@ -421,25 +438,6 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                                                             )}
                                                         />
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    onClick={() => remove(index)}
-                                                                    disabled={fields.length === 1}
-                                                                    className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent side="left">
-                                                                <p>Remove item</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TableCell>
                                                 </TableRow>
                                             )
                                         })}
@@ -448,7 +446,12 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                             </div>
                             {!selectedPoNumber && (
                                 <p className="px-4 py-3 text-sm text-muted-foreground">
-                                    Select a PO number first to load available PO items.
+                                    Select a PO number first to load all PO items automatically.
+                                </p>
+                            )}
+                            {selectedPoNumber && fields.length === 0 && (
+                                <p className="px-4 py-3 text-sm text-muted-foreground">
+                                    Tidak ada open item untuk PO ini.
                                 </p>
                             )}
                             {form.formState.errors.items?.root && (
@@ -486,8 +489,7 @@ export function GoodReceiveForm({ warehouses = [], poOptions = [], poLineOptions
                             )}
                         </Button>
                     </div>
-                </form>
-            </Form>
-        </TooltipProvider>
+            </form>
+        </Form>
     )
 }

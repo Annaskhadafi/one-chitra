@@ -41,13 +41,16 @@ type ProductFormValues = z.infer<typeof productSchema>
 
 interface ProductDialogProps {
     product?: Product
+    initialValues?: Partial<ProductFormValues>
     trigger?: React.ReactNode
     onSuccess?: () => void
 }
 
 const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
+const DEFAULT_PLANT_CODE = "2001"
+const DEFAULT_SLOC = "TRD BPN"
 
-export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProps) {
+export function ProductDialog({ product, initialValues, trigger, onSuccess }: ProductDialogProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [warehouses, setWarehouses] = useState<{ sloc: string, description: string | null }[]>([])
@@ -66,18 +69,37 @@ export function ProductDialog({ product, trigger, onSuccess }: ProductDialogProp
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productSchema),
         defaultValues: {
-            category: product?.category ?? "TYRE",
-            materialNumber: product?.materialNumber ?? "",
-            oldMaterialNo: product?.oldMaterialNo ?? "",
-            materialDescription: product?.materialDescription ?? "",
-            brand: product?.brand ?? "",
-            costSap: product?.costSap ?? "",
-            plant: product?.plant ?? "",
-            sloc: product?.sloc ?? "",
-            slocDescription: product?.slocDescription ?? "",
-            imageUrl: product?.imageUrl ?? "",
+            category: product?.category ?? initialValues?.category ?? "TYRE",
+            materialNumber: product?.materialNumber ?? initialValues?.materialNumber ?? "",
+            oldMaterialNo: product?.oldMaterialNo ?? initialValues?.oldMaterialNo ?? "",
+            materialDescription: product?.materialDescription ?? initialValues?.materialDescription ?? "",
+            brand: product?.brand ?? initialValues?.brand ?? "",
+            costSap: product?.costSap ?? initialValues?.costSap ?? "",
+            plant: product?.plant ?? initialValues?.plant ?? DEFAULT_PLANT_CODE,
+            sloc: product?.sloc ?? initialValues?.sloc ?? DEFAULT_SLOC,
+            slocDescription: product?.slocDescription ?? initialValues?.slocDescription ?? "",
+            typeWarehouse: product?.typeWarehouse ?? initialValues?.typeWarehouse ?? "",
+            imageUrl: product?.imageUrl ?? initialValues?.imageUrl ?? "",
         },
     })
+
+    useEffect(() => {
+        if (!isOpen) return
+
+        form.reset({
+            category: product?.category ?? initialValues?.category ?? "TYRE",
+            materialNumber: product?.materialNumber ?? initialValues?.materialNumber ?? "",
+            oldMaterialNo: product?.oldMaterialNo ?? initialValues?.oldMaterialNo ?? "",
+            materialDescription: product?.materialDescription ?? initialValues?.materialDescription ?? "",
+            brand: product?.brand ?? initialValues?.brand ?? "",
+            costSap: product?.costSap ?? initialValues?.costSap ?? "",
+            plant: product?.plant ?? initialValues?.plant ?? DEFAULT_PLANT_CODE,
+            sloc: product?.sloc ?? initialValues?.sloc ?? DEFAULT_SLOC,
+            slocDescription: product?.slocDescription ?? initialValues?.slocDescription ?? "",
+            typeWarehouse: product?.typeWarehouse ?? initialValues?.typeWarehouse ?? "",
+            imageUrl: product?.imageUrl ?? initialValues?.imageUrl ?? "",
+        })
+    }, [form, initialValues, isOpen, product])
 
     const handleSubmit = async (data: ProductFormValues) => {
         setIsLoading(true)
