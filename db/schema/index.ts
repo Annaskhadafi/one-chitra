@@ -130,7 +130,7 @@ export {
     costSettlementSignatoriesRelations,
 } from "./cost-settlements";
 export { marketingCampaigns, campaignRecipients, marketingCampaignsRelations, campaignRecipientsRelations } from "./marketing-campaigns";
-export { zmc9StockSap, me2lPurchDocsSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
+export { zmc9StockSap, me2lPurchDocsSap, zvendorPoReportSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
 export { aiInventoryPredictions, restockNotifications, aiSettings } from "./ai-predictions";
 export {
     evhsReceipts,

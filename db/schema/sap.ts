@@ -55,6 +55,41 @@ export const me2lPurchDocsSap = pgTable("me2l_purch_docs_sap", {
     docDateIdx: index("doc_date_idx").on(table.docDate),
 }));
 
+// SAP Vendor PO Report
+export const zvendorPoReportSap = pgTable("zvendor_po_report_sap", {
+    poReportId: integer("po_report_id").primaryKey(),
+    companyCode: text("company_code"),
+    vendorCode: text("vendor_code"),
+    vendorName: text("vendor_name"),
+    poNo: text("po_no"),
+    order: text("order"),
+    item: integer("item"),
+    poDate: date("po_date"),
+    material: text("material"),
+    shortText: text("short_text"),
+    poQuantity: integer("po_quantity"),
+    oun: text("oun"),
+    netValue: decimal("net_value", { precision: 20, scale: 2 }),
+    currency: text("currency"),
+    grDate: date("gr_date"),
+    grQuantity: integer("gr_quantity"),
+    grCurrency: text("gr_currency"),
+    totalGrValueIdr: decimal("total_gr_value_idr", { precision: 20, scale: 2 }),
+    totalGrValueUsd: decimal("total_gr_value_usd", { precision: 20, scale: 2 }),
+    plant: text("plant"),
+    plantGroup: text("plant_group"),
+    invoicePoDate: date("invoice_po_date"),
+    totalInvoiceValue: decimal("total_invoice_value", { precision: 20, scale: 2 }),
+    outstandingValue: decimal("outstanding_value", { precision: 20, scale: 2 }),
+    outstandingQuantity: integer("outstanding_quantity"),
+    costCenter: text("cost_center"),
+    assetNumber: text("asset_number"),
+    materialType: text("material_type"),
+    a: text("a"),
+    goodReceivedNonValuated: text("good_received_non_valuated"),
+    extractedAt: timestamp("extracted_at"),
+});
+
 // SAP Sales Revenue
 export const salesRevenueSap = pgTable("sales_revenue_sap", {
     salesRevId: integer("sales_rev_id").primaryKey(),

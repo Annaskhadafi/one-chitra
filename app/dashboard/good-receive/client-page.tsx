@@ -294,8 +294,23 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
             cell: ({ row }) => <div className="text-right text-sm tabular-nums text-muted-foreground">{row.getValue("toinvo")}</div>,
         },
         {
+            accessorKey: "grqty",
+            header: () => (
+                <div className="text-right">
+                    <div className="text-xs font-semibold uppercase tracking-wider">GR Qty</div>
+                    <div className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">Vendor PO</div>
+                </div>
+            ),
+            cell: ({ row }) => <div className="text-right text-sm tabular-nums">{row.getValue("grqty")}</div>,
+        },
+        {
             accessorKey: "togr",
-            header: () => <div className="text-right text-xs font-semibold uppercase tracking-wider">To GR</div>,
+            header: () => (
+                <div className="text-right">
+                    <div className="text-xs font-semibold uppercase tracking-wider">To GR</div>
+                    <div className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">GR qty dari vendor PO</div>
+                </div>
+            ),
             cell: ({ row }) => {
                 const isProcessed = row.original.isProcessed
                 const warehouseId = row.original.warehouseId
@@ -501,6 +516,12 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                         </div>
                     )}
 
+                    {rawData.length > 0 && (
+                        <p className="mb-4 text-xs text-muted-foreground">
+                            Qty GR pada halaman ini menggunakan sumber <span className="font-mono">zvendor_po_report_sap.gr_quantity</span>.
+                        </p>
+                    )}
+
                     {/* Main Content Areas */}
                     <TabsContent value="pending" className="m-0 focus-visible:ring-0">
                         {rawData.length > 0 ? (
@@ -578,10 +599,14 @@ export default function GoodReceiveClient({ warehouses }: GoodReceiveClientProps
                                                                     <p className="font-mono text-[11px] break-all">{item.materialnumb || "-"}</p>
                                                                     <p className="text-xs text-muted-foreground break-words">{item.material || "-"}</p>
                                                                 </div>
-                                                                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                                                <div className="grid grid-cols-4 gap-2 text-[11px]">
                                                                     <div>
                                                                         <p className="text-muted-foreground">PO Qty</p>
                                                                         <p className="font-semibold">{item.poqty}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-muted-foreground">GR Qty</p>
+                                                                        <p className="font-semibold">{item.grqty}</p>
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-muted-foreground">To Inv</p>

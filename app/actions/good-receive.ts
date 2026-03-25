@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { products, stockLevels, me2lPurchDocsSap } from "@/db/schema"
-import { eq, and, gte, lte, isNotNull, ne, isNull } from "drizzle-orm"
+import { products, stockLevels, me2lPurchDocsSap, zvendorPoReportSap } from "@/db/schema"
+import { eq, and, gte, lte, isNotNull, ne, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
@@ -58,22 +58,63 @@ export async function fetchGoodReceiveFromSAP(startDate: string, endDate: string
             return true
         })
 
-        const mappedData: SAPGoodReceiveItem[] = filteredData.map(item => ({
-            ponumb: item.purchasingDoc || "",
-            item: item.item || 0,
-            vendor: item.vendorName || "",
-            prnumb: item.trackingNo || null,
-            podate: item.docDate || "",
-            materialnumb: item.material || null,
-            material: item.shortText || "",
-            poqty: item.orderQty || 0,
-            togr: (item.orderQty || 0) - (item.deliveredQty || 0),
-            toinvo: item.invoicedQty || 0,
-            grqty: item.deliveredQty || 0,
-            isProcessed: !!item.grProcessedDate,
-            processedDate: item.grProcessedDate,
-            warehouseId: item.grWarehouseId
-        }))
+        const poNumbers = Array.from(
+            new Set(
+                filteredData
+                    .map((item) => item.purchasingDoc?.trim())
+                    .filter((value): value is string => !!value)
+            )
+        )
+
+        const vendorPoRows = poNumbers.length > 0
+            ? await db.query.zvendorPoReportSap.findMany({
+                where: inArray(zvendorPoReportSap.poNo, poNumbers),
+            })
+            : []
+
+        const vendorPoByItem = new Map<string, number>()
+        const vendorPoByPo = new Map<string, number>()
+        const vendorPoRowCountByPo = new Map<string, number>()
+
+        for (const row of vendorPoRows) {
+            const poNo = row.poNo?.trim()
+            if (!poNo) continue
+
+            vendorPoRowCountByPo.set(poNo, (vendorPoRowCountByPo.get(poNo) ?? 0) + 1)
+
+            if (row.item !== null && row.item !== undefined) {
+                vendorPoByItem.set(`${poNo}-${row.item}`, Number(row.grQuantity ?? 0))
+            }
+
+            if (!vendorPoByPo.has(poNo)) {
+                vendorPoByPo.set(poNo, Number(row.grQuantity ?? 0))
+            }
+        }
+
+        const mappedData: SAPGoodReceiveItem[] = filteredData.map(item => {
+            const poNo = item.purchasingDoc?.trim() || ""
+            const itemKey = `${poNo}-${item.item ?? 0}`
+            const vendorItemGrQty = vendorPoByItem.get(itemKey)
+            const vendorPoGrQty = vendorPoRowCountByPo.get(poNo) === 1 ? vendorPoByPo.get(poNo) : undefined
+            const resolvedGrQty = vendorItemGrQty ?? vendorPoGrQty ?? item.deliveredQty ?? 0
+
+            return {
+                ponumb: item.purchasingDoc || "",
+                item: item.item || 0,
+                vendor: item.vendorName || "",
+                prnumb: item.trackingNo || null,
+                podate: item.docDate || "",
+                materialnumb: item.material || null,
+                material: item.shortText || "",
+                poqty: item.orderQty || 0,
+                togr: (item.orderQty || 0) - resolvedGrQty,
+                toinvo: item.invoicedQty || 0,
+                grqty: resolvedGrQty,
+                isProcessed: !!item.grProcessedDate,
+                processedDate: item.grProcessedDate,
+                warehouseId: item.grWarehouseId
+            }
+        })
 
         return { success: true, data: mappedData }
     } catch (error) {
