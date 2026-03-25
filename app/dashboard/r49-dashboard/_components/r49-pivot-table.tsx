@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, Fragment } from "react"
+import { useMemo, Fragment } from "react"
 import {
     Table,
     TableBody,
@@ -34,18 +34,7 @@ export function R49PivotTable({
     years,
     isLoading
 }: R49PivotTableProps) {
-    const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
-
     const formattedYears = useMemo(() => [...years].sort((a, b) => b.localeCompare(a)), [years]);
-
-    const toggleExpand = (name: string) => {
-        setExpandedCustomers(prev => {
-            const next = new Set(prev);
-            if (next.has(name)) next.delete(name);
-            else next.add(name);
-            return next;
-        });
-    };
 
     const rows = useMemo(() => {
         const dataMap = new Map<string, Record<string, Record<string, { qty: number, revenue: number }>>>();
@@ -67,10 +56,26 @@ export function R49PivotTable({
 
         return customerOrder.map(c => {
             const name = c.customerName || "Unknown Customer";
+            const materials = dataMap.get(name) || {};
+            const materialNames = Object.keys(materials);
+            const totalQty = materialNames.reduce(
+                (customerSum, materialName) =>
+                    customerSum +
+                    Object.values(materials[materialName]).reduce(
+                        (yearSum, yearData) => yearSum + Number(yearData.qty),
+                        0
+                    ),
+                0
+            );
+
             return {
                 name,
-                materials: dataMap.get(name) || {},
-                totalRevenue: c.totalRevenue
+                materials,
+                totalRevenue: c.totalRevenue,
+                materialNames,
+                hasMultipleMaterials: materialNames.length > 1,
+                primaryMaterial: materialNames[0] || "",
+                totalQty
             };
         });
     }, [pivotData, customerOrder]);
@@ -111,15 +116,14 @@ export function R49PivotTable({
             mobileView={
                 <div className="space-y-2">
                     {rows.map((row, idx) => {
-                        const isExpanded = expandedCustomers.has(row.name)
-                        const matKeys = Object.keys(row.materials)
+                        const isExpanded = true
+                        const matKeys = row.materialNames
                         
                         return (
                             <div key={row.name} className="rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-900/20 overflow-hidden">
                                 {/* Header - Clickable */}
                                 <div
-                                    className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 cursor-pointer active:scale-[0.99] transition-transform"
-                                    onClick={() => toggleExpand(row.name)}
+                                    className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600"
                                 >
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -135,7 +139,7 @@ export function R49PivotTable({
                                                     {row.name}
                                                 </h3>
                                                 <p className="text-xs text-blue-100">
-                                                    Qty: {formatValue(pivotData.filter(d => d.customerName === row.name).reduce((sum, d) => sum + Number(d.qty), 0), false)}
+                                                    Qty: {formatValue(row.totalQty, false)}
                                                 </p>
                                             </div>
                                         </div>
@@ -148,7 +152,7 @@ export function R49PivotTable({
                                 {/* Content */}
                                 <div className="p-4 space-y-3">
                                     {/* Year Stats */}
-                                    {formattedYears.map((year, yearIdx) => {
+                                    {formattedYears.map((year) => {
                                         const totalQty = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.qty || 0), 0)
                                         const totalRev = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.revenue || 0), 0)
                                         const avgPrice = totalQty > 0 ? totalRev / totalQty : 0
@@ -188,7 +192,7 @@ export function R49PivotTable({
                                                 </span>
                                                 <div className="h-1 flex-1 bg-gradient-to-l from-blue-600 to-transparent rounded-full" />
                                             </div>
-                                            {matKeys.map((mat, matIdx) => (
+                                            {(row.hasMultipleMaterials ? matKeys : []).map((mat, matIdx) => (
                                                 <div key={mat} className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/40 rounded-lg p-3 border border-indigo-200 dark:border-indigo-800">
                                                     <div className="flex items-start gap-2 mb-2">
                                                         <div className="shrink-0 w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
@@ -252,14 +256,13 @@ export function R49PivotTable({
                         </TableHeader>
                         <TableBody>
                             {rows.map((row, rIdx) => {
-                                const isExpanded = expandedCustomers.has(row.name);
-                                const matKeys = Object.keys(row.materials);
+                                const isExpanded = true;
+                                const matKeys = row.materialNames;
 
                                 return (
                                     <Fragment key={row.name}>
                                         <TableRow
-                                            className={`${rIdx % 2 === 0 ? "bg-[#F8F9FC]" : "bg-white"} hover:bg-slate-50 transition-colors border-b border-slate-100 group cursor-pointer`}
-                                            onClick={() => toggleExpand(row.name)}
+                                            className={`${rIdx % 2 === 0 ? "bg-[#F8F9FC]" : "bg-white"} hover:bg-slate-50 transition-colors border-b border-slate-100 group`}
                                         >
                                             <TableCell className={`font-bold text-[#172B4D] border-r border-slate-100 py-3 sticky left-0 z-10 ${rIdx % 2 === 0 ? "bg-[#F8F9FC]" : "bg-white"} group-hover:bg-slate-50`}>
                                                 <div className="flex items-center gap-2">
@@ -268,10 +271,10 @@ export function R49PivotTable({
                                                 </div>
                                             </TableCell>
                                             <TableCell className="border-r border-slate-100 text-slate-400 text-xs italic">
-                                                {isExpanded ? matKeys[0] || "" : ""}
+                                                {row.hasMultipleMaterials ? "" : row.primaryMaterial}
                                             </TableCell>
                                             <TableCell className="border-r border-slate-100 text-center font-bold text-[#172B4D]">
-                                                {formatValue(pivotData.filter(d => d.customerName === row.name).reduce((sum, d) => sum + Number(d.qty), 0), false)}
+                                                {formatValue(row.totalQty, false)}
                                             </TableCell>
                                             {formattedYears.map(year => {
                                                 const totalQty = matKeys.reduce((sum, m) => sum + (row.materials[m][year]?.qty || 0), 0);
@@ -292,14 +295,20 @@ export function R49PivotTable({
                                         </TableRow>
 
                                         {/* Sub-rows for Multi-Material or drill down details */}
-                                        {isExpanded && matKeys.length > 1 && matKeys.slice(1).map((mat, mIdx) => (
+                                        {isExpanded && row.hasMultipleMaterials && matKeys.map((mat) => (
                                             <TableRow key={`${row.name}-${mat}`} className="bg-white border-b border-slate-50 italic opacity-80">
                                                 <TableCell className="border-r border-slate-100 sticky left-0 z-10 bg-white" />
                                                 <TableCell className="text-xs text-[#0052CC] border-r border-slate-100 py-2 pl-4">
                                                     {mat}
                                                 </TableCell>
                                                 <TableCell className="border-r border-slate-100 text-center text-xs">
-                                                    {formatValue(pivotData.filter(d => d.customerName === row.name && d.materialDescription === mat).reduce((sum, d) => sum + Number(d.qty), 0), false)}
+                                                    {formatValue(
+                                                        Object.values(row.materials[mat] || {}).reduce(
+                                                            (sum, yearData) => sum + Number(yearData.qty),
+                                                            0
+                                                        ),
+                                                        false
+                                                    )}
                                                 </TableCell>
                                                 {formattedYears.map(year => {
                                                     const d = row.materials[mat][year];
