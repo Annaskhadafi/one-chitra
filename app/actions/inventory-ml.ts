@@ -9,6 +9,7 @@ import { getAuthenticatedSession } from "@/lib/rbac"
 import { getFleetList } from "./fleet"
 import { revalidatePath } from "next/cache"
 import { calculateMovingAverage } from "@/lib/ai-utils"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 const GROQ_API_KEY = "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";
 
@@ -2083,7 +2084,7 @@ export async function calculatePredictionAccuracy() {
 
                 // Fetch actual sales data for the product in the 30-day period after prediction
                 const actualSalesResult = await db.select({
-                    totalQty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
+                    totalQty: sql<number>`SUM(${salesRevenueCountableQty})`
                 })
                     .from(salesRevenueSap)
                     .where(
@@ -3269,7 +3270,7 @@ export async function updateComparisonData() {
 
             const salesResult = await db
                 .select({
-                    totalQty: sql<number>`COALESCE(SUM(${salesRevenueSap.qty}), 0)`,
+                    totalQty: sql<number>`COALESCE(SUM(${salesRevenueCountableQty}), 0)`,
                 })
                 .from(salesRevenueSap)
                 .where(

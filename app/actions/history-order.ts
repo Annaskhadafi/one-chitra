@@ -5,6 +5,7 @@ import { historyOrders } from "@/db/schema/history-orders"
 import { salesRevenueSap } from "@/db/schema/sap"
 import { desc, notIlike, isNull, isNotNull, or, and, eq, SQL } from "drizzle-orm"
 import { getSetting } from "./settings"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 export interface HistoryOrderItem {
     customer_name: string;
@@ -164,7 +165,7 @@ export async function getHistoryOrder(filters: HistoryOrderFilters = {}) {
 
         const aggregation = await db.select({
             totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
-            totalQty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            totalQty: sql<number>`SUM(${salesRevenueCountableQty})`,
             uniqueCust: sql<number>`COUNT(DISTINCT ${salesRevenueSap.customerName})`,
             uniqueOrders: sql<number>`COUNT(DISTINCT ${salesRevenueSap.poNo})`,
             totalCount: sql<number>`COUNT(*)`

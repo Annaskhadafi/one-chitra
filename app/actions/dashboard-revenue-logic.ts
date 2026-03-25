@@ -4,6 +4,7 @@ import { forecasts } from "@/db/schema/forecasts"
 import { eq, sql, and, isNotNull, or, isNull, notIlike, ilike } from "drizzle-orm"
 import { settings } from "@/db/schema/settings"
 import { normalizeRevenueReportConfig, type RevenueReportConfig } from "@/lib/revenue-report-config"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 
 export interface DashboardRevenueFilters {
@@ -212,7 +213,7 @@ export async function fetchDashboardRevenueForecast(filters: DashboardRevenueFil
     const materialsData = await db.select({
         materialDesc: salesRevenueSap.materialDescription,
         totalRevenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`,
-        qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
+        qty: sql<number>`SUM(${salesRevenueCountableQty})`
     }).from(salesRevenueSap)
         .where(and(baseFilter, ilike(salesRevenueSap.revType, 'Trading')))
         .groupBy(salesRevenueSap.materialDescription)

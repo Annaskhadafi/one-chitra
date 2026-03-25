@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { salesRevenueSap } from "@/db/schema/sap"
 import { sql, and, isNotNull, or, notIlike, desc, asc, ilike, inArray } from "drizzle-orm"
 import { type SQL } from "drizzle-orm"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 const ACTIVE_SALESMAN_BILLING_START = '2026-01-01';
 const ACTIVE_SALESMAN_BILLING_END = '2027-01-01';
@@ -139,7 +140,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
             customerName: salesRevenueSap.customerName,
             materialDescription: salesRevenueSap.materialDescription,
             year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
-            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            qty: sql<number>`SUM(${salesRevenueCountableQty})`,
             revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`
         })
             .from(salesRevenueSap)
@@ -175,7 +176,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
 
         const avgPriceTrend = await db.select({
             year: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
-            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) / NULLIF(SUM(COALESCE(${salesRevenueSap.qty}, 0)), 0)`
+            value: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0)) / NULLIF(SUM(${salesRevenueCountableQty}), 0)`
         })
             .from(salesRevenueSap)
             .where(finalWhere)
@@ -192,7 +193,7 @@ export async function getR49DashboardData(filters: R49DashboardFilters = {}) {
         const qtyVsRev = await db.select({
             label: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY')`,
             rev: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInDocCurr}, 0))`,
-            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`
+            qty: sql<number>`SUM(${salesRevenueCountableQty})`
         })
             .from(salesRevenueSap)
             .where(finalWhere)

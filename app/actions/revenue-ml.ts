@@ -6,6 +6,7 @@ import { db } from "@/db"
 import { salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { buildRevenueMLForecast } from "@/lib/revenue-ml-forecast"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { salesRevenueCountableQty } from "@/lib/sales-revenue-sql"
 
 const nonCancelledSalesRevenueCondition = sql`upper(trim(coalesce(${salesRevenueSap.cancelled}, ''))) != 'X'`
 
@@ -31,7 +32,7 @@ export async function getRevenueMLForecast(filters: {
         const data = await db.select({
             month: sql<string>`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`,
             revenue: sql<number>`SUM(COALESCE(${salesRevenueSap.revenueInLocCurr}, 0))`,
-            qty: sql<number>`SUM(COALESCE(${salesRevenueSap.qty}, 0))`,
+            qty: sql<number>`SUM(${salesRevenueCountableQty})`,
         }).from(salesRevenueSap)
             .where(and(...revenueConditions))
             .groupBy(sql`to_char(${salesRevenueSap.billingDate}, 'YYYY-MM')`)
