@@ -131,8 +131,8 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
+            <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-[500px]">
+                <DialogHeader className="shrink-0">
                     <DialogTitle>{isEdit ? "Edit Product" : "Add Product"}</DialogTitle>
                     <DialogDescription>
                         {isEdit ? "Update product details below." : "Enter product details to add to the system."}
@@ -140,7 +140,8 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+                    <form onSubmit={form.handleSubmit(handleSubmit)} className="flex min-h-0 flex-1 flex-col">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                         <FormField
                             control={form.control}
                             name="category"
@@ -344,6 +345,7 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
                                 {isLoading ? "Saving..." : isEdit ? "Update Product" : "Add Product"}
                             </Button>
                         </DialogFooter>
+                        </div>
                     </form>
                 </Form>
             </DialogContent>
