@@ -1,11 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback, useTransition } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getR49DashboardData } from "@/app/actions/r49-dashboard"
 import { R49PivotTable } from "./r49-pivot-table"
 import { R49Charts } from "./r49-charts"
-import { Card, CardContent } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import {
     Popover,
@@ -25,13 +23,10 @@ import {
 import {
     Loader2,
     RefreshCcw,
-    Filter,
     Calendar,
     User,
     Building2,
     ChevronDown,
-    Search,
-    MapPin
 } from "lucide-react"
 
 interface R49DashboardClientProps {
@@ -43,22 +38,38 @@ interface R49DashboardClientProps {
     }
 }
 
-export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientProps) {
-    const [filters, setFilters] = useState({
-        years: initialFilterOptions.years.slice(0, 3), // Default to last 3 years
-        months: [] as string[],
+function getDefaultR49Filters(initialFilterOptions: R49DashboardClientProps["initialFilterOptions"]) {
+    const today = new Date();
+    const currentYear = String(today.getFullYear());
+    const currentMonth = today.getMonth() + 1;
+    const preferredYear = initialFilterOptions.years.includes("2026")
+        ? "2026"
+        : initialFilterOptions.years.includes(currentYear)
+            ? currentYear
+            : initialFilterOptions.years[0] || "";
+    const ytdMonths = initialFilterOptions.months.filter((month) => {
+        const monthNumber = Number(month);
+        return Number.isFinite(monthNumber) && monthNumber >= 1 && monthNumber <= currentMonth;
+    });
+
+    return {
+        years: preferredYear ? [preferredYear] : [],
+        months: ytdMonths,
         salesman: [] as string[],
         customers: [] as string[],
         page: 1,
-        pageSize: 15, // Reduced page size for this specialized view
-        sortByYear: initialFilterOptions.years[0],
+        pageSize: 15,
+        sortByYear: preferredYear || initialFilterOptions.years[0] || "",
         sortOrder: 'desc' as const
-    });
+    };
+}
+
+export function R49DashboardClient({ initialFilterOptions }: R49DashboardClientProps) {
+    const [filters, setFilters] = useState(() => getDefaultR49Filters(initialFilterOptions));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isPending, startTransition] = useTransition();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
