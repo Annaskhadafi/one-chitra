@@ -723,7 +723,7 @@ export function GoodReceiveForm({
                             )}
                             {selectedPoNumber && fields.length === 0 && (
                                 <p className="px-4 py-3 text-sm text-muted-foreground">
-                                    Tidak ada open item untuk PO ini.
+                                    Tidak ada sisa item untuk PO ini.
                                 </p>
                             )}
                             {form.formState.errors.items?.root && (

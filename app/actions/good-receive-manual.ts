@@ -271,7 +271,7 @@ export async function getManualGoodReceivePoOptions() {
                 openQty,
                 productId,
             }
-        }).filter((line) => line.openQty > 0).sort((a, b) => {
+        }).sort((a, b) => {
             if (a.poNumber === b.poNumber) return a.poItem - b.poItem
             return a.poNumber.localeCompare(b.poNumber)
         })
