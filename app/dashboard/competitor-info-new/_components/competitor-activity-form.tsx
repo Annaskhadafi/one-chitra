@@ -41,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { getUsers } from "@/app/actions/users"
 import { createCompetitorActivity } from "@/app/actions/competitor-new"
+import { useSession } from "@/lib/auth-client"
 import { toast } from "sonner"
 
 const formSchema = z.object({
@@ -65,10 +66,12 @@ interface CompetitorActivityFormProps {
 export function CompetitorActivityForm({ open, onOpenChange, onSuccess }: CompetitorActivityFormProps) {
     const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const { data: session } = useSession()
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
+            businessConsultantId: "",
             competitorName: "",
             customerName: "",
             industryCategory: "Distributor Ban",
@@ -84,13 +87,31 @@ export function CompetitorActivityForm({ open, onOpenChange, onSuccess }: Compet
         getUsers().then(setUsers)
     }, [])
 
+    useEffect(() => {
+        const currentUserId = session?.user?.id
+        if (!currentUserId) return
+        if (form.getValues("businessConsultantId")) return
+
+        form.setValue("businessConsultantId", currentUserId)
+    }, [form, session?.user?.id, users])
+
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true)
         try {
             const result = await createCompetitorActivity(values)
             if (result.success) {
                 toast.success("Record created successfully")
-                form.reset()
+                form.reset({
+                    businessConsultantId: session?.user?.id ?? "",
+                    competitorName: "",
+                    customerName: "",
+                    industryCategory: "Distributor Ban",
+                    location: "",
+                    activityType: "",
+                    marketResponse: "Positif",
+                    businessImpact: "Tidak Ada",
+                    description: "",
+                })
                 onSuccess()
             } else {
                 toast.error(result.error)
@@ -120,7 +141,7 @@ export function CompetitorActivityForm({ open, onOpenChange, onSuccess }: Compet
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Business Consultant *</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                                        <Select onValueChange={field.onChange} value={field.value || undefined}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Pilih Consultant" />

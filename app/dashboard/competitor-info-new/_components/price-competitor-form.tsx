@@ -41,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { getUsers } from "@/app/actions/users"
 import { createCompetitorPrice } from "@/app/actions/competitor-new"
+import { useSession } from "@/lib/auth-client"
 import { toast } from "sonner"
 
 const formSchema = z.object({
@@ -66,10 +67,12 @@ interface PriceCompetitorFormProps {
 export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceCompetitorFormProps) {
     const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const { data: session } = useSession()
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
+            businessConsultantId: undefined,
             customerName: "",
             productSize: "",
             category: "Earthmover",
@@ -77,6 +80,7 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
             supplier: "",
             currency: "IDR",
             price: "",
+            consultantName: "",
             remark: "",
         },
     })
@@ -84,6 +88,18 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
     useEffect(() => {
         getUsers().then(setUsers)
     }, [])
+
+    useEffect(() => {
+        const currentUserId = session?.user?.id
+        const currentUserName = session?.user?.name
+        if (!currentUserId) return
+        if (form.getValues("businessConsultantId")) return
+
+        form.setValue("businessConsultantId", currentUserId)
+        if (currentUserName) {
+            form.setValue("consultantName", currentUserName)
+        }
+    }, [form, session?.user?.id, session?.user?.name, users])
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true)
@@ -95,7 +111,18 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
             const result = await createCompetitorPrice(submissionData as Parameters<typeof createCompetitorPrice>[0])
             if (result.success) {
                 toast.success("Record created successfully")
-                form.reset()
+                form.reset({
+                    businessConsultantId: session?.user?.id,
+                    consultantName: session?.user?.name ?? "",
+                    customerName: "",
+                    productSize: "",
+                    category: "Earthmover",
+                    brand: "",
+                    supplier: "",
+                    currency: "IDR",
+                    price: "",
+                    remark: "",
+                })
                 onSuccess()
             } else {
                 toast.error(result.error)
@@ -173,7 +200,7 @@ export function PriceCompetitorForm({ open, onOpenChange, onSuccess }: PriceComp
                                                     form.setValue("consultantName", selectedUser.name)
                                                 }
                                             }}
-                                            defaultValue={field.value || undefined}
+                                            value={field.value || undefined}
                                         >
                                             <FormControl>
                                                 <SelectTrigger>
