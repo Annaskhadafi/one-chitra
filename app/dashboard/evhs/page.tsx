@@ -23,7 +23,16 @@ import { EvhsControlTower } from "./_components/evhs-control-tower"
 import { EvhsAllVhsStockTable } from "./_components/evhs-all-vhs-stock-table"
 import { EvhsStockOverviewTable } from "./_components/evhs-stock-overview-table"
 
-export default async function EvhsPage() {
+type EvhsTabValue = "control-tower" | "receipts" | "stock-all-vhs" | "stock" | "vouchers" | "gi-matching" | "mrko" | "master-price"
+
+const EVHS_TAB_VALUES: EvhsTabValue[] = ["control-tower", "receipts", "stock-all-vhs", "stock", "vouchers", "gi-matching", "mrko", "master-price"]
+
+export default async function EvhsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+    const { tab } = await searchParams
+    const defaultTab: EvhsTabValue = EVHS_TAB_VALUES.includes((tab ?? "") as EvhsTabValue)
+        ? (tab as EvhsTabValue)
+        : "control-tower"
+
     // Initial data fetching
     const receipts = await getEvhsReceipts()
     const pendingTransfers = await getPendingEvhsTransfers()
@@ -43,7 +52,7 @@ export default async function EvhsPage() {
                 </p>
             </div>
 
-            <Tabs id="evhs-tabs" defaultValue="control-tower" className="space-y-3 sm:space-y-4">
+            <Tabs id="evhs-tabs" defaultValue={defaultTab} className="space-y-3 sm:space-y-4">
                 <TabsList className="w-full justify-start gap-1 overflow-x-auto bg-muted/50 p-1 whitespace-nowrap">
                     <TabsTrigger className="shrink-0" value="control-tower">Control Tower</TabsTrigger>
                     <TabsTrigger className="shrink-0" value="receipts">Penerimaan</TabsTrigger>
