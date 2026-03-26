@@ -11,6 +11,7 @@ export type SerialNumberEntry = {
     productName: string
     materialNumber: string
     source: "delivery" | "evhs-receipt" | "evhs-voucher"
+    sourceRecordId: number
     documentNo: string
     documentDate: string | null
     customerOrSite: string
@@ -22,6 +23,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
     // 1. From Delivery Items
     const deliveryRows = await db
         .select({
+            deliveryId: deliveries.id,
             deliveryNumber: deliveries.deliveryNumber,
             deliveryDate: deliveries.deliveryDate,
             scheduledDate: deliveries.scheduledDate,
@@ -48,6 +50,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
                 productName: row.materialDescription || row.materialNumber || "-",
                 materialNumber: row.materialNumber || "-",
                 source: "delivery",
+                sourceRecordId: row.deliveryId,
                 documentNo: row.deliveryNumber || "-",
                 documentDate: date ? new Date(date).toISOString().split("T")[0] : null,
                 customerOrSite: row.salesOrderReference || row.salesOrderInvoiceNumber || "-",
@@ -58,6 +61,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
     // 2. From EVHS Receipt Items
     const receiptRows = await db
         .select({
+            receiptId: evhsReceipts.id,
             doChitraNo: evhsReceipts.doChitraNo,
             receivedDate: evhsReceipts.receivedDate,
             serialNumbers: evhsReceiptItems.serialNumbers,
@@ -79,6 +83,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
                 productName: row.materialDescription || row.materialNumber || "-",
                 materialNumber: row.materialNumber || "-",
                 source: "evhs-receipt",
+                sourceRecordId: row.receiptId,
                 documentNo: row.doChitraNo || "-",
                 documentDate: row.receivedDate
                     ? new Date(row.receivedDate).toISOString().split("T")[0]
@@ -91,6 +96,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
     // 3. From EVHS Voucher Items
     const voucherRows = await db
         .select({
+            voucherId: evhsVouchers.id,
             vhsNo: evhsVouchers.vhsNo,
             date: evhsVouchers.date,
             woNo: evhsVouchers.woNo,
@@ -111,6 +117,7 @@ export async function getSerialNumberHistory(): Promise<SerialNumberEntry[]> {
             productName: row.materialDescription || row.materialNumber || "-",
             materialNumber: row.materialNumber || "-",
             source: "evhs-voucher",
+            sourceRecordId: row.voucherId,
             documentNo: row.vhsNo || "-",
             documentDate: row.date || null,
             customerOrSite: row.woNo || "-",

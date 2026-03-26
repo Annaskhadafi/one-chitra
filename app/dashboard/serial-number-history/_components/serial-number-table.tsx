@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, Barcode, Truck, Package, ClipboardCheck } from "lucide-react"
 import type { SerialNumberEntry } from "@/app/actions/serial-number"
+import Link from "next/link"
 
 const SOURCE_LABELS = {
     "delivery": { label: "Delivery", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", icon: Truck },
@@ -17,6 +18,18 @@ type FilterSource = "all" | "delivery" | "evhs-receipt" | "evhs-voucher"
 
 interface SerialNumberTableProps {
     data: SerialNumberEntry[]
+}
+
+function getDocumentHref(row: SerialNumberEntry): string {
+    if (row.source === "delivery") {
+        return `/dashboard/deliveries/${row.sourceRecordId}`
+    }
+
+    if (row.source === "evhs-receipt") {
+        return `/dashboard/evhs?tab=receipts`
+    }
+
+    return `/dashboard/evhs?tab=vouchers`
 }
 
 export function SerialNumberTable({ data }: SerialNumberTableProps) {
@@ -137,7 +150,14 @@ export function SerialNumberTable({ data }: SerialNumberTableProps) {
                                             {srcMeta.label}
                                         </Badge>
                                     </div>
-                                    <div className="font-mono text-xs">{row.documentNo}</div>
+                                    <div className="font-mono text-xs">
+                                        <Link
+                                            href={getDocumentHref(row)}
+                                            className="text-primary hover:underline"
+                                        >
+                                            {row.documentNo}
+                                        </Link>
+                                    </div>
                                     <div className="text-muted-foreground text-xs">
                                         {row.documentDate ?? "-"}
                                     </div>
