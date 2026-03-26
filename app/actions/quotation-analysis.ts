@@ -36,7 +36,8 @@ export async function getQuotationAnalysis(filters?: {
                     }
                 },
                 customer: true,
-                createdByUser: true
+                createdByUser: true,
+                salesPerson: true,
             },
             where: filters?.startDate && filters?.endDate
                 ? and(gte(quotations.quotationDate, filters.startDate), lte(quotations.quotationDate, filters.endDate))
@@ -128,6 +129,7 @@ export async function getQuotationAnalysis(filters?: {
                     quotationNumber: q.quotationNumber,
                     quotationId: q.id,
                     customerName: q.customer.name,
+                    salesName: q.salesPerson?.name || q.createdByUser?.name || "Tidak diketahui",
                     productName: desc,
                     productId: item.productId,
                     category: item.product.category,
@@ -180,6 +182,22 @@ export async function getQuotationAnalysis(filters?: {
         return {
             success: true,
             data: {
+                allQuotes: allQuotes.map((quote) => ({
+                    id: quote.id,
+                    quotationDate: quote.quotationDate,
+                    status: quote.status,
+                    salesName: quote.salesPerson?.name || quote.createdByUser?.name || "Tidak diketahui",
+                    items: quote.items.map((item) => ({
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        product: item.product ? {
+                            id: item.product.id,
+                            materialNumber: item.product.materialNumber,
+                            materialDescription: item.product.materialDescription,
+                            category: item.product.category,
+                        } : null
+                    }))
+                })),
                 summary: {
                     totalSent,
                     totalConverted,

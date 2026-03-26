@@ -38,12 +38,19 @@ import {
     History,
     ChevronRight,
     Sparkles,
-    AlertCircle
+    AlertCircle,
+    ChevronDown
 } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuCheckboxItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface QuotationAnalysisClientProps {
     initialData: any
@@ -60,17 +67,112 @@ const CHART_COLORS = [
 ]
 
 export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClientProps) {
-    const [data, setData] = useState(initialData)
+    const [data] = useState(initialData)
     const [searchQuery, setSearchQuery] = useState("")
+    const [selectedSalesNames, setSelectedSalesNames] = useState<string[]>(() => {
+        const currentUserName = initialData?.currentUserName
+        return currentUserName ? [currentUserName] : []
+    })
+
+    const salesNameOptions = useMemo<string[]>(
+        () => Array.from(new Set((data?.allQuotes ?? []).map((quote: any) => quote.salesName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+        [data]
+    )
+
+    const effectiveSalesNames = useMemo(
+        () => (selectedSalesNames.length > 0 ? selectedSalesNames : salesNameOptions),
+        [selectedSalesNames, salesNameOptions]
+    )
+
+    const filteredQuotes = useMemo(
+        () => (data?.allQuotes ?? []).filter((quote: any) => effectiveSalesNames.includes(quote.salesName)),
+        [data, effectiveSalesNames]
+    )
+
+    const derivedSummary = useMemo(() => {
+        const totalSent = filteredQuotes.filter((quote: any) => quote.status !== "draft").length
+        const totalConverted = filteredQuotes.filter((quote: any) => quote.status === "approved" || quote.status === "converted").length
+        const conversionRate = totalSent > 0 ? (totalConverted / totalSent) * 100 : 0
+
+        return {
+            totalQuotes: filteredQuotes.length,
+            totalSent,
+            totalConverted,
+            conversionRate,
+        }
+    }, [filteredQuotes])
+
+    const derivedTopItems = useMemo(() => {
+        const itemFrequency: Record<number, { productId: number, name: string, count: number }> = {}
+        filteredQuotes.forEach((quote: any) => {
+            quote.items.forEach((item: any) => {
+                if (!item.productId || !item.product) return
+                if (!itemFrequency[item.productId]) {
+                    itemFrequency[item.productId] = {
+                        productId: item.productId,
+                        name: item.product.materialDescription || item.product.materialNumber,
+                        count: 0,
+                    }
+                }
+                itemFrequency[item.productId].count += 1
+            })
+        })
+
+        return Object.values(itemFrequency)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10)
+    }, [filteredQuotes])
+
+    const derivedMonthlyTrend = useMemo(() => {
+        const monthlyTrend: Record<string, { month: string, sent: number, approved: number, rate: number }> = {}
+        const now = new Date()
+
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            const key = `${d.getFullYear()}-${d.getMonth() + 1}`
+            monthlyTrend[key] = {
+                month: d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
+                sent: 0,
+                approved: 0,
+                rate: 0,
+            }
+        }
+
+        filteredQuotes.forEach((quote: any) => {
+            const d = new Date(quote.quotationDate)
+            const key = `${d.getFullYear()}-${d.getMonth() + 1}`
+            if (!monthlyTrend[key]) return
+            if (quote.status !== "draft") {
+                monthlyTrend[key].sent += 1
+                if (quote.status === "approved" || quote.status === "converted") {
+                    monthlyTrend[key].approved += 1
+                }
+            }
+        })
+
+        Object.values(monthlyTrend).forEach((month) => {
+            month.rate = month.sent > 0 ? (month.approved / month.sent) * 100 : 0
+        })
+
+        return Object.values(monthlyTrend)
+    }, [filteredQuotes])
 
     const filteredLostAnalysis = useMemo(() => {
         if (!data?.lostAnalysis) return []
         return data.lostAnalysis.filter((item: any) =>
-            item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.quotationNumber.toLowerCase().includes(searchQuery.toLowerCase())
+            effectiveSalesNames.includes(item.salesName) &&
+            (
+                item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                item.quotationNumber.toLowerCase().includes(searchQuery.toLowerCase())
+            )
         )
-    }, [data, searchQuery])
+    }, [data, searchQuery, effectiveSalesNames])
+
+    const filteredLostCount = useMemo(
+        () => (data?.lostAnalysis ?? []).filter((item: any) => effectiveSalesNames.includes(item.salesName)).length,
+        [data, effectiveSalesNames]
+    )
 
     if (!data) {
         return (
@@ -82,7 +184,9 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
         )
     }
 
-    const { summary, topItems, monthlyTrend } = data
+    const summary = derivedSummary
+    const topItems = derivedTopItems
+    const monthlyTrend = derivedMonthlyTrend
 
     return (
         <div className="space-y-6">
@@ -93,6 +197,41 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                 <p className="text-muted-foreground">
                     Analisis konversi penjualan dan rekomendasi barang sejenis untuk peluang yang hilang.
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="gap-1">
+                        <Filter className="h-3.5 w-3.5" />
+                        Salesname Filter
+                    </Badge>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                                <Filter className="h-4 w-4" />
+                                {selectedSalesNames.length > 0 ? `${selectedSalesNames.length} sales dipilih` : "Semua sales"}
+                                <ChevronDown className="h-4 w-4 opacity-70" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-64">
+                            {salesNameOptions.map((salesName) => (
+                                <DropdownMenuCheckboxItem
+                                    key={salesName}
+                                    checked={effectiveSalesNames.includes(salesName)}
+                                    onCheckedChange={(checked) => {
+                                        if (checked) {
+                                            setSelectedSalesNames((prev) => Array.from(new Set([...prev, salesName])))
+                                            return
+                                        }
+                                        setSelectedSalesNames((prev) => prev.filter((name) => name !== salesName))
+                                    }}
+                                >
+                                    {salesName}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedSalesNames(salesNameOptions)}>
+                        Pilih Semua
+                    </Button>
+                </div>
             </div>
 
             {/* KPI Cards */}
@@ -113,7 +252,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                 />
                 <ScoreCard
                     title="Potential Opportunities"
-                    value={data.lostAnalysis.length}
+                    value={filteredLostCount}
                     icon={Package}
                     description="Item dari kuotasi lost"
                     gradient="from-purple-500/10 via-purple-400/5 to-pink-500/10 border-purple-200/50"
