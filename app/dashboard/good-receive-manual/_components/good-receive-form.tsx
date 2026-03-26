@@ -39,9 +39,20 @@ const formSchema = z.object({
         materialNumber: z.string().min(1, "Material number is required"),
         productId: z.coerce.number().min(0),
         openQty: z.coerce.number().min(0),
+        poQty: z.coerce.number().min(0),
         quantity: z.coerce.number().min(0, "Quantity cannot be negative"),
         notes: z.string().optional(),
     })).min(1, "At least one item is required"),
+}).superRefine((data, ctx) => {
+    data.items.forEach((item, index) => {
+        if (item.quantity > item.poQty) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Quantity tidak boleh melebihi PO Qty (${item.poQty})`,
+                path: ["items", index, "quantity"],
+            })
+        }
+    })
 })
 
 type GoodReceiveFormProps = {
@@ -114,6 +125,7 @@ export function GoodReceiveForm({
                 poItem: line.poItem,
                 materialNumber: line.materialNumber,
                 productId: line.productId ?? 0,
+                poQty: line.poQty,
                 openQty: line.openQty,
                 quantity: currentItem?.quantity ?? 0,
                 notes: currentItem?.notes ?? "",
@@ -126,6 +138,7 @@ export function GoodReceiveForm({
                 || item.poItem !== nextItem.poItem
                 || item.materialNumber !== nextItem.materialNumber
                 || item.productId !== nextItem.productId
+                || item.poQty !== nextItem.poQty
                 || item.openQty !== nextItem.openQty
                 || item.quantity !== nextItem.quantity
                 || (item.notes ?? "") !== (nextItem.notes ?? "")
@@ -476,7 +489,7 @@ export function GoodReceiveForm({
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs">
-                                Yang muncul di sini hanya sisa item yang belum di-GR manual.
+                                Pilih quantity sesuai PO Qty masing-masing item.
                             </CardDescription>
                         </CardHeader>
                         <Separator />
@@ -545,22 +558,13 @@ export function GoodReceiveForm({
                                                         </div>
                                                     </div>
 
-                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                    <div className="grid grid-cols-1 gap-3">
                                                         <div>
                                                             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                                                 PO Qty
                                                             </p>
                                                             <p className="mt-1 text-sm font-medium">
                                                                 {selectedLine?.poQty ?? 0}
-                                                            </p>
-                                                        </div>
-
-                                                        <div>
-                                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                                                Sisa Qty
-                                                            </p>
-                                                            <p className="mt-1 text-sm font-medium">
-                                                                {selectedLine?.openQty ?? 0}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -578,10 +582,14 @@ export function GoodReceiveForm({
                                                                         <Input
                                                                             type="number"
                                                                             min={0}
-                                                                            max={selectedLine?.openQty ?? 0}
+                                                                            max={selectedLine?.poQty ?? 0}
                                                                             className="focus-visible:ring-indigo-500"
                                                                             {...field}
-                                                                            onChange={(e) => field.onChange(Number(e.target.value))}
+                                                                            onChange={(e) => {
+                                                                                const nextQty = Number(e.target.value)
+                                                                                const maxQty = selectedLine?.poQty ?? 0
+                                                                                field.onChange(Math.min(Math.max(0, nextQty), maxQty))
+                                                                            }}
                                                                         />
                                                                     </FormControl>
                                                                     <FormMessage />
@@ -619,7 +627,6 @@ export function GoodReceiveForm({
                                             <TableHead className="w-[320px] text-xs font-semibold text-muted-foreground">PO Item</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Internal Product</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">PO Qty</TableHead>
-                                            <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Sisa Qty</TableHead>
                                             <TableHead className="w-[100px] text-xs font-semibold text-muted-foreground">Quantity</TableHead>
                                             <TableHead className="text-xs font-semibold text-muted-foreground">Notes</TableHead>
                                         </TableRow>
@@ -671,9 +678,6 @@ export function GoodReceiveForm({
                                                     <TableCell className="text-sm font-medium">
                                                         {selectedLine?.poQty ?? 0}
                                                     </TableCell>
-                                                    <TableCell className="text-sm font-medium">
-                                                        {selectedLine?.openQty ?? 0}
-                                                    </TableCell>
                                                     <TableCell>
                                                         <FormField
                                                             control={form.control}
@@ -684,10 +688,14 @@ export function GoodReceiveForm({
                                                                         <Input
                                                                             type="number"
                                                                             min={0}
-                                                                            max={selectedLine?.openQty ?? 0}
+                                                                            max={selectedLine?.poQty ?? 0}
                                                                             className="focus-visible:ring-indigo-500"
                                                                             {...field}
-                                                                            onChange={(e) => field.onChange(Number(e.target.value))}
+                                                                            onChange={(e) => {
+                                                                                const nextQty = Number(e.target.value)
+                                                                                const maxQty = selectedLine?.poQty ?? 0
+                                                                                field.onChange(Math.min(Math.max(0, nextQty), maxQty))
+                                                                            }}
                                                                         />
                                                                     </FormControl>
                                                                     <FormMessage />

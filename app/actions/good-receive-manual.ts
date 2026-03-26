@@ -375,6 +375,7 @@ export type CreateGoodReceiveManualInput = {
         poItem: number
         materialNumber: string
         productId: number
+        poQty?: number
         quantity: number
         openQty: number
         notes?: string
@@ -469,17 +470,12 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
                 }
 
-                const sapOpenQty = sanitizeOpenQty(sapLine.orderQty, sapLine.deliveredQty)
-                const manualReceivedQty = manualReceivedByPoItem.get(item.poItem) ?? 0
-                const remainingQty = Math.max(0, sapOpenQty - manualReceivedQty)
-                if (remainingQty <= 0) {
-                    throw new Error(`PO Item ${item.poItem} tidak memiliki sisa qty untuk GR Manual`)
-                }
+                const poQty = Number(sapLine.orderQty || 0)
                 if (item.quantity < 0) {
                     throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
                 }
-                if (item.quantity > remainingQty) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi sisa qty (${remainingQty})`)
+                if (item.quantity > poQty) {
+                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi PO Qty (${poQty})`)
                 }
 
                 const product = productById.get(item.productId)
