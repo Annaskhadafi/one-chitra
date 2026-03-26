@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/update-comparison-data",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/chat-unread-reminders",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

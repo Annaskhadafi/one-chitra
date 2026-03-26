@@ -4,10 +4,11 @@ import { db } from "@/db"
 import { chatRooms, chatRoomMembers, chatMessages } from "@/db/schema"
 import { quotations, salesOrders, deliveries } from "@/db/schema"
 import { user as userTable } from "@/db/schema"
-import { eq, and, or, desc, sql, gt } from "drizzle-orm"
+import { eq, and, or, desc, sql, gt, ne } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { ensureChatSchema } from "@/lib/chat-schema"
 
 async function getCurrentUserId() {
     const session = await auth.api.getSession({ headers: await headers() })
@@ -35,6 +36,20 @@ export type ChatMessage = {
     mentionId: string | null
     mentionLabel: string | null
     createdAt: string
+}
+
+export type UnreadChatReminder = {
+    membershipId: number
+    roomId: number
+    roomName: string
+    recipientUserId: string
+    recipientName: string
+    recipientEmail: string
+    unreadCount: number
+    latestUnreadAt: string
+    latestSenderName: string
+    latestMessagePreview: string
+    reminderCount: number
 }
 
 async function getCurrentUser() {
@@ -151,6 +166,7 @@ export async function sendMessage(
 
 // Get messages for a room
 export async function getRoomMessages(roomId: number, limit = 50): Promise<ChatMessage[]> {
+    await ensureChatSchema()
     const currentUserId = await getCurrentUserId()
 
     const membership = await db.query.chatRoomMembers.findFirst({
@@ -182,7 +198,7 @@ export async function getRoomMessages(roomId: number, limit = 50): Promise<ChatM
 
     // Mark as read
     await db.update(chatRoomMembers)
-        .set({ lastReadAt: new Date() })
+        .set({ lastReadAt: new Date(), lastUnreadReminderAt: null, unreadReminderCount: 0 })
         .where(and(
             eq(chatRoomMembers.roomId, roomId),
             eq(chatRoomMembers.userId, currentUserId)
@@ -196,6 +212,7 @@ export async function getRoomMessages(roomId: number, limit = 50): Promise<ChatM
 
 // Get user's rooms with unread counts & last message
 export async function getUserRooms(): Promise<ChatRoomWithMeta[]> {
+    await ensureChatSchema()
     const currentUserId = await getCurrentUserId()
 
     const myMemberships = await db
@@ -246,6 +263,7 @@ export async function getUserRooms(): Promise<ChatRoomWithMeta[]> {
                 .from(chatMessages)
                 .where(and(
                     eq(chatMessages.roomId, roomId),
+                    ne(chatMessages.senderId, currentUserId),
                     gt(chatMessages.createdAt, lastReadAt)
                 ))
             unreadCount = Number(row?.count ?? 0)
@@ -253,7 +271,10 @@ export async function getUserRooms(): Promise<ChatRoomWithMeta[]> {
             const [row] = await db
                 .select({ count: sql<number>`count(*)` })
                 .from(chatMessages)
-                .where(eq(chatMessages.roomId, roomId))
+                .where(and(
+                    eq(chatMessages.roomId, roomId),
+                    ne(chatMessages.senderId, currentUserId),
+                ))
             unreadCount = Number(row?.count ?? 0)
         }
 
@@ -282,6 +303,129 @@ export async function getUserRooms(): Promise<ChatRoomWithMeta[]> {
         const db2 = b.lastMessage?.createdAt ?? ""
         return db2.localeCompare(da)
     })
+}
+
+export async function getUnreadChatReminders(overdueMinutes = 60): Promise<UnreadChatReminder[]> {
+    await ensureChatSchema()
+    const cutoff = new Date(Date.now() - overdueMinutes * 60 * 1000)
+
+    const memberships = await db
+        .select({
+            membershipId: chatRoomMembers.id,
+            roomId: chatRoomMembers.roomId,
+            userId: chatRoomMembers.userId,
+            lastReadAt: chatRoomMembers.lastReadAt,
+            lastUnreadReminderAt: chatRoomMembers.lastUnreadReminderAt,
+            unreadReminderCount: chatRoomMembers.unreadReminderCount,
+            recipientName: userTable.name,
+            recipientEmail: userTable.email,
+        })
+        .from(chatRoomMembers)
+        .innerJoin(userTable, eq(chatRoomMembers.userId, userTable.id))
+
+    const reminders: UnreadChatReminder[] = []
+
+    for (const membership of memberships) {
+        if (!membership.recipientEmail) {
+            continue
+        }
+
+        if ((membership.unreadReminderCount ?? 0) >= 5) {
+            continue
+        }
+
+        const unreadCondition = membership.lastReadAt
+            ? and(
+                eq(chatMessages.roomId, membership.roomId),
+                ne(chatMessages.senderId, membership.userId),
+                gt(chatMessages.createdAt, membership.lastReadAt),
+            )
+            : and(
+                eq(chatMessages.roomId, membership.roomId),
+                ne(chatMessages.senderId, membership.userId),
+            )
+
+        const unreadMessages = await db
+            .select({
+                id: chatMessages.id,
+                content: chatMessages.content,
+                createdAt: chatMessages.createdAt,
+                senderName: userTable.name,
+            })
+            .from(chatMessages)
+            .innerJoin(userTable, eq(chatMessages.senderId, userTable.id))
+            .where(unreadCondition)
+            .orderBy(desc(chatMessages.createdAt))
+
+        if (unreadMessages.length === 0) {
+            continue
+        }
+
+        const latestUnread = unreadMessages[0]
+        if (latestUnread.createdAt > cutoff) {
+            continue
+        }
+
+        if (membership.lastUnreadReminderAt && membership.lastUnreadReminderAt >= latestUnread.createdAt) {
+            continue
+        }
+
+        const room = await db.query.chatRooms.findFirst({
+            where: eq(chatRooms.id, membership.roomId),
+        })
+
+        if (!room) {
+            continue
+        }
+
+        let roomName = room.name ?? "Chat"
+        if (room.type === "dm") {
+            const memberRows = await db
+                .select({
+                    userId: chatRoomMembers.userId,
+                    name: userTable.name,
+                })
+                .from(chatRoomMembers)
+                .innerJoin(userTable, eq(chatRoomMembers.userId, userTable.id))
+                .where(eq(chatRoomMembers.roomId, membership.roomId))
+
+            roomName = memberRows.find((member) => member.userId !== membership.userId)?.name ?? roomName
+        }
+
+        reminders.push({
+            membershipId: membership.membershipId,
+            roomId: membership.roomId,
+            roomName,
+            recipientUserId: membership.userId,
+            recipientName: membership.recipientName,
+            recipientEmail: membership.recipientEmail,
+            unreadCount: unreadMessages.length,
+            latestUnreadAt: latestUnread.createdAt.toISOString(),
+            latestSenderName: latestUnread.senderName,
+            latestMessagePreview: latestUnread.content.slice(0, 180),
+            reminderCount: membership.unreadReminderCount ?? 0,
+        })
+    }
+
+    return reminders
+}
+
+export async function markUnreadChatReminderSent(membershipId: number) {
+    await ensureChatSchema()
+    const membership = await db.query.chatRoomMembers.findFirst({
+        where: eq(chatRoomMembers.id, membershipId),
+    })
+
+    if (!membership) {
+        return
+    }
+    await db
+        .update(chatRoomMembers)
+        .set({
+            lastUnreadReminderAt: new Date(),
+            unreadReminderCount: (membership.unreadReminderCount ?? 0) + 1,
+        })
+        .where(eq(chatRoomMembers.id, membershipId))
 }
 
 // Search documents for "/" mention

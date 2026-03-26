@@ -19,6 +19,8 @@ export const chatRoomMembers = pgTable("chat_room_members", {
     userId: varchar("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
     lastReadAt: timestamp("last_read_at"), // untuk unread tracking
+    lastUnreadReminderAt: timestamp("last_unread_reminder_at"),
+    unreadReminderCount: integer("unread_reminder_count").default(0).notNull(),
 });
 
 // Chat Messages
