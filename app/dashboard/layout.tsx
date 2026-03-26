@@ -20,6 +20,7 @@ import { getNavbarTheme } from "@/lib/navbar-theme"
 import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 import { getDashboardRouteResource } from "@/lib/route-permissions"
+import { ChatWidget } from "@/components/chat/chat-widget"
 
 const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
   return sections.map((section) => ({
@@ -94,8 +95,6 @@ const ensureMasterDataMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[
     }),
   }))
 }
-
-// ... imports
 
 export default async function DashboardLayout({
   children,
@@ -270,6 +269,7 @@ export default async function DashboardLayout({
         <SidebarInset suppressHydrationWarning>
           <SiteHeader />
           <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
+          <ChatWidget currentUserId={session.user.id} />
         </SidebarInset>
       </SidebarProvider>
     </PermissionsProvider>

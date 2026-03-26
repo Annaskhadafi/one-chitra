@@ -133,6 +133,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/evhs",
                         resource: "evhs",
                     },
+                    {
+                        title: "Serial Number History",
+                        url: "/dashboard/serial-number-history",
+                        resource: "serial-number-history",
+                    },
                 ],
             },
             {

@@ -172,7 +172,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [discount, setDiscount] = useState(Number(initialData?.discount || 0))
     const [tax] = useState(Number(initialData?.tax || 0))
     const [shipping, setShipping] = useState(Number(initialData?.shipping || 0))
-    const [globalMargin, setGlobalMargin] = useState<number>(0)
+    const [globalMargin, setGlobalMargin] = useState<number>(11)
     const [exchangeRate, setExchangeRate] = useState<number>(1)
     const [isApplyingMargin, startApplyingMarginTransition] = useTransition()
 

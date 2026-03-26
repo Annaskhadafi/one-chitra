@@ -159,6 +159,14 @@ export {
     emailContactsRelations,
     emailGroupMembersRelations,
 } from "./email-contacts";
+export {
+    chatRooms,
+    chatRoomMembers,
+    chatMessages,
+    chatRoomsRelations,
+    chatRoomMembersRelations,
+    chatMessagesRelations,
+} from "./chat";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";
