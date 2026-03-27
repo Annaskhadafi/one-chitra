@@ -36,6 +36,12 @@ export type OcrResult = {
     pagesProcessed: number
 }
 
+export type RawOcrTextResult = {
+    rawText: string
+    model: string
+    pagesProcessed: number
+}
+
 const documentAnnotationSchema = z.object({
     customer_company_name: z.string(),
     customer_code: z.string().optional().nullable(),
@@ -249,6 +255,71 @@ export async function extractStructuredFromDocument(params: {
         entityBoxes,
         model,
         pagesProcessed,
+    }
+}
+
+export async function extractRawTextFromDocument(params: {
+    fileBuffer: Buffer
+    filename: string
+    pages?: string | number[] | null
+}): Promise<RawOcrTextResult> {
+    const apiKey = process.env.MISTRAL_API_KEY
+    const endpoint = process.env.MISTRAL_OCR_ENDPOINT?.trim() || "https://api.mistral.ai/v1/ocr"
+    if (!apiKey) {
+        throw new Error("MISTRAL_API_KEY is not set")
+    }
+
+    const { filename, fileBuffer } = await normalizeDocumentForOcr(params.filename, params.fileBuffer)
+    const base64 = fileBuffer.toString("base64")
+    const documentUrl = buildDataUri(filename, base64)
+    const normalizedPages = normalizePages(params.pages)
+
+    const body = {
+        model: "mistral-ocr-latest",
+        document: {
+            type: "document_url",
+            document_url: documentUrl,
+        },
+        ...(normalizedPages ? { pages: normalizedPages } : {}),
+    }
+
+    const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+        const text = await res.text()
+        let upstreamMessage = text
+        try {
+            const parsed = JSON.parse(text) as { detail?: Array<{ msg?: string; loc?: string[] }> }
+            if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+                upstreamMessage = parsed.detail
+                    .slice(0, 3)
+                    .map((d) => {
+                        const loc = Array.isArray(d.loc) ? d.loc.join(".") : "body"
+                        return `${loc}: ${d.msg || "invalid request"}`
+                    })
+                    .join(" | ")
+            }
+        } catch {}
+
+        if (upstreamMessage.includes("does not support image input")) {
+            throw new Error("File gambar tidak didukung oleh model OCR ini. Silakan gunakan file PDF untuk hasil terbaik.")
+        }
+
+        throw new Error(`MISTRAL_UPSTREAM_ERROR ${res.status} ${upstreamMessage}`)
+    }
+
+    const json = await res.json()
+    return {
+        rawText: getRawText(json),
+        model: json?.model ?? "mistral-ocr-latest",
+        pagesProcessed: json?.usage_info?.pages_processed ?? 0,
     }
 }
 

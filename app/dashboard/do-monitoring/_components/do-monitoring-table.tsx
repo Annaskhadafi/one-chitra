@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react"
 import { EditDoDialog } from "./edit-do-dialog"
+import { BulkDoOcrUploadDialog } from "./bulk-do-ocr-upload-dialog"
 import { ScanDoPreview } from "./scan-do-preview"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
 import { DeliveryPdfPreview } from "../../deliveries/_components/delivery-pdf-preview"
@@ -733,6 +734,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         <Download className="mr-2 h-4 w-4" />
                         Export CSV
                     </Button>
+                    <BulkDoOcrUploadDialog />
                     <Button
                         variant="outline"
                         onClick={handleSyncInvoiceFromSap}

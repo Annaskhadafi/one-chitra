@@ -1292,6 +1292,154 @@ export async function updateDoMonitoringFields(id: number, data: {
     }
 }
 
+export async function bulkAttachDoScansByInternalNo(entries: Array<{
+    internalNo: string
+    fileUrl: string
+    originalFileName?: string | null
+}>) {
+    try {
+        await checkPermission('deliveries', 'edit')
+
+        const now = new Date()
+        const normalizedEntries = entries
+            .map((entry) => ({
+                internalNo: normalizeDeliveryNumberKey(entry.internalNo),
+                fileUrl: entry.fileUrl,
+                originalFileName: entry.originalFileName?.trim() || null,
+            }))
+            .filter((entry) => entry.internalNo && entry.fileUrl)
+
+        if (normalizedEntries.length === 0) {
+            return {
+                success: false,
+                error: "Tidak ada file hasil OCR yang siap diproses",
+            }
+        }
+
+        const deliveryRows = await db.query.deliveries.findMany({
+            columns: {
+                id: true,
+                deliveryNumber: true,
+                scanDoDocument: true,
+                doStatus: true,
+                returnDoDate: true,
+            },
+        })
+
+        const deliveryMap = new Map<string, {
+            id: number
+            deliveryNumber: string | null
+            scanDoDocument: string | null
+            doStatus: string | null
+            returnDoDate: Date | null
+        }>(
+            deliveryRows
+                .filter((row) => row.deliveryNumber)
+                .map((row) => [normalizeDeliveryNumberKey(row.deliveryNumber ?? ""), row]),
+        )
+
+        const seenKeys = new Set<string>()
+        const updated: Array<{
+            id: number
+            deliveryNumber: string
+            fileUrl: string
+            originalFileName: string | null
+        }> = []
+        const unmatched: Array<{
+            internalNo: string
+            fileUrl: string
+            originalFileName: string | null
+            reason: string
+        }> = []
+        const duplicates: Array<{
+            internalNo: string
+            fileUrl: string
+            originalFileName: string | null
+            reason: string
+        }> = []
+
+        for (const entry of normalizedEntries) {
+            const key = normalizeDeliveryNumberKey(entry.internalNo)
+            if (!key) {
+                unmatched.push({
+                    internalNo: entry.internalNo,
+                    fileUrl: entry.fileUrl,
+                    originalFileName: entry.originalFileName,
+                    reason: "Internal No kosong setelah normalisasi",
+                })
+                continue
+            }
+
+            if (seenKeys.has(key)) {
+                duplicates.push({
+                    internalNo: entry.internalNo,
+                    fileUrl: entry.fileUrl,
+                    originalFileName: entry.originalFileName,
+                    reason: "Duplicate Internal No pada batch upload",
+                })
+                continue
+            }
+            seenKeys.add(key)
+
+            const matchedDelivery = deliveryMap.get(key)
+            if (!matchedDelivery?.id || !matchedDelivery.deliveryNumber) {
+                unmatched.push({
+                    internalNo: entry.internalNo,
+                    fileUrl: entry.fileUrl,
+                    originalFileName: entry.originalFileName,
+                    reason: "Delivery tidak ditemukan",
+                })
+                continue
+            }
+
+            await db.update(deliveries)
+                .set({
+                    scanDoDocument: entry.fileUrl,
+                    returnDoDate: now,
+                    doStatus: "Returned",
+                    updatedAt: now,
+                })
+                .where(eq(deliveries.id, matchedDelivery.id))
+
+            updated.push({
+                id: matchedDelivery.id,
+                deliveryNumber: matchedDelivery.deliveryNumber,
+                fileUrl: entry.fileUrl,
+                originalFileName: entry.originalFileName,
+            })
+        }
+
+        try {
+            revalidatePath("/dashboard/deliveries")
+            revalidatePath("/dashboard/do-monitoring")
+        } catch (_e) { }
+
+        return {
+            success: true,
+            processedAt: now.toISOString(),
+            totalReceived: entries.length,
+            totalReady: normalizedEntries.length,
+            updatedCount: updated.length,
+            unmatchedCount: unmatched.length,
+            duplicateCount: duplicates.length,
+            updated,
+            unmatched,
+            duplicates,
+        }
+    } catch (_error) {
+        console.error("Failed to bulk attach DO scans:", _error)
+        return { success: false, error: "Failed to bulk attach DO scans" }
+    }
+}
+
+function normalizeDeliveryNumberKey(value: string | null | undefined) {
+    return String(value ?? "")
+        .toUpperCase()
+        .replace(/[–—]/g, "-")
+        .replace(/\//g, "-")
+        .replace(/[^A-Z0-9]/g, "")
+}
+
 export async function checkAndCompleteSalesOrder(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], salesOrderId: number) {
     // 1. Fetch SO with items
     const order = await tx.query.salesOrders.findFirst({
