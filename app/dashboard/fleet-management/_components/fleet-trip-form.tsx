@@ -36,9 +36,9 @@ import {
 } from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
     Table,
     TableBody,
@@ -48,6 +48,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 // Types for props
 interface Driver {
@@ -66,7 +67,17 @@ interface SalesOrder { // Simplified from getSalesOrdersForDelivery result
     invoiceNumber: string | null
     customerPo: string | null
     customer: { name: string }
-    items: { remainingQuantity: number }[]
+    items: {
+        id: number
+        quantity: number
+        remainingQuantity: number
+        alreadyDelivered: number
+        product?: {
+            materialDescription: string | null
+            materialNumber: string | null
+            category: string | null
+        } | null
+    }[]
 }
 
 interface FleetTripFormProps {
@@ -80,6 +91,8 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [openDriver, setOpenDriver] = useState(false)
     const [openVehicle, setOpenVehicle] = useState(false)
+    const [salesOrderSearch, setSalesOrderSearch] = useState("")
+    const [customerFilter, setCustomerFilter] = useState("all")
 
     const form = useForm<z.infer<typeof fleetTripSchema>>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,6 +141,28 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
     }
 
     const selectedSalesOrderIds = form.watch("salesOrderIds")
+
+    const customerOptions = Array.from(
+        new Set(
+            salesOrders
+                .map((order) => order.customer.name?.trim())
+                .filter((name): name is string => Boolean(name))
+        )
+    ).sort((a, b) => a.localeCompare(b))
+
+    const filteredSalesOrders = salesOrders.filter((so) => {
+        const matchesCustomer = customerFilter === "all" || so.customer.name === customerFilter
+        const searchTerm = salesOrderSearch.trim().toLowerCase()
+        const matchesSearch = !searchTerm || [
+            so.invoiceNumber || "",
+            so.customerPo || "",
+            so.customer.name || "",
+            ...so.items.map((item) => item.product?.materialDescription || ""),
+            ...so.items.map((item) => item.product?.materialNumber || ""),
+        ].some((value) => value.toLowerCase().includes(searchTerm))
+
+        return matchesCustomer && matchesSearch
+    })
 
     const handleToggleSalesOrder = (id: number) => {
         const current = form.getValues("salesOrderIds")
@@ -600,58 +635,133 @@ export function FleetTripForm({ drivers, vehicles, salesOrders }: FleetTripFormP
                             </CardHeader>
                             <CardContent className="flex-1 overflow-auto max-h-[600px]">
                                 <div className="space-y-4">
+                                    <div className="grid gap-3 md:grid-cols-[1fr_240px]">
+                                        <Input
+                                            placeholder="Search SO, PO, customer, product..."
+                                            value={salesOrderSearch}
+                                            onChange={(event) => setSalesOrderSearch(event.target.value)}
+                                        />
+                                        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Filter by Customer" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Semua Customer</SelectItem>
+                                                {customerOptions.map((customerName) => (
+                                                    <SelectItem key={customerName} value={customerName}>
+                                                        {customerName}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-[50px]"></TableHead>
-                                                    <TableHead>SO Number</TableHead>
-                                                    <TableHead>Customer</TableHead>
-                                                    <TableHead className="text-right">Items</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {salesOrders.length === 0 ? (
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
-                                                            No pending orders available.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ) : (
-                                                    salesOrders.map((so) => (
-                                                        <TableRow
-                                                            key={so.id}
-                                                            className="cursor-pointer hover:bg-muted/50"
-                                                            onClick={(e) => {
-                                                                if ((e.target as HTMLElement).closest('button')) return;
-                                                                handleToggleSalesOrder(so.id);
-                                                            }}
-                                                        >
-                                                            <TableCell>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    className="size-4 rounded-sm border-input shadow-sm accent-primary cursor-pointer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    checked={selectedSalesOrderIds.includes(so.id)}
-                                                                    onChange={() => handleToggleSalesOrder(so.id)}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell className="font-mono">
-                                                                {so.invoiceNumber || so.customerPo || "SO-" + so.id}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {so.customer.name}
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                <Badge variant="outline">
-                                                                    {so.items.length} Items
-                                                                </Badge>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))
-                                                )}
-                                            </TableBody>
-                                        </Table>
+                                        {filteredSalesOrders.length === 0 ? (
+                                            <div className="py-4 text-center text-sm text-muted-foreground">
+                                                Tidak ada sales order yang sesuai filter.
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="grid grid-cols-[44px_1fr_1fr_1.2fr_110px_44px] items-center gap-3 border-b bg-muted/40 px-4 py-3 text-sm font-medium text-muted-foreground">
+                                                    <div></div>
+                                                    <div>SO Number</div>
+                                                    <div>Nomor PO</div>
+                                                    <div>Customer</div>
+                                                    <div className="text-right">Items</div>
+                                                    <div></div>
+                                                </div>
+                                                <Accordion type="multiple" className="w-full">
+                                                {filteredSalesOrders.map((so) => {
+                                                    const detailItems = so.items.filter((item) => item.remainingQuantity > 0)
+
+                                                    return (
+                                                        <AccordionItem key={so.id} value={`so-${so.id}`} className="border-b last:border-b-0">
+                                                            <div
+                                                                className="grid grid-cols-[44px_1fr_1fr_1.2fr_110px_44px] items-center gap-3 px-4 py-3 hover:bg-muted/40"
+                                                                onClick={(e) => {
+                                                                    if ((e.target as HTMLElement).closest("button")) return
+                                                                    handleToggleSalesOrder(so.id)
+                                                                }}
+                                                            >
+                                                                <div>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="size-4 rounded-sm border-input shadow-sm accent-primary cursor-pointer"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        checked={selectedSalesOrderIds.includes(so.id)}
+                                                                        onChange={() => handleToggleSalesOrder(so.id)}
+                                                                    />
+                                                                </div>
+                                                                <div className="font-mono text-sm">
+                                                                    {so.invoiceNumber || `SO-${so.id}`}
+                                                                </div>
+                                                                <div className="font-mono text-sm">
+                                                                    {so.customerPo || "-"}
+                                                                </div>
+                                                                <div className="text-sm">
+                                                                    {so.customer.name}
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <Badge variant="outline">
+                                                                        {detailItems.length} Items
+                                                                    </Badge>
+                                                                </div>
+                                                                <AccordionTrigger className="justify-self-end py-0 hover:no-underline" />
+                                                            </div>
+                                                            <AccordionContent className="px-4 pb-4">
+                                                                <div className="overflow-x-auto rounded-md border bg-muted/20">
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow>
+                                                                                <TableHead>Product</TableHead>
+                                                                                <TableHead>Material Number</TableHead>
+                                                                                <TableHead>Category</TableHead>
+                                                                                <TableHead className="text-right">Ordered</TableHead>
+                                                                                <TableHead className="text-right">Delivered</TableHead>
+                                                                                <TableHead className="text-right">Outstanding</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {detailItems.length === 0 ? (
+                                                                                <TableRow>
+                                                                                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                                                                                        Tidak ada detail item outstanding.
+                                                                                    </TableCell>
+                                                                                </TableRow>
+                                                                            ) : (
+                                                                                detailItems.map((item) => (
+                                                                                    <TableRow key={item.id}>
+                                                                                        <TableCell className="text-sm font-medium">
+                                                                                            {item.product?.materialDescription || item.product?.materialNumber || "-"}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="font-mono text-xs">
+                                                                                            {item.product?.materialNumber || "-"}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="text-sm">
+                                                                                            {item.product?.category || "-"}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="text-right">
+                                                                                            {item.quantity.toLocaleString("id-ID")}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="text-right">
+                                                                                            {item.alreadyDelivered.toLocaleString("id-ID")}
+                                                                                        </TableCell>
+                                                                                        <TableCell className="text-right font-medium">
+                                                                                            {item.remainingQuantity.toLocaleString("id-ID")}
+                                                                                        </TableCell>
+                                                                                    </TableRow>
+                                                                                ))
+                                                                            )}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            </AccordionContent>
+                                                        </AccordionItem>
+                                                    )
+                                                })}
+                                                </Accordion>
+                                            </>
+                                        )}
                                     </div>
                                     {form.formState.errors.salesOrderIds && (
                                         <p className="text-[0.8rem] font-medium text-destructive">

@@ -13,6 +13,8 @@ export default async function CreateCostSettlementPage() {
     const toNumber = (value: string | number | null | undefined) => Number(value ?? 0)
     const sumCostFields = (payload: {
         costGasoline?: string | number | null
+        costGasolineDexlite?: string | number | null
+        costGasolineBio?: string | number | null
         costToll?: string | number | null
         costParking?: string | number | null
         costMeals?: string | number | null
@@ -25,6 +27,8 @@ export default async function CreateCostSettlementPage() {
         costEscort?: string | number | null
     }) => (
         toNumber(payload.costGasoline)
+        + toNumber(payload.costGasolineDexlite)
+        + toNumber(payload.costGasolineBio)
         + toNumber(payload.costToll)
         + toNumber(payload.costParking)
         + toNumber(payload.costMeals)
@@ -40,7 +44,7 @@ export default async function CreateCostSettlementPage() {
     const tripOptions = fleetTrips.map((trip) => ({
         id: trip.id,
         tripNumber: trip.tripNumber,
-        driverLabel: trip.driver?.name || "Tanpa Driver",
+        driverLabel: `${trip.driver?.name || "Tanpa Driver"} • ${new Date(trip.date).toLocaleDateString("id-ID")}`,
         advanceAmount: sumCostFields(trip),
     }))
 

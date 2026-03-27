@@ -62,7 +62,16 @@ interface FleetTripWithRelations {
     date: Date
     driver: { name: string } | null
     vehicle: { policeNumber: string; type: string } | null
-    deliveries: { id: number; deliveryNumber: string | null }[]
+    deliveries: {
+        id: number
+        deliveryNumber: string | null
+        salesOrder?: {
+            id: number
+            invoiceNumber: string | null
+            customerPo: string | null
+            customer?: { name: string } | null
+        } | null
+    }[]
     costGasolineDexlite: string | null
     costGasolineBio: string | null
     costToll: string | null
@@ -118,6 +127,25 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
             (Number(trip.costPortal) || 0) +
             (Number(trip.costWashing) || 0) +
             (Number(trip.costEscort) || 0)
+    }
+
+    const getTripSalesOrders = (trip: FleetTripWithRelations) => {
+        const seen = new Set<string>()
+
+        return trip.deliveries.flatMap((delivery) => {
+            const salesOrder = delivery.salesOrder
+            if (!salesOrder) return []
+
+            const label = salesOrder.invoiceNumber || `SO-${salesOrder.id}`
+            const poNumber = salesOrder.customerPo || "-"
+            const customerName = salesOrder.customer?.name || "-"
+            const key = `${label}-${poNumber}-${customerName}`
+
+            if (seen.has(key)) return []
+            seen.add(key)
+
+            return [{ label, poNumber, customerName }]
+        })
     }
 
     const columns = useMemo<ColumnDef<FleetTripWithRelations>[]>(() => [
@@ -211,6 +239,25 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
             cell: ({ row }) => (
                 <div className="text-right">
                     <Badge variant="secondary">{row.original.deliveries.length}</Badge>
+                </div>
+            ),
+        },
+        {
+            id: "salesOrders",
+            header: "List SO",
+            cell: ({ row }) => (
+                <div className="min-w-[280px] space-y-1">
+                    {getTripSalesOrders(row.original).length === 0 ? (
+                        <span className="text-muted-foreground">-</span>
+                    ) : (
+                        getTripSalesOrders(row.original).map((salesOrder) => (
+                            <div key={`${salesOrder.label}-${salesOrder.poNumber}`} className="rounded-md border px-2 py-1 text-xs">
+                                <div className="font-mono font-medium">{salesOrder.label}</div>
+                                <div className="text-muted-foreground">PO: {salesOrder.poNumber}</div>
+                                <div className="text-muted-foreground">{salesOrder.customerName}</div>
+                            </div>
+                        ))
+                    )}
                 </div>
             ),
         },
@@ -311,7 +358,12 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.tripNumber.toLowerCase().includes(term) ||
                 trip.driver?.name?.toLowerCase().includes(term) ||
                 trip.vehicle?.policeNumber?.toLowerCase().includes(term) ||
-                trip.status?.toLowerCase().includes(term)
+                trip.status?.toLowerCase().includes(term) ||
+                getTripSalesOrders(trip).some((salesOrder) =>
+                    salesOrder.label.toLowerCase().includes(term) ||
+                    salesOrder.poNumber.toLowerCase().includes(term) ||
+                    salesOrder.customerName.toLowerCase().includes(term)
+                )
             )
         },
     })
@@ -334,9 +386,13 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
         : [0, 0]
 
     const handleExport = () => {
-        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "BBM (Dexlite)", "BBM (Bio Solar)", "Toll", "Parkir", "Meals", "Maintenance", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Others", "Total Cost"]
+        const headers = ["Trip Number", "Date", "Status", "Driver", "Vehicle", "Deliveries", "List SO", "BBM (Dexlite)", "BBM (Bio Solar)", "Toll", "Parkir", "Meals", "Maintenance", "Rapid Test", "Ferry", "Portal", "Washing", "Escort", "Others", "Total Cost"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const trip = row.original
+            const salesOrderList = getTripSalesOrders(trip)
+                .map((salesOrder) => `${salesOrder.label} / PO ${salesOrder.poNumber} / ${salesOrder.customerName}`)
+                .join(" | ")
+
             return [
                 trip.tripNumber,
                 new Date(trip.date).toLocaleDateString("id-ID"),
@@ -344,6 +400,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                 trip.driver?.name || "",
                 trip.vehicle?.policeNumber || "",
                 trip.deliveries.length,
+                salesOrderList,
                 trip.costGasolineDexlite || 0,
                 trip.costGasolineBio || 0,
                 trip.costToll || 0,
@@ -430,7 +487,7 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                             {rowVirtualizer.getVirtualItems().length > 0 ? (
                                 <>
                                     <TableRow style={{ height: `${before}px` }} className="border-none">
-                                        <TableCell colSpan={8} />
+                                        <TableCell colSpan={9} />
                                     </TableRow>
                                     {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                                         const row = rows[virtualRow.index]
@@ -445,12 +502,12 @@ export function FleetTripTable({ data: initialData }: FleetTripTableProps) {
                                         )
                                     })}
                                     <TableRow style={{ height: `${after}px` }} className="border-none">
-                                        <TableCell colSpan={8} />
+                                        <TableCell colSpan={9} />
                                     </TableRow>
                                 </>
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                                         No trips found.
                                     </TableCell>
                                 </TableRow>

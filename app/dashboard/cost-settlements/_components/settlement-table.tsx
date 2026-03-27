@@ -44,6 +44,7 @@ export function SettlementTable({ data }: { data: SettlementRow[] }) {
                             <tr className="border-b text-left text-muted-foreground">
                                 <th className="px-3 py-2 font-medium">No. Settlement</th>
                                 <th className="px-3 py-2 font-medium">Tipe</th>
+                                <th className="px-3 py-2 font-medium">Referensi</th>
                                 <th className="px-3 py-2 font-medium">Tanggal</th>
                                 <th className="px-3 py-2 font-medium">Driver</th>
                                 <th className="px-3 py-2 font-medium">Uang Muka</th>
@@ -56,7 +57,7 @@ export function SettlementTable({ data }: { data: SettlementRow[] }) {
                         <tbody>
                             {data.length === 0 ? (
                                 <tr>
-                                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={9}>
+                                    <td className="px-3 py-6 text-center text-muted-foreground" colSpan={10}>
                                         Belum ada data settlement.
                                     </td>
                                 </tr>
@@ -64,6 +65,11 @@ export function SettlementTable({ data }: { data: SettlementRow[] }) {
                                 <tr key={row.id} className="border-b last:border-b-0">
                                     <td className="px-3 py-2 font-medium">{row.settlementNumber}</td>
                                     <td className="px-3 py-2 uppercase">{row.settlementType}</td>
+                                    <td className="px-3 py-2">
+                                        {row.settlementType === "trip"
+                                            ? row.fleetTrip?.tripNumber || "-"
+                                            : row.delivery?.deliveryNumber || "-"}
+                                    </td>
                                     <td className="px-3 py-2">{formatDate(row.settlementDate)}</td>
                                     <td className="px-3 py-2">{row.driverName || "-"}</td>
                                     <td className="px-3 py-2">{formatCurrency(row.advanceAmount)}</td>
