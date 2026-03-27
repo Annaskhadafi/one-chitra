@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
             and(
                 ilike(emailLogs.toEmail, `%${userEmail}%`),
                 eq(emailLogs.status, "sent"),
+                eq(emailLogs.deliveryChannel, "push"),
             ),
         )
         .orderBy(desc(emailLogs.createdAt))
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
             and(
                 ilike(emailLogs.toEmail, `%${userEmail}%`),
                 eq(emailLogs.status, "sent"),
+                eq(emailLogs.deliveryChannel, "push"),
                 isNull(userNotificationReads.id),
             ),
         )
@@ -122,6 +124,7 @@ export async function POST(request: NextRequest) {
                 and(
                     ilike(emailLogs.toEmail, `%${userEmail}%`),
                     eq(emailLogs.status, "sent"),
+                    eq(emailLogs.deliveryChannel, "push"),
                     isNull(userNotificationReads.id),
                 ),
             )
@@ -152,6 +155,7 @@ export async function POST(request: NextRequest) {
             and(
                 eq(emailLogs.id, body.notificationId),
                 ilike(emailLogs.toEmail, `%${userEmail}%`),
+                eq(emailLogs.deliveryChannel, "push"),
             ),
         )
         .limit(1)

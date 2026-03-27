@@ -215,6 +215,7 @@ const formSchema = z.object({
     subject: z.string().min(1, "Subject is required"),
     htmlContent: z.string().min(1, "HTML content is required"),
     textContent: z.string().optional(),
+    deliveryChannels: z.array(z.enum(["email", "push"])).min(1, "Pilih minimal satu channel"),
     isActive: z.boolean(),
 })
 
@@ -254,6 +255,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
             subject: "",
             htmlContent: "",
             textContent: "",
+            deliveryChannels: ["email"],
             isActive: true,
         },
     })
@@ -268,6 +270,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                 subject: template.subject,
                 htmlContent: template.htmlContent,
                 textContent: template.textContent ?? "",
+                deliveryChannels: ((template.deliveryChannels as Array<"email" | "push"> | null) ?? ["email"]),
                 isActive: template.isActive,
             })
             setVariables((template.variables as string[]) ?? [])
@@ -282,6 +285,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                 subject: STARTER_TEMPLATES.notification.subject,
                 htmlContent: STARTER_TEMPLATES.notification.htmlContent,
                 textContent: "",
+                deliveryChannels: ["email"],
                 isActive: true,
             })
             setVariables(STARTER_TEMPLATES.notification.variables)
@@ -350,6 +354,7 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
             recipientRoles: isRevenueReportTemplate ? [] : normalizeRecipientRoleNames(selectedRecipientRoles),
             recipientUserIds: isRevenueReportTemplate ? [] : recipientUserIds,
             ccEmails: isRevenueReportTemplate ? [] : ccEmails,
+            deliveryChannels: values.deliveryChannels,
         } as Partial<Template> & { id?: string })
     }
 
@@ -709,6 +714,46 @@ export function TemplateEditorDialog({ open, onOpenChange, template, onSave, rec
                                 />
 
                                 {/* Active toggle */}
+                                <FormField
+                                    control={form.control}
+                                    name="deliveryChannels"
+                                    render={({ field }) => {
+                                        const selectedChannels = field.value ?? []
+                                        const toggleChannel = (channel: "email" | "push") => {
+                                            const next = selectedChannels.includes(channel)
+                                                ? selectedChannels.filter((entry) => entry !== channel)
+                                                : [...selectedChannels, channel]
+                                            field.onChange(next)
+                                        }
+
+                                        return (
+                                            <FormItem className="rounded-lg border p-4">
+                                                <FormLabel>Delivery Channel</FormLabel>
+                                                <FormDescription className="text-xs">
+                                                    Pilih apakah template ini dikirim sebagai email, push notification di icon bell, atau keduanya.
+                                                </FormDescription>
+                                                <div className="mt-3 flex flex-wrap gap-3">
+                                                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                                        <Checkbox
+                                                            checked={selectedChannels.includes("email")}
+                                                            onCheckedChange={() => toggleChannel("email")}
+                                                        />
+                                                        Email
+                                                    </label>
+                                                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                                        <Checkbox
+                                                            checked={selectedChannels.includes("push")}
+                                                            onCheckedChange={() => toggleChannel("push")}
+                                                        />
+                                                        Push Notification
+                                                    </label>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )
+                                    }}
+                                />
+
                                 <FormField
                                     control={form.control}
                                     name="isActive"

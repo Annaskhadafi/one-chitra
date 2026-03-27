@@ -5,8 +5,10 @@ import { db } from "@/db"
 import { smtpSettings, emailLogs, emailTemplates } from "@/db/schema/email"
 import {
     ensureSystemEmailTemplates,
+    getDefaultDeliveryChannelsForTemplate,
     getSystemEmailTemplateDefinition,
     SYSTEM_EMAIL_TEMPLATE_CODES,
+    type NotificationDeliveryChannel,
     type SystemEmailTemplateCode,
 } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
@@ -59,6 +61,14 @@ type SendEmailResult = {
     error?: string
 }
 
+type DispatchTemplateResult = {
+    success: boolean
+    channels: NotificationDeliveryChannel[]
+    email?: SendEmailResult
+    pushLogged: boolean
+    error?: string
+}
+
 function normalizeEmailList(value?: string | string[] | null) {
     if (!value) return [] as string[]
 
@@ -75,6 +85,19 @@ function normalizeEmailList(value?: string | string[] | null) {
 function serializeEmailList(value?: string | string[] | null) {
     const normalized = normalizeEmailList(value)
     return normalized.length > 0 ? normalized.join(", ") : null
+}
+
+function normalizeDeliveryChannels(value?: unknown, fallback: NotificationDeliveryChannel[] = ["email"]) {
+    const input = Array.isArray(value) ? value : []
+    const valid = Array.from(
+        new Set(
+            input.filter(
+                (entry): entry is NotificationDeliveryChannel => entry === "email" || entry === "push",
+            ),
+        ),
+    )
+
+    return valid.length > 0 ? valid : fallback
 }
 
 export async function resolveUserEmailsFromRolesAndIds(roleNames: string[], userIds: string[]) {
@@ -118,6 +141,7 @@ async function writeEmailLog(params: {
     templateId?: string | null
     templateCode?: string | null
     templateName?: string | null
+    deliveryChannel?: NotificationDeliveryChannel
 }) {
     try {
         await ensureEmailManagementSchema()
@@ -129,6 +153,7 @@ async function writeEmailLog(params: {
             toEmail: serializeEmailList(params.to) ?? "-",
             ccEmail: serializeEmailList(params.cc),
             fromEmail: params.fromEmail ?? null,
+            deliveryChannel: params.deliveryChannel ?? "email",
             subject: params.subject,
             htmlContent: params.html ?? null,
             textContent: params.text ?? null,
@@ -138,6 +163,109 @@ async function writeEmailLog(params: {
         })
     } catch (error) {
         console.error("[EMAIL] Failed to write email log:", error)
+    }
+}
+
+async function writePushNotificationLog(params: {
+    to?: string | string[] | null
+    cc?: string | string[] | null
+    subject: string
+    html?: string | null
+    text?: string | null
+    templateId?: string | null
+    templateCode?: string | null
+    templateName?: string | null
+}) {
+    await writeEmailLog({
+        ...params,
+        status: "sent",
+        sentAt: new Date(),
+        deliveryChannel: "push",
+    })
+}
+
+async function dispatchTemplateMessage(args: {
+    to: string[]
+    cc: string[]
+    subject: string
+    html?: string
+    text?: string
+    replyTo?: string
+    attachments?: Array<{
+        filename: string
+        content: Buffer | string
+        contentType?: string
+    }>
+    channels: NotificationDeliveryChannel[]
+    logMeta?: EmailOptions["logMeta"]
+}): Promise<DispatchTemplateResult> {
+    const channels = normalizeDeliveryChannels(args.channels)
+
+    if (args.to.length === 0) {
+        const error = "No recipient email provided"
+        for (const channel of channels) {
+            await writeEmailLog({
+                to: args.to,
+                cc: args.cc,
+                subject: args.subject,
+                html: args.html ?? null,
+                text: args.text ?? null,
+                status: "failed",
+                errorMessage: error,
+                templateId: args.logMeta?.templateId ?? null,
+                templateCode: args.logMeta?.templateCode ?? null,
+                templateName: args.logMeta?.templateName ?? null,
+                deliveryChannel: channel,
+            })
+        }
+
+        return {
+            success: false,
+            channels,
+            pushLogged: false,
+            error,
+        }
+    }
+
+    let emailResult: SendEmailResult | undefined
+    if (channels.includes("email")) {
+        emailResult = await sendEmail({
+            to: args.to,
+            cc: args.cc,
+            subject: args.subject,
+            html: args.html,
+            text: args.text,
+            replyTo: args.replyTo,
+            attachments: args.attachments,
+            logMeta: args.logMeta,
+        })
+    }
+
+    let pushLogged = false
+    if (channels.includes("push")) {
+        await writePushNotificationLog({
+            to: args.to,
+            cc: args.cc,
+            subject: args.subject,
+            html: args.html ?? null,
+            text: args.text ?? null,
+            templateId: args.logMeta?.templateId ?? null,
+            templateCode: args.logMeta?.templateCode ?? null,
+            templateName: args.logMeta?.templateName ?? null,
+        })
+        pushLogged = true
+    }
+
+    const success = channels.includes("email")
+        ? Boolean(emailResult?.success) || pushLogged
+        : pushLogged
+
+    return {
+        success,
+        channels,
+        email: emailResult,
+        pushLogged,
+        error: emailResult?.success === false ? emailResult.error : undefined,
     }
 }
 
@@ -261,6 +389,7 @@ export async function sendEmail(
             templateId: options.logMeta?.templateId ?? null,
             templateCode: options.logMeta?.templateCode ?? null,
             templateName: options.logMeta?.templateName ?? null,
+            deliveryChannel: "email",
         })
         return result
     }
@@ -304,6 +433,7 @@ export async function sendEmail(
         templateId: options.logMeta?.templateId ?? null,
         templateCode: options.logMeta?.templateCode ?? null,
         templateName: options.logMeta?.templateName ?? null,
+        deliveryChannel: "email",
     })
 
     return result
@@ -328,6 +458,7 @@ export async function sendTemplatedEmail(
             subject: customSubject ? replaceTemplateVariables(customSubject, data) : errorMessage,
             status: "failed",
             errorMessage,
+            deliveryChannel: "email",
         })
         return { success: false, error: errorMessage }
     }
@@ -347,12 +478,13 @@ export async function sendTemplatedEmail(
     )
     const templateCc = (template.ccEmails as string[] | null) ?? []
 
-    return sendEmail({
+    return dispatchTemplateMessage({
         to: [...normalizeEmailList(to), ...templateRecipients],
         cc: [...templateCc, ...normalizeEmailList(extraOptions?.cc)],
         subject,
         html,
         text,
+        channels: normalizeDeliveryChannels(template.deliveryChannels, ["email"]),
         logMeta: {
             templateId: template.id,
             templateCode: template.code ?? null,
@@ -388,6 +520,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
             status: "failed",
             errorMessage,
             templateCode: args.code,
+            deliveryChannel: "email",
         })
         return { success: false, error: errorMessage }
     }
@@ -403,11 +536,13 @@ export async function sendSystemTemplatedEmailByCode(args: {
             templateId: activeTemplate.id,
             templateCode: activeTemplate.code ?? args.code,
             templateName: activeTemplate.name,
+            deliveryChannel: "email",
         })
         return { success: false, error: errorMessage }
     }
 
     const template = activeTemplate ?? starterTemplate
+    const templateType = activeTemplate?.type ?? starterTemplate?.type ?? "notification"
     const normalizedData = normalizeSystemTemplateData(args.data)
     const subjectSource = args.customSubject ?? template.subject
     const htmlSource = template.htmlContent
@@ -415,17 +550,27 @@ export async function sendSystemTemplatedEmailByCode(args: {
     const ccEmails = isRevenueReportTemplateManagedByAutomation(args.code)
         ? []
         : ("ccEmails" in template ? (template.ccEmails ?? []) : [])
+    const deliveryChannels = "deliveryChannels" in template
+        ? normalizeDeliveryChannels(template.deliveryChannels, getDefaultDeliveryChannelsForTemplate({
+            code: args.code,
+            type: templateType,
+        }))
+        : getDefaultDeliveryChannelsForTemplate({
+            code: args.code,
+            type: templateType,
+        })
     const templateRecipients = args.ignoreTemplateRecipients ? [] : await resolveUserEmailsFromRolesAndIds(
         ("recipientRoles" in template ? (template.recipientRoles ?? []) : []) as string[],
         ("recipientUserIds" in template ? (template.recipientUserIds ?? []) : []) as string[],
     )
 
-    return sendEmail({
+    return dispatchTemplateMessage({
         to: [...normalizeEmailList(args.to), ...templateRecipients],
         cc: [...ccEmails, ...normalizeEmailList(args.cc)],
         subject: replaceTemplateVariables(subjectSource, normalizedData),
         html: replaceTemplateVariables(htmlSource, normalizedData),
         text: textSource ? replaceTemplateVariables(textSource, normalizedData) : undefined,
+        channels: deliveryChannels,
         attachments: args.attachments,
         logMeta: {
             templateId: "id" in template ? template.id : null,

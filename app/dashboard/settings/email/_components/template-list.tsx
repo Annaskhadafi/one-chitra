@@ -97,6 +97,7 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
             recipientRoles: (template.recipientRoles as string[]) ?? [],
             recipientUserIds: (template.recipientUserIds as string[]) ?? [],
             ccEmails: (template.ccEmails as string[]) ?? [],
+            deliveryChannels: (template.deliveryChannels as Array<"email" | "push">) ?? ["email"],
             isActive: false,
         })
         if (res.success && res.template) {
@@ -182,6 +183,7 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                                     <TableHead>Name</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Code</TableHead>
+                                    <TableHead>Channel</TableHead>
                                     <TableHead>CC</TableHead>
                                     <TableHead>Subject</TableHead>
                                     <TableHead>Recipients</TableHead>
@@ -208,6 +210,15 @@ export function TemplateList({ initialTemplates, recipientUsers, recipientRoles 
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">—</span>
                                             )}
+                                        </TableCell>
+                                        <TableCell className="max-w-[180px]">
+                                            <div className="flex flex-wrap gap-1">
+                                                {((tmpl.deliveryChannels as Array<"email" | "push"> | null) ?? ["email"]).map((channel) => (
+                                                    <Badge key={`${tmpl.id}-${channel}`} variant={channel === "push" ? "default" : "outline"} className="text-[11px]">
+                                                        {channel === "push" ? "Push" : "Email"}
+                                                    </Badge>
+                                                ))}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="max-w-[220px]">
                                             <div className="flex gap-1 flex-wrap">

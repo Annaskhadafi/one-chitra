@@ -16,11 +16,17 @@ function sanitizeTemplateRecipientSettings<T extends {
     recipientRoles?: string[]
     recipientUserIds?: string[]
     ccEmails?: string[]
+    deliveryChannels?: Array<"email" | "push">
 }>(data: T): T {
+    const normalizedChannels = Array.isArray(data.deliveryChannels)
+        ? Array.from(new Set(data.deliveryChannels.filter((entry): entry is "email" | "push" => entry === "email" || entry === "push")))
+        : undefined
+
     if (!isRevenueReportTemplateManagedByAutomation(data.code)) {
         return {
             ...data,
             recipientRoles: data.recipientRoles ? normalizeRecipientRoleNames(data.recipientRoles) : data.recipientRoles,
+            deliveryChannels: normalizedChannels && normalizedChannels.length > 0 ? normalizedChannels : ["email"],
         }
     }
 
@@ -29,6 +35,7 @@ function sanitizeTemplateRecipientSettings<T extends {
         recipientRoles: [],
         recipientUserIds: [],
         ccEmails: [],
+        deliveryChannels: normalizedChannels && normalizedChannels.length > 0 ? normalizedChannels : ["email", "push"],
     }
 }
 
@@ -155,6 +162,7 @@ export async function createEmailTemplate(data: {
     recipientRoles?: string[]
     recipientUserIds?: string[]
     ccEmails?: string[]
+    deliveryChannels?: Array<"email" | "push">
     isActive: boolean
 }) {
     try {
@@ -188,6 +196,7 @@ export async function updateEmailTemplate(
         recipientRoles?: string[]
         recipientUserIds?: string[]
         ccEmails?: string[]
+        deliveryChannels?: Array<"email" | "push">
         isActive?: boolean
     }
 ) {

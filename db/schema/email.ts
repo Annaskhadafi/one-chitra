@@ -18,6 +18,11 @@ export const emailRecipientRoleEnum = pgEnum("email_recipient_role", [
     "all"
 ]);
 
+export const notificationDeliveryChannelEnum = pgEnum("notification_delivery_channel", [
+    "email",
+    "push",
+]);
+
 export const smtpSettings = pgTable("smtp_settings", {
     id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
     host: varchar("host", { length: 255 }).notNull().default("smtp.gmail.com"),
@@ -44,6 +49,7 @@ export const emailTemplates = pgTable("email_templates", {
     recipientRoles: jsonb("recipient_roles").$type<string[]>().default([]),
     recipientUserIds: jsonb("recipient_user_ids").$type<string[]>().default([]),
     ccEmails: jsonb("cc_emails").$type<string[]>().default([]),
+    deliveryChannels: jsonb("delivery_channels").$type<Array<"email" | "push">>().default(["email"]),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -57,6 +63,7 @@ export const emailLogs = pgTable("email_logs", {
     toEmail: text("to_email").notNull(),
     ccEmail: text("cc_email"),
     fromEmail: varchar("from_email", { length: 255 }),
+    deliveryChannel: varchar("delivery_channel", { length: 20 }).notNull().default("email"),
     subject: varchar("subject", { length: 500 }).notNull(),
     htmlContent: text("html_content"),
     textContent: text("text_content"),

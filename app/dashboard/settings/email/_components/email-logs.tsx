@@ -74,6 +74,7 @@ export function EmailLogsTable({ logs }: Props) {
                 log.templateName ?? "",
                 log.templateCode ?? "",
                 log.fromEmail ?? "",
+                log.deliveryChannel ?? "",
             ].join(" ").toLowerCase()
 
             const matchesSearch = !keyword || haystack.includes(keyword)
@@ -206,6 +207,7 @@ export function EmailLogsTable({ logs }: Props) {
                                             <TableHead>To</TableHead>
                                             <TableHead>CC</TableHead>
                                             <TableHead>Template</TableHead>
+                                            <TableHead>Channel</TableHead>
                                             <TableHead>Subject</TableHead>
                                             <TableHead>Sent At</TableHead>
                                             <TableHead className="w-[110px]">Preview</TableHead>
@@ -233,6 +235,11 @@ export function EmailLogsTable({ logs }: Props) {
                                                             <span className="text-sm font-medium">{log.templateName || "Direct Email"}</span>
                                                             <span className="font-mono text-[11px] text-muted-foreground">{log.templateCode || "—"}</span>
                                                         </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={log.deliveryChannel === "push" ? "default" : "outline"}>
+                                                            {log.deliveryChannel === "push" ? "Push" : "Email"}
+                                                        </Badge>
                                                     </TableCell>
                                                     <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
                                                         {log.subject}
@@ -286,6 +293,14 @@ export function EmailLogsTable({ logs }: Props) {
                                         <div className="rounded-md border p-3">
                                             <div className="text-xs text-muted-foreground mb-1">Sent At</div>
                                             <div>{formatDateTime(selectedLog.sentAt)}</div>
+                                        </div>
+                                        <div className="rounded-md border p-3">
+                                            <div className="text-xs text-muted-foreground mb-1">Channel</div>
+                                            <div>
+                                                <Badge variant={selectedLog.deliveryChannel === "push" ? "default" : "outline"}>
+                                                    {selectedLog.deliveryChannel === "push" ? "Push Notification" : "Email"}
+                                                </Badge>
+                                            </div>
                                         </div>
                                         <div className="rounded-md border p-3">
                                             <div className="text-xs text-muted-foreground mb-1">Template</div>

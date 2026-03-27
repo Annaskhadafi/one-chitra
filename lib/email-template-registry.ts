@@ -44,6 +44,8 @@ type TemplateType =
     "delivery_update" |
     "custom"
 
+export type NotificationDeliveryChannel = "email" | "push"
+
 type SystemEmailTemplateDefinition = {
     code: SystemEmailTemplateCode
     name: string
@@ -56,6 +58,25 @@ type SystemEmailTemplateDefinition = {
     recipientUserIds: string[]
     ccEmails: string[]
     defaultActive: boolean
+}
+
+export function getDefaultDeliveryChannelsForTemplate(args: {
+    code: SystemEmailTemplateCode
+    type: TemplateType
+}): NotificationDeliveryChannel[] {
+    if (
+        args.code === SYSTEM_EMAIL_TEMPLATE_CODES.authMagicLink ||
+        args.code === SYSTEM_EMAIL_TEMPLATE_CODES.authPasswordReset ||
+        args.code === SYSTEM_EMAIL_TEMPLATE_CODES.customerBirthdayGreeting
+    ) {
+        return ["email"]
+    }
+
+    if (args.type === "notification" || args.type === "delivery_update") {
+        return ["email", "push"]
+    }
+
+    return ["email"]
 }
 
 function createEmailShell(params: {
@@ -897,6 +918,10 @@ export async function ensureSystemEmailTemplates() {
                 recipientRoles: template.recipientRoles,
                 recipientUserIds: template.recipientUserIds,
                 ccEmails: template.ccEmails,
+                deliveryChannels: getDefaultDeliveryChannelsForTemplate({
+                    code: template.code,
+                    type: template.type,
+                }),
                 isActive: template.defaultActive,
             })),
         )
@@ -916,6 +941,10 @@ export async function ensureSystemEmailTemplates() {
                     recipientRoles: template.recipientRoles,
                     recipientUserIds: template.recipientUserIds,
                     ccEmails: template.ccEmails,
+                    deliveryChannels: getDefaultDeliveryChannelsForTemplate({
+                        code: template.code,
+                        type: template.type,
+                    }),
                     updatedAt: new Date(),
                     // Optionally force active if it's a critical system template
                     // isActive: template.defaultActive 

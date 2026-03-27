@@ -26,6 +26,15 @@ async function syncEmailManagementSchema() {
     `)
 
     await db.execute(sql`
+        DO $$ BEGIN
+            CREATE TYPE notification_delivery_channel AS ENUM (
+                'email', 'push'
+            );
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    `)
+
+    await db.execute(sql`
         CREATE TABLE IF NOT EXISTS smtp_settings (
             id          VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::text,
             host        VARCHAR(255) NOT NULL DEFAULT 'smtp.gmail.com',
@@ -53,6 +62,7 @@ async function syncEmailManagementSchema() {
             recipient_roles    JSONB                DEFAULT '[]'::jsonb,
             recipient_user_ids JSONB                DEFAULT '[]'::jsonb,
             cc_emails          JSONB                DEFAULT '[]'::jsonb,
+            delivery_channels  JSONB                DEFAULT '["email"]'::jsonb,
             is_active          BOOLEAN              NOT NULL DEFAULT true,
             created_at         TIMESTAMP            NOT NULL DEFAULT now(),
             updated_at         TIMESTAMP            NOT NULL DEFAULT now(),
@@ -74,6 +84,7 @@ async function syncEmailManagementSchema() {
             template_name  VARCHAR(255),
             cc_email       TEXT,
             from_email     VARCHAR(255),
+            delivery_channel VARCHAR(20) NOT NULL DEFAULT 'email',
             html_content   TEXT,
             text_content   TEXT
         );
@@ -92,6 +103,11 @@ async function syncEmailManagementSchema() {
     await db.execute(sql`
         ALTER TABLE IF EXISTS email_templates
         ADD COLUMN IF NOT EXISTS recipient_user_ids JSONB DEFAULT '[]'::jsonb;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS email_templates
+        ADD COLUMN IF NOT EXISTS delivery_channels JSONB DEFAULT '["email"]'::jsonb;
     `)
 
     await db.execute(sql`
@@ -115,17 +131,24 @@ async function syncEmailManagementSchema() {
     `)
 
     await db.execute(sql`
+        ALTER TABLE IF EXISTS email_templates
+        ALTER COLUMN delivery_channels SET DEFAULT '["email"]'::jsonb;
+    `)
+
+    await db.execute(sql`
         UPDATE email_templates
         SET
             variables = COALESCE(variables, '[]'::jsonb),
             recipient_roles = COALESCE(recipient_roles, '[]'::jsonb),
             recipient_user_ids = COALESCE(recipient_user_ids, '[]'::jsonb),
-            cc_emails = COALESCE(cc_emails, '[]'::jsonb)
+            cc_emails = COALESCE(cc_emails, '[]'::jsonb),
+            delivery_channels = COALESCE(delivery_channels, '["email"]'::jsonb)
         WHERE
             variables IS NULL
             OR recipient_roles IS NULL
             OR recipient_user_ids IS NULL
-            OR cc_emails IS NULL;
+            OR cc_emails IS NULL
+            OR delivery_channels IS NULL;
     `)
 
     await db.execute(sql`
@@ -157,6 +180,11 @@ async function syncEmailManagementSchema() {
     await db.execute(sql`
         ALTER TABLE IF EXISTS email_logs
         ADD COLUMN IF NOT EXISTS from_email VARCHAR(255);
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS email_logs
+        ADD COLUMN IF NOT EXISTS delivery_channel VARCHAR(20) NOT NULL DEFAULT 'email';
     `)
 
     await db.execute(sql`
