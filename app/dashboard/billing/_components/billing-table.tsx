@@ -47,6 +47,17 @@ import { cn } from "@/lib/utils"
 
 const BLANK_MODE_DELIVERY_FILTER = "(Blank)"
 
+const getBillingItemUnitPrice = (item: { qty?: unknown; totalPrice?: unknown }) => {
+    const qty = Number(item.qty)
+    const totalPrice = Number(item.totalPrice)
+
+    if (!Number.isFinite(qty) || qty === 0 || !Number.isFinite(totalPrice)) {
+        return 0
+    }
+
+    return totalPrice / qty
+}
+
 const EDITABLE_COLUMN_CONFIG: Record<string, { type: "text" | "date" | "select"; options?: string[] }> = {
     noInvSap: { type: "text" },
     dateInvoice: { type: "date" },
@@ -918,7 +929,7 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                                                                                         <TableCell className={cn("text-right text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.qty}</TableCell>
                                                                                         <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.uom}</TableCell>
                                                                                         <TableCell className={cn("text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.curr}</TableCell>
-                                                                                        <TableCell className={cn("text-right text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.price ? Number(item.price).toLocaleString('id-ID') : 0}</TableCell>
+                                                                                        <TableCell className={cn("text-right text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{getBillingItemUnitPrice(item).toLocaleString('id-ID')}</TableCell>
                                                                                         <TableCell className={cn("text-right font-medium text-xs md:text-sm", isSheetView && "px-2 py-1 text-[11px]")}>{item.totalPrice ? Number(item.totalPrice).toLocaleString('id-ID') : 0}</TableCell>
                                                                                     </TableRow>
                                                                                 ))}
