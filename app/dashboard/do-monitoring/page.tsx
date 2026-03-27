@@ -3,6 +3,7 @@ import { DoMonitoringTable, type DeliveryWithRelations } from "./_components/do-
 import { Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
+import { Providers } from "@/components/providers"
 
 function calculateGrandTotal(salesOrder: DeliveryWithRelations['salesOrder']) {
     if (!salesOrder || !salesOrder.items) return 0
@@ -97,7 +98,9 @@ export default async function DoMonitoringPage() {
             </div>
 
             <div className="flex-1">
-                <DoMonitoringTable data={deliveriesData as DeliveryWithRelations[]} />
+                <Providers>
+                    <DoMonitoringTable data={deliveriesData as DeliveryWithRelations[]} />
+                </Providers>
             </div>
         </div>
     )

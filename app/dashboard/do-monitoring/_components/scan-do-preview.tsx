@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import {
     Dialog,
     DialogContent,
@@ -16,13 +17,15 @@ interface ScanDoPreviewProps {
     onOpenChange: (open: boolean) => void
     url: string | null | undefined
     deliveryNumber?: string | null
+    headerActions?: ReactNode
 }
 
 export function ScanDoPreview({
     open,
     onOpenChange,
     url,
-    deliveryNumber
+    deliveryNumber,
+    headerActions,
 }: ScanDoPreviewProps) {
     const fileUrl = resolveUploadDocumentUrl(url)
 
@@ -36,7 +39,8 @@ export function ScanDoPreview({
                             Document for {deliveryNumber || "Delivery"}
                         </DialogDescription>
                     </div>
-                    <div className="flex items-center gap-1 mr-8">
+                    <div className="flex items-center gap-2 mr-8">
+                        {headerActions}
                         {fileUrl && (
                             <Button
                                 variant="ghost"

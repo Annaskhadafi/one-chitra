@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { readManagedUpload } from "@/lib/upload-storage"
-import { extractRawTextFromDocument } from "@/lib/mistral-ocr"
+import { extractRawTextFromDocumentViaOllama } from "@/lib/ollama-vision-ocr"
 
 export const runtime = "nodejs"
 
@@ -29,28 +29,29 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: "File tidak ditemukan" }, { status: 404 })
         }
 
-        const ocr = await extractRawTextFromDocument({
+        const ocr = await extractRawTextFromDocumentViaOllama({
             fileBuffer: uploaded.buffer,
             filename: uploaded.filename,
             pages: pages ?? "all",
         })
 
-        const extracted = extractInternalNo(ocr.rawText)
+        const directInternalNo = normalizeInternalNo(ocr.fields.internalNo)
+        const extracted = directInternalNo
+            ? { internalNo: directInternalNo, source: "label" as MatchSource }
+            : extractInternalNo(ocr.focusedText || ocr.rawText)
 
         return Response.json({
             internalNo: extracted.internalNo,
             detectionSource: extracted.source,
-            rawText: sanitizeText(ocr.rawText),
+            rawText: sanitizeText(selectDisplayText(ocr.focusedText, ocr.rawText)),
+            fields: ocr.fields,
             model: ocr.model,
             pagesProcessed: ocr.pagesProcessed,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR scan DO gagal"
-        if (message.includes("MISTRAL_API_KEY is not set")) {
-            return Response.json({ error: "Konfigurasi OCR belum lengkap: MISTRAL_API_KEY belum diset" }, { status: 500 })
-        }
-        if (message.includes("MISTRAL_UPSTREAM_ERROR")) {
-            return Response.json({ error: `Gagal memproses OCR dari provider: ${message}` }, { status: 502 })
+        if (message.includes("OLLAMA_UPSTREAM_ERROR")) {
+            return Response.json({ error: `Gagal memproses OCR dari Ollama: ${message}` }, { status: 502 })
         }
         return Response.json({ error: message }, { status: 500 })
     }
@@ -94,12 +95,26 @@ function normalizeInternalNo(value: string | null | undefined): string | null {
     const compact = cleaned.replace(/[^A-Z0-9]/g, "")
     const dlvMatch = compact.match(/(DLV)(\d{8})(\d{4})/)
     if (dlvMatch) {
-        return `${dlvMatch[1]}-${dlvMatch[2]}-${dlvMatch[3]}`
+        const normalizedDate = forceDeliveryYear2026(dlvMatch[2])
+        return `${dlvMatch[1]}-${normalizedDate}-${dlvMatch[3]}`
     }
 
     return cleaned || null
 }
 
+function forceDeliveryYear2026(dateToken: string) {
+    if (/^\d{8}$/.test(dateToken)) {
+        return `2026${dateToken.slice(4)}`
+    }
+    return dateToken
+}
+
 function sanitizeText(value: string | null | undefined): string {
     return String(value ?? "").replace(/\u0000/g, " ").trim()
+}
+
+function selectDisplayText(focusedText: string | null | undefined, rawText: string | null | undefined) {
+    const focused = sanitizeText(focusedText)
+    const raw = sanitizeText(rawText)
+    return focused || raw
 }
