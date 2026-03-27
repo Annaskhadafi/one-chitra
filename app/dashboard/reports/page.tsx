@@ -1,6 +1,6 @@
 import { getDashboardStats } from "@/app/actions/dashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Package, TrendingUp, Users, Truck, ShoppingCart, Warehouse, ArrowRight, FileCheck2 } from "lucide-react"
+import { Package, TrendingUp, Users, Truck, ShoppingCart, Warehouse, ArrowRight, FileCheck2, BarChart3 } from "lucide-react"
 import Link from "next/link"
 
 const reportCards = [
@@ -59,6 +59,14 @@ const reportCards = [
         href: "/dashboard/reports/approvals",
         color: "from-slate-500/10 via-zinc-400/5 to-gray-500/10 border-slate-200/50 dark:from-slate-500/20 dark:via-zinc-400/10 dark:to-gray-500/20",
         iconColor: "text-slate-600 dark:text-slate-400",
+    },
+    {
+        title: "Report Monthly SCM",
+        description: "GR Manual, delivered goods, and 27.00 R 49 delivery analytics",
+        icon: BarChart3,
+        href: "/dashboard/reports/scm",
+        color: "from-cyan-500/10 via-sky-400/5 to-blue-500/10 border-cyan-200/50 dark:from-cyan-500/20 dark:via-sky-400/10 dark:to-blue-500/20",
+        iconColor: "text-cyan-700 dark:text-cyan-400",
     },
 ]
 

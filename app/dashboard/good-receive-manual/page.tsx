@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { goodReceiveManual } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { stockMovements } from "@/db/schema/stock-movements";
+import { user } from "@/db/schema/auth";
+import { desc, eq, and, sql } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,9 +60,40 @@ function VendorDoViewer({ url }: { url: string | null }) {
 }
 
 export default async function GoodReceiveManualPage() {
-    const data = await db.query.goodReceiveManual.findMany({
-        orderBy: [desc(goodReceiveManual.receiveDate)],
-    });
+    const data = await db
+        .select({
+            id: goodReceiveManual.id,
+            supplier: goodReceiveManual.supplier,
+            poNumber: goodReceiveManual.poNumber,
+            receiveDate: goodReceiveManual.receiveDate,
+            deliveryType: goodReceiveManual.deliveryType,
+            referenceDocument: goodReceiveManual.referenceDocument,
+            vendorDoUrl: goodReceiveManual.vendorDoUrl,
+            createdAt: goodReceiveManual.createdAt,
+            createdBy: sql<string>`COALESCE(STRING_AGG(DISTINCT COALESCE(${user.name}, 'Unknown'), ', '), '-')`,
+            gapSlaDays: sql<number>`(${goodReceiveManual.createdAt}::date - ${goodReceiveManual.receiveDate}::date)`,
+        })
+        .from(goodReceiveManual)
+        .leftJoin(
+            stockMovements,
+            and(
+                eq(stockMovements.type, "GR_MANUAL"),
+                sql`${stockMovements.referenceNumber} LIKE ('PO: ' || ${goodReceiveManual.poNumber} || ' Item:%')`,
+                sql`DATE(${stockMovements.createdAt}) = DATE(${goodReceiveManual.createdAt})`
+            )
+        )
+        .leftJoin(user, eq(user.id, stockMovements.recordedBy))
+        .groupBy(
+            goodReceiveManual.id,
+            goodReceiveManual.supplier,
+            goodReceiveManual.poNumber,
+            goodReceiveManual.receiveDate,
+            goodReceiveManual.deliveryType,
+            goodReceiveManual.referenceDocument,
+            goodReceiveManual.vendorDoUrl,
+            goodReceiveManual.createdAt,
+        )
+        .orderBy(desc(goodReceiveManual.receiveDate), desc(goodReceiveManual.createdAt));
 
     const totalComplete = data.filter((d) => d.deliveryType === "Complete").length;
     const totalPartial = data.filter((d) => d.deliveryType === "Partial").length;
@@ -180,6 +213,14 @@ export default async function GoodReceiveManualPage() {
                                             </div>
                                         </div>
                                         <div>
+                                            <p className="text-[11px] text-muted-foreground">Created By</p>
+                                            <p className="text-xs font-medium break-words">{item.createdBy || "-"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] text-muted-foreground">Gap SLA</p>
+                                            <p className="text-xs font-medium">{formatGapSla(item.gapSlaDays)}</p>
+                                        </div>
+                                        <div>
                                             <p className="text-[11px] text-muted-foreground">Ref. Doc</p>
                                             <p className="text-xs font-mono break-all">{item.referenceDocument || "—"}</p>
                                         </div>
@@ -203,6 +244,8 @@ export default async function GoodReceiveManualPage() {
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delivery Type</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ref. Doc</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Foto DO Vendor</TableHead>
+                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created By</TableHead>
+                                            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gap SLA</TableHead>
                                             <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">Created At</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -239,6 +282,8 @@ export default async function GoodReceiveManualPage() {
                                                 <TableCell>
                                                     <VendorDoViewer url={item.vendorDoUrl} />
                                                 </TableCell>
+                                                <TableCell className="text-sm">{item.createdBy || "-"}</TableCell>
+                                                <TableCell className="text-sm">{formatGapSla(item.gapSlaDays)}</TableCell>
                                                 <TableCell className="text-right text-xs text-muted-foreground">
                                                     {format(new Date(item.createdAt), "dd MMM yyyy HH:mm")}
                                                 </TableCell>
@@ -253,4 +298,9 @@ export default async function GoodReceiveManualPage() {
             </Card>
         </div>
     );
+}
+
+function formatGapSla(value: number | null | undefined) {
+    if (value == null || !Number.isFinite(Number(value))) return "-"
+    return `${Number(value).toLocaleString("id-ID")} Hari`
 }

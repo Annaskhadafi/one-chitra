@@ -96,6 +96,13 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
+const REMARK_VARIANTS: Record<string, "secondary" | "warning" | "destructive" | "success"> = {
+    complete: "success",
+    ready: "success",
+    partial: "warning",
+    empty: "destructive",
+}
+
 const SALES_ORDER_TRANSITIONS = {
     draft: ["confirmed", "cancelled"],
     confirmed: ["completed", "cancelled", "draft"],
@@ -171,6 +178,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [statusFilter, setStatusFilter] = useState<string[]>([])
     const [customerFilter, setCustomerFilter] = useState<string[]>([])
     const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+    const [remarkFilter, setRemarkFilter] = useState<string[]>([])
     const [yearFilter, setYearFilter] = useState<string[]>([])
     const [monthFilter, setMonthFilter] = useState<string[]>([])
     const [createdByFilter, setCreatedByFilter] = useState<string[]>([])
@@ -272,6 +280,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
     const uniqueCustomers = useMemo(() => Array.from(new Set(data.map(o => o.customer?.name).filter(Boolean))) as string[], [data])
     const uniqueCategories = useMemo(() => Array.from(new Set(data.map(o => o.categoryProduct).filter(Boolean))) as string[], [data])
+    const uniqueRemarks = useMemo(() => Array.from(new Set(data.map(o => o.remarks?.label).filter(Boolean))) as string[], [data])
     const uniqueYears = useMemo(() => Array.from(new Set(data.map(o => new Date(o.salesDate).getFullYear().toString()))) as string[], [data])
     const uniqueMonths = useMemo(() => {
         const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
@@ -771,6 +780,39 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             },
         },
         {
+            id: "remarks",
+            accessorFn: (row) => row.remarks?.label ?? "",
+            header: "Remarks",
+            cell: ({ row }) => {
+                const remarks = row.original.remarks
+                if (!remarks) return "-"
+
+                return (
+                    <div className="min-w-[260px] space-y-1">
+                        <Badge variant={REMARK_VARIANTS[remarks.status] ?? "secondary"}>
+                            {remarks.label}
+                        </Badge>
+                        <div className="text-xs text-muted-foreground">
+                            Outstanding Qty: {remarks.outstandingQty.toLocaleString()} | Items: {remarks.outstandingItemsCount.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            Aging dari PO Receive: {remarks.outstandingDays != null ? `${remarks.outstandingDays} hari` : "-"}
+                        </div>
+                        {remarks.items.length > 0 ? (
+                            <div className="space-y-0.5 text-xs text-muted-foreground">
+                                {remarks.items.slice(0, 2).map((item) => (
+                                    <div key={item.itemId}>
+                                        {item.productName}: stock {item.availableStock.toLocaleString()} / outstanding {item.remainingQuantity.toLocaleString()}
+                                    </div>
+                                ))}
+                                {remarks.items.length > 2 ? <div>+{remarks.items.length - 2} item lainnya</div> : null}
+                            </div>
+                        ) : null}
+                    </div>
+                )
+            },
+        },
+        {
             id: "createdBy",
             accessorFn: (row) => row.createdByUser?.name,
             header: ({ column }) => (
@@ -808,13 +850,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
             const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status)
             const matchesCustomer = customerFilter.length === 0 || customerFilter.includes(order.customer?.name || "")
             const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(order.categoryProduct || "")
+            const matchesRemark = remarkFilter.length === 0 || remarkFilter.includes(order.remarks?.label || "")
             const matchesYear = yearFilter.length === 0 || yearFilter.includes(orderYear)
             const matchesMonth = monthFilter.length === 0 || monthFilter.includes(orderMonth)
             const matchesCreatedBy = createdByFilter.length === 0 || createdByFilter.includes(order.createdByUser?.name || "")
 
-            return matchesSearch && matchesStatus && matchesCustomer && matchesCategory && matchesYear && matchesMonth && matchesCreatedBy
+            return matchesSearch && matchesStatus && matchesCustomer && matchesCategory && matchesRemark && matchesYear && matchesMonth && matchesCreatedBy
         })
-    }, [data, globalFilter, statusFilter, customerFilter, categoryFilter, yearFilter, monthFilter, createdByFilter])
+    }, [data, globalFilter, statusFilter, customerFilter, categoryFilter, remarkFilter, yearFilter, monthFilter, createdByFilter])
 
     const table = useReactTable({
         data: filteredData,
@@ -1194,6 +1237,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 onFilterChange={setCategoryFilter}
                             />
                         )}
+                        {uniqueRemarks.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Remark"
+                                options={uniqueRemarks}
+                                selectedValues={remarkFilter}
+                                onFilterChange={setRemarkFilter}
+                            />
+                        )}
                         {uniqueYears.length > 0 && (
                             <DataTableFacetedFilter
                                 title="Year"
@@ -1237,6 +1288,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                             customerName: "Customer",
                                             salesDate: "Date PO",
                                             poReceive: "PO Receive",
+                                            remarks: "Remarks",
                                             salesPerson: "PIC Sales",
                                             categoryPo: "Cat. PO",
                                             categoryProduct: "Category",
@@ -1295,6 +1347,14 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                 onFilterChange={setCategoryFilter}
                             />
                         )}
+                        {uniqueRemarks.length > 0 && (
+                            <DataTableFacetedFilter
+                                title="Remark"
+                                options={uniqueRemarks}
+                                selectedValues={remarkFilter}
+                                onFilterChange={setRemarkFilter}
+                            />
+                        )}
                         {uniqueYears.length > 0 && (
                             <DataTableFacetedFilter
                                 title="Year"
@@ -1345,6 +1405,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                             customerName: "Customer",
                                             salesDate: "Date PO",
                                             poReceive: "PO Receive",
+                                            remarks: "Remarks",
                                             salesPerson: "PIC Sales",
                                             categoryPo: "Cat. PO",
                                             categoryProduct: "Category",

@@ -6,11 +6,14 @@ import { customers } from "@/db/schema/customers"
 import { salesOrders, salesOrderItems } from "@/db/schema/sales-orders"
 import { stockLevels } from "@/db/schema/stock-levels"
 import { warehouses } from "@/db/schema/warehouses"
-import { deliveries } from "@/db/schema/deliveries"
+import { deliveries, deliveryItems } from "@/db/schema/deliveries"
 import { stockTransfers, stockTransferItems } from "@/db/schema/transfers"
 import { billingRecords } from "@/db/schema/billing"
 import { sapSyncLogs } from "@/db/schema/sap-sync"
 import { approvalAssignments, approvalRequests } from "@/db/schema/approval-workflows"
+import { goodReceiveManual, goodReceiveManualItems } from "@/db/schema/good-receive-manual"
+import { stockMovements } from "@/db/schema/stock-movements"
+import { user } from "@/db/schema/auth"
 import { sql, desc, asc, eq, gte, lte, and, or } from "drizzle-orm"
 
 // ==================== INVENTORY REPORT TYPES ====================
@@ -344,6 +347,74 @@ export type ApprovalReportData = {
         submitted: number
         approved: number
         rejected: number
+    }[]
+}
+
+const reportCategorySql = sql<string>`CASE
+    WHEN UPPER(COALESCE(${products.category}, '')) LIKE '%TYRE%' THEN 'Prime Product'
+    WHEN UPPER(TRIM(COALESCE(${products.category}, ''))) = 'PRIME PRODUCT' THEN 'Prime Product'
+    WHEN COALESCE(TRIM(${products.category}), '') = '' THEN 'Uncategorized'
+    ELSE TRIM(${products.category})
+END`
+
+export type MonthlyScmReportData = {
+    period: string
+    summary: {
+        totalGrManualQty: number
+        totalDeliveredQty: number
+        totalR49DeliveredQty: number
+        totalGrManualTransactions: number
+        totalDeliveredTransactions: number
+        totalR49Deliveries: number
+        totalOutstandingOrders: number
+        totalOutstandingQty: number
+        totalOutstandingValue: number
+    }
+    grManualByCategory: {
+        category: string
+        totalQuantity: number
+        transactionCount: number
+        totalValue: number
+        averageSlaDays: number
+        createdBy: string
+    }[]
+    deliveredByCategory: {
+        category: string
+        totalQuantity: number
+        deliveryCount: number
+        totalValue: number
+    }[]
+    r49ByDelivery: {
+        deliveryId: number
+        deliveryNumber: string
+        deliveryDate: string | null
+        customerName: string
+        category: string
+        totalQuantity: number
+        itemCount: number
+        totalValue: number
+        products: {
+            productName: string
+            materialNumber: string
+            quantity: number
+        }[]
+    }[]
+    outstandingSalesOrders: {
+        salesOrderId: number
+        orderNumber: string
+        salesDate: string | null
+        customerName: string
+        category: string
+        totalQuantity: number
+        totalValue: number
+        productCount: number
+        products: {
+            productName: string
+            materialNumber: string
+            category: string
+            quantity: number
+            value: number
+        }[]
     }[]
 }
 
@@ -1430,5 +1501,284 @@ export async function getApprovalReport(): Promise<ApprovalReportData> {
                 rejected: Number(row.rejected ?? 0),
             }))
             .reverse(),
+    }
+}
+
+export async function getMonthlyScmReport(period?: string): Promise<MonthlyScmReportData> {
+    const normalizedPeriod = /^\d{4}-\d{2}$/.test(period ?? "")
+        ? String(period)
+        : new Date().toISOString().slice(0, 7)
+
+    const grManualRaw = await db.select({
+        category: reportCategorySql,
+        total_quantity: sql<number>`COALESCE(SUM(${goodReceiveManualItems.quantity}), 0)`,
+        transaction_count: sql<number>`COUNT(DISTINCT ${goodReceiveManual.id})`,
+        total_value: sql<number>`COALESCE(SUM(${goodReceiveManualItems.quantity} * COALESCE(NULLIF(${products.costSap}, ''), '0')::numeric), 0)`,
+        average_sla_days: sql<number>`COALESCE(AVG(${goodReceiveManual.receiveDate}::date - ${goodReceiveManual.createdAt}::date), 0)`,
+        created_by: sql<string>`COALESCE(STRING_AGG(DISTINCT COALESCE(${user.name}, 'Unknown'), ', '), '-')`,
+    })
+        .from(goodReceiveManualItems)
+        .innerJoin(goodReceiveManual, eq(goodReceiveManual.id, goodReceiveManualItems.headerId))
+        .innerJoin(products, eq(products.id, goodReceiveManualItems.productId))
+        .leftJoin(
+            stockMovements,
+            and(
+                eq(stockMovements.productId, goodReceiveManualItems.productId),
+                eq(stockMovements.warehouseId, goodReceiveManualItems.warehouseId),
+                eq(stockMovements.quantity, goodReceiveManualItems.quantity),
+                eq(stockMovements.type, "GR_MANUAL"),
+                sql`${stockMovements.referenceNumber} LIKE ('PO: ' || ${goodReceiveManual.poNumber} || ' Item:%')`,
+                sql`DATE(${stockMovements.createdAt}) = DATE(${goodReceiveManual.createdAt})`
+            )
+        )
+        .leftJoin(user, eq(user.id, stockMovements.recordedBy))
+        .where(sql`TO_CHAR(${goodReceiveManual.receiveDate}, 'YYYY-MM') = ${normalizedPeriod}`)
+        .groupBy(reportCategorySql)
+        .orderBy(desc(sql`COALESCE(SUM(${goodReceiveManualItems.quantity}), 0)`))
+
+    const deliveredFilter = and(
+        sql`TO_CHAR(COALESCE(${deliveries.deliveryDate}, ${deliveries.scheduledDate}), 'YYYY-MM') = ${normalizedPeriod}`,
+        or(
+            eq(deliveries.status, "delivered"),
+            eq(deliveries.doStatus, "Delivered"),
+        ),
+    )
+
+    const deliveredRaw = await db.select({
+        category: reportCategorySql,
+        total_quantity: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+        delivery_count: sql<number>`COUNT(DISTINCT ${deliveries.id})`,
+        total_value: sql<number>`COALESCE(SUM(
+            (${salesOrderItems.unitPrice}::numeric * ${deliveryItems.deliveredQuantity})
+            - CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.discount}::numeric / ${salesOrderItems.quantity}) * ${deliveryItems.deliveredQuantity}
+                ELSE 0
+              END
+            + CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.tax}::numeric / ${salesOrderItems.quantity}) * ${deliveryItems.deliveredQuantity}
+                ELSE 0
+              END
+        ), 0)`,
+    })
+        .from(deliveryItems)
+        .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+        .innerJoin(products, eq(products.id, deliveryItems.productId))
+        .leftJoin(salesOrderItems, eq(salesOrderItems.id, deliveryItems.salesOrderItemId))
+        .where(deliveredFilter)
+        .groupBy(reportCategorySql)
+        .orderBy(desc(sql`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`))
+
+    const r49Pattern = "%27.00 r 49%"
+    const r49Raw = await db.select({
+        delivery_id: deliveries.id,
+        delivery_number: deliveries.deliveryNumber,
+        delivery_date: sql<string>`TO_CHAR(COALESCE(${deliveries.deliveryDate}, ${deliveries.scheduledDate}), 'YYYY-MM-DD')`,
+        customer_name: customers.name,
+        category: reportCategorySql,
+        total_quantity: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+        item_count: sql<number>`COUNT(DISTINCT ${deliveryItems.id})`,
+        total_value: sql<number>`COALESCE(SUM(
+            (${salesOrderItems.unitPrice}::numeric * ${deliveryItems.deliveredQuantity})
+            - CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.discount}::numeric / ${salesOrderItems.quantity}) * ${deliveryItems.deliveredQuantity}
+                ELSE 0
+              END
+            + CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.tax}::numeric / ${salesOrderItems.quantity}) * ${deliveryItems.deliveredQuantity}
+                ELSE 0
+              END
+        ), 0)`,
+    })
+        .from(deliveryItems)
+        .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+        .innerJoin(products, eq(products.id, deliveryItems.productId))
+        .leftJoin(salesOrderItems, eq(salesOrderItems.id, deliveryItems.salesOrderItemId))
+        .innerJoin(salesOrders, eq(salesOrders.id, deliveries.salesOrderId))
+        .leftJoin(customers, eq(customers.id, salesOrders.customerId))
+        .where(and(
+            deliveredFilter,
+            or(
+                sql`LOWER(COALESCE(${products.materialDescription}, '')) LIKE ${r49Pattern}`,
+                sql`LOWER(COALESCE(${products.materialNumber}, '')) LIKE ${r49Pattern}`,
+                sql`LOWER(COALESCE(${products.oldMaterialNo}, '')) LIKE ${r49Pattern}`,
+            ),
+        ))
+        .groupBy(deliveries.id, deliveries.deliveryNumber, customers.name, reportCategorySql, sql`TO_CHAR(COALESCE(${deliveries.deliveryDate}, ${deliveries.scheduledDate}), 'YYYY-MM-DD')`)
+        .orderBy(
+            desc(sql`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`),
+            desc(sql`TO_CHAR(COALESCE(${deliveries.deliveryDate}, ${deliveries.scheduledDate}), 'YYYY-MM-DD')`),
+        )
+
+    const r49ItemsRaw = await db.select({
+        delivery_id: deliveries.id,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        quantity: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`,
+    })
+        .from(deliveryItems)
+        .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+        .innerJoin(products, eq(products.id, deliveryItems.productId))
+        .leftJoin(salesOrderItems, eq(salesOrderItems.id, deliveryItems.salesOrderItemId))
+        .innerJoin(salesOrders, eq(salesOrders.id, deliveries.salesOrderId))
+        .where(and(
+            deliveredFilter,
+            or(
+                sql`LOWER(COALESCE(${products.materialDescription}, '')) LIKE ${r49Pattern}`,
+                sql`LOWER(COALESCE(${products.materialNumber}, '')) LIKE ${r49Pattern}`,
+                sql`LOWER(COALESCE(${products.oldMaterialNo}, '')) LIKE ${r49Pattern}`,
+            ),
+        ))
+        .groupBy(deliveries.id, products.materialDescription, products.materialNumber)
+        .orderBy(
+            desc(sql`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`),
+            asc(products.materialDescription),
+            asc(products.materialNumber),
+        )
+
+    const deliveredPerSalesOrderItem = db.$with("delivered_per_sales_order_item").as(
+        db.select({
+            salesOrderItemId: deliveryItems.salesOrderItemId,
+            deliveredQty: sql<number>`COALESCE(SUM(${deliveryItems.deliveredQuantity}), 0)`.as("delivered_qty"),
+        })
+            .from(deliveryItems)
+            .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+            .where(sql`${deliveries.status} != 'cancelled'`)
+            .groupBy(deliveryItems.salesOrderItemId)
+    )
+
+    const outstandingRaw = await db.with(deliveredPerSalesOrderItem).select({
+        sales_order_id: salesOrders.id,
+        order_number: salesOrders.invoiceNumber,
+        customer_po: salesOrders.customerPo,
+        sales_date: sql<string>`TO_CHAR(${salesOrders.salesDate}, 'YYYY-MM-DD')`,
+        customer_name: customers.name,
+        category: reportCategorySql,
+        product_name: products.materialDescription,
+        material_number: products.materialNumber,
+        remaining_quantity: sql<number>`GREATEST(${salesOrderItems.quantity} - COALESCE(${deliveredPerSalesOrderItem.deliveredQty}, 0), 0)`,
+        remaining_value: sql<number>`GREATEST(
+            (${salesOrderItems.unitPrice}::numeric * (${salesOrderItems.quantity} - COALESCE(${deliveredPerSalesOrderItem.deliveredQty}, 0)))
+            - CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.discount}::numeric / ${salesOrderItems.quantity}) * (${salesOrderItems.quantity} - COALESCE(${deliveredPerSalesOrderItem.deliveredQty}, 0))
+                ELSE 0
+              END
+            + CASE
+                WHEN COALESCE(${salesOrderItems.quantity}, 0) > 0
+                    THEN (${salesOrderItems.tax}::numeric / ${salesOrderItems.quantity}) * (${salesOrderItems.quantity} - COALESCE(${deliveredPerSalesOrderItem.deliveredQty}, 0))
+                ELSE 0
+              END,
+            0
+        )`,
+    })
+        .from(salesOrderItems)
+        .innerJoin(salesOrders, eq(salesOrders.id, salesOrderItems.salesOrderId))
+        .leftJoin(deliveredPerSalesOrderItem, eq(deliveredPerSalesOrderItem.salesOrderItemId, salesOrderItems.id))
+        .leftJoin(products, eq(products.id, salesOrderItems.productId))
+        .leftJoin(customers, eq(customers.id, salesOrders.customerId))
+        .where(and(
+            sql`TO_CHAR(${salesOrders.salesDate}, 'YYYY-MM') = ${normalizedPeriod}`,
+            sql`GREATEST(${salesOrderItems.quantity} - COALESCE(${deliveredPerSalesOrderItem.deliveredQty}, 0), 0) > 0`,
+            sql`${salesOrders.status} != 'cancelled'`,
+        ))
+        .orderBy(desc(salesOrders.salesDate), asc(customers.name), asc(products.materialDescription))
+
+    const outstandingSalesOrdersMap = new Map<number, MonthlyScmReportData["outstandingSalesOrders"][number]>()
+    for (const row of outstandingRaw) {
+        const salesOrderId = Number(row.sales_order_id)
+        const existing = outstandingSalesOrdersMap.get(salesOrderId)
+        const orderNumber = String(row.order_number ?? row.customer_po ?? `SO-${salesOrderId}`)
+        const categoryLabel = String(row.category ?? "Uncategorized")
+        const product = {
+            productName: String(row.product_name ?? "Unknown Product"),
+            materialNumber: String(row.material_number ?? "-"),
+            category: categoryLabel,
+            quantity: Number(row.remaining_quantity ?? 0),
+            value: Number(row.remaining_value ?? 0),
+        }
+
+        if (!existing) {
+            outstandingSalesOrdersMap.set(salesOrderId, {
+                salesOrderId,
+                orderNumber,
+                salesDate: row.sales_date ? String(row.sales_date) : null,
+                customerName: String(row.customer_name ?? "Unknown Customer"),
+                category: categoryLabel,
+                totalQuantity: product.quantity,
+                totalValue: product.value,
+                productCount: 1,
+                products: [product],
+            })
+            continue
+        }
+
+        existing.totalQuantity += product.quantity
+        existing.totalValue += product.value
+        existing.productCount += 1
+        existing.products.push(product)
+
+        const categories = Array.from(new Set([
+            ...existing.category.split(",").map((entry) => entry.trim()).filter(Boolean),
+            categoryLabel,
+        ]))
+        existing.category = categories.join(", ")
+    }
+
+    const outstandingSalesOrders = Array.from(outstandingSalesOrdersMap.values()).sort((left, right) => {
+        if (right.totalValue !== left.totalValue) return right.totalValue - left.totalValue
+        return right.totalQuantity - left.totalQuantity
+    })
+
+    const summary = {
+        totalGrManualQty: grManualRaw.reduce((sum, row) => sum + Number(row.total_quantity ?? 0), 0),
+        totalDeliveredQty: deliveredRaw.reduce((sum, row) => sum + Number(row.total_quantity ?? 0), 0),
+        totalR49DeliveredQty: r49Raw.reduce((sum, row) => sum + Number(row.total_quantity ?? 0), 0),
+        totalGrManualTransactions: grManualRaw.reduce((sum, row) => sum + Number(row.transaction_count ?? 0), 0),
+        totalDeliveredTransactions: deliveredRaw.reduce((sum, row) => sum + Number(row.delivery_count ?? 0), 0),
+        totalR49Deliveries: r49Raw.length,
+        totalOutstandingOrders: outstandingSalesOrders.length,
+        totalOutstandingQty: outstandingSalesOrders.reduce((sum, row) => sum + row.totalQuantity, 0),
+        totalOutstandingValue: outstandingSalesOrders.reduce((sum, row) => sum + row.totalValue, 0),
+    }
+
+    return {
+        period: normalizedPeriod,
+        summary,
+        grManualByCategory: grManualRaw.map((row) => ({
+            category: String(row.category ?? "Uncategorized"),
+            totalQuantity: Number(row.total_quantity ?? 0),
+            transactionCount: Number(row.transaction_count ?? 0),
+            totalValue: Number(row.total_value ?? 0),
+            averageSlaDays: Number(row.average_sla_days ?? 0),
+            createdBy: String(row.created_by ?? "-"),
+        })),
+        deliveredByCategory: deliveredRaw.map((row) => ({
+            category: String(row.category ?? "Uncategorized"),
+            totalQuantity: Number(row.total_quantity ?? 0),
+            deliveryCount: Number(row.delivery_count ?? 0),
+            totalValue: Number(row.total_value ?? 0),
+        })),
+        r49ByDelivery: r49Raw.map((row) => ({
+            deliveryId: Number(row.delivery_id),
+            deliveryNumber: String(row.delivery_number ?? `DLV-${row.delivery_id}`),
+            deliveryDate: row.delivery_date ? String(row.delivery_date) : null,
+            customerName: String(row.customer_name ?? "Unknown Customer"),
+            category: String(row.category ?? "Uncategorized"),
+            totalQuantity: Number(row.total_quantity ?? 0),
+            itemCount: Number(row.item_count ?? 0),
+            totalValue: Number(row.total_value ?? 0),
+            products: r49ItemsRaw
+                .filter((item) => Number(item.delivery_id) === Number(row.delivery_id))
+                .map((item) => ({
+                    productName: String(item.product_name ?? "Unknown Product"),
+                    materialNumber: String(item.material_number ?? "-"),
+                    quantity: Number(item.quantity ?? 0),
+                })),
+        })),
+        outstandingSalesOrders,
     }
 }

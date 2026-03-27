@@ -170,10 +170,92 @@ export async function getSalesOrders() {
                 return item.quantity - delivered > 0
             })
 
+            const itemProductIds = items.map((item) => item.productId).filter((productId): productId is number => productId != null)
+
+            const warehouseStocks = order.warehouseId && itemProductIds.length > 0
+                ? await db.select({
+                    productId: stockLevels.productId,
+                    totalStock: sql<number>`COALESCE(SUM(${stockLevels.totalStock}), 0)`,
+                })
+                    .from(stockLevels)
+                    .where(and(
+                        eq(stockLevels.warehouseId, order.warehouseId),
+                        inArray(stockLevels.productId, itemProductIds)
+                    ))
+                    .groupBy(stockLevels.productId)
+                : []
+
+            const stockMap = new Map<number, number>(
+                warehouseStocks.map((stock) => [stock.productId, Number(stock.totalStock ?? 0)])
+            )
+
+            const outstandingItems = items
+                .map((item) => {
+                    const delivered = deliveredQuantities.get(item.id) ?? 0
+                    const remainingQuantity = Math.max(item.quantity - delivered, 0)
+                    const availableStock = item.productId ? (stockMap.get(item.productId) ?? 0) : 0
+                    const stockStatus = remainingQuantity <= 0
+                        ? "done"
+                        : availableStock >= remainingQuantity
+                            ? "ready"
+                            : availableStock > 0
+                                ? "partial"
+                                : "empty"
+
+                    return {
+                        itemId: item.id,
+                        productId: item.productId,
+                        productName: item.product?.materialDescription || item.product?.materialNumber || item.description || "Unknown Product",
+                        materialNumber: item.product?.materialNumber || "-",
+                        orderedQuantity: item.quantity,
+                        deliveredQuantity: delivered,
+                        remainingQuantity,
+                        availableStock,
+                        stockStatus,
+                    }
+                })
+                .filter((item) => item.remainingQuantity > 0)
+
+            const hasReadyAll = outstandingItems.length > 0 && outstandingItems.every((item) => item.availableStock >= item.remainingQuantity)
+            const hasAnyStock = outstandingItems.some((item) => item.availableStock > 0)
+            const outstandingDays = order.poReceive
+                ? Math.max(0, Math.floor((Date.now() - new Date(order.poReceive).getTime()) / (1000 * 60 * 60 * 24)))
+                : null
+
+            const remarks = outstandingItems.length === 0
+                ? null
+                : hasReadyAll
+                    ? {
+                        status: "ready",
+                        label: "Stock Ready",
+                        outstandingDays,
+                        outstandingItemsCount: outstandingItems.length,
+                        outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                        items: outstandingItems,
+                    }
+                    : hasAnyStock
+                        ? {
+                            status: "partial",
+                            label: "Partial Stock",
+                            outstandingDays,
+                            outstandingItemsCount: outstandingItems.length,
+                            outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                            items: outstandingItems,
+                        }
+                        : {
+                            status: "empty",
+                            label: "No Stock",
+                            outstandingDays,
+                            outstandingItemsCount: outstandingItems.length,
+                            outstandingQty: outstandingItems.reduce((sum, item) => sum + item.remainingQuantity, 0),
+                            items: outstandingItems,
+                        }
+
             return {
                 ...order,
                 salesPerson: normalizeSalesPerson(order),
                 items,
+                remarks,
                 deliverySummary: {
                     totalCount: orderDeliveries.length,
                     activeCount: activeDeliveries.length,
