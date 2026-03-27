@@ -159,6 +159,7 @@ export {
     emailContactsRelations,
     emailGroupMembersRelations,
 } from "./email-contacts";
+export { userNotificationReads } from "./user-notifications";
 export {
     chatRooms,
     chatRoomMembers,
