@@ -5,13 +5,13 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { attachSalesDocumentsToQuotation, createQuotationAttachment, deleteQuotationAttachment, uploadQuotationCustomerPo } from "@/app/actions/quotation"
 import { createSalesDocument, getSalesDocuments } from "@/app/actions/sales-document"
-import { uploadFile } from "@/app/actions/upload"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -109,6 +109,8 @@ export function QuotationFileCenter({
     const [saveToSalesDocument, setSaveToSalesDocument] = useState(false)
     const [poFile, setPoFile] = useState<File | null>(null)
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
+    const [attachmentUploadProgress, setAttachmentUploadProgress] = useState(0)
+    const [attachmentUploadMessage, setAttachmentUploadMessage] = useState("Menyiapkan upload attachment...")
     const [isUploadingPo, setIsUploadingPo] = useState(false)
     const [isLoadingSalesDocuments, setIsLoadingSalesDocuments] = useState(true)
     const [isAddingFromSalesDocument, setIsAddingFromSalesDocument] = useState(false)
@@ -206,16 +208,43 @@ export function QuotationFileCenter({
             return
         }
 
+        const oversizedFile = attachmentFiles.find((file) => file.size > 20 * 1024 * 1024)
+        if (oversizedFile) {
+            toast.error(`File ${oversizedFile.name} terlalu besar. Maksimal 20MB per file.`)
+            return
+        }
+
         setIsUploadingAttachment(true)
+        setAttachmentUploadProgress(5)
+        setAttachmentUploadMessage(`Menyiapkan ${attachmentFiles.length} file attachment...`)
         try {
-            for (const file of attachmentFiles) {
+            for (const [index, file] of attachmentFiles.entries()) {
+                const itemStart = Math.round((index / attachmentFiles.length) * 100)
+                const itemMid = Math.min(92, itemStart + Math.round(55 / attachmentFiles.length))
+                const itemEnd = Math.min(98, itemStart + Math.round(90 / attachmentFiles.length))
+
+                setAttachmentUploadProgress(Math.max(5, itemStart + 5))
+                setAttachmentUploadMessage(`Mengupload ${file.name}...`)
+
                 const formData = new FormData()
                 formData.append("file", file)
 
-                const uploadResult = await uploadFile(formData)
+                const uploadResponse = await fetch("/api/uploads", {
+                    method: "POST",
+                    body: formData,
+                })
+
+                const uploadResult = await uploadResponse.json() as {
+                    success: boolean
+                    url?: string
+                    error?: string
+                }
                 if (!uploadResult.success || !uploadResult.url) {
                     throw new Error(uploadResult.error || `Upload attachment ${file.name} gagal`)
                 }
+
+                setAttachmentUploadProgress(itemMid)
+                setAttachmentUploadMessage(`Menyimpan ${file.name} ke quotation...`)
 
                 const attachmentLabel = attachmentTitle.trim()
                 const resolvedTitle = attachmentFiles.length === 1
@@ -239,6 +268,7 @@ export function QuotationFileCenter({
                 }
 
                 if (saveToSalesDocument) {
+                    setAttachmentUploadMessage(`Menyimpan ${file.name} ke Sales Document...`)
                     const salesDocResult = await createSalesDocument({
                         title: resolvedTitle,
                         description: attachmentDescription.trim() || null,
@@ -251,8 +281,12 @@ export function QuotationFileCenter({
                         throw new Error(salesDocResult.error || `Attachment ${file.name} gagal disimpan ke Sales Document`)
                     }
                 }
+
+                setAttachmentUploadProgress(itemEnd)
             }
 
+            setAttachmentUploadProgress(100)
+            setAttachmentUploadMessage("Upload attachment selesai")
             toast.success(`${attachmentFiles.length} attachment quotation berhasil ditambahkan`)
             setAttachmentTitle("")
             setAttachmentDescription("")
@@ -260,13 +294,21 @@ export function QuotationFileCenter({
             setIncludeInPdf(true)
             setSaveToSalesDocument(false)
             setSalesDocumentSearch("")
-            const documents = await getSalesDocuments()
-            setSalesDocuments(documents)
+
+            if (saveToSalesDocument) {
+                const documents = await getSalesDocuments()
+                setSalesDocuments(documents)
+            }
+
             router.refresh()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Attachment gagal diupload")
         } finally {
-            setIsUploadingAttachment(false)
+            window.setTimeout(() => {
+                setIsUploadingAttachment(false)
+                setAttachmentUploadProgress(0)
+                setAttachmentUploadMessage("Menyiapkan upload attachment...")
+            }, 400)
         }
     }
 
@@ -516,6 +558,13 @@ export function QuotationFileCenter({
                             {isUploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                             Upload Attachment
                         </Button>
+                        {isUploadingAttachment && (
+                            <ProgressLoading
+                                value={attachmentUploadProgress}
+                                message={attachmentUploadMessage}
+                                className="max-w-none"
+                            />
+                        )}
 
                         <div className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-3 sm:space-y-4 sm:p-4">
                             <div>
