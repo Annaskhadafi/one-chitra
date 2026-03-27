@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import {
     MessageCircle,
     X,
@@ -19,11 +18,13 @@ import {
     Plus,
     Search,
     Loader2,
+    Trash2,
 } from "lucide-react"
 import {
     getUserRooms,
     getRoomMessages,
     sendMessage,
+    deleteChatRoom,
     getChatUsers,
     getOrCreateDmRoom,
     createGroupRoom,
@@ -93,7 +94,7 @@ function DocumentMentionPicker({
         <div className="absolute bottom-full left-0 right-0 mb-2 bg-popover border rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="px-3 py-2 bg-muted/50 border-b flex items-center gap-2 text-xs text-muted-foreground font-medium">
                 <FileText className="h-3 w-3" />
-                Mention Dokumen — ketik untuk cari, `/Quo` untuk quotation saya
+                Mention Dokumen — ketik untuk cari, `/Quo` quotation saya, `/po` customer PO
                 <button onClick={onClose} className="ml-auto"><X className="h-3 w-3" /></button>
             </div>
             {loading && (
@@ -181,10 +182,12 @@ function ConversationView({
     room,
     currentUserId,
     onBack,
+    onDeleteRoom,
 }: {
     room: ChatRoomWithMeta
     currentUserId: string
     onBack: () => void
+    onDeleteRoom: (roomId: number) => Promise<void>
 }) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState("")
@@ -283,7 +286,7 @@ function ConversationView({
     const otherMembers = room.members.filter((m) => m.userId !== currentUserId)
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
             {/* Header */}
             <div className="flex items-center gap-2 p-3 border-b bg-card">
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onBack}>
@@ -303,10 +306,23 @@ function ConversationView({
                         <p className="text-xs text-muted-foreground">{room.members.length} anggota</p>
                     )}
                 </div>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
+                    title="Hapus chat"
+                    onClick={async () => {
+                        const confirmed = window.confirm("Hapus chat ini dari daftar Anda?")
+                        if (!confirmed) return
+                        await onDeleteRoom(room.id)
+                    }}
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1 p-3">
+            <ScrollArea className="flex-1 min-h-0 p-3">
                 {renderedMessages.map((msg, index) => (
                     <MessageBubble
                         key={`${msg.id}-${msg.createdAt}-${index}`}
@@ -352,7 +368,7 @@ function ConversationView({
                                 handleSend()
                             }
                         }}
-                        placeholder="Ketik pesan... (/ untuk dokumen, /Quo untuk quotation saya)"
+                        placeholder="Ketik pesan... (/ untuk dokumen, /Quo quotation saya, /po customer PO)"
                         className="flex-1 text-sm"
                         autoComplete="off"
                     />
@@ -381,7 +397,7 @@ function RoomList({
     totalUnread: number
 }) {
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between p-3 border-b">
                 <div className="flex items-center gap-2">
                     <MessageCircle className="h-4 w-4 text-primary" />
@@ -394,7 +410,7 @@ function RoomList({
                     <Plus className="h-4 w-4" />
                 </Button>
             </div>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 min-h-0">
                 {rooms.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
                         <MessageCircle className="h-8 w-8 opacity-30" />
@@ -482,7 +498,11 @@ function NewChatView({
     const toggle = (id: string) => {
         setSelected((prev) => {
             const s = new Set(prev)
-            s.has(id) ? s.delete(id) : s.add(id)
+            if (s.has(id)) {
+                s.delete(id)
+            } else {
+                s.add(id)
+            }
             return s
         })
     }
@@ -507,7 +527,7 @@ function NewChatView({
     }
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
             <div className="flex items-center gap-2 p-3 border-b">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBack}>
                     <ChevronLeft className="h-4 w-4" />
@@ -535,7 +555,7 @@ function NewChatView({
                     />
                 </div>
             </div>
-            <ScrollArea className="flex-1 px-3">
+            <ScrollArea className="flex-1 min-h-0 px-3">
                 {filtered.map((u) => (
                     <button
                         key={u.id}
@@ -581,18 +601,12 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     const [rooms, setRooms] = useState<ChatRoomWithMeta[]>([])
     const [activeRoom, setActiveRoom] = useState<ChatRoomWithMeta | null>(null)
     const [showNewChat, setShowNewChat] = useState(false)
-    const [loading, setLoading] = useState(false)
 
     const totalUnread = rooms.reduce((s, r) => s + r.unreadCount, 0)
 
     const loadRooms = useCallback(async () => {
-        setLoading(true)
-        try {
-            const r = await getUserRooms()
-            setRooms(r)
-        } finally {
-            setLoading(false)
-        }
+        const r = await getUserRooms()
+        setRooms(r)
     }, [])
 
     // Load rooms on open
@@ -623,6 +637,13 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
         }
     }, [loadRooms])
 
+    const handleDeleteRoom = useCallback(async (roomId: number) => {
+        await deleteChatRoom(roomId)
+        setActiveRoom(null)
+        setShowNewChat(false)
+        await loadRooms()
+    }, [loadRooms])
+
     return (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
             {/* Chat Panel */}
@@ -649,7 +670,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 overflow-hidden">
+                    <div className="flex-1 overflow-hidden min-h-0">
                         {showNewChat ? (
                             <NewChatView
                                 currentUserId={currentUserId}
@@ -660,6 +681,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
                             <ConversationView
                                 room={activeRoom}
                                 currentUserId={currentUserId}
+                                onDeleteRoom={handleDeleteRoom}
                                 onBack={() => {
                                     setActiveRoom(null)
                                     loadRooms()

@@ -4,7 +4,7 @@ import { db } from "@/db"
 import { chatRooms, chatRoomMembers, chatMessages } from "@/db/schema"
 import { quotations, salesOrders, deliveries } from "@/db/schema"
 import { user as userTable } from "@/db/schema"
-import { eq, and, or, desc, sql, gt, ne } from "drizzle-orm"
+import { eq, and, desc, sql, gt, ne } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -159,6 +159,42 @@ export async function sendMessage(
 
     // Update room updatedAt
     await db.update(chatRooms).set({ updatedAt: new Date() }).where(eq(chatRooms.id, roomId))
+
+    revalidatePath("/dashboard")
+    return { success: true }
+}
+
+// Delete chat room for current user.
+// If the room has no members left, delete the room (messages cascade).
+export async function deleteChatRoom(roomId: number) {
+    const currentUserId = await getCurrentUserId()
+
+    const membership = await db.query.chatRoomMembers.findFirst({
+        where: and(
+            eq(chatRoomMembers.roomId, roomId),
+            eq(chatRoomMembers.userId, currentUserId),
+        ),
+    })
+
+    if (!membership) throw new Error("Not a member of this room")
+
+    await db
+        .delete(chatRoomMembers)
+        .where(
+            and(
+                eq(chatRoomMembers.roomId, roomId),
+                eq(chatRoomMembers.userId, currentUserId),
+            ),
+        )
+
+    const [memberCountRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(chatRoomMembers)
+        .where(eq(chatRoomMembers.roomId, roomId))
+
+    if (Number(memberCountRow?.count ?? 0) === 0) {
+        await db.delete(chatRooms).where(eq(chatRooms.id, roomId))
+    }
 
     revalidatePath("/dashboard")
     return { success: true }
@@ -436,6 +472,8 @@ export async function searchDocumentsForMention(query: string) {
     const isSalesRole = currentUser.role.trim().toLowerCase() === "sales"
     const isQuotationShortcut = normalizedQuery.startsWith("quo")
     const quotationFilter = normalizedQuery.length > 3 ? `%${normalizedQuery.slice(3)}%` : null
+    const isPoShortcut = normalizedQuery.startsWith("po")
+    const poFilter = normalizedQuery.length > 2 ? `%${normalizedQuery.slice(2)}%` : null
 
     const salesQuotationResults = isSalesRole && isQuotationShortcut
         ? await db.select({
@@ -455,6 +493,22 @@ export async function searchDocumentsForMention(query: string) {
                     : eq(quotations.createdBy, currentUser.id)
             )
             .orderBy(desc(quotations.quotationDate))
+            .limit(10)
+        : null
+
+    const poShortcutResults = isPoShortcut
+        ? await db.select({
+            id: salesOrders.id,
+            number: salesOrders.invoiceNumber,
+            customerPo: salesOrders.customerPo,
+            subject: salesOrders.quotationSubject,
+        }).from(salesOrders)
+            .where(
+                poFilter
+                    ? sql`lower(coalesce(${salesOrders.customerPo}, '')) like ${poFilter}`
+                    : sql`coalesce(${salesOrders.customerPo}, '') <> ''`
+            )
+            .orderBy(desc(salesOrders.createdAt))
             .limit(10)
         : null
 
@@ -516,15 +570,37 @@ export async function searchDocumentsForMention(query: string) {
         })
     }
 
-    return [
-        ...Array.from(quotationMap.values()),
-        ...soResults.map((s) => ({
+    const soMap = new Map<string, {
+        type: "sales-order"
+        id: string
+        label: string
+        sublabel: string
+        url: string
+    }>()
+
+    for (const s of poShortcutResults ?? []) {
+        soMap.set(String(s.id), {
+            type: "sales-order",
+            id: String(s.id),
+            label: s.customerPo || s.number || `SO #${s.id}`,
+            sublabel: s.number || s.subject || "",
+            url: `/dashboard/sales-orders?id=${s.id}`,
+        })
+    }
+
+    for (const s of soResults) {
+        soMap.set(String(s.id), {
             type: "sales-order" as const,
             id: String(s.id),
             label: s.number || s.customerPo || `SO #${s.id}`,
             sublabel: s.subject || s.customerPo || "",
             url: `/dashboard/sales-orders?id=${s.id}`,
-        })),
+        })
+    }
+
+    return [
+        ...Array.from(quotationMap.values()),
+        ...Array.from(soMap.values()),
         ...deliveryResults.map((d) => ({
             type: "delivery" as const,
             id: String(d.id),
