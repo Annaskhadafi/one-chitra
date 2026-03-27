@@ -2,8 +2,8 @@
 
 import { useMemo, useRef, useState } from "react"
 import { uploadFile } from "@/app/actions/upload"
-import { bulkAttachDoScansByInternalNo } from "@/app/actions/delivery"
-import { useQueryClient } from "@tanstack/react-query"
+import { bulkAttachDoScansByInternalNo, getDeliveries, updateDoMonitoringFields } from "@/app/actions/delivery"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Upload, ScanSearch, FileText, CheckCircle2, CircleAlert, Loader2 } from "lucide-react"
 
 type UploadStatus = "pending" | "uploading" | "ocr" | "matched" | "unmatched" | "duplicate" | "failed"
@@ -40,8 +41,24 @@ export function BulkDoOcrUploadDialog() {
     const [open, setOpen] = useState(false)
     const [files, setFiles] = useState<UploadItem[]>([])
     const [isProcessing, setIsProcessing] = useState(false)
+    const [manualMatchingId, setManualMatchingId] = useState<string | null>(null)
+    const [manualSelections, setManualSelections] = useState<Record<string, string>>({})
     const [progress, setProgress] = useState(0)
     const [summary, setSummary] = useState<BulkResult | null>(null)
+
+    const { data: deliveries = [] } = useQuery({
+        queryKey: ["deliveries"],
+        queryFn: () => getDeliveries(),
+        staleTime: 60 * 1000,
+    })
+
+    const deliveryOptions = useMemo(
+        () => deliveries
+            .filter((delivery) => delivery.deliveryNumber)
+            .map((delivery) => ({ id: delivery.id, deliveryNumber: delivery.deliveryNumber || "-" }))
+            .sort((a, b) => a.deliveryNumber.localeCompare(b.deliveryNumber)),
+        [deliveries],
+    )
 
     const readyCount = useMemo(
         () => files.filter((file) => file.status === "matched" || file.status === "unmatched" || file.status === "failed").length,
@@ -52,6 +69,8 @@ export function BulkDoOcrUploadDialog() {
         setOpen(nextOpen)
         if (!nextOpen && !isProcessing) {
             setFiles([])
+            setManualSelections({})
+            setManualMatchingId(null)
             setProgress(0)
             setSummary(null)
         }
@@ -70,6 +89,50 @@ export function BulkDoOcrUploadDialog() {
             file,
             status: "pending",
         })))
+        setManualSelections({})
+    }
+
+    async function matchManual(item: UploadItem) {
+        const selectedDeliveryId = Number(manualSelections[item.id])
+        if (!selectedDeliveryId || !item.fileUrl) {
+            toast.error("Pilih Delivery/DO No dulu untuk matching manual")
+            return
+        }
+
+        const selectedDelivery = deliveryOptions.find((delivery) => delivery.id === selectedDeliveryId)
+        if (!selectedDelivery) {
+            toast.error("Delivery yang dipilih tidak valid")
+            return
+        }
+
+        setManualMatchingId(item.id)
+        try {
+            const result = await updateDoMonitoringFields(selectedDeliveryId, {
+                scanDoDocument: item.fileUrl,
+                returnDoDate: new Date(),
+                doStatus: "Returned",
+            })
+
+            if (!result.success) {
+                toast.error(result.error || "Matching manual gagal")
+                return
+            }
+
+            setFiles((prev) => prev.map((entry) => entry.id === item.id
+                ? {
+                    ...entry,
+                    internalNo: selectedDelivery.deliveryNumber,
+                    deliveryNumber: selectedDelivery.deliveryNumber,
+                    status: "matched",
+                    message: `Matched manual ke ${selectedDelivery.deliveryNumber}`,
+                }
+                : entry))
+
+            toast.success(`File ${item.file.name} berhasil di-match manual`)
+            await queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+        } finally {
+            setManualMatchingId(null)
+        }
     }
 
     async function processFiles() {
@@ -282,20 +345,53 @@ export function BulkDoOcrUploadDialog() {
                                 </div>
                             )}
                             {files.map((item) => (
-                                <div key={item.id} className="flex items-start justify-between gap-3 p-4">
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
-                                            <p className="truncate font-medium">{item.file.name}</p>
+                                <div key={item.id}>
+                                    <div className="flex items-start justify-between gap-3 p-4">
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                                <p className="truncate font-medium">{item.file.name}</p>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {item.internalNo ? `Internal No: ${item.internalNo}` : "Menunggu pembacaan Internal No"}
+                                            </p>
+                                            {item.message && (
+                                                <p className="text-xs text-muted-foreground">{item.message}</p>
+                                            )}
                                         </div>
-                                        <p className="text-xs text-muted-foreground">
-                                            {item.internalNo ? `Internal No: ${item.internalNo}` : "Menunggu pembacaan Internal No"}
-                                        </p>
-                                        {item.message && (
-                                            <p className="text-xs text-muted-foreground">{item.message}</p>
-                                        )}
+                                        <StatusBadge status={item.status} />
                                     </div>
-                                    <StatusBadge status={item.status} />
+                                    {item.status === "unmatched" && item.fileUrl && (
+                                        <div className="px-4 pb-4">
+                                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <Select
+                                                    value={manualSelections[item.id] ?? ""}
+                                                    onValueChange={(value) => setManualSelections((prev) => ({ ...prev, [item.id]: value }))}
+                                                    disabled={isProcessing || manualMatchingId === item.id}
+                                                >
+                                                    <SelectTrigger className="w-full sm:w-[250px]">
+                                                        <SelectValue placeholder="Pilih Delivery/DO No untuk match manual" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {deliveryOptions.map((option) => (
+                                                            <SelectItem key={option.id} value={String(option.id)}>
+                                                                {option.deliveryNumber}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    onClick={() => matchManual(item)}
+                                                    disabled={isProcessing || manualMatchingId === item.id || !manualSelections[item.id]}
+                                                >
+                                                    {manualMatchingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                    Matching Manual
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
