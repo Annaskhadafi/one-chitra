@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { Upload, FileText, ExternalLink, Maximize2 } from "lucide-react"
 import type { SalesOrder, Customer } from "@/lib/types"
+import { getDoMonitoringStatus, getStoredDoStatus, type DoMonitoringStatus } from "../status-utils"
 
 type DeliveryWithSalesOrder = Delivery & {
     salesOrder?: (SalesOrder & { customer: Customer }) | null
@@ -51,7 +52,7 @@ export function EditDoDialog({
     const [invoiceDate, setInvoiceDate] = useState(
         delivery?.invoiceDate ? new Date(delivery.invoiceDate).toISOString().slice(0, 10) : ""
     )
-    const [doStatus, setDoStatus] = useState(delivery?.doStatus || "Pending")
+    const [doStatus, setDoStatus] = useState<DoMonitoringStatus>(getDoMonitoringStatus(delivery ?? {}))
     const [remark, setRemark] = useState(delivery?.remark || "")
     const [scanDoDocument, setScanDoDocument] = useState(delivery?.scanDoDocument || "")
     const [doSap, setDoSap] = useState(delivery?.doSap || "")
@@ -98,7 +99,7 @@ export function EditDoDialog({
             setReturnDoDate(delivery.returnDoDate ? new Date(delivery.returnDoDate).toISOString().slice(0, 10) : "")
             setInvoiceNumber(currentInvoiceNumber)
             setInvoiceDate(currentInvoiceDate)
-            setDoStatus(delivery.doStatus || "Pending")
+            setDoStatus(getDoMonitoringStatus(delivery))
             setRemark(delivery.remark || "")
             setScanDoDocument(delivery.scanDoDocument || "")
             setDoSap(delivery.doSap || "")
@@ -121,7 +122,7 @@ export function EditDoDialog({
             returnDoDate: returnDoDate ? new Date(returnDoDate) : null,
             invoiceNumber,
             invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
-            doStatus,
+            doStatus: getStoredDoStatus(doStatus),
             remark,
             scanDoDocument,
             doSap
@@ -171,6 +172,10 @@ export function EditDoDialog({
             if (result.success && result.url) {
                 setUploadProgress(100)
                 setScanDoDocument(result.url)
+                setDoStatus("Return")
+                if (!returnDoDate) {
+                    setReturnDoDate(new Date().toISOString().slice(0, 10))
+                }
                 toast.success("Document berhasil diupload")
             } else {
                 setUploadProgress(0)
@@ -199,13 +204,13 @@ export function EditDoDialog({
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">DO Status</Label>
-                        <Select value={doStatus} onValueChange={setDoStatus}>
+                        <Select value={doStatus} onValueChange={(value) => setDoStatus(value as DoMonitoringStatus)}>
                             <SelectTrigger className="col-span-3">
                                 <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="Pending">Pending</SelectItem>
-                                <SelectItem value="Returned">Returned</SelectItem>
+                                <SelectItem value="Return">Return</SelectItem>
                                 <SelectItem value="Lost">Lost</SelectItem>
                             </SelectContent>
                         </Select>

@@ -56,6 +56,7 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { getDoMonitoringStatus, getStoredDoStatus } from "../status-utils"
 import {
     useReactTable,
     getCoreRowModel,
@@ -201,14 +202,14 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
 
     // Mutations
     const updateStatusMutation = useMutation({
-        mutationFn: ({ id, status }: { id: number, status: string }) => updateDoMonitoringFields(id, { doStatus: status }),
+        mutationFn: ({ id, status }: { id: number, status: string }) => updateDoMonitoringFields(id, { doStatus: getStoredDoStatus(status) }),
         onMutate: async ({ id, status }) => {
             await queryClient.cancelQueries({ queryKey: ["deliveries"] })
             const previousDeliveries = queryClient.getQueryData<DeliveryWithRelations[]>(["deliveries"])
 
             if (previousDeliveries) {
                 queryClient.setQueryData<DeliveryWithRelations[]>(["deliveries"], (old) =>
-                    old?.map(d => d.id === id ? { ...d, doStatus: status } : d)
+                    old?.map(d => d.id === id ? { ...d, doStatus: getStoredDoStatus(status) } : d)
                 )
             }
 
@@ -324,28 +325,29 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
             header: "DO Status",
             cell: ({ row }) => {
                 const delivery = row.original
+                const displayStatus = getDoMonitoringStatus(delivery)
                 return canEdit ? (
                     <Select
-                        defaultValue={delivery.doStatus || "Pending"}
+                        defaultValue={displayStatus}
                         onValueChange={(value) => handleUpdateStatus(delivery.id, value)}
                     >
-                        <SelectTrigger className={`h-8 w-[110px] text-xs font-medium border-none shadow-none focus:ring-0 ${delivery.doStatus === "Returned" ? 'bg-primary text-primary-foreground' :
-                            delivery.doStatus === "Lost" ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-secondary-foreground'
+                        <SelectTrigger className={`h-8 w-[110px] text-xs font-medium border-none shadow-none focus:ring-0 ${displayStatus === "Return" ? 'bg-primary text-primary-foreground' :
+                            displayStatus === "Lost" ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-secondary-foreground'
                             }`}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="Pending">Pending</SelectItem>
-                            <SelectItem value="Returned">Returned</SelectItem>
+                            <SelectItem value="Return">Return</SelectItem>
                             <SelectItem value="Lost">Lost</SelectItem>
                         </SelectContent>
                     </Select>
                 ) : (
                     <Badge variant={
-                        delivery.doStatus === "Returned" ? "default" :
-                            delivery.doStatus === "Lost" ? "destructive" : "secondary"
+                        displayStatus === "Return" ? "default" :
+                            displayStatus === "Lost" ? "destructive" : "secondary"
                     }>
-                        {delivery.doStatus || "Pending"}
+                        {displayStatus}
                     </Badge>
                 )
             },
@@ -552,7 +554,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 (d.salesOrder?.customerPo?.toLowerCase().includes(term))
             )
 
-            const matchesStatus = statusFilter === "all" || (d.doStatus || "Pending") === statusFilter
+            const matchesStatus = statusFilter === "all" || getDoMonitoringStatus(d) === statusFilter
             const matchesInvoice = invoiceFilter === "all" ||
                 (invoiceFilter === "uninvoice" && (!d.invoiceNumber || d.invoiceNumber.trim() === "")) ||
                 (invoiceFilter === "invoiced" && (d.invoiceNumber && d.invoiceNumber.trim() !== "")) ||
@@ -630,7 +632,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                 d.salesOrder?.customerPo || "",
                 d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString("id-ID") : "",
                 d.returnDoDate ? new Date(d.returnDoDate).toLocaleDateString("id-ID") : "",
-                d.doStatus || "Pending",
+                getDoMonitoringStatus(d),
                 d.scanDoDocument || "",
                 d.invoiceNumber || "",
                 d.invoiceDate ? new Date(d.invoiceDate).toLocaleDateString("id-ID") : "",
@@ -751,7 +753,7 @@ export function DoMonitoringTable({ data: initialData }: { data: DeliveryWithRel
                         <SelectContent>
                             <SelectItem value="all">All Status</SelectItem>
                             <SelectItem value="Pending">Pending</SelectItem>
-                            <SelectItem value="Returned">Returned</SelectItem>
+                            <SelectItem value="Return">Return</SelectItem>
                             <SelectItem value="Lost">Lost</SelectItem>
                         </SelectContent>
                     </Select>

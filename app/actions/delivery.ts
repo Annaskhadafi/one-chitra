@@ -1252,15 +1252,23 @@ export async function updateDoMonitoringFields(id: number, data: {
     try {
         await checkPermission('deliveries', 'edit')
 
+        const hasScanDoDocument = data.scanDoDocument !== undefined && Boolean(data.scanDoDocument)
+        const normalizedDoStatus = hasScanDoDocument && data.doStatus !== "Lost"
+            ? "Returned"
+            : data.doStatus
+        const normalizedReturnDate = hasScanDoDocument && data.returnDoDate === undefined
+            ? new Date()
+            : data.returnDoDate
+
         // Build update object dynamically to support partial updates
         const updateData: Partial<typeof deliveries.$inferInsert> = {
             updatedAt: new Date(),
         }
 
-        if (data.returnDoDate !== undefined) updateData.returnDoDate = data.returnDoDate
+        if (normalizedReturnDate !== undefined) updateData.returnDoDate = normalizedReturnDate
         if (data.invoiceNumber !== undefined) updateData.invoiceNumber = normalizeCodeValue(data.invoiceNumber)
         if (data.invoiceDate !== undefined) updateData.invoiceDate = data.invoiceDate
-        if (data.doStatus !== undefined) updateData.doStatus = data.doStatus
+        if (normalizedDoStatus !== undefined) updateData.doStatus = normalizedDoStatus
         if (data.remark !== undefined) updateData.remark = data.remark
         if (data.scanDoDocument !== undefined) updateData.scanDoDocument = data.scanDoDocument
         if (data.doSap !== undefined) updateData.doSap = normalizeCodeValue(data.doSap)
@@ -1269,7 +1277,7 @@ export async function updateDoMonitoringFields(id: number, data: {
             .set(updateData)
             .where(eq(deliveries.id, id))
 
-        if (data.doStatus === "Delivered") {
+        if (normalizedDoStatus === "Delivered") {
             const delivery = await db.query.deliveries.findFirst({
                 where: eq(deliveries.id, id),
                 columns: { salesOrderId: true }

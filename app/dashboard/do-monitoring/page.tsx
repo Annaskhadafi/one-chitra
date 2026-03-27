@@ -4,6 +4,7 @@ import { Truck, Clock, CheckCircle, DollarSign, FileX } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 import { Providers } from "@/components/providers"
+import { getDoMonitoringStatus } from "./status-utils"
 
 function calculateGrandTotal(salesOrder: DeliveryWithRelations['salesOrder']) {
     if (!salesOrder || !salesOrder.items) return 0
@@ -25,8 +26,8 @@ function formatCurrency(value: number) {
 export default async function DoMonitoringPage() {
     const deliveriesData = await getDeliveries()
 
-    const pendingCount = deliveriesData.filter(d => d.doStatus === 'Pending' || !d.doStatus).length
-    const returnedCount = deliveriesData.filter(d => d.doStatus === 'Returned').length
+    const pendingCount = deliveriesData.filter(d => getDoMonitoringStatus(d) === "Pending").length
+    const returnedCount = deliveriesData.filter(d => getDoMonitoringStatus(d) === "Return").length
 
     // Calculate Grand Total Invoiced and Un-invoiced
     const grandTotalInvoiced = deliveriesData
