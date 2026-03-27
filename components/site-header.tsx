@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DASHBOARD_SHORTCUTS_OPEN_EVENT } from "@/components/dashboard-shortcuts-command"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { UtcClock } from "@/components/utc-clock"
+import { NotificationBell } from "@/components/notification-bell"
 
 export function SiteHeader() {
   const handleOpenShortcuts = () => {
@@ -35,6 +36,7 @@ export function SiteHeader() {
               Ctrl+Q
             </span>
           </Button>
+          <NotificationBell />
           <ThemeToggle />
         </div>
       </div>
