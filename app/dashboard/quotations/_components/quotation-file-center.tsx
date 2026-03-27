@@ -50,6 +50,8 @@ interface QuotationFileCenterProps {
     attachments: AttachmentEntry[]
 }
 
+const QUOTATION_TIME_ZONE = "Asia/Makassar"
+
 function formatFileSize(size: number) {
     if (!size) {
         return "0 B"
@@ -62,6 +64,17 @@ function formatFileSize(size: number) {
         unitIndex += 1
     }
     return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function formatAttachmentDateTime(value: Date) {
+    return new Date(value).toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: QUOTATION_TIME_ZONE,
+    })
 }
 
 function inferSalesDocumentFileType(fileName: string, fileType?: string | null) {
@@ -722,7 +735,7 @@ export function QuotationFileCenter({
                                             </Badge>
                                             {poValidationSummary?.checkedAt && (
                                                 <span className="text-xs text-muted-foreground">
-                                                    {new Date(poValidationSummary.checkedAt).toLocaleString("id-ID")}
+                                                    {formatAttachmentDateTime(new Date(poValidationSummary.checkedAt))}
                                                 </span>
                                             )}
                                         </div>
@@ -776,7 +789,7 @@ export function QuotationFileCenter({
                                         <p className="text-sm text-muted-foreground">{attachment.fileName} • {formatFileSize(attachment.fileSize)}</p>
                                         {attachment.description && <p className="text-sm text-muted-foreground">{attachment.description}</p>}
                                         <p className="text-xs text-muted-foreground">
-                                            {new Date(attachment.createdAt).toLocaleString("id-ID")} • {attachment.uploadedByUser?.name || attachment.uploadedByUser?.email || "System"}
+                                            {formatAttachmentDateTime(attachment.createdAt)} • {attachment.uploadedByUser?.name || attachment.uploadedByUser?.email || "System"}
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">

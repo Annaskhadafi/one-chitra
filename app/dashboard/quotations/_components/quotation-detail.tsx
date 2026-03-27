@@ -143,6 +143,8 @@ const statusConfig: Record<string, { variant: "default" | "secondary" | "destruc
     converted: { variant: "default", icon: ArrowRightLeft, label: "Converted to SO", color: "text-purple-500" },
 }
 
+const QUOTATION_TIME_ZONE = "Asia/Makassar"
+
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -156,6 +158,7 @@ function formatDate(date: Date) {
         day: "2-digit",
         month: "long",
         year: "numeric",
+        timeZone: QUOTATION_TIME_ZONE,
     })
 }
 
@@ -166,6 +169,7 @@ function formatDateTime(date: Date) {
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: QUOTATION_TIME_ZONE,
     })
 }
 

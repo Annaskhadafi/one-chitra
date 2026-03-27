@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { getAuthenticatedSession } from "@/lib/rbac"
 import { createManagedUploadFilename, saveManagedUpload } from "@/lib/upload-storage"
 
 export async function POST(request: Request) {
-    try {
-        await getAuthenticatedSession()
-    } catch {
-        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
     try {
         const formData = await request.formData()
         const file = formData.get("file")
