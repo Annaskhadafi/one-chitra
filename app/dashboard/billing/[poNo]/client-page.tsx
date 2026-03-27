@@ -21,17 +21,6 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = (data.items as any[]) || []
-    const getItemPrice = (item: { qty?: unknown; totalPrice?: unknown }) => {
-        const qty = Number(item.qty)
-        const totalPrice = Number(item.totalPrice)
-
-        if (!Number.isFinite(qty) || qty === 0 || !Number.isFinite(totalPrice)) {
-            return 0
-        }
-
-        return totalPrice / qty
-    }
-
     return (
         <div className="flex flex-1 flex-col">
             <div className="px-4 md:px-8 pt-6">
@@ -168,7 +157,7 @@ export function BillingDetailClient({ data }: BillingDetailClientProps) {
                                             <TableCell>{item.materialDescription}</TableCell>
                                             <TableCell className="text-right">{item.qty}</TableCell>
                                             <TableCell>{item.uom}</TableCell>
-                                            <TableCell className="text-right">{getItemPrice(item).toLocaleString('id-ID')}</TableCell>
+                                            <TableCell className="text-right">{Number(item.price).toLocaleString('id-ID')}</TableCell>
                                             <TableCell className="text-right font-medium">{Number(item.totalPrice).toLocaleString('id-ID')}</TableCell>
                                         </TableRow>
                                     )) : (
