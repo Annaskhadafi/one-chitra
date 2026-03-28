@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 
 import { db } from "@/db"
@@ -16,6 +16,13 @@ import {
 } from "@/db/schema"
 import { auth } from "@/lib/auth"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
+import {
+    buildHelpDeskFallbackAnswer,
+    buildHelpDeskSystemPrompt,
+    HELP_DESK_STARTER_PROMPTS,
+    searchHelpDeskKnowledge,
+} from "@/lib/helpdesk-assistant"
+import { ensureHelpDeskSchema } from "@/lib/helpdesk-schema"
 
 const HELP_DESK_BOT_ID = HELP_DESK_CONFIG.botId
 const HELP_DESK_BOT_NAME = HELP_DESK_CONFIG.botName
@@ -90,6 +97,7 @@ async function ensureBotUser() {
 }
 
 export async function ensureHelpDeskKnowledgeSeed() {
+    await ensureHelpDeskSchema()
     const userId = await getCurrentUserId()
 
     for (const item of DEFAULT_KNOWLEDGE) {
@@ -133,6 +141,7 @@ export async function ensureHelpDeskKnowledgeSeed() {
 
 export async function ensureHelpDeskRoom(): Promise<{ roomId: number }> {
     const currentUserId = await getCurrentUserId()
+    await ensureHelpDeskSchema()
     await ensureBotUser()
     await ensureHelpDeskKnowledgeSeed()
 
@@ -270,52 +279,9 @@ export async function trainHelpDeskFromPage(form: {
     return { success: true, sourceId }
 }
 
-async function searchKnowledgeContext(query: string, limit = 6) {
-    const q = `%${query.trim()}%`
-    const sources = await db
-        .select({
-            sourceId: helpdeskKnowledgeSources.id,
-            title: helpdeskKnowledgeSources.title,
-            pagePath: helpdeskKnowledgeSources.pagePath,
-            content: helpdeskKnowledgeSources.content,
-        })
-        .from(helpdeskKnowledgeSources)
-        .where(
-            and(
-                eq(helpdeskKnowledgeSources.isActive, true),
-                or(
-                    ilike(helpdeskKnowledgeSources.title, q),
-                    ilike(helpdeskKnowledgeSources.summary, q),
-                    ilike(helpdeskKnowledgeSources.content, q),
-                    sql`${helpdeskKnowledgeSources.tags}::text ILIKE ${q}`,
-                ),
-            ),
-        )
-        .orderBy(asc(helpdeskKnowledgeSources.updatedAt))
-        .limit(3)
-
-    const chunks = await db
-        .select({
-            sourceId: helpdeskKnowledgeChunks.sourceId,
-            content: helpdeskKnowledgeChunks.content,
-        })
-        .from(helpdeskKnowledgeChunks)
-        .innerJoin(helpdeskKnowledgeSources, eq(helpdeskKnowledgeSources.id, helpdeskKnowledgeChunks.sourceId))
-        .where(
-            and(
-                eq(helpdeskKnowledgeSources.isActive, true),
-                ilike(helpdeskKnowledgeChunks.content, q),
-            ),
-        )
-        .orderBy(asc(helpdeskKnowledgeChunks.chunkIndex))
-        .limit(limit)
-
-    return { sources, chunks }
-}
-
 async function askHelpDeskOllama(params: {
     question: string
-    contextSources: { sourceId: number; title: string; pagePath: string | null; content: string }[]
+    contextSources: { sourceId: number; title: string; pagePath: string | null; summary: string | null; content: string }[]
     contextChunks: { sourceId: number; content: string }[]
 }) {
     const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
@@ -325,7 +291,7 @@ async function askHelpDeskOllama(params: {
     const apiKey = process.env.OLLAMA_API_KEY || ""
 
     const contextText = [
-        ...params.contextSources.map((s) => `Sumber ${s.sourceId} (${s.title}${s.pagePath ? ` - ${s.pagePath}` : ""}): ${s.content}`),
+        ...params.contextSources.map((s) => `Sumber ${s.sourceId} (${s.title}${s.pagePath ? ` - ${s.pagePath}` : ""}): ${(s.summary ? `${s.summary}\n` : "") + s.content}`),
         ...params.contextChunks.map((c) => `Potongan ${c.sourceId}: ${c.content}`),
     ]
         .join("\n\n")
@@ -343,12 +309,7 @@ async function askHelpDeskOllama(params: {
             messages: [
                 {
                     role: "system",
-                    content:
-                        "Kamu adalah Chitra Jenius, AI help desk aplikasi One Chitra. Jawab ringkas, praktis, dan fokus pada fitur yang ada. Jika konteks tidak cukup, jujur dan minta user menambahkan data training.",
-                },
-                {
-                    role: "system",
-                    content: `KONTEKS ONE CHITRA:\n${contextText || "Belum ada data training."}`,
+                    content: buildHelpDeskSystemPrompt(contextText),
                 },
                 { role: "user", content: params.question },
             ],
@@ -364,13 +325,19 @@ async function askHelpDeskOllama(params: {
     return String(data?.message?.content || "").trim()
 }
 
+export async function getHelpDeskStarterPrompts() {
+    await getCurrentUserId()
+    return [...HELP_DESK_STARTER_PROMPTS]
+}
+
 export async function generateHelpDeskReply(question: string) {
     if (!question.trim()) {
         return "Silakan tulis pertanyaan Anda terlebih dahulu ya."
     }
 
+    await ensureHelpDeskSchema()
     await ensureHelpDeskKnowledgeSeed()
-    const { sources, chunks } = await searchKnowledgeContext(question)
+    const { sources, chunks } = await searchHelpDeskKnowledge(question)
 
     try {
         const answer = await askHelpDeskOllama({
@@ -384,10 +351,6 @@ export async function generateHelpDeskReply(question: string) {
         console.error("Help desk Ollama error", error)
     }
 
-    if (sources.length === 0 && chunks.length === 0) {
-        return "Maaf, saya belum menemukan materi training yang relevan. Silakan tambahkan materi di halaman Training AI Help Desk agar saya bisa belajar konteks tersebut."
-    }
-
-    return "Maaf, saya sedang kesulitan mengakses Ollama. Silakan coba lagi beberapa saat lagi."
+    return buildHelpDeskFallbackAnswer(question, sources, chunks).text
 }
 

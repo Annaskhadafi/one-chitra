@@ -6,7 +6,7 @@ import { user } from "./auth";
 export const chatRooms = pgTable("chat_rooms", {
     id: serial("id").primaryKey(),
     name: varchar("name", { length: 255 }), // null for DM, required for group
-    type: varchar("type", { length: 10 }).default("dm").notNull(), // 'dm' | 'group'
+    type: varchar("type", { length: 20 }).default("dm").notNull(), // 'dm' | 'group' | 'ai-helpdesk'
     createdBy: varchar("created_by").references(() => user.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

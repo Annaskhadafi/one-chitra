@@ -489,7 +489,13 @@ export async function sendMessage(
         .where(eq(chatRooms.id, roomId))
 
     if (room.type === "ai-helpdesk" && cleanContent) {
-        const aiReply = await generateHelpDeskReply(cleanContent)
+        let aiReply = "Maaf, Chitra Jenius sedang belum bisa merespons. Silakan coba lagi sebentar lagi."
+
+        try {
+            aiReply = await generateHelpDeskReply(cleanContent)
+        } catch (error) {
+            console.error("generateHelpDeskReply failed", error)
+        }
 
         await db.insert(chatMessages).values({
             roomId,

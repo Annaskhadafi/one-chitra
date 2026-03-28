@@ -6,6 +6,11 @@ let ensureChatSchemaPromise: Promise<void> | null = null
 
 async function syncChatSchema() {
     await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_rooms
+        ALTER COLUMN type TYPE VARCHAR(20);
+    `)
+
+    await db.execute(sql`
         ALTER TABLE IF EXISTS chat_room_members
         ADD COLUMN IF NOT EXISTS last_unread_reminder_at TIMESTAMP;
     `)
