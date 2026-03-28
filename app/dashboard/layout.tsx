@@ -21,6 +21,165 @@ import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 import { getDashboardRouteResource } from "@/lib/route-permissions"
 import { ChatWidget } from "@/components/chat/chat-widget"
+import { navigationConfig } from "@/lib/navigation"
+
+type RuntimeNavSubItem = NonNullable<RuntimeNavSection["items"][number]["items"]>[number]
+
+const BUSINESS_SECTION_TITLE = "Business & Analytics"
+
+const getBusinessDefaultGroup = (title: string) =>
+  navigationConfig
+    .find((section) => section.title === BUSINESS_SECTION_TITLE)
+    ?.items.find((item) => item.title === title)
+
+const marketingDefaultGroup = getBusinessDefaultGroup("Marketing")
+const salesDefaultGroup = getBusinessDefaultGroup("Sales Preview")
+const reportsDefaultGroup = getBusinessDefaultGroup("Reports & Analytics")
+
+const marketingDefaultUrls = new Set((marketingDefaultGroup?.items ?? []).map((item) => item.url))
+const salesDefaultUrls = new Set((salesDefaultGroup?.items ?? []).map((item) => item.url))
+const reportsDefaultUrls = new Set((reportsDefaultGroup?.items ?? []).map((item) => item.url))
+const businessKnownUrls = new Set([
+  ...marketingDefaultUrls,
+  ...salesDefaultUrls,
+  ...reportsDefaultUrls,
+])
+
+const normalizeBusinessNavigation = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  return sections.map((section) => {
+    if (section.title !== BUSINESS_SECTION_TITLE) {
+      return section
+    }
+
+    const marketingItem = section.items.find((item) => item.title === "Marketing")
+    const salesItem = section.items.find((item) => item.title === "Sales" || item.title === "Sales Preview")
+    const reportsItem = section.items.find((item) => item.title === "Reports & Analytics")
+
+    const sourceByUrl = new Map<string, RuntimeNavSubItem>()
+    for (const item of section.items) {
+      for (const subItem of item.items ?? []) {
+        if (!subItem.url || subItem.url === "#") continue
+        if (!sourceByUrl.has(subItem.url)) {
+          sourceByUrl.set(subItem.url, subItem)
+        }
+      }
+    }
+
+    const buildDefaultSubItems = (
+      parentId: string,
+      defaults: NonNullable<ReturnType<typeof getBusinessDefaultGroup>>["items"],
+    ): RuntimeNavSubItem[] => {
+      return defaults.map((defaultItem, index) => {
+        const existing = sourceByUrl.get(defaultItem.url)
+        return {
+          id: existing?.id ?? `${parentId}-sub-${index}`,
+          title: existing?.title ?? defaultItem.title,
+          url: defaultItem.url,
+          resource: defaultItem.resource ?? existing?.resource,
+          hidden: existing?.hidden ?? false,
+          openInNewTab: existing?.openInNewTab ?? false,
+          isCustom: existing?.isCustom ?? false,
+          linkType: existing?.linkType ?? "internal",
+          externalOpenMode: existing?.externalOpenMode ?? "new_tab",
+          iframeManualEnabled: existing?.iframeManualEnabled ?? false,
+        }
+      })
+    }
+
+    const buildGroup = (
+      currentItem: RuntimeNavSection["items"][number] | undefined,
+      defaultGroup: NonNullable<ReturnType<typeof getBusinessDefaultGroup>>,
+      fallbackId: string,
+      knownUrls: Set<string>,
+    ) => {
+      const baseItem = currentItem ?? {
+        id: fallbackId,
+        title: defaultGroup.title,
+        url: "#",
+        iconName: "Circle",
+        resource: defaultGroup.resource,
+        hidden: false,
+        items: [],
+      }
+
+      const defaultSubItems = buildDefaultSubItems(baseItem.id, defaultGroup.items ?? [])
+      const extraSubItems = (currentItem?.items ?? []).filter((subItem) => {
+        if (!subItem.url || subItem.url === "#") return false
+        if (knownUrls.has(subItem.url)) return false
+        return true
+      })
+
+      const combinedItems = [...defaultSubItems, ...extraSubItems]
+      const seenUrls = new Set<string>()
+      const dedupedItems = combinedItems.filter((subItem) => {
+        if (!subItem.url || subItem.url === "#") return true
+        if (seenUrls.has(subItem.url)) return false
+        seenUrls.add(subItem.url)
+        return true
+      })
+
+      return {
+        ...baseItem,
+        title: currentItem?.title ?? defaultGroup.title,
+        url: "#",
+        resource: currentItem?.resource ?? defaultGroup.resource,
+        items: dedupedItems,
+      }
+    }
+
+    const normalizedMarketing = marketingDefaultGroup
+      ? buildGroup(marketingItem, marketingDefaultGroup, "business-marketing", businessKnownUrls)
+      : marketingItem
+    const normalizedSales = salesDefaultGroup
+      ? buildGroup(salesItem, salesDefaultGroup, "business-sales", businessKnownUrls)
+      : salesItem
+    const normalizedReports = reportsDefaultGroup
+      ? buildGroup(reportsItem, reportsDefaultGroup, "business-reports", businessKnownUrls)
+      : reportsItem
+
+    const otherItems = section.items.filter((item) => ![
+      "Marketing",
+      "Sales",
+      "Sales Preview",
+      "Reports & Analytics",
+    ].includes(item.title))
+
+    return {
+      ...section,
+      items: [
+        normalizedMarketing,
+        normalizedSales,
+        normalizedReports,
+        ...otherItems,
+      ].filter((item): item is RuntimeNavSection["items"][number] => Boolean(item)),
+    }
+  })
+}
+
+const dedupeRuntimeNavigationUrls = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
+  const seenTopLevelUrls = new Set<string>()
+  const seenSubUrls = new Set<string>()
+
+  return sections.map((section) => ({
+    ...section,
+    items: section.items
+      .filter((item) => {
+        if (!item.url || item.url === "#") return true
+        if (seenTopLevelUrls.has(item.url)) return false
+        seenTopLevelUrls.add(item.url)
+        return true
+      })
+      .map((item) => ({
+        ...item,
+        items: (item.items ?? []).filter((subItem) => {
+          if (!subItem.url || subItem.url === "#") return true
+          if (seenSubUrls.has(subItem.url)) return false
+          seenSubUrls.add(subItem.url)
+          return true
+        }),
+      })),
+  }))
+}
 
 const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNavSection[] => {
   return sections.map((section) => ({
@@ -122,8 +281,12 @@ export default async function DashboardLayout({
     getNavbarTheme(),
     getNavbarMenuSettingsAction(),
   ])
-  const runtimeNavigationSections = ensureMasterDataMenu(
-    ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+  const runtimeNavigationSections = dedupeRuntimeNavigationUrls(
+    normalizeBusinessNavigation(
+      ensureMasterDataMenu(
+        ensureLogisticsSettlementMenu(toRuntimeNavigationConfig(navbarMenuSettings)),
+      ),
+    ),
   )
 
   const user = session?.user as {

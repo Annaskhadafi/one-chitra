@@ -291,6 +291,146 @@ export const getDefaultEditableNavigationConfig = (): EditableNavSection[] => {
     })
 }
 
+const BUSINESS_SECTION_TITLE = "Business & Analytics"
+
+const sanitizeBusinessAnalyticsConfig = (config: EditableNavSection[]): EditableNavSection[] => {
+    const defaultBusinessSection = getDefaultEditableNavigationConfig().find((section) => section.title === BUSINESS_SECTION_TITLE)
+
+    if (!defaultBusinessSection) {
+        return config
+    }
+
+    const defaultMarketing = defaultBusinessSection.items.find((item) => item.title === "Marketing")
+    const defaultSales = defaultBusinessSection.items.find((item) => item.title === "Sales Preview")
+    const defaultReports = defaultBusinessSection.items.find((item) => item.title === "Reports & Analytics")
+
+    const knownUrls = new Set(
+        [defaultMarketing, defaultSales, defaultReports]
+            .flatMap((item) => item?.items ?? [])
+            .map((item) => item.url)
+            .filter((url) => Boolean(url) && url !== "#"),
+    )
+
+    return config.map((section) => {
+        if (section.title !== BUSINESS_SECTION_TITLE) {
+            return section
+        }
+
+        const marketingItem = section.items.find((item) => item.title === "Marketing")
+        const salesItem = section.items.find((item) => item.title === "Sales" || item.title === "Sales Preview")
+        const reportsItem = section.items.find((item) => item.title === "Reports & Analytics")
+
+        const sourceByUrl = new Map<string, EditableNavSubItem>()
+        for (const item of section.items) {
+            for (const subItem of item.items ?? []) {
+                if (!subItem.url || subItem.url === "#") continue
+                if (!sourceByUrl.has(subItem.url)) {
+                    sourceByUrl.set(subItem.url, subItem)
+                }
+            }
+        }
+
+        const buildGroup = (
+            currentItem: EditableNavItem | undefined,
+            defaultItem: EditableNavItem | undefined,
+            fallbackId: string,
+        ): EditableNavItem | undefined => {
+            if (!defaultItem) {
+                return currentItem
+            }
+
+            const baseItem: EditableNavItem = currentItem ?? {
+                ...defaultItem,
+                id: fallbackId,
+            }
+
+            const defaultSubItems = defaultItem.items.map((subItem, index) => {
+                const existing = sourceByUrl.get(subItem.url)
+                return {
+                    id: existing?.id ?? `${baseItem.id}-sub-${index}`,
+                    title: existing?.title ?? subItem.title,
+                    url: subItem.url,
+                    resource: subItem.resource ?? existing?.resource,
+                    hidden: existing?.hidden ?? false,
+                    openInNewTab: existing?.openInNewTab ?? false,
+                    isCustom: existing?.isCustom ?? false,
+                    linkType: existing?.linkType ?? "internal",
+                    externalOpenMode: existing?.externalOpenMode ?? "new_tab",
+                    iframeManualEnabled: existing?.iframeManualEnabled ?? false,
+                    iframeManualCode: existing?.iframeManualCode ?? "",
+                }
+            })
+
+            const extraSubItems = (currentItem?.items ?? []).filter((subItem) => {
+                if (!subItem.url || subItem.url === "#") return false
+                return !knownUrls.has(subItem.url)
+            })
+
+            const seenUrls = new Set<string>()
+            const items = [...defaultSubItems, ...extraSubItems].filter((subItem) => {
+                if (!subItem.url || subItem.url === "#") return true
+                if (seenUrls.has(subItem.url)) return false
+                seenUrls.add(subItem.url)
+                return true
+            })
+
+            return {
+                ...baseItem,
+                title: currentItem?.title ?? defaultItem.title,
+                url: "#",
+                resource: currentItem?.resource ?? defaultItem.resource,
+                items,
+            }
+        }
+
+        const otherItems = section.items.filter((item) => ![
+            "Marketing",
+            "Sales",
+            "Sales Preview",
+            "Reports & Analytics",
+        ].includes(item.title))
+
+        return {
+            ...section,
+            items: [
+                buildGroup(marketingItem, defaultMarketing, "business-marketing"),
+                buildGroup(salesItem, defaultSales, "business-sales"),
+                buildGroup(reportsItem, defaultReports, "business-reports"),
+                ...otherItems,
+            ].filter((item): item is EditableNavItem => Boolean(item)),
+        }
+    })
+}
+
+const dedupeUrlsAcrossConfig = (config: EditableNavSection[]): EditableNavSection[] => {
+    const seenItemUrls = new Set<string>()
+    const seenSubUrls = new Set<string>()
+
+    return config.map((section) => ({
+        ...section,
+        items: section.items
+            .filter((item) => {
+                if (!item.url || item.url === "#") return true
+                if (seenItemUrls.has(item.url)) return false
+                seenItemUrls.add(item.url)
+                return true
+            })
+            .map((item) => ({
+                ...item,
+                items: item.items.filter((subItem) => {
+                    if (!subItem.url || subItem.url === "#") return true
+                    if (seenSubUrls.has(subItem.url)) return false
+                    seenSubUrls.add(subItem.url)
+                    return true
+                }),
+            })),
+    }))
+}
+
+const sanitizeEditableNavigationConfig = (config: EditableNavSection[]): EditableNavSection[] => {
+    return dedupeUrlsAcrossConfig(sanitizeBusinessAnalyticsConfig(config))
+}
+
 const normalizeEditableSubItem = (item: Partial<EditableNavSubItem>): EditableNavSubItem | null => {
     if (!item.title || !item.url) {
         return null
@@ -599,7 +739,7 @@ const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): Editabl
         }
     }
 
-    return dedupeEditableNavigationConfig(merged)
+    return sanitizeEditableNavigationConfig(dedupeEditableNavigationConfig(merged))
 }
 
 export const parseNavigationConfigFromSetting = (rawSetting: string | null): EditableNavSection[] => {

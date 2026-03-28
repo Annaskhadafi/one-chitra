@@ -271,6 +271,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "quotations",
                     },
                     {
+                        title: "Sales Order Summary",
+                        url: "/dashboard/summary-order",
+                        resource: "sales-orders",
+                    },
+                    {
                         title: "Sales Document",
                         url: "/dashboard/sales-documents",
                         resource: "sales-documents",
@@ -408,11 +413,6 @@ export const navigationConfig: NavSection[] = [
                 resource: "admin",
                 items: [
                     {
-                        title: "SAP Stock Feed (PostgreSQL)",
-                        url: "/dashboard/stocks-sap-new",
-                        resource: "stocks-sap",
-                    },
-                    {
                         title: "SAP Stock Feed (Live API)",
                         url: "/dashboard/stocks-sap",
                         resource: "stocks-sap",
@@ -421,11 +421,6 @@ export const navigationConfig: NavSection[] = [
                         title: "SAP Sync Report",
                         url: "/dashboard/reports/sap",
                         resource: "reports",
-                    },
-                    {
-                        title: "Email Delivery Logs",
-                        url: "/dashboard/settings/email",
-                        resource: "email-settings",
                     },
                 ],
             },
@@ -439,11 +434,6 @@ export const navigationConfig: NavSection[] = [
                         title: "Navbar Settings",
                         url: "/dashboard/settings/navbar",
                         resource: "admin",
-                    },
-                    {
-                        title: "Email Settings",
-                        url: "/dashboard/settings/email",
-                        resource: "email-settings",
                     },
                 ],
             },

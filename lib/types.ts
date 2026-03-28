@@ -100,6 +100,50 @@ export type BillingRecordDisplay = {
     originalPrice: string | null
 }
 
+export type SummaryOrderDeliveryItem = {
+    deliveryId: number
+    deliveryNo: string | null
+    doSap: string | null
+    dateDelivery: Date | null
+    statusDelivery: string | null
+    invoiceNo: string | null
+    scanDo: string | null
+    remark: string | null
+}
+
+export type SummaryOrderProductItem = {
+    salesOrderItemId: number | null
+    materialNumber: string | null
+    materialDescription: string | null
+    orderedQty: number | null
+    deliveredQty: number | null
+}
+
+export type SummaryOrderRow = {
+    rowId: string
+    salesOrderId: number
+    soNumber: string | null
+    poNo: string | null
+    docPo: string | null
+    datePo: Date | null
+    picSales: string | null
+    categoryPo: string | null
+    grandTotal: number
+    remark: string | null
+    customerName: string | null
+    latestDeliveryId: number | null
+    latestDeliveryNo: string | null
+    deliveryNoSummary: string | null
+    doSapSummary: string | null
+    dateDelivery: Date | null
+    statusDelivery: string | null
+    invoiceNo: string | null
+    scanDo: string | null
+    latestActivityDate: Date | null
+    details: SummaryOrderProductItem[]
+    deliveries: SummaryOrderDeliveryItem[]
+}
+
 export type StockMovement = InferSelectModel<typeof stockMovements> & {
     product?: Product | null
     warehouse?: Warehouse | null
