@@ -70,8 +70,71 @@ const getDateDifferenceInDays = (endDate: Date, startDate: Date) => {
     return Math.round((endDate.getTime() - startDate.getTime()) / millisecondsPerDay)
 }
 
+async function ensureInventoryVendorTables() {
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "inventory_vendor_lead_times" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "vendor_name" text NOT NULL,
+            "default_lead_time_days" integer,
+            "notes" text,
+            "is_active" boolean DEFAULT true NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        );
+    `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "inventory_vendor_lead_time_materials" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "vendor_id" integer NOT NULL,
+            "material_no" text NOT NULL,
+            "material_desc" text,
+            "lead_time_days" integer NOT NULL,
+            "is_preferred" boolean DEFAULT false NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        );
+    `)
+
+    await db.execute(sql`
+        DO $$ BEGIN
+            ALTER TABLE "inventory_vendor_lead_time_materials"
+            ADD CONSTRAINT "inventory_vendor_lead_time_materials_vendor_id_inventory_vendor_lead_times_id_fk"
+            FOREIGN KEY ("vendor_id") REFERENCES "public"."inventory_vendor_lead_times"("id") ON DELETE cascade ON UPDATE no action;
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    `)
+
+    await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "inventory_vendor_lead_times_vendor_name_uidx"
+        ON "inventory_vendor_lead_times" ("vendor_name");
+    `)
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "inventory_vendor_lead_times_is_active_idx"
+        ON "inventory_vendor_lead_times" ("is_active");
+    `)
+    await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS "inventory_vendor_lead_time_materials_vendor_material_uidx"
+        ON "inventory_vendor_lead_time_materials" ("vendor_id", "material_no");
+    `)
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "inventory_vendor_lead_time_materials_vendor_id_idx"
+        ON "inventory_vendor_lead_time_materials" ("vendor_id");
+    `)
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "inventory_vendor_lead_time_materials_material_no_idx"
+        ON "inventory_vendor_lead_time_materials" ("material_no");
+    `)
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS "inventory_vendor_lead_time_materials_preferred_idx"
+        ON "inventory_vendor_lead_time_materials" ("is_preferred");
+    `)
+}
+
 export async function getInventoryVendorProfiles(): Promise<VendorLeadTimeProfile[]> {
     await getAuthenticatedSession("inventory", "view")
+    await ensureInventoryVendorTables()
 
     const rows = await db
         .select({
@@ -136,6 +199,7 @@ export async function upsertInventoryVendorProfile(input: {
     materials: VendorMaterialInput[]
 }) {
     await getAuthenticatedSession("inventory", "edit")
+    await ensureInventoryVendorTables()
 
     const vendorName = normalizeVendorName(input.vendorName || "")
     if (!vendorName) {
@@ -244,6 +308,7 @@ export async function upsertInventoryVendorProfile(input: {
 
 export async function deleteInventoryVendorProfile(id: number) {
     await getAuthenticatedSession("inventory", "edit")
+    await ensureInventoryVendorTables()
 
     await db.delete(inventoryVendorLeadTimes).where(eq(inventoryVendorLeadTimes.id, id))
 
@@ -259,6 +324,7 @@ export async function getMaterialVendorReference(materialNo: string): Promise<{
     error?: string
 }> {
     await getAuthenticatedSession("inventory", "view")
+    await ensureInventoryVendorTables()
 
     const normalizedMaterialNo = normalizeMaterialNo(materialNo || "")
     if (!normalizedMaterialNo) {

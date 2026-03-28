@@ -273,6 +273,43 @@ const getDateDifferenceInDays = (endDate: Date, startDate: Date) => {
     return Math.round((endDate.getTime() - startDate.getTime()) / millisecondsPerDay)
 }
 
+async function ensureInventoryVendorTables() {
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "inventory_vendor_lead_times" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "vendor_name" text NOT NULL,
+            "default_lead_time_days" integer,
+            "notes" text,
+            "is_active" boolean DEFAULT true NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        );
+    `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS "inventory_vendor_lead_time_materials" (
+            "id" serial PRIMARY KEY NOT NULL,
+            "vendor_id" integer NOT NULL,
+            "material_no" text NOT NULL,
+            "material_desc" text,
+            "lead_time_days" integer NOT NULL,
+            "is_preferred" boolean DEFAULT false NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL
+        );
+    `)
+
+    await db.execute(sql`
+        DO $$ BEGIN
+            ALTER TABLE "inventory_vendor_lead_time_materials"
+            ADD CONSTRAINT "inventory_vendor_lead_time_materials_vendor_id_inventory_vendor_lead_times_id_fk"
+            FOREIGN KEY ("vendor_id") REFERENCES "public"."inventory_vendor_lead_times"("id") ON DELETE cascade ON UPDATE no action;
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    `)
+}
+
 const calculateLinearTrendSlope = (values: number[]) => {
     if (values.length < 2) return 0
 
@@ -1420,6 +1457,7 @@ export async function getSafetyStockAnalytics(
 ) {
     try {
         await getAuthenticatedSession("inventory", "view")
+        await ensureInventoryVendorTables()
 
         const normalizedMaterialNo = materialNo.trim()
         if (!normalizedMaterialNo) {
@@ -2038,6 +2076,7 @@ export async function getInventoryPlanningAdvisor(
 ): Promise<{ success: true; data: InventoryPlanningAdvisor } | { success: false; error: string; data?: InventoryPlanningAdvisor }> {
     try {
         await getAuthenticatedSession("inventory", "view")
+        await ensureInventoryVendorTables()
 
         const analyticsResponse = await getSafetyStockAnalytics(materialNo, params)
         if (!analyticsResponse.success || !analyticsResponse.data) {
