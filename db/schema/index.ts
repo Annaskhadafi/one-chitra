@@ -169,6 +169,14 @@ export {
     chatRoomMembersRelations,
     chatMessagesRelations,
 } from "./chat";
+export {
+    helpdeskKnowledgeSources,
+    helpdeskKnowledgeChunks,
+    helpdeskTrainingLogs,
+    helpdeskKnowledgeSourcesRelations,
+    helpdeskKnowledgeChunksRelations,
+    helpdeskTrainingLogsRelations,
+} from "./helpdesk-ai";
 
 // Core Auth Table Relations
 import { salesDocuments } from "./sales-documents";
