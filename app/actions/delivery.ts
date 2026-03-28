@@ -10,7 +10,7 @@ import { deliverySchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
-import { sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
+import { sendDeliveryCreatedNotification, sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
 import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 
@@ -213,6 +213,17 @@ async function notifyDeliveredDeliveries(deliveryIds: number[]) {
         } catch (error) {
             console.error(`[DELIVERY EMAIL] Unexpected error for delivery ${deliveryId}:`, error)
         }
+    }
+}
+
+async function notifyCreatedDelivery(deliveryId: number) {
+    try {
+        const result = await sendDeliveryCreatedNotification(deliveryId)
+        if (!result.success && !result.skipped) {
+            console.error(`[DELIVERY EMAIL] Failed to send created notification for delivery ${deliveryId}:`, result.error)
+        }
+    } catch (error) {
+        console.error(`[DELIVERY EMAIL] Unexpected error for created notification ${deliveryId}:`, error)
     }
 }
 
@@ -646,6 +657,10 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 deliveredNotificationIds: data.status === "delivered" ? [newDelivery.id] : [],
             }
         })
+
+        if (result.success) {
+            await notifyCreatedDelivery(result.id)
+        }
 
         if (result.success && result.deliveredNotificationIds.length > 0) {
             await notifyDeliveredDeliveries(result.deliveredNotificationIds)
