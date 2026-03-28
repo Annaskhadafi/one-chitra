@@ -65,7 +65,6 @@ import {
     useReactTable,
     getCoreRowModel,
     getSortedRowModel,
-    getFilteredRowModel,
     ColumnDef,
     flexRender,
     SortingState,
@@ -1467,42 +1466,17 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     ], [renderQuotationActions, canEdit, mounted, expandedQuotationIds, refetch])
 
     const table = useReactTable({
-        data: quotations,
+        data: filteredQuotations,
         columns,
         state: {
             sorting,
-            globalFilter,
             rowSelection,
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
         onRowSelectionChange: setRowSelection,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
         getRowId: (row) => row.id.toString(),
-        globalFilterFn: (row, _columnId, filterValue) => {
-            const q = row.original
-            const searchEntry = quotationSearchIndex.get(q.id)
-            const normalizedFilterValue = normalizeSearchText(filterValue)
-            const compactFilterValue = compactSearchText(filterValue)
-
-            const matchesSearch = matchesSearchText(
-                searchEntry?.searchText || "",
-                searchEntry?.compactText || "",
-                normalizedFilterValue,
-                compactFilterValue
-            )
-
-            const date = new Date(q.quotationDate)
-            const matchesStatus = statusFilter === "all" || q.status === statusFilter
-            const matchesUser = userFilter === "all" || q.createdBy === userFilter
-            const matchesMonth = monthFilter === "all" || date.getMonth().toString() === monthFilter
-            const matchesYear = yearFilter === "all" || date.getFullYear().toString() === yearFilter
-            const matchesCustomer = customerFilter === "all" || q.customer.id.toString() === customerFilter
-
-            return matchesSearch && matchesStatus && matchesUser && matchesMonth && matchesYear && matchesCustomer
-        },
     })
 
     const selectedIds = useMemo(() =>
