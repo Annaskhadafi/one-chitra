@@ -33,7 +33,7 @@ function uniqueJoined(values: Array<string | null | undefined>) {
 
 export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
     noStore()
-    await getAuthenticatedSession("sales-orders", "view")
+    await getAuthenticatedSession("sales-order-summary", "view")
 
     const [orders, billingResult] = await Promise.all([
         db.query.salesOrders.findMany({

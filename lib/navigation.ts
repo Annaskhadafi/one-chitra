@@ -273,7 +273,7 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Sales Order Summary",
                         url: "/dashboard/summary-order",
-                        resource: "sales-orders",
+                        resource: "sales-order-summary",
                     },
                     {
                         title: "Sales Document",

@@ -52,7 +52,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/sales-dashboard", resource: "sales-dashboard" },
     { prefix: "/dashboard/sales-documents", resource: "sales-documents" },
     { prefix: "/dashboard/sales-orders", resource: "sales-orders" },
-    { prefix: "/dashboard/summary-order", resource: "sales-orders" },
+    { prefix: "/dashboard/summary-order", resource: "sales-order-summary" },
     { prefix: "/dashboard/security", resource: "security" },
     { prefix: "/dashboard/settings/approvals", resource: "approvals-settings" },
     { prefix: "/dashboard/settings/email", resource: "email-settings" },
