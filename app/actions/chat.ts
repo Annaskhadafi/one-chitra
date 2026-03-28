@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { ensureChatSchema } from "@/lib/chat-schema"
+import { generateHelpDeskReply, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
 
 async function getCurrentUserId() {
     const session = await auth.api.getSession({ headers: await headers() })
@@ -72,7 +73,8 @@ export async function getChatUsers() {
         email: userTable.email,
         image: userTable.image,
     }).from(userTable)
-    return users
+
+    return users.filter((user) => user.id !== HELP_DESK_CONFIG.botId)
 }
 
 // Get or create a DM room between two users
@@ -148,6 +150,9 @@ export async function sendMessage(
     })
     if (!membership) throw new Error("Not a member of this room")
 
+    const room = await db.query.chatRooms.findFirst({ where: eq(chatRooms.id, roomId) })
+    if (!room) throw new Error("Room not found")
+
     await db.insert(chatMessages).values({
         roomId,
         senderId: currentUserId,
@@ -156,6 +161,17 @@ export async function sendMessage(
         mentionId: mention?.id ?? null,
         mentionLabel: mention?.label ?? null,
     })
+
+    if (room.type === "ai-helpdesk") {
+        const aiReply = await generateHelpDeskReply(content)
+
+        await db.insert(chatMessages).values({
+            roomId,
+            senderId: HELP_DESK_CONFIG.botId,
+            content: aiReply,
+            isSystemMessage: true,
+        })
+    }
 
     // Update room updatedAt
     await db.update(chatRooms).set({ updatedAt: new Date() }).where(eq(chatRooms.id, roomId))
@@ -177,6 +193,11 @@ export async function deleteChatRoom(roomId: number) {
     })
 
     if (!membership) throw new Error("Not a member of this room")
+
+    const room = await db.query.chatRooms.findFirst({ where: eq(chatRooms.id, roomId) })
+    if (room?.type === "ai-helpdesk") {
+        throw new Error("Chat Chitra Jenius tidak dapat dihapus")
+    }
 
     await db
         .delete(chatRoomMembers)

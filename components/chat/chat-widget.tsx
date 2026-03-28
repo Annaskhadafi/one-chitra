@@ -32,6 +32,7 @@ import {
     type ChatRoomWithMeta,
     type ChatMessage,
 } from "@/app/actions/chat"
+import { ensureHelpDeskRoom, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
 import { cn } from "@/lib/utils"
 
 // ─── Document Mention Picker ───────────────────────────────────────────────
@@ -306,19 +307,21 @@ function ConversationView({
                         <p className="text-xs text-muted-foreground">{room.members.length} anggota</p>
                     )}
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
-                    title="Hapus chat"
-                    onClick={async () => {
-                        const confirmed = window.confirm("Hapus chat ini dari daftar Anda?")
-                        if (!confirmed) return
-                        await onDeleteRoom(room.id)
-                    }}
-                >
-                    <Trash2 className="h-4 w-4" />
-                </Button>
+                {room.type !== "ai-helpdesk" && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
+                        title="Hapus chat"
+                        onClick={async () => {
+                            const confirmed = window.confirm("Hapus chat ini dari daftar Anda?")
+                            if (!confirmed) return
+                            await onDeleteRoom(room.id)
+                        }}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                )}
             </div>
 
             {/* Messages */}
@@ -388,12 +391,14 @@ function RoomList({
     currentUserId,
     onSelectRoom,
     onNewChat,
+    onOpenHelpDesk,
     totalUnread,
 }: {
     rooms: ChatRoomWithMeta[]
     currentUserId: string
     onSelectRoom: (room: ChatRoomWithMeta) => void
     onNewChat: () => void
+    onOpenHelpDesk: () => void
     totalUnread: number
 }) {
     return (
@@ -406,9 +411,14 @@ function RoomList({
                         <Badge className="h-4 min-w-4 text-[10px] px-1">{totalUnread > 99 ? "99+" : totalUnread}</Badge>
                     )}
                 </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onNewChat}>
-                    <Plus className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={onOpenHelpDesk}>
+                        {HELP_DESK_CONFIG.botName}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onNewChat}>
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
             <ScrollArea className="flex-1 min-h-0">
                 {rooms.length === 0 && (
@@ -440,7 +450,10 @@ function RoomList({
                             )}
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-sm font-medium truncate">{room.name}</p>
+                                    <div className="flex items-center gap-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">{room.name}</p>
+                                        {room.type === "ai-helpdesk" && <Badge variant="secondary" className="h-4 px-1 text-[10px]">AI</Badge>}
+                                    </div>
                                     {room.lastMessage && (
                                         <p className="text-[10px] text-muted-foreground shrink-0 ml-1">
                                             {new Date(room.lastMessage.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
@@ -644,6 +657,18 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
         await loadRooms()
     }, [loadRooms])
 
+    const handleOpenHelpDesk = useCallback(async () => {
+        const { roomId } = await ensureHelpDeskRoom()
+        const fresh = await getUserRooms()
+        setRooms(fresh)
+        const room = fresh.find((item) => item.id === roomId)
+        if (room) {
+            setActiveRoom(room)
+            setShowNewChat(false)
+            setIsOpen(true)
+        }
+    }, [])
+
     return (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
             {/* Chat Panel */}
@@ -693,6 +718,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
                                 currentUserId={currentUserId}
                                 onSelectRoom={handleSelectRoom}
                                 onNewChat={() => setShowNewChat(true)}
+                                onOpenHelpDesk={handleOpenHelpDesk}
                                 totalUnread={totalUnread}
                             />
                         )}
