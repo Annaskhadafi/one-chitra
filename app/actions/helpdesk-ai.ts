@@ -87,7 +87,7 @@ async function ensureBotUser() {
             email: HELP_DESK_BOT_EMAIL,
             role: "system",
             emailVerified: true,
-            department: "AI Help Desk",
+            department: "MAGIC Help Desk",
             jobTitle: "Virtual Assistant",
             image: null,
         })
@@ -177,7 +177,7 @@ export async function ensureHelpDeskRoom(): Promise<{ roomId: number }> {
         roomId: newRoom.id,
         senderId: HELP_DESK_BOT_ID,
         content:
-            "Halo, saya Chitra Jenius 🤖. Saya siap bantu sebagai help desk One Chitra. Silakan tanya fitur apa pun yang ada di aplikasi ini.",
+            "Halo, saya Chitra Jenius. Saya siap bantu sebagai MAGIC help desk One Chitra. Silakan tanya fitur apa pun yang ada di aplikasi ini.",
         isSystemMessage: true,
     })
 

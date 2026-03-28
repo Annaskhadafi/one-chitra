@@ -183,7 +183,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
                                     </p>
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-3">
-                                    <Card className="border-white/70 bg-white/90 shadow-sm"><CardContent className="flex items-start gap-3 p-4"><div className="rounded-2xl bg-sky-100 p-2.5"><BrainCircuit className="h-5 w-5 text-sky-700" /></div><div><p className="text-sm font-semibold text-slate-900">AI-ready narrative</p><p className="mt-1 text-xs leading-5 text-slate-600">Insight dibingkai untuk mendukung keputusan manajemen dan prioritas intervensi.</p></div></CardContent></Card>
+                                    <Card className="border-white/70 bg-white/90 shadow-sm"><CardContent className="flex items-start gap-3 p-4"><div className="rounded-2xl bg-sky-100 p-2.5"><BrainCircuit className="h-5 w-5 text-sky-700" /></div><div><p className="text-sm font-semibold text-slate-900">MAGIC-ready narrative</p><p className="mt-1 text-xs leading-5 text-slate-600">Insight dibingkai untuk mendukung keputusan manajemen dan prioritas intervensi.</p></div></CardContent></Card>
                                     <Card className="border-white/70 bg-white/90 shadow-sm"><CardContent className="flex items-start gap-3 p-4"><div className="rounded-2xl bg-emerald-100 p-2.5"><Target className="h-5 w-5 text-emerald-700" /></div><div><p className="text-sm font-semibold text-slate-900">Configurable scoring</p><p className="mt-1 text-xs leading-5 text-slate-600">Bobot skor bisa disesuaikan menurut prioritas revenue, service, inventory, dan commercial.</p></div></CardContent></Card>
                                     <Card className="border-white/70 bg-white/90 shadow-sm"><CardContent className="flex items-start gap-3 p-4"><div className="rounded-2xl bg-amber-100 p-2.5"><CircleAlert className="h-5 w-5 text-amber-700" /></div><div><p className="text-sm font-semibold text-slate-900">Early warning</p><p className="mt-1 text-xs leading-5 text-slate-600">Sinyal risiko ditampilkan lebih awal agar koreksi operasional lebih cepat.</p></div></CardContent></Card>
                                 </div>
@@ -191,7 +191,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
 
                             <Card className="border-slate-200/80 bg-white/95 shadow-sm">
                                 <CardHeader>
-                                    <CardDescription className="text-slate-600">AI Transformation Score</CardDescription>
+                                    <CardDescription className="text-slate-600">MAGIC Transformation Score</CardDescription>
                                     <CardTitle className="text-5xl font-semibold tracking-tight text-slate-950">{transformationScore}</CardTitle>
                                     <p className="text-sm leading-6 text-slate-600">
                                         Skor komposit yang dibentuk dari empat mesin utama distribusi: revenue quality, inventory discipline, service execution, dan commercial effectiveness.
@@ -207,7 +207,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
                                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                                         <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Management reading</p>
                                         <p className="mt-2 text-sm leading-6 text-slate-700">
-                                            {transformationScore >= 75 ? "Perusahaan sudah punya fondasi yang cukup kuat untuk masuk ke use case AI yang lebih prediktif dan preskriptif." : transformationScore >= 55 ? "Kondisi transformasi sudah bergerak positif, tetapi masih membutuhkan penguatan pada bottleneck prioritas." : "Fokus transformasi sebaiknya dimulai dari visibility proses, penurunan backlog, dan disiplin data operasional."}
+                                            {transformationScore >= 75 ? "Perusahaan sudah punya fondasi yang cukup kuat untuk masuk ke use case MAGIC yang lebih prediktif dan preskriptif." : transformationScore >= 55 ? "Kondisi transformasi sudah bergerak positif, tetapi masih membutuhkan penguatan pada bottleneck prioritas." : "Fokus transformasi sebaiknya dimulai dari visibility proses, penurunan backlog, dan disiplin data operasional."}
                                         </p>
                                     </div>
                                 </CardContent>
@@ -227,7 +227,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
                     <Tabs defaultValue="overview" className="gap-4">
                         <TabsList className="bg-slate-100">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
-                            <TabsTrigger value="scoring">AI Score Studio</TabsTrigger>
+                            <TabsTrigger value="scoring">MAGIC Score Studio</TabsTrigger>
                         </TabsList>
                         <TabsContent value="overview">
                             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -316,7 +316,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
                                             </Link>
                                         ))}
                                         <div className="rounded-[22px] border border-dashed border-sky-200 bg-sky-50 p-4">
-                                            <p className="text-sm font-semibold text-sky-900">Arah next-level AI / ML</p>
+                                            <p className="text-sm font-semibold text-sky-900">Arah next-level MAGIC / ML</p>
                                             <p className="mt-2 text-sm leading-6 text-sky-800">Demand forecasting, stockout prediction, churn signal pelanggan, dan anomaly detection untuk bottleneck service adalah evolusi logis berikutnya.</p>
                                         </div>
                                     </CardContent>
@@ -327,7 +327,7 @@ export function ReportsHubClient({ metrics, salesSeries, categorySeries, recentO
                             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
                                 <Card className="border-slate-200/80 bg-white">
                                     <CardHeader>
-                                        <CardTitle>AI Score Weight Studio</CardTitle>
+                                        <CardTitle>MAGIC Score Weight Studio</CardTitle>
                                         <CardDescription>Atur bobot penilaian agar selaras dengan agenda manajemen saat ini.</CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-5">

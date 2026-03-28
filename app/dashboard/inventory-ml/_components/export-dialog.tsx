@@ -2,7 +2,7 @@
 
 /**
  * Export Dialog Component
- * Provides UI for exporting AI predictions to Excel or PDF formats
+ * Provides UI for exporting MAGIC predictions to Excel or PDF formats
  * Requirements: 5.1, 5.2, 5.9, 5.10
  */
 
@@ -137,7 +137,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Export AI Predictions</DialogTitle>
+          <DialogTitle>Export MAGIC Predictions</DialogTitle>
           <DialogDescription>
             Export prediction data to Excel or PDF format with optional filters
           </DialogDescription>
@@ -281,7 +281,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                "From" date must be before or equal to "To" date
+                &quot;From&quot; date must be before or equal to &quot;To&quot; date
               </AlertDescription>
             </Alert>
           )}

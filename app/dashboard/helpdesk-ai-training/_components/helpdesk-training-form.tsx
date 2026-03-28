@@ -29,7 +29,7 @@ export function HelpDeskTrainingForm() {
         startTransition(async () => {
             try {
                 await trainHelpDeskFromPage(form)
-                setMessage("Training berhasil disimpan. Chitra Jenius sudah belajar konteks terbaru.")
+                setMessage("Training berhasil disimpan. Chitra Jenius sudah belajar konteks MAGIC terbaru.")
                 setForm({ slug: "", title: "", pagePath: "", summary: "", tags: "", content: "" })
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Gagal menyimpan training")

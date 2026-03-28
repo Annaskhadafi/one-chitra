@@ -604,7 +604,7 @@ export async function getRecentPredictions(filters?: PredictionFilters): Promise
         };
     } catch (error) {
         console.error("Failed to fetch predictions:", error);
-        return { success: false, error: "Failed to fetch AI predictions" };
+    return { success: false, error: "Failed to fetch MAGIC predictions" };
     }
 }
 
@@ -906,7 +906,7 @@ export async function deleteMLPrediction(id: number) {
         return { success: true };
     } catch (error) {
         console.error("Failed to delete prediction:", error);
-        return { success: false, error: "Failed to delete AI prediction" };
+    return { success: false, error: "Failed to delete MAGIC prediction" };
     }
 }
 
@@ -1224,7 +1224,7 @@ ${jsonSchema}`;
             } catch (_e2) {
                 console.error("[AI] All parse attempts failed. Content (first 500):", rawContent.substring(0, 500));
                 console.error("[AI] Content (last 500):", rawContent.substring(rawContent.length - 500));
-                throw new Error("AI gagal mengembalikan JSON yang valid. Silakan coba lagi.");
+            throw new Error("MAGIC gagal mengembalikan JSON yang valid. Silakan coba lagi.");
             }
         }
 
@@ -2990,7 +2990,7 @@ export async function exportToExcel(filters?: {
         const typeLabel = filters?.predictionType && filters.predictionType !== 'ALL'
             ? filters.predictionType
             : 'All';
-        const filename = `AI_Forecast_${typeLabel}_${timestamp}.xlsx`;
+  const filename = `MAGIC_Forecast_${typeLabel}_${timestamp}.xlsx`;
 
         return {
             success: true,
@@ -3101,10 +3101,10 @@ export async function updateMLSettings(settings: {
         };
 
     } catch (error) {
-        console.error("Failed to update AI settings:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to update AI settings"
+  console.error("Failed to update MAGIC settings:", error);
+  return {
+    success: false,
+    error: error instanceof Error ? error.message : "Failed to update MAGIC settings"
         };
     }
 }
@@ -3122,7 +3122,7 @@ export async function testMLSettings(testSettings: {
         await getAuthenticatedSession("inventory", "edit");
 
         // Use a simple test prompt
-        const testPrompt = `Anda adalah AI Analis Inventory. Berikan rekomendasi singkat untuk produk test.
+    const testPrompt = `Anda adalah MAGIC Analis Inventory. Berikan rekomendasi singkat untuk produk test.
 
 Format Response Anda HARUS valid JSON saja:
 {
@@ -3176,10 +3176,10 @@ Format Response Anda HARUS valid JSON saja:
         };
 
     } catch (error) {
-        console.error("Failed to test AI settings:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to test AI settings"
+    console.error("Failed to test MAGIC settings:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to test MAGIC settings"
         };
     }
 }
@@ -3214,14 +3214,14 @@ export async function resetMLSettings(updatedBy: string) {
 
         return {
             success: true,
-            message: 'AI settings reset to defaults'
+      message: 'MAGIC settings reset to defaults'
         };
 
     } catch (error) {
-        console.error("Failed to reset AI settings:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Failed to reset AI settings"
+    console.error("Failed to reset MAGIC settings:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to reset MAGIC settings"
         };
     }
 }
@@ -3327,7 +3327,7 @@ export async function exportToPDF(filters?: {
         doc.text('PT Chitra Paratama', 15, 20);
 
         doc.setFontSize(16);
-        doc.text('AI Inventory Forecast Report', 15, 30);
+  doc.text('MAGIC Inventory Forecast Report', 15, 30);
 
         // Add timestamp (Requirement 5.5)
         doc.setFontSize(10);
@@ -3464,7 +3464,7 @@ export async function exportToPDF(filters?: {
         const typeLabel = filters?.predictionType && filters.predictionType !== 'ALL'
             ? filters.predictionType
             : 'All';
-        const filename = `AI_Forecast_${typeLabel}_${dateStamp}.pdf`;
+  const filename = `MAGIC_Forecast_${typeLabel}_${dateStamp}.pdf`;
 
         return {
             success: true,

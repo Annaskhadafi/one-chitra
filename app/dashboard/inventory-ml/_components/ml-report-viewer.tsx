@@ -168,7 +168,7 @@ export function MLReportViewer({ rationale }: { rationale: string }) {
 
             {hasFormatWarning && (
                 <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
-                    Format AI response non-standar. Menampilkan ringkasan parsial dari teks.
+                    Format response MAGIC non-standar. Menampilkan ringkasan parsial dari teks.
                 </div>
             )}
 

@@ -35,7 +35,7 @@ export function PredictiveReplenishment() {
                 if (res.cached) {
                     toast.success("Mengambil data prediksi dari cache (24 jam terakhir)")
                 } else {
-                    toast.success("Prediksi AI berhasil dibuat")
+                    toast.success("Prediksi MAGIC berhasil dibuat")
                 }
                 // Trigger history refresh
                 setRefreshTrigger(prev => prev + 1)
@@ -68,7 +68,7 @@ export function PredictiveReplenishment() {
                                 Generate Prediksi Baru
                             </CardTitle>
                             <CardDescription>
-                                Masukkan Material Number / Product Code dari SAP untuk mendapatkan saran restock dari AI.
+                                Masukkan Material Number / Product Code dari SAP untuk mendapatkan saran restock dari MAGIC.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -87,10 +87,10 @@ export function PredictiveReplenishment() {
                                 {isLoading ? (
                                     <>
                                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        AI Sedang Menganalisa...
+                                        MAGIC Sedang Menganalisa...
                                     </>
                                 ) : (
-                                    "Mulai Analisis AI"
+                                    "Mulai Analisis MAGIC"
                                 )}
                             </Button>
 
@@ -114,7 +114,7 @@ export function PredictiveReplenishment() {
                 <div className="space-y-6">
                     <PredictionHistoryList
                         predictionType="REPLENISHMENT"
-                        title="Riwayat Analisis AI"
+                        title="Riwayat Analisis MAGIC"
                         icon={<History className="w-5 h-5" />}
                         onRefresh={refreshTrigger}
                     />

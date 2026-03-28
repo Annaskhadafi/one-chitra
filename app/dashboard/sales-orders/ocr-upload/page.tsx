@@ -156,7 +156,7 @@ export default function OcrUploadPage() {
                 rawText: ocrRes.rawText || "",
             })
             toast.success("Dokumen Berhasil Diekstrak", { 
-                description: "Data dasar PO telah teridentifikasi. Silakan lanjutkan ke Mapping AI." 
+                description: "Data dasar PO telah teridentifikasi. Silakan lanjutkan ke Mapping MAGIC." 
             })
         } catch {
             setError("Terjadi kesalahan jaringan atau server")
@@ -185,18 +185,18 @@ export default function OcrUploadPage() {
             })
             const body = await response.json().catch(() => null)
             if (!response.ok) {
-                setError(body?.error || "Gagal proses mapping AI")
-                toast.error("Mapping Gagal", { description: body?.error || "AI gagal memetakan produk." })
+                setError(body?.error || "Gagal proses mapping MAGIC")
+                toast.error("Mapping Gagal", { description: body?.error || "MAGIC gagal memetakan produk." })
                 return
             }
             if (!body?.sessionId) {
                 setError("Session hasil mapping tidak ditemukan")
                 return
             }
-            toast.success("Mapping AI Selesai", { description: "Mengalihkan ke halaman validasi..." })
+            toast.success("Mapping MAGIC Selesai", { description: "Mengalihkan ke halaman validasi..." })
             router.push(`/dashboard/sales-orders/ocr-validate?session=${body.sessionId}`)
         } catch {
-            setError("Gagal menghubungi AI mapping service")
+            setError("Gagal menghubungi MAGIC mapping service")
         } finally {
             setIsMapping(false)
         }
@@ -338,8 +338,8 @@ export default function OcrUploadPage() {
                                 <div className="flex items-start gap-3 sm:gap-4">
                                     <div className="h-8 w-8 rounded-full bg-indigo-800 flex items-center justify-center shrink-0 font-bold text-sm">3</div>
                                     <div className="space-y-1">
-                                        <p className="font-bold text-sm">Mapping Produk AI</p>
-                                        <p className="text-indigo-300 text-xs leading-relaxed">AI akan mencocokkan nama barang dari customer dengan produk di database kami.</p>
+                                        <p className="font-bold text-sm">Mapping Produk MAGIC</p>
+                                        <p className="text-indigo-300 text-xs leading-relaxed">MAGIC akan mencocokkan nama barang dari customer dengan produk di database kami.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 sm:gap-4">
@@ -387,11 +387,11 @@ export default function OcrUploadPage() {
                                 {isMapping ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Mapping AI...
+                                        Mapping MAGIC...
                                     </>
                                 ) : (
                                     <>
-                                        Lanjutkan ke Mapping AI
+                                        Lanjutkan ke Mapping MAGIC
                                         <ArrowRight className="ml-2 h-4 w-4" />
                                     </>
                                 )}

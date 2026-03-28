@@ -395,7 +395,7 @@ export function DynamicSafetyStock() {
             }
 
             if (!response.success && !response.data) {
-                toast.error(response.error || "Advisor AI gagal dimuat")
+                toast.error(response.error || "Advisor MAGIC gagal dimuat")
             }
         } finally {
             setIsLoadingAdvisor(false)
@@ -789,7 +789,7 @@ export function DynamicSafetyStock() {
                             <Alert className="border-indigo-200 bg-indigo-50/80">
                                 <ShieldCheck className="h-4 w-4 text-indigo-600" />
                                 <AlertTitle className="flex flex-wrap items-center gap-2 text-indigo-900">
-                                    <span>Safety Stock AI: {numberFormatter.format(result.recommendedStock)} qty</span>
+                                        <span>Safety Stock MAGIC: {numberFormatter.format(result.recommendedStock)} qty</span>
                                     {report?.status && (
                                         <Badge variant={getStatusBadgeVariant(report.status)}>
                                             {report.status}
@@ -797,7 +797,7 @@ export function DynamicSafetyStock() {
                                     )}
                                 </AlertTitle>
                                 <AlertDescription className="mt-2 space-y-3 text-sm leading-relaxed text-indigo-950/80">
-                                    <p>{report?.summary || "Model AI telah membuat ringkasan safety stock terbaru."}</p>
+                                        <p>{report?.summary || "Model MAGIC telah membuat ringkasan safety stock terbaru."}</p>
                                     {report?.metrics && report.metrics.length > 0 && (
                                         <div className="grid gap-2 sm:grid-cols-3">
                                             {report.metrics.slice(0, 3).map((metric) => (
@@ -971,7 +971,7 @@ export function DynamicSafetyStock() {
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                 <div className="rounded-2xl border bg-slate-50 p-4">
                                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                        Safety Stock AI
+                                    Safety Stock MAGIC
                                     </p>
                                     <p className="mt-1 text-xl font-bold text-slate-900">
                                         {formatQuantity(result?.recommendedStock || 0)}
@@ -1010,7 +1010,7 @@ export function DynamicSafetyStock() {
                                     Executive Summary
                                 </p>
                                 <p className="mt-2 text-sm leading-relaxed text-slate-700">
-                                    {report?.summary || "Model AI telah membuat ringkasan safety stock terbaru."}
+                                    {report?.summary || "Model MAGIC telah membuat ringkasan safety stock terbaru."}
                                 </p>
                             </div>
                         </CardContent>
@@ -1565,7 +1565,7 @@ export function DynamicSafetyStock() {
                                             {report?.status || analytics.excessStatus}
                                         </p>
                                         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                                            Safety stock AI saat ini {numberFormatter.format(result?.recommendedStock || 0)} qty
+                                    Safety stock MAGIC saat ini {numberFormatter.format(result?.recommendedStock || 0)} qty
                                             dengan ketahanan stok {formatDays(analytics.daysOfCover)}.
                                         </p>
                                     </div>
@@ -1619,10 +1619,10 @@ export function DynamicSafetyStock() {
                             <div>
                                 <CardTitle className="flex items-center gap-2">
                                     <BrainCircuit className="h-5 w-5 text-indigo-600" />
-                                    AI Inventory Advisor
+                                    MAGIC Inventory Advisor
                                 </CardTitle>
                                 <CardDescription>
-                                    Advisor ini memakai metrik forecast yang sudah dihitung lalu diringkas oleh Ollama agar tindak lanjut pembelian lebih jelas.
+                                    Advisor ini memakai metrik forecast yang sudah dihitung lalu diringkas oleh mesin MAGIC agar tindak lanjut pembelian lebih jelas.
                                 </CardDescription>
                             </div>
                             <Button
@@ -1684,7 +1684,7 @@ export function DynamicSafetyStock() {
                                 </>
                             ) : (
                                 <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                                    Advisor AI akan muncul setelah material dianalisis.
+                                    Advisor MAGIC akan muncul setelah material dianalisis.
                                 </div>
                             )}
                         </CardContent>
@@ -1767,7 +1767,7 @@ export function DynamicSafetyStock() {
                                     </div>
                                     <div className="rounded-2xl border bg-slate-50 p-4">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                                            AI Recommendation
+                                            MAGIC Recommendation
                                         </p>
                                         <p className="mt-1 text-xl font-bold text-slate-900">
                                             {formatQuantity(analytics.aiRecommendedSafetyStock)}
