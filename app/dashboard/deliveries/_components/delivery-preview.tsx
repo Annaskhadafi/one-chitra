@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
 import {
@@ -89,6 +88,7 @@ interface DeliveryPreviewProps {
     delivery: DeliveryWithRelations | null
     open: boolean
     onOpenChange: (open: boolean) => void
+    showEditButton?: boolean
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -109,7 +109,7 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
-export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPreviewProps) {
+export function DeliveryPreview({ delivery, open, onOpenChange, showEditButton = true }: DeliveryPreviewProps) {
     const [isPdfOpen, setIsPdfOpen] = useState(false)
 
     if (!delivery) return null
@@ -144,12 +144,14 @@ export function DeliveryPreview({ delivery, open, onOpenChange }: DeliveryPrevie
                                 <FileDown className="h-3.5 w-3.5" />
                                 Cetak PDF
                             </Button>
-                            <Link href={`/dashboard/deliveries/${delivery.id}`} onClick={() => onOpenChange(false)}>
-                                <Button size="sm" variant="outline" className="h-8 gap-1.5 hidden sm:flex">
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    Edit
-                                </Button>
-                            </Link>
+                            {showEditButton ? (
+                                <Link href={`/dashboard/deliveries/${delivery.id}`} onClick={() => onOpenChange(false)}>
+                                    <Button size="sm" variant="outline" className="h-8 gap-1.5 hidden sm:flex">
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Edit
+                                    </Button>
+                                </Link>
+                            ) : null}
                         </div>
                     </div>
                 </SheetHeader>

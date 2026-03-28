@@ -27,6 +27,7 @@ interface SalesOrderDetailProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     order: SalesOrderWithRelations | null
+    showEditButton?: boolean
 }
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -45,7 +46,7 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
-export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetailProps) {
+export function SalesOrderDetail({ open, onOpenChange, order, showEditButton = true }: SalesOrderDetailProps) {
     if (!order) return null
 
     const calculateSubtotal = () => {
@@ -103,14 +104,16 @@ export function SalesOrderDetail({ open, onOpenChange, order }: SalesOrderDetail
                         </Badge>
                     </div>
                     
-                    <div className="flex items-center gap-4">
-                        <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
-                            <Button variant="outline" className="h-9 w-full rounded-lg border-slate-200 bg-white px-5 text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm hover:bg-slate-50 sm:w-auto">
-                                <Pencil className="h-3 w-3 mr-2" />
-                                Edit Order
-                            </Button>
-                        </Link>
-                    </div>
+                    {showEditButton ? (
+                        <div className="flex items-center gap-4">
+                            <Link href={`/dashboard/sales-orders/${order.id}/edit`} onClick={() => onOpenChange(false)}>
+                                <Button variant="outline" className="h-9 w-full rounded-lg border-slate-200 bg-white px-5 text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm hover:bg-slate-50 sm:w-auto">
+                                    <Pencil className="h-3 w-3 mr-2" />
+                                    Edit Order
+                                </Button>
+                            </Link>
+                        </div>
+                    ) : null}
                     </div>
                 </header>
 

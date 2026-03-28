@@ -307,6 +307,8 @@ export async function getDeliveryItemsFlat() {
 }
 
 export async function getDelivery(id: number) {
+    await getAuthenticatedSession("deliveries", "view")
+
     const delivery = await db.query.deliveries.findFirst({
         where: eq(deliveries.id, id),
         with: {

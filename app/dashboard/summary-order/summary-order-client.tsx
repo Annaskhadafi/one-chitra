@@ -1,17 +1,20 @@
 "use client"
 
 import { Fragment, useMemo, useState } from "react"
-import Link from "next/link"
 import * as XLSX from "xlsx"
 import type { DateRange } from "react-day-picker"
 import type { SummaryOrderDeliveryItem, SummaryOrderProductItem, SummaryOrderRow } from "@/lib/types"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 import { ScoreCard } from "@/components/score-card"
+import { getDelivery } from "@/app/actions/delivery"
+import { getSalesOrder } from "@/app/actions/sales-order"
 import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
+import { SalesOrderDetail } from "@/app/dashboard/sales-orders/_components/sales-order-detail"
+import { DeliveryPreview } from "@/app/dashboard/deliveries/_components/delivery-preview"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
     Popover,
@@ -36,7 +39,6 @@ import {
     FileCheck2,
     FileSearch,
     Filter,
-    RefreshCw,
     Search,
     ShoppingCart,
     Truck,
@@ -78,10 +80,6 @@ function getRowDate(row: SummaryOrderRow) {
     return row.latestActivityDate ?? row.dateDelivery ?? row.datePo ?? null
 }
 
-function getSyncVariant(row: SummaryOrderRow) {
-    return row.dataCompleteness === "Lengkap" ? "default" : "secondary"
-}
-
 function buildExportRows(rows: SummaryOrderRow[]) {
     return rows.map((row, index) => ({
         No: index + 1,
@@ -102,9 +100,6 @@ function buildExportRows(rows: SummaryOrderRow[]) {
         "Invoice No": row.invoiceNo ?? "",
         "Qty Order": row.totalOrderedQty,
         "Qty Delivery": row.totalDeliveredQty,
-        "Sync Sources": row.syncSources.join(", "),
-        "Data Status": row.dataCompleteness,
-        "Need Review": row.missingSyncFields.join(", "),
         "Detail Product": row.details.map((detail) => detail.materialDescription || detail.materialNumber || "Product").join(" | "),
         "Material No": row.details.map((detail) => detail.materialNumber || "-").join(" | "),
         "Qty Order Detail": row.details.map((detail) => detail.orderedQty ?? "-").join(" | "),
@@ -162,9 +157,11 @@ function ProductDetailCard({
 function DeliveryDetailCard({
     delivery,
     compact = false,
+    onPreview,
 }: {
     delivery: SummaryOrderDeliveryItem
     compact?: boolean
+    onPreview?: (deliveryId: number) => void
 }) {
     const scanDoUrl = resolveUploadDocumentUrl(delivery.scanDo)
 
@@ -173,9 +170,13 @@ function DeliveryDetailCard({
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                     {delivery.deliveryNo ? (
-                        <Link href={`/dashboard/deliveries/${delivery.deliveryId}`} className="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                        <button
+                            type="button"
+                            onClick={() => onPreview?.(delivery.deliveryId)}
+                            className="font-mono text-sm font-semibold text-blue-600 hover:underline"
+                        >
                             {delivery.deliveryNo}
-                        </Link>
+                        </button>
                     ) : (
                         <p className="font-mono text-sm font-semibold">-</p>
                     )}
@@ -204,9 +205,11 @@ function DeliveryDetailCard({
 function SummaryDetailsSection({
     row,
     compact = false,
+    onPreviewDelivery,
 }: {
     row: SummaryOrderRow
     compact?: boolean
+    onPreviewDelivery?: (deliveryId: number) => void
 }) {
     return (
         <div className="space-y-4">
@@ -238,6 +241,7 @@ function SummaryDetailsSection({
                                 key={`${row.rowId}-delivery-${delivery.deliveryId}`}
                                 delivery={delivery}
                                 compact={compact}
+                                onPreview={onPreviewDelivery}
                             />
                         ))}
                     </div>
@@ -261,6 +265,10 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
     const [expandedAll, setExpandedAll] = useState(false)
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
     const [dateRange, setDateRange] = useState<DateRange | undefined>()
+    const [previewSalesOrder, setPreviewSalesOrder] = useState<Parameters<typeof SalesOrderDetail>[0]["order"]>(null)
+    const [isSalesOrderPreviewOpen, setIsSalesOrderPreviewOpen] = useState(false)
+    const [previewDelivery, setPreviewDelivery] = useState<Parameters<typeof DeliveryPreview>[0]["delivery"]>(null)
+    const [isDeliveryPreviewOpen, setIsDeliveryPreviewOpen] = useState(false)
 
     const salesOptions = useMemo(() => dedupeOptions(data.map((row) => row.picSales)), [data])
     const customerOptions = useMemo(() => dedupeOptions(data.map((row) => row.customerName)), [data])
@@ -286,9 +294,6 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                 row.invoiceNo,
                 row.categoryPo,
                 row.remark,
-                row.dataCompleteness,
-                ...row.syncSources,
-                ...row.missingSyncFields,
                 ...row.details.flatMap((detail) => [detail.materialNumber, detail.materialDescription]),
             ].some((value) => value?.toLowerCase().includes(term))
 
@@ -331,7 +336,6 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
             grandTotal: filteredData.reduce((sum, row) => sum + row.grandTotal, 0),
             invoicedGrand: filteredData.filter((row) => getInvoiceStatus(row) === "Sudah Invoice").reduce((sum, row) => sum + row.grandTotal, 0),
             uninvoicedGrand: filteredData.filter((row) => getInvoiceStatus(row) === "Belum Invoice").reduce((sum, row) => sum + row.grandTotal, 0),
-            synced: filteredData.filter((row) => row.dataCompleteness === "Lengkap").length,
         }
     }, [filteredData])
 
@@ -368,26 +372,33 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
         XLSX.writeFile(workbook, `sales-order-summary-${new Date().toISOString().slice(0, 10)}.xlsx`)
     }
 
+    const handlePreviewSalesOrder = async (salesOrderId: number) => {
+        const order = await getSalesOrder(salesOrderId)
+        if (!order) return
+        setPreviewSalesOrder(order as Parameters<typeof SalesOrderDetail>[0]["order"])
+        setIsSalesOrderPreviewOpen(true)
+    }
+
+    const handlePreviewDelivery = async (deliveryId: number) => {
+        const delivery = await getDelivery(deliveryId)
+        if (!delivery) return
+        setPreviewDelivery(delivery as Parameters<typeof DeliveryPreview>[0]["delivery"])
+        setIsDeliveryPreviewOpen(true)
+    }
+
     return (
         <div className="space-y-4 sm:space-y-6">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <ScoreCard title="Total PO / SO" value={scoreCards.totalPo} description="Grouping by PO" icon={ShoppingCart} gradient="from-blue-500/10 via-blue-400/5 to-indigo-500/10 border-blue-200/50" iconColor="text-blue-600" textColor="text-blue-900" />
                 <ScoreCard title="Delivery" value={scoreCards.totalDelivery} description="Semua delivery terkait" icon={Truck} gradient="from-cyan-500/10 via-cyan-400/5 to-sky-500/10 border-cyan-200/50" iconColor="text-cyan-600" textColor="text-cyan-900" />
                 <ScoreCard title="Grand Total" value={formatCurrency(scoreCards.grandTotal)} description="Nilai order aktif" icon={DollarSign} gradient="from-emerald-500/10 via-emerald-400/5 to-teal-500/10 border-emerald-200/50" iconColor="text-emerald-600" textColor="text-emerald-900" />
                 <ScoreCard title="Sudah Invoice" value={formatCurrency(scoreCards.invoicedGrand)} description="Invoice no terisi" icon={FileCheck2} gradient="from-green-500/10 via-green-400/5 to-lime-500/10 border-green-200/50" iconColor="text-green-600" textColor="text-green-900" />
                 <ScoreCard title="Belum Invoice" value={formatCurrency(scoreCards.uninvoicedGrand)} description="Masih perlu follow up" icon={FileSearch} gradient="from-amber-500/10 via-amber-400/5 to-orange-500/10 border-amber-200/50" iconColor="text-amber-600" textColor="text-amber-900" />
-                <ScoreCard title="Data Lengkap" value={scoreCards.synced} description="Sync valid lintas modul" icon={RefreshCw} gradient="from-violet-500/10 via-fuchsia-400/5 to-pink-500/10 border-fuchsia-200/50" iconColor="text-fuchsia-600" textColor="text-fuchsia-900" />
             </div>
 
             <Card className="overflow-hidden border-0 bg-gradient-to-br from-slate-50 via-white to-slate-100 shadow-sm ring-1 ring-slate-200/70">
                 <CardHeader className="space-y-3 p-4 sm:p-5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-1">
-                            <CardTitle className="text-base sm:text-lg">Filter Sales Mobile</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                                Fokus ke pencarian cepat, filter sales, dan status invoice agar nyaman dipakai dari HP.
-                            </p>
-                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="outline" className="rounded-full px-3 py-1">
                                 <Filter className="mr-1 h-3.5 w-3.5" />
@@ -472,17 +483,9 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                             <Badge variant={invoiceStatus === "Sudah Invoice" ? "default" : "secondary"}>{invoiceStatus}</Badge>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="rounded-xl bg-slate-50 p-3">
-                                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Grand Total</p>
-                                                <p className="text-sm font-semibold leading-tight">{formatCurrency(row.grandTotal)}</p>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 p-3">
-                                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Sync</p>
-                                                <div className="mt-1 flex items-center gap-2">
-                                                    <Badge variant={getSyncVariant(row)}>{row.dataCompleteness}</Badge>
-                                                </div>
-                                            </div>
+                                        <div className="rounded-xl bg-slate-50 p-3">
+                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Grand Total</p>
+                                            <p className="text-sm font-semibold leading-tight">{formatCurrency(row.grandTotal)}</p>
                                         </div>
 
                                         <div className="grid grid-cols-1 gap-2 text-sm">
@@ -496,23 +499,28 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                             <Badge variant={statusVariant(row.statusDelivery)}>{row.statusDelivery || "-"}</Badge>
                                             <Badge variant="outline">{row.deliveryCount} delivery</Badge>
                                             <Badge variant="outline">{row.totalDeliveredQty}/{row.totalOrderedQty} qty</Badge>
-                                            {row.syncSources.map((source) => (
-                                                <Badge key={`${row.rowId}-${source}`} variant="outline">{source}</Badge>
-                                            ))}
                                         </div>
 
                                         <div className="flex flex-wrap gap-3 text-xs">
                                             {row.soNumber ? (
-                                                <Link href={`/dashboard/sales-orders/${row.salesOrderId}`} className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handlePreviewSalesOrder(row.salesOrderId)}
+                                                    className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                                                >
                                                     Detail SO
                                                     <ExternalLink className="h-3.5 w-3.5" />
-                                                </Link>
+                                                </button>
                                             ) : null}
                                             {row.latestDeliveryId && row.latestDeliveryNo ? (
-                                                <Link href={`/dashboard/deliveries/${row.latestDeliveryId}`} className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handlePreviewDelivery(row.latestDeliveryId!)}
+                                                    className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                                                >
                                                     Detail Delivery
                                                     <ExternalLink className="h-3.5 w-3.5" />
-                                                </Link>
+                                                </button>
                                             ) : null}
                                             {docPoUrl ? (
                                                 <a href={docPoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
@@ -530,14 +538,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                     </div>
                                 </div>
 
-                                {row.dataCompleteness === "Perlu Review" ? (
-                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                        <p className="font-medium">Perlu review data</p>
-                                        <p className="mt-1">{row.missingSyncFields.join(", ")}</p>
-                                    </div>
-                                ) : null}
-
-                                {isExpanded ? <SummaryDetailsSection row={row} compact /> : null}
+                                {isExpanded ? <SummaryDetailsSection row={row} compact onPreviewDelivery={(deliveryId) => void handlePreviewDelivery(deliveryId)} /> : null}
                             </CardContent>
                         </Card>
                     )
@@ -571,7 +572,6 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                 <TableHead>Status Delivery</TableHead>
                                 <TableHead>Status Invoice</TableHead>
                                 <TableHead>Invoice No</TableHead>
-                                <TableHead>Sync</TableHead>
                                 <TableHead>Scan DO</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -592,7 +592,15 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                             </TableCell>
                                             <TableCell>{index + 1}</TableCell>
                                             <TableCell className="font-mono text-xs">
-                                                {row.soNumber ? <Link href={`/dashboard/sales-orders/${row.salesOrderId}`} className="text-blue-600 hover:underline">{row.soNumber}</Link> : "-"}
+                                                {row.soNumber ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handlePreviewSalesOrder(row.salesOrderId)}
+                                                        className="text-blue-600 hover:underline"
+                                                    >
+                                                        {row.soNumber}
+                                                    </button>
+                                                ) : "-"}
                                             </TableCell>
                                             <TableCell className="font-mono text-xs">{row.poNo || "-"}</TableCell>
                                             <TableCell>
@@ -609,23 +617,21 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                             <TableCell>{formatCurrency(row.grandTotal)}</TableCell>
                                             <TableCell>{row.customerName || "-"}</TableCell>
                                             <TableCell className="font-mono text-xs">
-                                                {row.latestDeliveryId && row.latestDeliveryNo ? <Link href={`/dashboard/deliveries/${row.latestDeliveryId}`} className="text-blue-600 hover:underline">{row.latestDeliveryNo}</Link> : (row.deliveryNoSummary || "-")}
+                                                {row.latestDeliveryId && row.latestDeliveryNo ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handlePreviewDelivery(row.latestDeliveryId!)}
+                                                        className="text-blue-600 hover:underline"
+                                                    >
+                                                        {row.latestDeliveryNo}
+                                                    </button>
+                                                ) : (row.deliveryNoSummary || "-")}
                                             </TableCell>
                                             <TableCell className="font-mono text-xs">{row.doSapSummary || "-"}</TableCell>
                                             <TableCell>{formatDate(row.dateDelivery)}</TableCell>
                                             <TableCell><Badge variant={statusVariant(row.statusDelivery)}>{row.statusDelivery || "-"}</Badge></TableCell>
                                             <TableCell><Badge variant={invoiceStatus === "Sudah Invoice" ? "default" : "secondary"}>{invoiceStatus}</Badge></TableCell>
                                             <TableCell className="font-mono text-xs">{row.invoiceNo || "-"}</TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1">
-                                                    <Badge variant={getSyncVariant(row)}>{row.dataCompleteness}</Badge>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {row.syncSources.map((source) => (
-                                                            <Badge key={`${row.rowId}-desktop-${source}`} variant="outline">{source}</Badge>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
                                             <TableCell>
                                                 {scanDoUrl ? (
                                                     <a href={scanDoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
@@ -637,8 +643,8 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                         </TableRow>
                                         {isExpanded ? (
                                             <TableRow>
-                                                <TableCell colSpan={18} className="bg-muted/30 px-4 py-4">
-                                                    <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-4">
+                                                <TableCell colSpan={17} className="bg-muted/30 px-4 py-4">
+                                                    <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
                                                         <div className="rounded-xl border bg-background p-3">
                                                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Qty Progress</p>
                                                             <p className="mt-1 text-sm font-semibold">{row.totalDeliveredQty} / {row.totalOrderedQty}</p>
@@ -651,12 +657,8 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Remark</p>
                                                             <p className="mt-1 text-sm">{row.remark || "-"}</p>
                                                         </div>
-                                                        <div className="rounded-xl border bg-background p-3">
-                                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Need Review</p>
-                                                            <p className="mt-1 text-sm">{row.missingSyncFields.join(", ") || "-"}</p>
-                                                        </div>
                                                     </div>
-                                                    <SummaryDetailsSection row={row} />
+                                                    <SummaryDetailsSection row={row} onPreviewDelivery={(deliveryId) => void handlePreviewDelivery(deliveryId)} />
                                                 </TableCell>
                                             </TableRow>
                                         ) : null}
@@ -664,7 +666,7 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                                 )
                             }) : (
                                 <TableRow>
-                                    <TableCell colSpan={18} className="h-24 text-center text-muted-foreground">
+                                    <TableCell colSpan={17} className="h-24 text-center text-muted-foreground">
                                         Tidak ada data yang cocok.
                                     </TableCell>
                                 </TableRow>
@@ -673,6 +675,20 @@ export function SummaryOrderClient({ data }: { data: SummaryOrderRow[] }) {
                     </Table>
                 </div>
             </div>
+
+            <SalesOrderDetail
+                open={isSalesOrderPreviewOpen}
+                onOpenChange={setIsSalesOrderPreviewOpen}
+                order={previewSalesOrder}
+                showEditButton={false}
+            />
+
+            <DeliveryPreview
+                delivery={previewDelivery}
+                open={isDeliveryPreviewOpen}
+                onOpenChange={setIsDeliveryPreviewOpen}
+                showEditButton={false}
+            />
         </div>
     )
 }
