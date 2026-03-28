@@ -17,8 +17,8 @@ export default async function ApprovalReportPage() {
                 </div>
 
                 <div className="px-4 lg:px-6">
-                    <h1 className="text-2xl font-bold tracking-tight">Approval Report</h1>
-                    <p className="text-muted-foreground">Monitoring performa approval, lead time, dan status request.</p>
+                    <h1 className="text-2xl font-bold tracking-tight">Approval Performance Intelligence</h1>
+                    <p className="text-muted-foreground">Visibilitas eksekutif atas beban approval, kecepatan keputusan, dan titik friksi proses lintas fungsi.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4 lg:px-6">
@@ -55,8 +55,8 @@ export default async function ApprovalReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Average Lead Time</CardTitle>
-                            <CardDescription>Rata-rata waktu dari submit sampai selesai.</CardDescription>
+                            <CardTitle className="text-base">Decision Lead Time</CardTitle>
+                            <CardDescription>Rata-rata waktu dari submit hingga keputusan final, sebagai indikator kelincahan proses.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="flex items-center gap-2 text-3xl font-bold">
@@ -68,8 +68,8 @@ export default async function ApprovalReportPage() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Pending by Step</CardTitle>
-                            <CardDescription>Distribusi beban pending per step approval.</CardDescription>
+                            <CardTitle className="text-base">Pending Load by Step</CardTitle>
+                            <CardDescription>Distribusi bottleneck approval untuk membantu simplifikasi workflow dan SLA.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             {data.pendingByStep.length === 0 ? (
@@ -89,8 +89,8 @@ export default async function ApprovalReportPage() {
                 <div className="px-4 lg:px-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Monthly Trend</CardTitle>
-                            <CardDescription>Jumlah request submitted, approved, dan rejected per bulan.</CardDescription>
+                            <CardTitle>Approval Trend by Month</CardTitle>
+                            <CardDescription>Pergerakan request submitted, approved, dan rejected untuk membaca kualitas arus keputusan.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="overflow-x-auto">

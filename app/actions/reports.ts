@@ -42,6 +42,10 @@ export type InventoryReportData = {
         minStock: number
         stockRatio: number
         valuationValue: number
+        avgDailyUsage: number
+        daysToStockout: number | null
+        recommendedRestockQty: number
+        recommendedRestockValue: number
     }[]
     deadStock: {
         productName: string
@@ -73,6 +77,12 @@ export type SalesReportData = {
         totalSales: number
         orderCount: number
         averageOrderValue: number
+        lastOrderDate?: Date
+        recentSales: number
+        historicalAverageSales: number
+        revenueShare: number
+        accountHealth: "Healthy" | "Watch" | "At Risk"
+        churnRisk: "Low" | "Medium" | "High"
     }[]
     salesByCategory: {
         category: string
@@ -100,6 +110,9 @@ export type SalesReportData = {
         percentage: number
         remaining: number
     }
+    grossProfitMargin: number
+    forecastNextMonth: number
+    concentrationTop5: number
 }
 
 // ==================== CUSTOMER REPORT TYPES ====================
@@ -118,6 +131,11 @@ export type CustomerReportData = {
         totalRevenue: number
         averageOrderValue: number
         lastOrderDate?: Date
+        daysSinceLastOrder: number | null
+        accountHealth: "Healthy" | "Watch" | "At Risk"
+        churnRisk: "Low" | "Medium" | "High"
+        estimatedClv: number
+        segment: "VIP" | "Regular" | "Small"
     }[]
     customerGrowth: {
         month: string
@@ -137,6 +155,8 @@ export type CustomerReportData = {
         count: number
         percentage: number
     }[]
+    estimatedClv: number
+    accountHealthScore: number
 }
 
 // ==================== ORDER FULFILLMENT REPORT TYPES ====================
@@ -458,22 +478,55 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
         .orderBy(movementCalc.date);
 
     // Low Stock Alerts
-    const lowStockData = await db.select({
-        id: stockLevels.id,
-        product_name: products.materialDescription,
-        material_number: products.materialNumber,
-        warehouse_name: warehouses.sloc,
-        current_stock: stockLevels.totalStock,
-        min_stock: stockLevels.minStock,
-        stock_ratio: sql<number>`CASE WHEN ${stockLevels.minStock} > 0 THEN ${stockLevels.totalStock}::float / ${stockLevels.minStock} ELSE 0 END`,
-        valuation_value: stockLevels.valuationValue
-    })
-        .from(stockLevels)
-        .innerJoin(products, eq(products.id, stockLevels.productId))
-        .innerJoin(warehouses, eq(warehouses.id, stockLevels.warehouseId))
-        .where(and(lte(stockLevels.totalStock, stockLevels.minStock), sql`${stockLevels.minStock} > 0`))
-        .orderBy(asc(sql`CASE WHEN ${stockLevels.minStock} > 0 THEN ${stockLevels.totalStock}::float / ${stockLevels.minStock} ELSE 0 END`))
-        .limit(50);
+    const lowStockData = await db.execute(sql`
+        WITH usage_30 AS (
+            SELECT
+                sm.product_id,
+                sm.warehouse_id,
+                COALESCE(ABS(SUM(CASE WHEN sm.quantity < 0 THEN sm.quantity ELSE 0 END))::numeric / 30, 0) AS avg_daily_usage
+            FROM "stock_movements" AS sm
+            WHERE sm.created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY sm.product_id, sm.warehouse_id
+        )
+        SELECT
+            sl.id,
+            p.material_description AS product_name,
+            p.material_number,
+            w.sloc AS warehouse_name,
+            sl.total_stock AS current_stock,
+            sl.min_stock,
+            CASE
+                WHEN sl.min_stock > 0 THEN sl.total_stock::float / sl.min_stock
+                ELSE 0
+            END AS stock_ratio,
+            sl.valuation_value,
+            COALESCE(u.avg_daily_usage, 0) AS avg_daily_usage,
+            CASE
+                WHEN COALESCE(u.avg_daily_usage, 0) > 0 AND sl.total_stock > 0
+                    THEN ROUND(sl.total_stock::numeric / u.avg_daily_usage, 1)
+                ELSE NULL
+            END AS days_to_stockout,
+            GREATEST(sl.min_stock - sl.total_stock, 0) AS recommended_restock_qty,
+            COALESCE(
+                GREATEST(sl.min_stock - sl.total_stock, 0)
+                * COALESCE(sl.valuation_value / NULLIF(sl.total_stock, 0), 0),
+                0
+            ) AS recommended_restock_value
+        FROM "stock_levels" AS sl
+        INNER JOIN "products" AS p ON p.id = sl.product_id
+        INNER JOIN "warehouses" AS w ON w.id = sl.warehouse_id
+        LEFT JOIN usage_30 AS u ON u.product_id = sl.product_id AND u.warehouse_id = sl.warehouse_id
+        WHERE sl.total_stock <= sl.min_stock
+          AND sl.min_stock > 0
+          ${warehouseId ? sql`AND sl.warehouse_id = ${warehouseId}` : sql``}
+        ORDER BY
+            CASE
+                WHEN sl.min_stock > 0 THEN sl.total_stock::float / sl.min_stock
+                ELSE 0
+            END ASC,
+            days_to_stockout ASC NULLS LAST
+        LIMIT 50
+    `);
 
     // Dead Stock (no movement in 90 days)
     const deadStockData = await db.select({
@@ -518,15 +571,19 @@ export async function getInventoryReport(warehouseId?: number): Promise<Inventor
             stockOut: Number(row.stock_out),
             netChange: Number(row.stock_in) - Number(row.stock_out),
         })),
-        lowStockAlerts: lowStockData.map(row => ({
+        lowStockAlerts: (lowStockData.rows as Record<string, unknown>[]).map(row => ({
             id: Number(row.id),
-            productName: row.product_name ?? "Unknown",
-            materialNumber: (row.material_number ?? null) as string,
-            warehouseName: (row.warehouse_name ?? null) as string,
+            productName: String(row.product_name ?? "Unknown"),
+            materialNumber: String(row.material_number ?? "-"),
+            warehouseName: String(row.warehouse_name ?? "-"),
             currentStock: Number(row.current_stock),
             minStock: Number(row.min_stock),
             stockRatio: Number(row.stock_ratio),
             valuationValue: Number(row.valuation_value),
+            avgDailyUsage: Number(row.avg_daily_usage),
+            daysToStockout: row.days_to_stockout === null ? null : Number(row.days_to_stockout),
+            recommendedRestockQty: Number(row.recommended_restock_qty),
+            recommendedRestockValue: Number(row.recommended_restock_value),
         })),
         deadStock: deadStockData.map(row => ({
             productName: row.product_name ?? "Unknown",
@@ -565,6 +622,15 @@ export async function getSalesReport(
         .groupBy(sql`DATE_TRUNC('day', ${salesOrders.salesDate})`)
         .orderBy(sql`DATE_TRUNC('day', ${salesOrders.salesDate})`);
 
+    const salesProfitability = await db.select({
+        total_revenue: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        total_cost: sql<number>`COALESCE(SUM(${salesOrderItems.quantity} * COALESCE(NULLIF(REGEXP_REPLACE(${products.costSap}, '[^0-9.-]', '', 'g'), ''), '0')::numeric), 0)`,
+    })
+        .from(salesOrders)
+        .innerJoin(salesOrderItems, eq(salesOrderItems.salesOrderId, salesOrders.id))
+        .innerJoin(products, eq(products.id, salesOrderItems.productId))
+        .where(and(gte(salesOrders.salesDate, start), lte(salesOrders.salesDate, end)));
+
     // Sales by Customer
     const salesByCustomerData = await db.select({
         customer_id: customers.id,
@@ -572,7 +638,9 @@ export async function getSalesReport(
         customer_code: customers.customerCode,
         total_sales: sql<number>`COALESCE(SUM((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
         order_count: sql<number>`COUNT(DISTINCT ${salesOrders.id})`,
-        avg_order_value: sql<number>`COALESCE(AVG((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`
+        avg_order_value: sql<number>`COALESCE(AVG((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric), 0)`,
+        last_order_date: sql<Date>`MAX(${salesOrders.salesDate})`,
+        recent_sales: sql<number>`COALESCE(SUM(CASE WHEN ${salesOrders.salesDate} >= NOW() - INTERVAL '60 days' THEN ((${salesOrderItems.unitPrice}::numeric * ${salesOrderItems.quantity}) - ${salesOrderItems.discount}::numeric + ${salesOrderItems.tax}::numeric) ELSE 0 END), 0)`,
     })
         .from(customers)
         .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
@@ -647,6 +715,25 @@ export async function getSalesReport(
         return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
     }).reduce((sum: number, r) => sum + Number(r.sales), 0);
 
+    const monthlyCurrentSeries = monthlyComparisonData
+        .map((row) => Number(row.current_year))
+        .filter((value) => Number.isFinite(value))
+
+    const lastThreeMonths = monthlyCurrentSeries.slice(-3)
+    const baseForecast = lastThreeMonths.length > 0
+        ? lastThreeMonths.reduce((sum, value) => sum + value, 0) / lastThreeMonths.length
+        : avgMonthlySales
+    const momentumAdjustment = lastThreeMonths.length >= 2
+        ? lastThreeMonths[lastThreeMonths.length - 1] - lastThreeMonths[lastThreeMonths.length - 2]
+        : 0
+    const forecastNextMonth = Math.max(0, baseForecast + (momentumAdjustment * 0.35))
+    const totalRevenueValue = Number(salesProfitability[0]?.total_revenue ?? totalSales)
+    const totalCostValue = Number(salesProfitability[0]?.total_cost ?? 0)
+    const grossProfitMargin = totalRevenueValue > 0 ? ((totalRevenueValue - totalCostValue) / totalRevenueValue) * 100 : 0
+    const concentrationTop5 = totalSales > 0
+        ? (salesByCustomerData.slice(0, 5).reduce((sum, row) => sum + Number(row.total_sales), 0) / totalSales) * 100
+        : 0
+
     return {
         salesTrend: salesTrendData.map(row => ({
             date: typeof row.date === 'object' && row.date !== null ? (row.date as Date).toISOString().split("T")[0] : String(row.date).split("T")[0],
@@ -654,14 +741,44 @@ export async function getSalesReport(
             orders: Number(row.orders),
             averageOrderValue: Number(row.avg_order_value),
         })),
-        salesByCustomer: salesByCustomerData.map(row => ({
-            customerId: Number(row.customer_id),
-            customerName: row.customer_name ?? "Unknown",
-            customerCode: (row.customer_code ?? null) as string,
-            totalSales: Number(row.total_sales),
-            orderCount: Number(row.order_count),
-            averageOrderValue: Number(row.avg_order_value),
-        })),
+        salesByCustomer: salesByCustomerData.map(row => {
+            const totalSalesPerCustomer = Number(row.total_sales)
+            const recentSales = Number(row.recent_sales)
+            const historicalAverageSales = totalSalesPerCustomer / 6
+            const recentRunRate = recentSales / 2
+            const healthRatio = historicalAverageSales > 0 ? recentRunRate / historicalAverageSales : 1
+            const lastOrderDate = row.last_order_date ? new Date(row.last_order_date as string | Date) : null as unknown as Date
+            const daysSinceLastOrder = lastOrderDate ? Math.floor((Date.now() - lastOrderDate.getTime()) / (1000 * 60 * 60 * 24)) : 999
+
+            const accountHealth: "Healthy" | "Watch" | "At Risk" =
+                healthRatio >= 0.9 && daysSinceLastOrder <= 45
+                    ? "Healthy"
+                    : healthRatio >= 0.6 && daysSinceLastOrder <= 90
+                        ? "Watch"
+                        : "At Risk"
+
+            const churnRisk: "Low" | "Medium" | "High" =
+                daysSinceLastOrder > 90 || healthRatio < 0.6
+                    ? "High"
+                    : daysSinceLastOrder > 45 || healthRatio < 0.9
+                        ? "Medium"
+                        : "Low"
+
+            return {
+                customerId: Number(row.customer_id),
+                customerName: row.customer_name ?? "Unknown",
+                customerCode: (row.customer_code ?? null) as string,
+                totalSales: totalSalesPerCustomer,
+                orderCount: Number(row.order_count),
+                averageOrderValue: Number(row.avg_order_value),
+                lastOrderDate,
+                recentSales,
+                historicalAverageSales,
+                revenueShare: totalSales > 0 ? (totalSalesPerCustomer / totalSales) * 100 : 0,
+                accountHealth,
+                churnRisk,
+            }
+        }),
         salesByCategory: salesByCategoryData.map(row => ({
             category: row.category ?? "Uncategorized",
             totalSales: Number(row.total_sales),
@@ -688,6 +805,9 @@ export async function getSalesReport(
             percentage: monthlyTarget > 0 ? (currentMonthSales / monthlyTarget) * 100 : 0,
             remaining: monthlyTarget - currentMonthSales,
         },
+        grossProfitMargin,
+        forecastNextMonth,
+        concentrationTop5,
     }
 }
 
@@ -811,6 +931,57 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
         .groupBy(sql`status`);
 
     const totalActivity = activityData.reduce((sum: number, r) => sum + Number(r.count), 0)
+    const enrichedTopCustomers = topCustomersData.map(row => {
+        const totalRevenue = Number(row.total_revenue)
+        const totalOrders = Number(row.total_orders)
+        const lastOrderDate = row.last_order_date ? new Date(row.last_order_date as string | Date) : null as unknown as Date
+        const daysSinceLastOrder = lastOrderDate ? Math.floor((Date.now() - lastOrderDate.getTime()) / (1000 * 60 * 60 * 24)) : null
+        const segment: "VIP" | "Regular" | "Small" =
+            totalRevenue >= 5_000_000_000
+                ? "VIP"
+                : totalRevenue >= 1_000_000_000
+                    ? "Regular"
+                    : "Small"
+        const accountHealth: "Healthy" | "Watch" | "At Risk" =
+            daysSinceLastOrder === null
+                ? "At Risk"
+                : daysSinceLastOrder <= 30
+                    ? "Healthy"
+                    : daysSinceLastOrder <= 90
+                        ? "Watch"
+                        : "At Risk"
+        const churnRisk: "Low" | "Medium" | "High" =
+            daysSinceLastOrder === null
+                ? "High"
+                : daysSinceLastOrder <= 45
+                    ? "Low"
+                    : daysSinceLastOrder <= 90
+                        ? "Medium"
+                        : "High"
+        const estimatedClv = totalRevenue * Math.min(Math.max(totalOrders, 1) / 3, 2.5)
+
+        return {
+            customerId: Number(row.customer_id),
+            customerName: String(row.customer_name ?? "Unknown"),
+            customerCode: String(row.customer_code ?? ""),
+            totalOrders,
+            totalRevenue,
+            averageOrderValue: Number(row.avg_order_value),
+            lastOrderDate,
+            daysSinceLastOrder,
+            accountHealth,
+            churnRisk,
+            estimatedClv,
+            segment,
+        }
+    })
+
+    const estimatedClv = enrichedTopCustomers.length > 0
+        ? enrichedTopCustomers.slice(0, 10).reduce((sum, row) => sum + row.estimatedClv, 0) / Math.min(enrichedTopCustomers.length, 10)
+        : 0
+    const accountHealthScore = enrichedTopCustomers.length > 0
+        ? enrichedTopCustomers.reduce((sum, row) => sum + (row.accountHealth === "Healthy" ? 100 : row.accountHealth === "Watch" ? 65 : 30), 0) / enrichedTopCustomers.length
+        : 0
 
     return {
         customerSegmentation: segmentationData.map(row => ({
@@ -819,15 +990,7 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
             percentage: totalCustomers > 0 ? (Number(row.count) / totalCustomers) * 100 : 0,
             totalRevenue: Number(row.total_revenue),
         })),
-        topCustomers: topCustomersData.map(row => ({
-            customerId: Number(row.customer_id),
-            customerName: String(row.customer_name ?? "Unknown"),
-            customerCode: String(row.customer_code ?? ""),
-            totalOrders: Number(row.total_orders),
-            totalRevenue: Number(row.total_revenue),
-            averageOrderValue: Number(row.avg_order_value),
-            lastOrderDate: row.last_order_date ? new Date(row.last_order_date as string | Date) : null as unknown as Date,
-        })),
+        topCustomers: enrichedTopCustomers,
         customerGrowth: growthData.map(row => ({
             month: String(row.month),
             newCustomers: Number(row.new_customers),
@@ -846,6 +1009,8 @@ export async function getCustomerReport(): Promise<CustomerReportData> {
             count: Number(row.count),
             percentage: totalActivity > 0 ? (Number(row.count) / totalActivity) * 100 : 0,
         })),
+        estimatedClv,
+        accountHealthScore,
     }
 }
 
@@ -1216,23 +1381,26 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
         .orderBy(desc(sql`COALESCE(SUM(${stockLevels.valuationValue}), 0)`));
 
     // Stock Transfer Flow
-    const wFrom = db.$with('w_from').as(db.select().from(warehouses));
-    const wTo = db.$with('w_to').as(db.select().from(warehouses));
-
-    const transferData = await db.with(wFrom, wTo).select({
-        from_warehouse: wFrom.sloc,
-        to_warehouse: wTo.sloc,
-        transfer_count: sql<number>`COUNT(DISTINCT ${stockTransfers.id})`,
-        total_quantity: sql<number>`COALESCE(SUM(${stockTransferItems.quantity}), 0)`,
-        total_value: sql<number>`COALESCE(SUM(${stockTransferItems.quantity} * ${products.costSap}::numeric), 0)`
-    })
-        .from(stockTransfers)
-        .innerJoin(wFrom, eq(wFrom.id, stockTransfers.fromWarehouseId))
-        .innerJoin(wTo, eq(wTo.id, stockTransfers.toWarehouseId))
-        .leftJoin(stockTransferItems, eq(stockTransferItems.transferId, stockTransfers.id))
-        .leftJoin(products, eq(products.id, stockTransferItems.productId))
-        .groupBy(wFrom.sloc, wTo.sloc)
-        .orderBy(desc(sql`COUNT(DISTINCT ${stockTransfers.id})`));
+    const transferData = await db.execute(sql`
+        SELECT
+            wf.sloc AS from_warehouse,
+            wt.sloc AS to_warehouse,
+            COUNT(DISTINCT st.id) AS transfer_count,
+            COALESCE(SUM(sti.quantity), 0) AS total_quantity,
+            COALESCE(SUM(
+                sti.quantity * COALESCE(
+                    NULLIF(REGEXP_REPLACE(p.cost_sap, '[^0-9.-]', '', 'g'), ''),
+                    '0'
+                )::numeric
+            ), 0) AS total_value
+        FROM ${stockTransfers} AS st
+        INNER JOIN ${warehouses} AS wf ON wf.id = st.from_warehouse_id
+        INNER JOIN ${warehouses} AS wt ON wt.id = st.to_warehouse_id
+        LEFT JOIN ${stockTransferItems} AS sti ON sti.transfer_id = st.id
+        LEFT JOIN ${products} AS p ON p.id = sti.product_id
+        GROUP BY wf.sloc, wt.sloc
+        ORDER BY COUNT(DISTINCT st.id) DESC
+    `);
 
     // Delivery Performance
     const deliveryPerformanceData = await db.select({
@@ -1288,12 +1456,12 @@ export async function getWarehouseLogisticsReport(): Promise<WarehouseLogisticsR
                 ? (Number(row.capacity_used) / Number(row.capacity_total)) * 100
                 : 0,
         })),
-        stockTransferFlow: transferData.map(row => ({
+        stockTransferFlow: (transferData.rows as Record<string, unknown>[]).map(row => ({
             fromWarehouse: String(row.from_warehouse ?? "Unknown"),
             toWarehouse: String(row.to_warehouse ?? "Unknown"),
-            transferCount: Number(row.transfer_count),
-            totalQuantity: Number(row.total_quantity),
-            totalValue: Number(row.total_value),
+            transferCount: Number(row.transfer_count ?? 0),
+            totalQuantity: Number(row.total_quantity ?? 0),
+            totalValue: Number(row.total_value ?? 0),
         })),
         deliveryPerformance: deliveryPerformanceData.map(row => ({
             month: String(row.month),

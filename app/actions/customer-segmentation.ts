@@ -65,6 +65,16 @@ const EXCLUDED_SEGMENTATION_CUSTOMERS = [
     "TRANSITYRE B.V",
 ]
 
+function formatDateOnly(date: Date) {
+    return date.toISOString().split("T")[0]
+}
+
+function subtractMonths(date: Date, months: number) {
+    const next = new Date(date)
+    next.setMonth(next.getMonth() - months)
+    return next
+}
+
 function getSegmentationCustomerWhereClause() {
     return and(
         sql`${historyOrders.customerName} IS NOT NULL`,
@@ -166,29 +176,39 @@ function findBestCustomerMatch(
     return includes ?? null;
 }
 
+async function resolveSegmentationRange(startDate?: string, endDate?: string) {
+    if (startDate && endDate) {
+        return { start: startDate, end: endDate }
+    }
+
+    const result = await db.select({
+        max_date: sql<string>`MAX(${historyOrders.billingDate})`
+    })
+        .from(historyOrders)
+        .where(getSegmentationCustomerWhereClause())
+
+    const latestBillingDate = result[0]?.max_date ? new Date(result[0].max_date) : new Date()
+    const end = endDate || formatDateOnly(latestBillingDate)
+    const rollingStartBase = subtractMonths(latestBillingDate, 11)
+    rollingStartBase.setDate(1)
+    const start = startDate || formatDateOnly(rollingStartBase)
+
+    return { start, end }
+}
+
 export async function getMaxBillingDate() {
     try {
-        const result = await db.select({
-            max_date: sql<string>`MAX(${historyOrders.billingDate})`
-        })
-            .from(historyOrders)
-            .where(getSegmentationCustomerWhereClause());
-
-        if (result[0]?.max_date) {
-            return { success: true, maxDate: new Date(result[0].max_date).toISOString().split('T')[0] };
-        }
-        return { success: false, maxDate: '2025-12-31' };
+        const { end } = await resolveSegmentationRange()
+        return { success: true as const, maxDate: end }
     } catch (error) {
         console.error("Failed to fetch max billing date:", error);
-        return { success: false, maxDate: '2025-12-31' };
+        return { success: false as const, maxDate: formatDateOnly(new Date()) };
     }
 }
 
 export async function getHistoryOrderForSegmentation(startDate?: string, endDate?: string) {
     try {
-        // Default range if not provided
-        const start = startDate || '2025-01-01';
-        const end = endDate || '2025-12-31';
+        const { start, end } = await resolveSegmentationRange(startDate, endDate)
 
         // 1. Dapatkan global first purchase per customer
         const globalFirstPurchaseQuery = db.select({
@@ -235,8 +255,7 @@ export async function getHistoryOrderForSegmentation(startDate?: string, endDate
 
 export async function getMarketingSegmentOptions(startDate?: string, endDate?: string) {
     try {
-        const start = startDate || "2025-01-01";
-        const end = endDate || "2025-12-31";
+        const { start, end } = await resolveSegmentationRange(startDate, endDate)
         const segmentation = await getHistoryOrderForSegmentation(start, end);
 
         if (!segmentation.success || !segmentation.data) {
@@ -299,8 +318,7 @@ export async function getSegmentEmailRecipients(
     try {
         if (segmentNames.length === 0) return { success: true as const, data: [] as MarketingSegmentRecipient[] };
 
-        const start = startDate || "2025-01-01";
-        const end = endDate || "2025-12-31";
+        const { start, end } = await resolveSegmentationRange(startDate, endDate)
         const segmentation = await getHistoryOrderForSegmentation(start, end);
 
         if (!segmentation.success || !segmentation.data) {
@@ -361,8 +379,7 @@ export async function getMarketingSegmentCustomerInsights(
     limit: number = 20
 ) {
     try {
-        const start = startDate || "2025-01-01";
-        const end = endDate || "2025-12-31";
+        const { start, end } = await resolveSegmentationRange(startDate, endDate)
         const segmentation = await getHistoryOrderForSegmentation(start, end);
 
         if (!segmentation.success || !segmentation.data) {
@@ -401,8 +418,7 @@ export async function getCustomerMarketingInsight(
             return { success: false as const, error: "Customer name is required" };
         }
 
-        const start = startDate || "2025-01-01";
-        const end = endDate || "2025-12-31";
+        const { start, end } = await resolveSegmentationRange(startDate, endDate)
         const segmentation = await getHistoryOrderForSegmentation(start, end);
 
         if (!segmentation.success || !segmentation.data) {

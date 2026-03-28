@@ -183,8 +183,8 @@ export default async function FinancialReportPage() {
 }
 
 function formatCurrency(val: number): string {
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
+    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)} Miliar`
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)} Juta`
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
 }

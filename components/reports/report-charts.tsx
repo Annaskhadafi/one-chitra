@@ -3,9 +3,18 @@
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Bar, BarChart, Pie, PieChart, Cell, Line, LineChart, ComposedChart, Scatter, ScatterChart, ZAxis, Treemap } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
+import { formatCurrency, formatNumber } from "@/lib/formatters"
 
-import { formatCurrency, formatNumber, formatPercentage } from "@/lib/formatters"
+const LIGHT_CARD = "border-slate-200 bg-white text-slate-950 shadow-sm"
+const LIGHT_GRID = "#e2e8f0"
+const LIGHT_TICK = "#64748b"
+const LIGHT_AXIS = "#cbd5e1"
+const LIGHT_TOOLTIP = {
+    backgroundColor: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    color: "#0f172a",
+}
 
 
 // ==================== AREA CHART (Sales Trend) ====================
@@ -26,7 +35,7 @@ export function SalesTrendChart({ data, title, description, height = 300 }: Sale
     const totalSales = data.reduce((sum: number, d) => sum + d.sales, 0)
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Sales Trend"}</CardTitle>
                 <CardDescription>
@@ -47,16 +56,16 @@ export function SalesTrendChart({ data, title, description, height = 300 }: Sale
                                     <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} />
                             <XAxis
                                 dataKey="date"
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                                axisLine={{ stroke: "hsl(var(--border))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
+                                axisLine={{ stroke: LIGHT_AXIS }}
                                 tickLine={false}
                             />
                             <YAxis
                                 tickFormatter={(v) => formatCurrency(v)}
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 width={80}
@@ -66,12 +75,7 @@ export function SalesTrendChart({ data, title, description, height = 300 }: Sale
                                     name === "sales" ? formatCurrency(value) : value.toLocaleString(),
                                     name === "sales" ? "Sales" : "Orders"
                                 ]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                    color: "hsl(var(--foreground))",
-                                }}
+                                contentStyle={LIGHT_TOOLTIP}
                             />
                             <Area
                                 type="monotone"
@@ -108,7 +112,7 @@ export function ReportBarChart({ data, title, description, height = 300, showLeg
     const defaultColors = ["hsl(217, 91%, 60%)", "hsl(160, 84%, 39%)"]
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Bar Chart"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -121,10 +125,10 @@ export function ReportBarChart({ data, title, description, height = 300, showLeg
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -132,7 +136,7 @@ export function ReportBarChart({ data, title, description, height = 300, showLeg
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 tickFormatter={formatNumber}
@@ -142,11 +146,7 @@ export function ReportBarChart({ data, title, description, height = 300, showLeg
                                     formatNumber(value),
                                     name === "value" ? "Value" : name
                                 ]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
+                                contentStyle={LIGHT_TOOLTIP}
                             />
                             {showLegend && <Legend />}
                             <Bar
@@ -199,7 +199,7 @@ export function ReportPieChart({ data, title, description, height = 300, showLeg
     const total = data.reduce((sum: number, d) => sum + d.value, 0)
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Distribution"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -246,11 +246,7 @@ export function ReportPieChart({ data, title, description, height = 300, showLeg
                             )}
                             <Tooltip
                                 formatter={(value: number) => [`${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`, "Count"]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
+                                contentStyle={LIGHT_TOOLTIP}
                             />
                             {showLegend && (
                                 <Legend
@@ -287,10 +283,10 @@ export function ReportScatterChart({
     xAxisKey = "revenue",
     yAxisKey = "margin",
     zAxisKey = "sold",
-    nameKey = "name"
+    nameKey: _nameKey = "name"
 }: ScatterChartProps) {
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
@@ -299,11 +295,11 @@ export function ReportScatterChart({
                 <div style={{ width: "100%", height }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                            <CartesianGrid />
+                            <CartesianGrid stroke={LIGHT_GRID} />
                             <XAxis type="number" dataKey={xAxisKey} name="Revenue" unit="Rp" />
                             <YAxis type="number" dataKey={yAxisKey} name="Margin" unit="%" />
                             <ZAxis type="number" dataKey={zAxisKey} range={[60, 400]} name="Sold" />
-                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Scatter name="Products" data={data} fill="hsl(var(--primary))" />
                         </ScatterChart>
@@ -324,7 +320,7 @@ export interface TreemapChartProps {
 
 export function ReportTreemapChart({ data, title, description, height = 300 }: TreemapChartProps) {
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
@@ -343,7 +339,7 @@ export function ReportTreemapChart({ data, title, description, height = 300 }: T
                                 if (props.active && props.payload && props.payload.length) {
                                     const { name, size } = props.payload[0].payload as { name: string; size: number }
                                     return (
-                                        <div className="bg-background border rounded p-2 shadow-md text-xs">
+                                        <div className="rounded border border-slate-200 bg-white p-2 text-xs shadow-md">
                                             <p className="font-bold">{name}</p>
                                             <p>Value: {formatCurrency(size)}</p>
                                         </div>
@@ -375,7 +371,7 @@ export function LineComparisonChart({ data, title, description, height = 300 }: 
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Comparison Chart"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -388,31 +384,27 @@ export function LineComparisonChart({ data, title, description, height = 300 }: 
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                                axisLine={{ stroke: "hsl(var(--border))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
+                                axisLine={{ stroke: LIGHT_AXIS }}
                                 tickLine={false}
                             />
                             <YAxis
                                 tickFormatter={formatNumber}
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
                             <Tooltip
                                 formatter={(value: number) => formatNumber(value)}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
+                                contentStyle={LIGHT_TOOLTIP}
                             />
                             <Legend />
                             <Bar
                                 dataKey="previous"
-                                fill="hsl(var(--muted))"
+                                fill="#cbd5e1"
                                 radius={[4, 4, 0, 0]}
                                 name="Previous Period"
                             />
@@ -454,7 +446,7 @@ export function StackedBarChart({ data, title, description, height = 300 }: Stac
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Stock Overview"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -467,10 +459,10 @@ export function StackedBarChart({ data, title, description, height = 300 }: Stac
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -479,17 +471,13 @@ export function StackedBarChart({ data, title, description, height = 300 }: Stac
                             />
                             <YAxis
                                 tickFormatter={formatNumber}
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
                             <Tooltip
                                 formatter={(value: number, name: string) => [value.toLocaleString(), name]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
+                                contentStyle={LIGHT_TOOLTIP}
                             />
                             <Legend />
                             <Bar dataKey="stock" fill="hsl(160, 84%, 39%)" stackId="a" radius={[0, 0, 0, 0]} name="Normal Stock" />
@@ -527,7 +515,7 @@ export function GaugeChart({ value, max, title, description, label }: GaugeChart
     }
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Progress"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -541,7 +529,7 @@ export function GaugeChart({ value, max, title, description, label }: GaugeChart
                             cy="100"
                             r="80"
                             fill="none"
-                            stroke="hsl(var(--border))"
+                            stroke={LIGHT_AXIS}
                             strokeWidth="16"
                         />
                         {/* Progress circle */}
@@ -561,11 +549,11 @@ export function GaugeChart({ value, max, title, description, label }: GaugeChart
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <span className="text-3xl font-bold">{percentage.toFixed(1)}%</span>
-                        {label && <span className="text-sm text-muted-foreground">{label}</span>}
+                        {label && <span className="text-sm text-slate-500">{label}</span>}
                     </div>
                 </div>
                 <div className="mt-4 text-center">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-slate-500">
                         {formatNumber(value)} of {formatNumber(max)}
                     </p>
                 </div>
@@ -586,7 +574,7 @@ export function FunnelChart({ data, title, description }: FunnelChartProps) {
     const COLORS = ["hsl(217, 91%, 60%)", "hsl(199, 89%, 48%)", "hsl(160, 84%, 39%)", "hsl(142, 71%, 45%)"]
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Funnel"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -601,7 +589,7 @@ export function FunnelChart({ data, title, description }: FunnelChartProps) {
                                     <span className="font-medium">{item.stage}</span>
                                     <span className="tabular-nums">{item.value.toLocaleString()}</span>
                                 </div>
-                                <div className="h-8 bg-muted rounded-md overflow-hidden flex items-center justify-center">
+                                <div className="flex h-8 items-center justify-center overflow-hidden rounded-md bg-slate-100">
                                     <div
                                         className="h-full transition-all duration-500 flex items-center justify-center text-xs font-medium text-white"
                                         style={{
@@ -646,7 +634,7 @@ export function HeatmapChart({ data, title, description }: HeatmapChartProps) {
     }
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Heatmap"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -658,11 +646,11 @@ export function HeatmapChart({ data, title, description }: HeatmapChartProps) {
                             <div className={`w-3 h-3 rounded ${getColor(item.days)}`} />
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">{item.name}</p>
-                                <p className="text-xs text-muted-foreground">{item.category}</p>
+                                <p className="text-xs text-slate-500">{item.category}</p>
                             </div>
                             <div className="text-right">
                                 <p className="text-sm font-medium tabular-nums">{item.value.toLocaleString()}</p>
-                                <p className="text-xs text-muted-foreground">{item.days} days</p>
+                                <p className="text-xs text-slate-500">{item.days} days</p>
                             </div>
                             <Badge variant="outline" className="text-xs">
                                 {getLabel(item.days)}
@@ -691,7 +679,7 @@ export function StockMovementChart({ data, title, description, height = 300 }: S
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Stock Movement"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -704,10 +692,10 @@ export function StockMovementChart({ data, title, description, height = 300 }: S
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="date"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -715,17 +703,11 @@ export function StockMovementChart({ data, title, description, height = 300 }: S
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Line type="monotone" dataKey="stockIn" stroke="hsl(160, 84%, 39%)" strokeWidth={2} dot={false} name="Stock In" />
                             <Line type="monotone" dataKey="stockOut" stroke="hsl(340, 82%, 52%)" strokeWidth={2} dot={false} name="Stock Out" />
@@ -753,7 +735,7 @@ export function DeliveryPerformanceChart({ data, title, description, height = 30
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Delivery Performance"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -772,10 +754,10 @@ export function DeliveryPerformanceChart({ data, title, description, height = 30
                                     <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -784,25 +766,19 @@ export function DeliveryPerformanceChart({ data, title, description, height = 30
                             />
                             <YAxis
                                 yAxisId="left"
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
                             <YAxis
                                 yAxisId="right"
                                 orientation="right"
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 domain={[0, 100]}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Area
                                 yAxisId="left"
@@ -852,7 +828,7 @@ export function ShippingCostChart({ data, title, description, height = 300 }: Sh
     }
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Shipping Cost"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -871,10 +847,10 @@ export function ShippingCostChart({ data, title, description, height = 300 }: Sh
                                     <stop offset="95%" stopColor="hsl(47, 93%, 58%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -882,19 +858,12 @@ export function ShippingCostChart({ data, title, description, height = 300 }: Sh
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 tickFormatter={formatCurrency}
                             />
-                            <Tooltip
-                                formatter={(value: number) => [formatCurrency(value), "Shipping Cost"]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip formatter={(value: number) => [formatCurrency(value), "Shipping Cost"]} contentStyle={LIGHT_TOOLTIP} />
                             <Area
                                 type="monotone"
                                 dataKey="cost"
@@ -926,7 +895,7 @@ export function OrderTrendChart({ data, title, description, height = 300 }: Orde
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Order Trend"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -939,10 +908,10 @@ export function OrderTrendChart({ data, title, description, height = 300 }: Orde
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -950,17 +919,11 @@ export function OrderTrendChart({ data, title, description, height = 300 }: Orde
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Bar dataKey="total" fill="hsl(217, 91%, 60%)" radius={[4, 4, 0, 0]} name="Total Orders" />
                             <Bar dataKey="completed" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Completed" />
@@ -987,7 +950,7 @@ export function FulfillmentTimeChart({ data, title, description, height = 300 }:
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Fulfillment Time"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -1000,10 +963,10 @@ export function FulfillmentTimeChart({ data, title, description, height = 300 }:
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -1011,18 +974,12 @@ export function FulfillmentTimeChart({ data, title, description, height = 300 }:
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 label={{ value: "Days", angle: -90, position: "insideLeft" }}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Line
                                 type="monotone"
                                 dataKey="days"
@@ -1053,7 +1010,7 @@ export function OnTimeDeliveryChart({ data, title, description, height = 300 }: 
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "On-Time Delivery"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -1072,10 +1029,10 @@ export function OnTimeDeliveryChart({ data, title, description, height = 300 }: 
                                     <stop offset="95%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -1083,20 +1040,13 @@ export function OnTimeDeliveryChart({ data, title, description, height = 300 }: 
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 domain={[0, 100]}
                                 label={{ value: "Rate (%)", angle: -90, position: "insideLeft" }}
                             />
-                            <Tooltip
-                                formatter={(value: number) => [`${value.toFixed(1)}%`, "On-Time Rate"]}
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip formatter={(value: number) => [`${value.toFixed(1)}%`, "On-Time Rate"]} contentStyle={LIGHT_TOOLTIP} />
                             <Area
                                 type="monotone"
                                 dataKey="rate"
@@ -1128,7 +1078,7 @@ export function OrderCompletionChart({ data, title, description, height = 300 }:
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Order Completion"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -1141,10 +1091,10 @@ export function OrderCompletionChart({ data, title, description, height = 300 }:
                 ) : (
                     <ResponsiveContainer width="100%" height={height}>
                         <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -1152,17 +1102,11 @@ export function OrderCompletionChart({ data, title, description, height = 300 }:
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Line
                                 type="monotone"
@@ -1204,7 +1148,7 @@ export function CustomerGrowthChart({ data, title, description, height = 300 }: 
     }))
 
     return (
-        <Card>
+        <Card className={LIGHT_CARD}>
             <CardHeader>
                 <CardTitle>{title ?? "Customer Growth"}</CardTitle>
                 {description && <CardDescription>{description}</CardDescription>}
@@ -1223,10 +1167,10 @@ export function CustomerGrowthChart({ data, title, description, height = 300 }: 
                                     <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={LIGHT_GRID} vertical={false} />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 11, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                                 angle={-45}
@@ -1234,17 +1178,11 @@ export function CustomerGrowthChart({ data, title, description, height = 300 }: 
                                 height={80}
                             />
                             <YAxis
-                                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                                tick={{ fontSize: 12, fill: LIGHT_TICK }}
                                 axisLine={false}
                                 tickLine={false}
                             />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--card))",
-                                    border: "1px solid hsl(var(--border))",
-                                    borderRadius: "8px",
-                                }}
-                            />
+                            <Tooltip contentStyle={LIGHT_TOOLTIP} />
                             <Legend />
                             <Area
                                 type="monotone"

@@ -2,7 +2,8 @@ import { getOrderFulfillmentReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPIGrid, ExportButton } from "@/components/reports/report-components"
 import { ReportBarChart, ReportPieChart, GaugeChart } from "@/components/reports/report-charts"
-import { PackageCheck, Clock, CheckCircle2, AlertOctagon, ArrowLeft } from "lucide-react"
+import { PackageCheck, ArrowLeft } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 
 export default async function OrderFulfillmentReportPage() {
@@ -66,13 +67,24 @@ export default async function OrderFulfillmentReportPage() {
                     </Link>
                 </div>
 
-                <div className="px-4 lg:px-6 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Order Fulfillment Report</h1>
-                        <p className="text-muted-foreground">
-                            Order processing, delivery performance, and backorders
-                        </p>
-                    </div>
+                <div className="px-4 lg:px-6">
+                    <Card className="border-slate-200 bg-gradient-to-br from-white via-slate-50 to-amber-50 shadow-sm">
+                        <CardHeader className="gap-4">
+                            <div className="flex flex-wrap gap-2">
+                                <Badge className="border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50">Execution Focus</Badge>
+                                <Badge className="border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">Backorder Pressure</Badge>
+                                <Badge className={`${overallCompletionRate >= 90 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"} hover:bg-inherit`}>
+                                    Completion {overallCompletionRate >= 90 ? "Healthy" : "Under Watch"}
+                                </Badge>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">Order Fulfillment Intelligence</h1>
+                                <p className="text-slate-600">
+                                    Visibilitas manajemen atas backlog order, kualitas eksekusi pengiriman, dan sumber tekanan service level.
+                                </p>
+                            </div>
+                        </CardHeader>
+                    </Card>
                 </div>
 
                 {/* KPI Cards */}
@@ -82,16 +94,16 @@ export default async function OrderFulfillmentReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <ReportPieChart
                         data={statusData}
-                        title="Order Status Distribution"
-                        description="Current state of all orders"
+                        title="Order Status Mix"
+                        description="Komposisi status order untuk membaca beban kerja dan risiko eksekusi saat ini."
                         height={350}
                         variant="donut"
                     />
                     <GaugeChart
                         value={data.onTimeDelivery.onTimeDeliveries}
                         max={data.onTimeDelivery.totalDeliveries}
-                        title="On-Time Delivery Performance"
-                        description={`Based on ${data.onTimeDelivery.totalDeliveries} total deliveries`}
+                        title="On-Time Delivery Discipline"
+                        description={`Dibaca dari ${data.onTimeDelivery.totalDeliveries} delivery sebagai baseline layanan`}
                         label={`${data.onTimeDelivery.onTimeRate.toFixed(1)}% On-Time`}
                     />
                 </div>
@@ -100,16 +112,16 @@ export default async function OrderFulfillmentReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <ReportBarChart
                         data={trendData}
-                        title="Order Trend"
-                        description="Total vs Completed orders per month"
+                        title="Order Throughput Trend"
+                        description="Order masuk versus order selesai untuk membaca stabilitas throughput operasional."
                         height={350}
                         colors={["hsl(217, 91%, 60%)", "hsl(142, 71%, 45%)"]}
                         showLegend
                     />
                     <ReportBarChart
                         data={fulfillmentTimeByMonthData}
-                        title="Average Fulfillment Time"
-                        description="Days from order to delivery by month"
+                        title="Fulfillment Cycle Time"
+                        description="Hari yang dibutuhkan dari order ke delivery sebagai indikator kecepatan eksekusi."
                         height={350}
                         colors={["hsl(340, 82%, 52%)"]}
                     />
@@ -117,12 +129,12 @@ export default async function OrderFulfillmentReportPage() {
 
                 {/* Backorder Analysis Table */}
                 <div className="px-4 lg:px-6 mb-6">
-                    <Card>
+                    <Card className="border-slate-200 bg-white shadow-sm">
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <CardTitle>Backorder Analysis</CardTitle>
-                                    <CardDescription>Products currently awaiting fulfillment</CardDescription>
+                                    <CardTitle>Backorder Pressure Analysis</CardTitle>
+                                    <CardDescription>Produk yang saat ini menahan pemenuhan order dan berpotensi mengganggu layanan</CardDescription>
                                 </div>
                                 <ExportButton data={data.backorderAnalysis} filename="backorders" format="csv" />
                             </div>
@@ -132,7 +144,7 @@ export default async function OrderFulfillmentReportPage() {
                                 <div className="flex h-[200px] items-center justify-center text-muted-foreground">
                                     <div className="text-center">
                                         <PackageCheck className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                                        <p>No backordered items! All orders are fulfilled.</p>
+                                        <p>Tidak ada backorder aktif. Kualitas pemenuhan order saat ini sangat sehat.</p>
                                     </div>
                                 </div>
                             ) : (

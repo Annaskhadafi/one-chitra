@@ -2,7 +2,8 @@ import { getProductPerformanceReport } from "@/app/actions/reports"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ReportKPIGrid, ExportButton } from "@/components/reports/report-components"
 import { ReportBarChart, ReportScatterChart, ReportTreemapChart } from "@/components/reports/report-charts"
-import { PackageOpen, TrendingUp, DollarSign, AlertCircle, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 
 export default async function ProductPerformanceReportPage() {
@@ -70,13 +71,24 @@ export default async function ProductPerformanceReportPage() {
                     </Link>
                 </div>
 
-                <div className="px-4 lg:px-6 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Product Performance Report</h1>
-                        <p className="text-muted-foreground">
-                            Analyze sales, profitability, and category performance
-                        </p>
-                    </div>
+                <div className="px-4 lg:px-6">
+                    <Card className="border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50 shadow-sm">
+                        <CardHeader className="gap-4">
+                            <div className="flex flex-wrap gap-2">
+                                <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Portfolio Focus</Badge>
+                                <Badge className="border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50">Margin Quality</Badge>
+                                <Badge className={`${avgMargin >= 15 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"} hover:bg-inherit`}>
+                                    Margin {avgMargin >= 15 ? "Healthy" : "Under Watch"}
+                                </Badge>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">Product Performance Intelligence</h1>
+                                <p className="text-slate-600">
+                                    Perspektif manajemen atas kontributor utama revenue, kualitas margin, dan area portofolio yang melemah.
+                                </p>
+                            </div>
+                        </CardHeader>
+                    </Card>
                 </div>
 
                 {/* KPI Cards */}
@@ -86,14 +98,14 @@ export default async function ProductPerformanceReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <ReportTreemapChart
                         data={treemapData}
-                        title="Category Performance"
-                        description="Revenue distribution by product category"
+                        title="Category Revenue Architecture"
+                        description="Sebaran pendapatan per kategori untuk membaca struktur portofolio dan titik pertumbuhan."
                         height={350}
                     />
                     <ReportScatterChart
                         data={scatterData}
-                        title="Product Profitability Analysis"
-                        description="Revenue vs. Profit Margin comparison"
+                        title="Product Profitability Landscape"
+                        description="Perbandingan revenue dan margin untuk membedakan champion produk dari volume yang kurang sehat."
                         height={350}
                         xAxisKey="revenue"
                         yAxisKey="margin"
@@ -106,8 +118,8 @@ export default async function ProductPerformanceReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:px-6">
                     <ReportBarChart
                         data={topProductsBarData}
-                        title="Top 10 Products by Revenue"
-                        description="Highest generating products"
+                        title="Top 10 Revenue-Driving Products"
+                        description="Produk yang paling kuat mendorong omzet aktual dan layak dipantau sebagai growth engine."
                         height={350}
                         colors={["hsl(142, 71%, 45%)"]}
                     />
@@ -115,12 +127,12 @@ export default async function ProductPerformanceReportPage() {
 
                 {/* Low Performers Table */}
                 <div className="px-4 lg:px-6 mb-6">
-                    <Card>
+                    <Card className="border-slate-200 bg-white shadow-sm">
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <CardTitle>Low Performing Products</CardTitle>
-                                    <CardDescription>Items with high stock and low recent sales movement</CardDescription>
+                                    <CardTitle>Low Performing Product Watchlist</CardTitle>
+                                    <CardDescription>Produk dengan stok tinggi namun kontribusi penjualan rendah yang berpotensi menahan modal kerja</CardDescription>
                                 </div>
                                 <ExportButton data={data.worstSellingProducts} filename="low-performers" format="csv" />
                             </div>
@@ -150,7 +162,7 @@ export default async function ProductPerformanceReportPage() {
                                         {data.worstSellingProducts.length === 0 && (
                                             <tr>
                                                 <td colSpan={5} className="py-8 text-center text-muted-foreground text-sm">
-                                                    No low performing products found.
+                                                    Tidak ada produk dengan tekanan performa yang menonjol pada periode ini.
                                                 </td>
                                             </tr>
                                         )}
@@ -166,8 +178,8 @@ export default async function ProductPerformanceReportPage() {
 }
 
 function formatCurrency(val: number): string {
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
+    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)} Miliar`
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)} Juta`
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
 }

@@ -1,8 +1,9 @@
 import { getWarehouseLogisticsReport } from "@/app/actions/reports"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ReportKPIGrid, ExportButton } from "@/components/reports/report-components"
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { ReportKPIGrid } from "@/components/reports/report-components"
 import { ReportBarChart, ReportPieChart, GaugeChart, SalesTrendChart } from "@/components/reports/report-charts"
-import { Warehouse, Truck, MapPin, DollarSign, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 
 export default async function WarehouseLogisticsReportPage() {
@@ -77,13 +78,24 @@ export default async function WarehouseLogisticsReportPage() {
                     </Link>
                 </div>
 
-                <div className="px-4 lg:px-6 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Warehouse & Logistics Report</h1>
-                        <p className="text-muted-foreground">
-                            Facility capacity, fleet performance, and shipping costs
-                        </p>
-                    </div>
+                <div className="px-4 lg:px-6">
+                    <Card className="border-slate-200 bg-gradient-to-br from-white via-slate-50 to-cyan-50 shadow-sm">
+                        <CardHeader className="gap-4">
+                            <div className="flex flex-wrap gap-2">
+                                <Badge className="border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-50">Network Control</Badge>
+                                <Badge className="border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">Cost Efficiency</Badge>
+                                <Badge className={`${onTimeRate >= 90 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"} hover:bg-inherit`}>
+                                    Service {onTimeRate >= 90 ? "Healthy" : "Under Watch"}
+                                </Badge>
+                            </div>
+                            <div>
+                                <CardTitle className="text-2xl tracking-tight">Warehouse & Logistics Intelligence</CardTitle>
+                                <CardDescription className="text-slate-600">
+                                    Ringkasan manajemen untuk membaca utilisasi fasilitas, disiplin distribusi, dan efisiensi biaya logistik.
+                                </CardDescription>
+                            </div>
+                        </CardHeader>
+                    </Card>
                 </div>
 
                 {/* KPI Cards */}
@@ -91,7 +103,7 @@ export default async function WarehouseLogisticsReportPage() {
 
                 {/* Warehouse Capacity Gauges */}
                 <div className="px-4 lg:px-6 mb-2">
-                    <h2 className="text-lg font-semibold tracking-tight mb-4">Warehouse Capacity Utilization</h2>
+                    <h2 className="text-lg font-semibold tracking-tight mb-4">Facility Utilization Snapshot</h2>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         {data.warehouseCapacity.slice(0, 4).map((w, i) => (
                             <GaugeChart
@@ -99,7 +111,7 @@ export default async function WarehouseLogisticsReportPage() {
                                 value={w.capacityUsed}
                                 max={w.capacityTotal}
                                 title={w.warehouseName}
-                                description="Current Utilization"
+                                description="Pemakaian kapasitas saat ini"
                                 label={`${w.utilizationRate.toFixed(1)}% Used`}
                             />
                         ))}
@@ -110,15 +122,15 @@ export default async function WarehouseLogisticsReportPage() {
                 <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
                     <ReportBarChart
                         data={transferFlowData}
-                        title="Stock Transfer Flow"
-                        description="Quantity transferred between facilities"
+                        title="Inter-Warehouse Transfer Flow"
+                        description="Arus perpindahan stok antar fasilitas untuk membaca pola distribusi internal."
                         height={350}
                         colors={["hsl(199, 89%, 48%)"]}
                     />
                     <ReportPieChart
                         data={deliveryDistData}
-                        title="Delivery Status Distribution"
-                        description="Current state of all deliveries"
+                        title="Delivery Volume Distribution"
+                        description="Sebaran volume delivery untuk membaca tekanan operasional dan ritme pengiriman."
                         height={350}
                         variant="donut"
                     />
@@ -129,15 +141,15 @@ export default async function WarehouseLogisticsReportPage() {
                     <div className="lg:col-span-2">
                         <SalesTrendChart
                             data={costTrendData}
-                            title="Shipping Cost Analysis"
-                            description="Monthly shipping cost trend"
+                            title="Shipping Cost Trend"
+                            description="Pergerakan biaya logistik untuk membaca efisiensi distribusi dari waktu ke waktu."
                             height={350}
                         />
                     </div>
                     <ReportBarChart
                         data={fleetData}
                         title="Fleet Utilization (%)"
-                        description="Vehicle operating efficiency"
+                        description="Efisiensi utilisasi armada sebagai indikator produktivitas aset distribusi."
                         height={350}
                         colors={["hsl(217, 91%, 60%)"]}
                     />
@@ -148,8 +160,8 @@ export default async function WarehouseLogisticsReportPage() {
 }
 
 function formatCurrency(val: number): string {
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)}B`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)}M`
+    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)} Miliar`
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1)} Juta`
     if (val >= 1_000) return `Rp ${(val / 1_000).toFixed(0)}K`
     return `Rp ${val.toLocaleString()}`
 }

@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react"
 import { Loader2, BarChart3 } from "lucide-react"
 
-import { getMonthlyScmReport, type MonthlyScmReportData } from "@/app/actions/reports"
+import { getMonthlyScmReport } from "@/app/actions/reports"
+import type { MonthlyScmReportData } from "@/app/dashboard/reports/types"
 import { ReportBarChart, ReportPieChart } from "@/components/reports/report-charts"
 import { ReportKPIGrid } from "@/components/reports/report-components"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"

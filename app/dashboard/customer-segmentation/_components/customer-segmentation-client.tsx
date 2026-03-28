@@ -51,7 +51,6 @@ import {
     flexRender,
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { cn } from "@/lib/utils"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { getFleetList } from "@/app/actions/fleet"
 import { useQuery } from "@tanstack/react-query"
@@ -91,15 +90,13 @@ interface Stats {
     pieData: Array<{ name: string; value: number; fill: string }>;
 }
 
-const COLORS = ['#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#64748b', '#f97316'];
-
 export function CustomerSegmentationClient() {
     const [rawData, setRawData] = useState<CustomerRFMAggregate[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSegment, setFilterSegment] = useState('All');
     const [loading, setLoading] = useState(true);
-    const [startDate, setStartDate] = useState('2025-01-01');
-    const [endDate, setEndDate] = useState('2025-12-31');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
     const [selectedFleetData, setSelectedFleetData] = useState<FleetItem[]>([]);
@@ -126,7 +123,12 @@ export function CustomerSegmentationClient() {
         const initializeDates = async () => {
             const result = await getMaxBillingDate();
             if (result.success && result.maxDate) {
+                const latest = new Date(result.maxDate);
+                const rollingStart = new Date(latest);
+                rollingStart.setMonth(rollingStart.getMonth() - 11);
+                rollingStart.setDate(1);
                 setEndDate(result.maxDate);
+                setStartDate(rollingStart.toISOString().split('T')[0]);
             }
             setIsInitialized(true);
         };
@@ -134,7 +136,7 @@ export function CustomerSegmentationClient() {
     }, []);
 
     const fetchData = useCallback(async () => {
-        if (!isInitialized) return;
+        if (!isInitialized || !startDate || !endDate) return;
 
         setLoading(true);
         setLoadingProgress(10);
@@ -263,7 +265,7 @@ export function CustomerSegmentationClient() {
             ignoreLocation: true,
             findAllMatches: true,
             minMatchCharLength: 3,
-            getFn: (obj, path) => {
+            getFn: (obj, _path) => {
                 const value = obj.customer
                 return normalizeCustomerName(value || '')
             }
