@@ -196,6 +196,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/inventory-ml",
                         resource: "inventory",
                     },
+                    {
+                        title: "Vendor Delivery Setup",
+                        url: "/dashboard/inventory-ml/vendors",
+                        resource: "inventory",
+                    },
                 ],
             },
             {

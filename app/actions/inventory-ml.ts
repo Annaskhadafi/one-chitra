@@ -2,9 +2,10 @@
 
 import { db } from "@/db"
 import { aiInventoryPredictions, aiSettings, restockNotifications } from "@/db/schema/ai-predictions"
+import { inventoryVendorLeadTimeMaterials, inventoryVendorLeadTimes } from "@/db/schema/inventory-vendors"
 import { me2lPurchDocsSap, salesRevenueSap, zmc9StockSap } from "@/db/schema/sap"
 import { historyOrders } from "@/db/schema/history-orders"
-import { eq, sql, desc, and, ilike, or, gte, lte, lt, gt, inArray } from "drizzle-orm"
+import { eq, sql, desc, and, ilike, or, gte, lte, lt, gt, inArray, asc } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { getFleetList } from "./fleet"
 import { revalidatePath } from "next/cache"
@@ -44,6 +45,8 @@ type HistoricalMonthlyPoint = {
 
 export interface SafetyStockAnalyticsParams {
     recommendedSafetyStock?: number | null
+    selectedVendorName?: string | null
+    customLeadTimeDays?: number | null
 }
 
 export interface SafetyStockChartPoint {
@@ -106,6 +109,9 @@ export interface SafetyStockAnalytics {
         usedFallback: boolean
         bufferIncrease: number
         insight: string
+        source: "manual_input" | "vendor_master" | "historical" | "fallback"
+        sourceLabel: string
+        selectedVendorName: string | null
         vendors: Array<{
             name: string
             averageDays: number
@@ -119,6 +125,20 @@ export interface SafetyStockAnalytics {
         confidenceNote: string
         seasonalityNote: string
     }
+    planning: {
+        stockoutRiskScore: number
+        stockoutRiskLabel: "Low" | "Medium" | "High" | "Critical"
+        urgencyScore: number
+        urgencyLabel: "Monitor" | "Review" | "Order Soon" | "Order Now"
+        recommendedOrderQty: number
+        targetMaxStock: number
+        suggestedReviewDays: number | null
+        nextReviewDate: string | null
+        demandPattern: "Stable" | "Fluktuatif" | "Intermittent" | "Musiman"
+        seasonalityIndex: number
+        vendorDependencyPct: number
+        vendorDependencyLabel: "Tersebar" | "Sedang" | "Tinggi"
+    }
     scenarios: {
         defaultServiceLevel: number
         options: SafetyStockScenarioOption[]
@@ -126,6 +146,16 @@ export interface SafetyStockAnalytics {
     }
     chart: SafetyStockChartPoint[]
     history: HistoricalMonthlyPoint[]
+}
+
+export interface InventoryPlanningAdvisor {
+    summary: string
+    priority: "Low" | "Medium" | "High" | "Critical"
+    actions: Array<{
+        title: string
+        detail: string
+    }>
+    watchouts: string[]
 }
 
 export interface SalesRevenueHistoryDetailItem {
@@ -170,6 +200,7 @@ const standardDeviation = (values: number[]) => {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+const formatIsoDate = (date: Date) => date.toISOString().slice(0, 10)
 
 const getZScore = (serviceLevel: number) => {
     if (SERVICE_LEVEL_Z_SCORES[serviceLevel]) {
@@ -224,6 +255,12 @@ const toDateString = (date: Date) => {
         String(date.getMonth() + 1).padStart(2, "0"),
         String(date.getDate()).padStart(2, "0"),
     ].join("-")
+}
+
+const addDaysToDate = (date: Date, days: number) => {
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + days)
+    return nextDate
 }
 
 const serializeDateValue = (value: string | Date | null | undefined) => {
@@ -1485,8 +1522,28 @@ export async function getSafetyStockAnalytics(
                 )
             )
 
+        const customVendorRows = await db
+            .select({
+                vendorName: inventoryVendorLeadTimes.vendorName,
+                leadTimeDays: inventoryVendorLeadTimeMaterials.leadTimeDays,
+                isPreferred: inventoryVendorLeadTimeMaterials.isPreferred,
+            })
+            .from(inventoryVendorLeadTimeMaterials)
+            .innerJoin(
+                inventoryVendorLeadTimes,
+                eq(inventoryVendorLeadTimes.id, inventoryVendorLeadTimeMaterials.vendorId),
+            )
+            .where(
+                and(
+                    eq(inventoryVendorLeadTimeMaterials.materialNo, canonicalMaterialNo),
+                    eq(inventoryVendorLeadTimes.isActive, true),
+                ),
+            )
+            .orderBy(desc(inventoryVendorLeadTimeMaterials.isPreferred), asc(inventoryVendorLeadTimes.vendorName))
+
         const leadTimeSamples: number[] = []
         const vendorPerformance = new Map<string, { totalDays: number; sampleSize: number; orderedQty: number }>()
+        const vendorLeadTimeSamples = new Map<string, number[]>()
 
         purchaseRows.forEach((row) => {
             const docDate = parseHistoryOrderDate(row.docDate)
@@ -1504,6 +1561,10 @@ export async function getSafetyStockAnalytics(
             leadTimeSamples.push(leadTimeDays)
 
             const vendorName = row.vendorName?.trim() || "Vendor tidak diketahui"
+            const vendorSamples = vendorLeadTimeSamples.get(vendorName) || []
+            vendorSamples.push(leadTimeDays)
+            vendorLeadTimeSamples.set(vendorName, vendorSamples)
+
             const currentVendor = vendorPerformance.get(vendorName) || {
                 totalDays: 0,
                 sampleSize: 0,
@@ -1516,19 +1577,81 @@ export async function getSafetyStockAnalytics(
             vendorPerformance.set(vendorName, currentVendor)
         })
 
+        const normalizedSelectedVendor = params?.selectedVendorName?.trim() || null
+        const normalizedCustomLeadTime = params?.customLeadTimeDays && params.customLeadTimeDays > 0
+            ? Number(params.customLeadTimeDays)
+            : null
+        const preferredVendorConfig = customVendorRows[0] || null
+        const selectedVendorConfig = normalizedSelectedVendor
+            ? customVendorRows.find((row) => row.vendorName.trim().toLowerCase() === normalizedSelectedVendor.toLowerCase()) || null
+            : null
+        const appliedVendorConfig = selectedVendorConfig || preferredVendorConfig
+        const appliedVendorName = normalizedSelectedVendor || appliedVendorConfig?.vendorName || null
+        const selectedVendorSamples = appliedVendorName ? vendorLeadTimeSamples.get(appliedVendorName) || [] : []
+
         const hasLeadTimeHistory = leadTimeSamples.length > 0
-        const leadTimeAverage = Number((hasLeadTimeHistory ? average(leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS).toFixed(2))
-        const leadTimeStdDev = Number((hasLeadTimeHistory ? standardDeviation(leadTimeSamples) : 0).toFixed(2))
-        const leadTimeMin = hasLeadTimeHistory ? Math.min(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
-        const leadTimeMax = hasLeadTimeHistory ? Math.max(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
-        const onTimeThreshold = leadTimeAverage + Math.max(leadTimeStdDev, 2)
-        const onTimeRate = hasLeadTimeHistory
-            ? Number(((leadTimeSamples.filter((days) => days <= onTimeThreshold).length / leadTimeSamples.length) * 100).toFixed(1))
-            : 0
+        const hasSelectedVendorHistory = selectedVendorSamples.length > 0
+
+        let appliedLeadTimeSource: SafetyStockAnalytics["leadTime"]["source"] = "fallback"
+        let appliedLeadTimeAverage = hasLeadTimeHistory ? average(leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
+        let appliedLeadTimeStdDev = hasLeadTimeHistory ? standardDeviation(leadTimeSamples) : 0
+        let appliedLeadTimeMin = hasLeadTimeHistory ? Math.min(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
+        let appliedLeadTimeMax = hasLeadTimeHistory ? Math.max(...leadTimeSamples) : DEFAULT_LEAD_TIME_DAYS
+        let appliedSampleSize = leadTimeSamples.length
+        let appliedOnTimeRate = 0
+        let leadTimeStatus: SafetyStockAnalytics["leadTime"]["status"] = "Stable"
+        let leadTimeSourceLabel = "Histori PO/GR"
+
+        if (!hasLeadTimeHistory) {
+            appliedLeadTimeSource = "fallback"
+            appliedLeadTimeAverage = DEFAULT_LEAD_TIME_DAYS
+            appliedLeadTimeStdDev = 0
+            appliedLeadTimeMin = DEFAULT_LEAD_TIME_DAYS
+            appliedLeadTimeMax = DEFAULT_LEAD_TIME_DAYS
+            appliedSampleSize = 0
+            appliedOnTimeRate = 0
+            leadTimeStatus = "Perlu Perhatian"
+            leadTimeSourceLabel = "Fallback default"
+        }
+
+        if (normalizedCustomLeadTime !== null) {
+            appliedLeadTimeSource = "manual_input"
+            appliedLeadTimeAverage = normalizedCustomLeadTime
+            appliedLeadTimeStdDev = 0
+            appliedLeadTimeMin = normalizedCustomLeadTime
+            appliedLeadTimeMax = normalizedCustomLeadTime
+            appliedSampleSize = 1
+            appliedOnTimeRate = 100
+            leadTimeStatus = "Stable"
+            leadTimeSourceLabel = "Input manual"
+        } else if (appliedVendorConfig) {
+            appliedLeadTimeSource = "vendor_master"
+            appliedLeadTimeAverage = appliedVendorConfig.leadTimeDays
+            appliedLeadTimeStdDev = 0
+            appliedLeadTimeMin = appliedVendorConfig.leadTimeDays
+            appliedLeadTimeMax = appliedVendorConfig.leadTimeDays
+            appliedSampleSize = hasSelectedVendorHistory ? selectedVendorSamples.length : 1
+            appliedOnTimeRate = hasSelectedVendorHistory ? 100 : 100
+            leadTimeStatus = "Stable"
+            leadTimeSourceLabel = "Master vendor delivery"
+        } else if (hasLeadTimeHistory) {
+            appliedLeadTimeSource = "historical"
+            leadTimeSourceLabel = "Histori PO/GR"
+        }
+
+        const onTimeThreshold = appliedLeadTimeAverage + Math.max(appliedLeadTimeStdDev, 2)
+        if (appliedLeadTimeSource === "historical") {
+            appliedOnTimeRate = Number(((leadTimeSamples.filter((days) => days <= onTimeThreshold).length / leadTimeSamples.length) * 100).toFixed(1))
+        }
+
+        const leadTimeAverage = Number(appliedLeadTimeAverage.toFixed(2))
+        const leadTimeStdDev = Number(appliedLeadTimeStdDev.toFixed(2))
+        const leadTimeMin = appliedLeadTimeMin
+        const leadTimeMax = appliedLeadTimeMax
+        const onTimeRate = appliedOnTimeRate
         const leadTimeBuffer = Math.ceil(avgDailyDemand * leadTimeStdDev)
 
-        let leadTimeStatus: SafetyStockAnalytics["leadTime"]["status"] = "Stable"
-        if (!hasLeadTimeHistory) {
+        if (appliedLeadTimeSource === "historical" && !hasLeadTimeHistory) {
             leadTimeStatus = "Perlu Perhatian"
         } else if (leadTimeStdDev >= 6 || onTimeRate < 65) {
             leadTimeStatus = "Volatile"
@@ -1638,17 +1761,43 @@ export async function getSafetyStockAnalytics(
             ...forecastPoints,
         ]
 
-        const vendorBreakdown = Array.from(vendorPerformance.entries())
-            .map(([name, values]) => ({
-                name,
-                averageDays: Number((values.totalDays / Math.max(values.sampleSize, 1)).toFixed(1)),
-                sampleSize: values.sampleSize,
-                orderedQty: Number(values.orderedQty.toFixed(0)),
-            }))
-            .sort((left, right) => right.orderedQty - left.orderedQty)
+        const vendorBreakdownMap = new Map(
+            Array.from(vendorPerformance.entries())
+                .map(([name, values]) => ([
+                    name,
+                    {
+                        name,
+                        averageDays: Number((values.totalDays / Math.max(values.sampleSize, 1)).toFixed(1)),
+                        sampleSize: values.sampleSize,
+                        orderedQty: Number(values.orderedQty.toFixed(0)),
+                    },
+                ])),
+        )
+
+        customVendorRows.forEach((row) => {
+            if (!vendorBreakdownMap.has(row.vendorName)) {
+                vendorBreakdownMap.set(row.vendorName, {
+                    name: row.vendorName,
+                    averageDays: row.leadTimeDays,
+                    sampleSize: 0,
+                    orderedQty: 0,
+                })
+            }
+        })
+
+        const vendorBreakdown = Array.from(vendorBreakdownMap.values())
+            .sort((left, right) => {
+                if (left.name === appliedVendorName) return -1
+                if (right.name === appliedVendorName) return 1
+                return right.orderedQty - left.orderedQty
+            })
             .slice(0, 3)
 
-        const leadTimeInsight = !hasLeadTimeHistory
+        const leadTimeInsight = normalizedCustomLeadTime !== null
+            ? `Lead time memakai input manual ${leadTimeAverage.toFixed(1)} hari${appliedVendorName ? ` untuk vendor ${appliedVendorName}` : ""}.`
+            : appliedLeadTimeSource === "vendor_master"
+                ? `Lead time memakai master vendor ${appliedVendorName || "terpilih"} sebesar ${leadTimeAverage.toFixed(1)} hari agar ROP lebih presisi.`
+                : !hasLeadTimeHistory
             ? `Belum ada histori penerimaan vendor, jadi lead time memakai fallback ${DEFAULT_LEAD_TIME_DAYS} hari.`
             : leadTimeStatus === "Volatile"
                 ? `Lead time sering molor dengan deviasi ${leadTimeStdDev.toFixed(1)} hari. Tambahkan buffer ${leadTimeBuffer} unit di safety stock.`
@@ -1661,6 +1810,85 @@ export async function getSafetyStockAnalytics(
         const seasonalityNote = seasonalityRatio >= 1.35
             ? "Ada puncak musiman yang cukup jelas, jadi stok perlu dipantau saat bulan peak demand mendekat."
             : "Pola demand cenderung datar, belum terlihat lonjakan musiman yang tajam."
+
+        const zeroDemandMonths = recentTwelveMonths.filter((value) => value === 0).length
+        const variabilityRatio = avgMonthlyDemand > 0 ? demandStdDevMonthly / avgMonthlyDemand : 0
+        const demandPattern: SafetyStockAnalytics["planning"]["demandPattern"] = zeroDemandMonths >= 5
+            ? "Intermittent"
+            : seasonalityRatio >= 1.35
+                ? "Musiman"
+                : variabilityRatio >= 0.75
+                    ? "Fluktuatif"
+                    : "Stable"
+
+        const totalTrackedVendorQty = Array.from(vendorPerformance.values()).reduce((sum, item) => sum + item.orderedQty, 0)
+        const preferredVendorShare = totalTrackedVendorQty > 0
+            ? ((vendorBreakdown[0]?.orderedQty || 0) / totalTrackedVendorQty) * 100
+            : appliedVendorName
+                ? 100
+                : 0
+        const vendorDependencyPct = Number(preferredVendorShare.toFixed(1))
+        const vendorDependencyLabel: SafetyStockAnalytics["planning"]["vendorDependencyLabel"] = vendorDependencyPct >= 75
+            ? "Tinggi"
+            : vendorDependencyPct >= 45
+                ? "Sedang"
+                : "Tersebar"
+
+        const stockPositionRatio = reorderPoint > 0 ? currentStock / reorderPoint : 1
+        const coverVsLeadTime = leadTimeAverage > 0 && daysOfCover !== null ? daysOfCover / leadTimeAverage : 1
+        const stockoutRiskBase = (
+            (stockPositionRatio < 1 ? (1 - stockPositionRatio) * 55 : 0) +
+            clamp(variabilityRatio, 0, 1.4) * 20 +
+            clamp(leadTimeStdDev / 7, 0, 1.4) * 15 +
+            (coverVsLeadTime < 1 ? (1 - coverVsLeadTime) * 25 : 0)
+        )
+        const stockoutRiskScore = Math.round(clamp(stockoutRiskBase, 0, 100))
+        const stockoutRiskLabel: SafetyStockAnalytics["planning"]["stockoutRiskLabel"] = stockoutRiskScore >= 80
+            ? "Critical"
+            : stockoutRiskScore >= 60
+                ? "High"
+                : stockoutRiskScore >= 35
+                    ? "Medium"
+                    : "Low"
+
+        const urgencyScore = Math.round(clamp(
+            stockoutRiskScore +
+            (daysUntilReorder === null
+                ? 0
+                : daysUntilReorder <= 0
+                    ? 25
+                    : daysUntilReorder <= 7
+                        ? 18
+                        : daysUntilReorder <= 14
+                            ? 10
+                            : 0),
+            0,
+            100,
+        ))
+        const urgencyLabel: SafetyStockAnalytics["planning"]["urgencyLabel"] = urgencyScore >= 85
+            ? "Order Now"
+            : urgencyScore >= 65
+                ? "Order Soon"
+                : urgencyScore >= 40
+                    ? "Review"
+                    : "Monitor"
+
+        const reviewCycleDays = demandPattern === "Musiman"
+            ? 10
+            : demandPattern === "Fluktuatif"
+                ? 14
+                : demandPattern === "Intermittent"
+                    ? 21
+                    : 30
+        const targetMaxStock = Math.max(
+            dynamicSafetyStock,
+            Math.ceil(dynamicSafetyStock + (avgDailyDemand * Math.max(leadTimeAverage + reviewCycleDays, 30))),
+        )
+        const recommendedOrderQty = Math.max(0, Math.ceil(targetMaxStock - currentStock))
+        const suggestedReviewDays = daysUntilReorder === null
+            ? null
+            : Math.max(3, Math.min(reviewCycleDays, Math.max(1, daysUntilReorder)))
+        const nextReviewDate = suggestedReviewDays === null ? null : formatIsoDate(addDaysToDate(new Date(), suggestedReviewDays))
 
         const scenarioOptions: SafetyStockScenarioOption[] = [90, 95, 99].map((serviceLevel) => {
             const zScore = getZScore(serviceLevel)
@@ -1713,12 +1941,15 @@ export async function getSafetyStockAnalytics(
                 stdDevDays: leadTimeStdDev,
                 minDays: leadTimeMin,
                 maxDays: leadTimeMax,
-                sampleSize: leadTimeSamples.length,
+                sampleSize: appliedSampleSize,
                 onTimeRate,
                 status: leadTimeStatus,
-                usedFallback: !hasLeadTimeHistory,
+                usedFallback: appliedLeadTimeSource === "fallback",
                 bufferIncrease: leadTimeBuffer,
                 insight: leadTimeInsight,
+                source: appliedLeadTimeSource,
+                sourceLabel: leadTimeSourceLabel,
+                selectedVendorName: appliedVendorName,
                 vendors: vendorBreakdown,
             },
             forecast: {
@@ -1726,6 +1957,20 @@ export async function getSafetyStockAnalytics(
                 nextQuarterDemand: forecastPoints.slice(0, 3).reduce((sum, point) => sum + (point.predictedDemand || 0), 0),
                 confidenceNote: buildConfidenceNote(demandStdDevMonthly, avgMonthlyDemand),
                 seasonalityNote,
+            },
+            planning: {
+                stockoutRiskScore,
+                stockoutRiskLabel,
+                urgencyScore,
+                urgencyLabel,
+                recommendedOrderQty,
+                targetMaxStock,
+                suggestedReviewDays,
+                nextReviewDate,
+                demandPattern,
+                seasonalityIndex: Number(seasonalityRatio.toFixed(2)),
+                vendorDependencyPct,
+                vendorDependencyLabel,
             },
             scenarios: {
                 defaultServiceLevel: 95,
@@ -1745,6 +1990,152 @@ export async function getSafetyStockAnalytics(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to generate safety stock analytics",
+        }
+    }
+}
+
+async function callInventoryAdvisorOllama(prompt: string) {
+    const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
+    const baseUrl = rawUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
+    const ollamaModel = process.env.OLLAMA_MODEL || "qwen3.5:397b-cloud"
+    const ollamaApiKey = process.env.OLLAMA_API_KEY || ""
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(ollamaApiKey ? { Authorization: `Bearer ${ollamaApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+            model: ollamaModel,
+            messages: [
+                {
+                    role: "system",
+                    content: "Anda adalah inventory planning advisor. Jawab HANYA dengan JSON valid tanpa markdown.",
+                },
+                {
+                    role: "user",
+                    content: prompt,
+                },
+            ],
+            stream: false,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Ollama request failed: ${response.status} ${errorText}`)
+    }
+
+    const data = await response.json()
+    return String(data.message?.content || "").trim()
+}
+
+export async function getInventoryPlanningAdvisor(
+    materialNo: string,
+    params?: SafetyStockAnalyticsParams,
+): Promise<{ success: true; data: InventoryPlanningAdvisor } | { success: false; error: string; data?: InventoryPlanningAdvisor }> {
+    try {
+        await getAuthenticatedSession("inventory", "view")
+
+        const analyticsResponse = await getSafetyStockAnalytics(materialNo, params)
+        if (!analyticsResponse.success || !analyticsResponse.data) {
+            return { success: false, error: analyticsResponse.error || "Analytics tidak tersedia." }
+        }
+
+        const analytics = analyticsResponse.data
+        const fallbackAdvisor: InventoryPlanningAdvisor = {
+            summary: analytics.planning.urgencyLabel === "Order Now"
+                ? "Stok sudah menekan titik aman. PO sebaiknya diproses segera agar tidak terlambat saat lead time berjalan."
+                : analytics.planning.urgencyLabel === "Order Soon"
+                    ? "Stok masih aman untuk jangka sangat pendek, tetapi review dan persiapan PO perlu dipercepat."
+                    : "Stok relatif terkendali. Fokus pada review berkala, disiplin vendor, dan pola demand ke depan.",
+            priority: analytics.planning.stockoutRiskLabel,
+            actions: [
+                {
+                    title: "Qty order yang disarankan",
+                    detail: `Pertimbangkan replenishment sekitar ${Math.max(analytics.planning.recommendedOrderQty, 0)} qty untuk kembali ke target stok ${analytics.planning.targetMaxStock} qty.`,
+                },
+                {
+                    title: "Jadwal review berikutnya",
+                    detail: analytics.planning.nextReviewDate
+                        ? `Lakukan review ulang paling lambat ${analytics.planning.nextReviewDate}.`
+                        : "Demand belum cukup aktif, jadi review dapat dilakukan manual sesuai kebutuhan.",
+                },
+                {
+                    title: "Fokus risiko utama",
+                    detail: `Pattern demand ${analytics.planning.demandPattern.toLowerCase()} dengan risiko stockout ${analytics.planning.stockoutRiskLabel.toLowerCase()} dan dependensi vendor ${analytics.planning.vendorDependencyLabel.toLowerCase()}.`,
+                },
+            ],
+            watchouts: [
+                analytics.leadTime.insight,
+                analytics.forecast.confidenceNote,
+                analytics.forecast.seasonalityNote,
+            ],
+        }
+
+        try {
+            const prompt = `Susun rekomendasi inventory dalam JSON dengan schema:
+{
+  "summary": "string",
+  "priority": "Low|Medium|High|Critical",
+  "actions": [{"title":"string","detail":"string"}],
+  "watchouts": ["string"]
+}
+
+Data material:
+- Material: ${analytics.materialNo} - ${analytics.materialDesc}
+- Current stock: ${analytics.currentStock}
+- Dynamic safety stock: ${analytics.dynamicSafetyStock}
+- Reorder point: ${analytics.reorderPoint}
+- Avg daily demand: ${analytics.avgDailyDemand}
+- Avg monthly demand: ${analytics.avgMonthlyDemand}
+- Lead time: ${analytics.leadTime.averageDays} hari (${analytics.leadTime.sourceLabel})
+- Vendor aktif: ${analytics.leadTime.selectedVendorName || "histori umum"}
+- Stockout risk: ${analytics.planning.stockoutRiskScore}/100 (${analytics.planning.stockoutRiskLabel})
+- Urgency: ${analytics.planning.urgencyScore}/100 (${analytics.planning.urgencyLabel})
+- Demand pattern: ${analytics.planning.demandPattern}
+- Recommended order qty: ${analytics.planning.recommendedOrderQty}
+- Next review date: ${analytics.planning.nextReviewDate || "-"}
+- Forecast next month: ${analytics.forecast.nextMonthDemand}
+- Forecast next quarter: ${analytics.forecast.nextQuarterDemand}
+
+Aturan:
+- Gunakan Bahasa Indonesia bisnis yang singkat dan jelas.
+- Maksimal 3 action dan 3 watchouts.
+- Action harus operasional, bukan teori.
+- Jangan menyebut asumsi palsu di luar data.
+- Priority harus mengikuti tingkat risiko aktual.`
+
+            const raw = await callInventoryAdvisorOllama(prompt)
+            const openBrace = raw.indexOf("{")
+            const closeBrace = raw.lastIndexOf("}")
+            const jsonText = openBrace >= 0 && closeBrace > openBrace ? raw.slice(openBrace, closeBrace + 1) : raw
+            const parsed = JSON.parse(jsonText) as InventoryPlanningAdvisor
+
+            return {
+                success: true,
+                data: {
+                    summary: parsed.summary || fallbackAdvisor.summary,
+                    priority: parsed.priority || fallbackAdvisor.priority,
+                    actions: Array.isArray(parsed.actions) && parsed.actions.length > 0 ? parsed.actions.slice(0, 3) : fallbackAdvisor.actions,
+                    watchouts: Array.isArray(parsed.watchouts) && parsed.watchouts.length > 0 ? parsed.watchouts.slice(0, 3) : fallbackAdvisor.watchouts,
+                },
+            }
+        } catch (error) {
+            console.error("Inventory advisor Ollama fallback:", error)
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : "Gagal memproses advisor AI.",
+                data: fallbackAdvisor,
+            }
+        }
+    } catch (error) {
+        console.error("Failed to build inventory advisor:", error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Gagal membuat advisor inventory.",
         }
     }
 }

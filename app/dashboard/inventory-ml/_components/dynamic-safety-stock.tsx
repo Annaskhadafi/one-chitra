@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import {
@@ -27,13 +28,16 @@ import { toast } from "sonner"
 
 import {
     generateAIPrediction,
+    getInventoryPlanningAdvisor,
     getLatestSafetyStockPredictionByMaterial,
     getMaterialSalesRevenueHistory,
     getRecentPredictions,
     getSafetyStockAnalytics,
+    type InventoryPlanningAdvisor,
     type SalesRevenueHistoryYearGroup,
     type SafetyStockAnalytics,
 } from "@/app/actions/inventory-ml"
+import { getMaterialVendorReference, type MaterialVendorReference } from "@/app/actions/inventory-vendors"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +47,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { MaterialCombobox } from "./material-combobox"
 import { SafetyStockInsightsChart } from "./safety-stock-insights-chart"
@@ -251,10 +256,43 @@ export function DynamicSafetyStock() {
     const [activeHistoryId, setActiveHistoryId] = useState<number | null>(null)
     const [serviceLevel, setServiceLevel] = useState<(typeof serviceLevelOptions)[number]>("95")
     const [suddenOrderQty, setSuddenOrderQty] = useState(100)
+    const [vendorReference, setVendorReference] = useState<MaterialVendorReference | null>(null)
+    const [isLoadingVendorReference, setIsLoadingVendorReference] = useState(false)
+    const [vendorName, setVendorName] = useState("")
+    const [deliveryTimeInput, setDeliveryTimeInput] = useState("")
+    const [advisor, setAdvisor] = useState<InventoryPlanningAdvisor | null>(null)
+    const [isLoadingAdvisor, setIsLoadingAdvisor] = useState(false)
 
     useEffect(() => {
         loadHistory()
     }, [])
+
+    useEffect(() => {
+        const normalizedMaterial = productCode.trim()
+        if (!normalizedMaterial) {
+            setVendorReference(null)
+            return
+        }
+
+        const loadVendorReference = async () => {
+            setIsLoadingVendorReference(true)
+            const response = await getMaterialVendorReference(normalizedMaterial)
+            if (response.success && response.data) {
+                setVendorReference(response.data)
+                setVendorName(response.data.defaultVendorName || "")
+                setDeliveryTimeInput(
+                    response.data.defaultLeadTimeDays !== null && response.data.defaultLeadTimeDays !== undefined
+                        ? String(response.data.defaultLeadTimeDays)
+                        : "",
+                )
+            } else {
+                setVendorReference(null)
+            }
+            setIsLoadingVendorReference(false)
+        }
+
+        void loadVendorReference()
+    }, [productCode])
 
     const loadHistory = async () => {
         const response = await getRecentPredictions()
@@ -276,6 +314,8 @@ export function DynamicSafetyStock() {
         prediction: SafetyStockPredictionResult,
         options?: {
             preserveActiveYear?: boolean
+            vendorName?: string
+            customLeadTimeDays?: number | null
         }
     ) => {
         try {
@@ -286,6 +326,7 @@ export function DynamicSafetyStock() {
             )
             setAnalytics(null)
             setSalesHistoryGroups([])
+            setAdvisor(null)
             if (!options?.preserveActiveYear) {
                 setExpandedSalesYears([])
             }
@@ -295,6 +336,8 @@ export function DynamicSafetyStock() {
             const [analyticsResponse, salesHistoryResponse] = await Promise.all([
                 getSafetyStockAnalytics(prediction.productCode, {
                     recommendedSafetyStock: prediction.recommendedStock,
+                    selectedVendorName: options?.vendorName || null,
+                    customLeadTimeDays: options?.customLeadTimeDays ?? null,
                 }),
                 getMaterialSalesRevenueHistory(prediction.productCode),
             ])
@@ -331,6 +374,34 @@ export function DynamicSafetyStock() {
         }
     }
 
+    const loadAdvisor = async (
+        materialNumber: string,
+        options?: {
+            vendorName?: string
+            customLeadTimeDays?: number | null
+        }
+    ) => {
+        setIsLoadingAdvisor(true)
+        try {
+            const response = await getInventoryPlanningAdvisor(materialNumber, {
+                selectedVendorName: options?.vendorName || null,
+                customLeadTimeDays: options?.customLeadTimeDays ?? null,
+            })
+
+            if (response.data) {
+                setAdvisor(response.data)
+            } else {
+                setAdvisor(null)
+            }
+
+            if (!response.success && !response.data) {
+                toast.error(response.error || "Advisor AI gagal dimuat")
+            }
+        } finally {
+            setIsLoadingAdvisor(false)
+        }
+    }
+
     const handleSelectHistory = async (item: PredictionHistoryItem) => {
         setActiveHistoryId(item.id)
 
@@ -344,8 +415,16 @@ export function DynamicSafetyStock() {
                     rationale: item.rationale,
                     createdAt: item.createdAt,
                 },
-                { preserveActiveYear: false }
+                {
+                    preserveActiveYear: false,
+                    vendorName: vendorName.trim() || undefined,
+                    customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+                }
             )
+            await loadAdvisor(item.productCode, {
+                vendorName: vendorName.trim() || undefined,
+                customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+            })
             toast.success(`History ${item.productCode} berhasil ditampilkan`)
         } catch (error) {
             const message = error instanceof Error ? error.message : "Gagal membuka history analisa"
@@ -397,8 +476,15 @@ export function DynamicSafetyStock() {
                 toast.success("Analisis Safety Stock berhasil dibuat")
             }
 
-            await loadPredictionDetails(nextResult, { preserveActiveYear: false })
-
+            await loadPredictionDetails(nextResult, {
+                preserveActiveYear: false,
+                vendorName: vendorName.trim() || undefined,
+                customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+            })
+            await loadAdvisor(nextResult.productCode, {
+                vendorName: vendorName.trim() || undefined,
+                customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+            })
             await loadHistory()
         } catch (error) {
             const message = error instanceof Error ? error.message : "Terjadi kesalahan"
@@ -410,6 +496,24 @@ export function DynamicSafetyStock() {
 
     const handleGenerate = async () => {
         await runSafetyStockCalculation(productCode)
+    }
+
+    const handleApplyVendorLeadTime = async () => {
+        if (!result) {
+            toast.error("Silakan hitung safety stock terlebih dahulu")
+            return
+        }
+
+        await loadPredictionDetails(result, {
+            preserveActiveYear: true,
+            vendorName: vendorName.trim() || undefined,
+            customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+        })
+        await loadAdvisor(result.productCode, {
+            vendorName: vendorName.trim() || undefined,
+            customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+        })
+        toast.success("ROP dan lead time berhasil diperbarui")
     }
 
     // This hydration should only react to URL query changes.
@@ -444,8 +548,16 @@ export function DynamicSafetyStock() {
                         currentStock: latestPrediction.data.currentStock,
                         createdAt: latestPrediction.data.createdAt,
                     },
-                    { preserveActiveYear: false }
+                    {
+                        preserveActiveYear: false,
+                        vendorName: vendorName.trim() || undefined,
+                        customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+                    }
                 )
+                await loadAdvisor(latestPrediction.data.productCode, {
+                    vendorName: vendorName.trim() || undefined,
+                    customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+                })
                 await loadHistory()
                 return
             }
@@ -575,6 +687,59 @@ export function DynamicSafetyStock() {
                             <MaterialCombobox value={productCode} onChange={setProductCode} />
                         </div>
 
+                        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Label htmlFor="vendor-name">Vendor</Label>
+                                    <Button asChild variant="link" className="h-auto p-0 text-sky-700">
+                                        <Link href="/dashboard/inventory-ml/vendors">Kelola Vendor Delivery</Link>
+                                    </Button>
+                                </div>
+                                <Input
+                                    id="vendor-name"
+                                    value={vendorName}
+                                    onChange={(event) => setVendorName(event.target.value)}
+                                    placeholder="Masukkan nama vendor"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                    {vendorReference?.vendors.slice(0, 4).map((vendor) => (
+                                        <Button
+                                            key={`${vendor.vendorName}-${vendor.source}`}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                setVendorName(vendor.vendorName)
+                                                setDeliveryTimeInput(vendor.leadTimeDays ? String(vendor.leadTimeDays) : "")
+                                            }}
+                                            className="h-8"
+                                        >
+                                            {vendor.vendorName}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="delivery-time">Delivery Time (hari)</Label>
+                                <Input
+                                    id="delivery-time"
+                                    type="number"
+                                    min={1}
+                                    value={deliveryTimeInput}
+                                    onChange={(event) => setDeliveryTimeInput(event.target.value)}
+                                    placeholder="21"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {isLoadingVendorReference
+                                        ? "Memuat referensi vendor..."
+                                        : vendorReference?.defaultVendorName
+                                            ? `Default dari master: ${vendorReference.defaultVendorName} • ${vendorReference.defaultLeadTimeDays ?? "-"} hari`
+                                            : "Bisa diisi manual atau dipilih dari master vendor."}
+                                </p>
+                            </div>
+                        </div>
+
                         <div className="flex flex-col gap-3 sm:flex-row">
                             <Button
                                 onClick={handleGenerate}
@@ -608,6 +773,15 @@ export function DynamicSafetyStock() {
                                         Save PDF Report
                                     </>
                                 )}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleApplyVendorLeadTime}
+                                disabled={!result || isLoadingInsights}
+                                className="border-sky-200 text-sky-700 hover:bg-sky-50"
+                            >
+                                Terapkan Vendor & Delivery
                             </Button>
                         </div>
 
@@ -1072,6 +1246,25 @@ export function DynamicSafetyStock() {
                                     </div>
                                 </div>
 
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Lead Time Source
+                                        </p>
+                                        <p className="mt-1 text-base font-bold text-slate-900">
+                                            {analytics.leadTime.sourceLabel}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            Applied Vendor
+                                        </p>
+                                        <p className="mt-1 text-base font-bold text-slate-900">
+                                            {analytics.leadTime.selectedVendorName || "Mengikuti histori umum"}
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                                         Top Vendors
@@ -1101,6 +1294,109 @@ export function DynamicSafetyStock() {
                                                 </div>
                                             ))
                                         )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.92fr)]">
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Gauge className="h-5 w-5 text-rose-600" />
+                                    Planning Scorecard
+                                </CardTitle>
+                                <CardDescription>
+                                    Ringkasan risiko, urgency order, dan target replenishment agar keputusan PO lebih cepat.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-5">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-700">
+                                                Stockout Risk
+                                            </p>
+                                            <Badge variant={analytics.planning.stockoutRiskLabel === "Critical" ? "destructive" : analytics.planning.stockoutRiskLabel === "High" ? "warning" : "outline"}>
+                                                {analytics.planning.stockoutRiskLabel}
+                                            </Badge>
+                                        </div>
+                                        <p className="mt-2 text-2xl font-bold text-slate-900">
+                                            {analytics.planning.stockoutRiskScore}/100
+                                        </p>
+                                        <Progress value={analytics.planning.stockoutRiskScore} className="mt-3 h-2" />
+                                    </div>
+
+                                    <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+                                                Urgency Order
+                                            </p>
+                                            <Badge variant={analytics.planning.urgencyLabel === "Order Now" ? "destructive" : analytics.planning.urgencyLabel === "Order Soon" ? "warning" : "outline"}>
+                                                {analytics.planning.urgencyLabel}
+                                            </Badge>
+                                        </div>
+                                        <p className="mt-2 text-2xl font-bold text-slate-900">
+                                            {analytics.planning.urgencyScore}/100
+                                        </p>
+                                        <Progress value={analytics.planning.urgencyScore} className="mt-3 h-2" />
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recommended PO Qty</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{formatQuantity(analytics.planning.recommendedOrderQty)}</p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Target Max Stock</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{formatQuantity(analytics.planning.targetMaxStock)}</p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Next Review</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{analytics.planning.nextReviewDate ? formatDate(analytics.planning.nextReviewDate) : "-"}</p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Review Cadence</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{analytics.planning.suggestedReviewDays ? `${analytics.planning.suggestedReviewDays} hari` : "-"}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 shadow-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Users className="h-5 w-5 text-amber-600" />
+                                    Demand Pattern & Vendor Mix
+                                </CardTitle>
+                                <CardDescription>
+                                    Membantu membaca apakah material ini stabil, musiman, atau terlalu bergantung pada satu vendor.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Demand Pattern</p>
+                                        <p className="mt-2 text-2xl font-bold text-slate-900">{analytics.planning.demandPattern}</p>
+                                        <p className="mt-2 text-sm text-slate-600">{analytics.forecast.confidenceNote}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Vendor Dependency</p>
+                                        <p className="mt-2 text-2xl font-bold text-slate-900">{analytics.planning.vendorDependencyPct}%</p>
+                                        <p className="mt-2 text-sm text-slate-600">Dependensi vendor: {analytics.planning.vendorDependencyLabel}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Seasonality Index</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{oneDecimalFormatter.format(analytics.planning.seasonalityIndex)}x</p>
+                                    </div>
+                                    <div className="rounded-xl border bg-slate-50 p-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Forecast 3 Bulan</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{formatQuantity(analytics.forecast.nextQuarterDemand)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -1317,6 +1613,82 @@ export function DynamicSafetyStock() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    <Card className="border-slate-200 shadow-sm">
+                        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2">
+                                    <BrainCircuit className="h-5 w-5 text-indigo-600" />
+                                    AI Inventory Advisor
+                                </CardTitle>
+                                <CardDescription>
+                                    Advisor ini memakai metrik forecast yang sudah dihitung lalu diringkas oleh Ollama agar tindak lanjut pembelian lebih jelas.
+                                </CardDescription>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void loadAdvisor(analytics.materialNo, {
+                                    vendorName: vendorName.trim() || undefined,
+                                    customLeadTimeDays: deliveryTimeInput ? Number(deliveryTimeInput) : null,
+                                })}
+                                disabled={isLoadingAdvisor}
+                            >
+                                {isLoadingAdvisor ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Menyusun Advisor...
+                                    </>
+                                ) : (
+                                    "Refresh Advisor"
+                                )}
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {advisor ? (
+                                <>
+                                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <Badge variant={advisor.priority === "Critical" ? "destructive" : advisor.priority === "High" ? "warning" : "outline"}>
+                                                Priority {advisor.priority}
+                                            </Badge>
+                                        </div>
+                                        <p className="mt-3 text-sm leading-relaxed text-slate-700">
+                                            {advisor.summary}
+                                        </p>
+                                    </div>
+
+                                    <div className="grid gap-4 lg:grid-cols-2">
+                                        <div className="space-y-3">
+                                            {advisor.actions.map((action) => (
+                                                <div key={`${action.title}-${action.detail}`} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                                                    <p className="font-semibold text-slate-900">{action.title}</p>
+                                                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{action.detail}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                                Watchouts
+                                            </p>
+                                            <div className="mt-3 space-y-3">
+                                                {advisor.watchouts.map((watchout) => (
+                                                    <p key={watchout} className="rounded-xl bg-white/80 p-3 text-sm leading-relaxed text-slate-700">
+                                                        {watchout}
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                                    Advisor AI akan muncul setelah material dianalisis.
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.92fr)]">
                         <Card className="border-slate-200 shadow-sm">

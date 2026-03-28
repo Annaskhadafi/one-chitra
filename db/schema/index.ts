@@ -132,6 +132,7 @@ export {
 export { marketingCampaigns, campaignRecipients, marketingCampaignsRelations, campaignRecipientsRelations } from "./marketing-campaigns";
 export { zmc9StockSap, me2lPurchDocsSap, zvendorPoReportSap, salesRevenueSap, salesRevenueSap as historyOrders, coverLetterSigners } from "./sap";
 export { aiInventoryPredictions, restockNotifications, aiSettings } from "./ai-predictions";
+export { inventoryVendorLeadTimes, inventoryVendorLeadTimeMaterials } from "./inventory-vendors";
 export {
     evhsReceipts,
     evhsReceiptItems,
