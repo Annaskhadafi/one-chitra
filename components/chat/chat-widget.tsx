@@ -306,6 +306,14 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             window.clearTimeout(timeout)
         }
     }, [room.id, searchQuery])
+    useEffect(() => {
+        if (!isHelpDeskRoom(room) || messages.length === 0) return
+        const lastMessage = messages[messages.length - 1]
+        if (lastMessage.senderId !== currentUserId) {
+            setAssistantThinking(false)
+            setSending(false)
+        }
+    }, [currentUserId, messages, room])
     const status = isHelpDeskRoom(room)
         ? assistantThinking ? "Sedang menyiapkan jawaban..." : "Siap membantu penggunaan sistem"
         : typingMembers.length ? `${typingMembers.map((member) => member.name).join(", ")} sedang mengetik...` : others.some((member) => member.isTyping) ? "Sedang mengetik..." : others.some((member) => member.lastSeenAt && lastSeenLabel(member.lastSeenAt) === "Aktif sekarang") ? "Aktif sekarang" : lastSeenLabel(memberPresence.find((member) => member.userId === others[0]?.userId)?.lastSeenAt ?? others[0]?.lastSeenAt ?? null)
@@ -321,8 +329,18 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         try {
             await sendMessage(room.id, trimmed || `[Referensi: ${pendingMention?.label}]`, pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined, replyTarget?.id ?? null)
             setInput(""); setPendingMention(null); setReplyTarget(null); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
-            const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) }); applySnapshot(snapshot, false); await onRoomUpdated()
-        } catch { toast.error("Pesan gagal dikirim") } finally { setSending(false); setAssistantThinking(false) }
+            const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) })
+            applySnapshot(snapshot, false)
+            onRoomUpdated().catch(() => undefined)
+        } catch {
+            toast.error("Pesan gagal dikirim")
+            setSending(false)
+            setAssistantThinking(false)
+        } finally {
+            if (!isHelpDeskRoom(room)) {
+                setSending(false)
+            }
+        }
     }
     const loadOlder = async () => {
         if (!messages.length) return
