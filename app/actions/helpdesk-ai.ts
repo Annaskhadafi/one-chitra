@@ -15,10 +15,11 @@ import {
     user as userTable,
 } from "@/db/schema"
 import { auth } from "@/lib/auth"
+import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 
-const HELP_DESK_BOT_ID = "onechitra-helpdesk-bot"
-const HELP_DESK_BOT_NAME = "Chitra Jenius"
-const HELP_DESK_BOT_EMAIL = "helpdesk-ai@onechitra.local"
+const HELP_DESK_BOT_ID = HELP_DESK_CONFIG.botId
+const HELP_DESK_BOT_NAME = HELP_DESK_CONFIG.botName
+const HELP_DESK_BOT_EMAIL = HELP_DESK_CONFIG.botEmail
 
 const DEFAULT_KNOWLEDGE = [
     {
@@ -390,7 +391,3 @@ export async function generateHelpDeskReply(question: string) {
     return "Maaf, saya sedang kesulitan mengakses Ollama. Silakan coba lagi beberapa saat lagi."
 }
 
-export const HELP_DESK_CONFIG = {
-    botId: HELP_DESK_BOT_ID,
-    botName: HELP_DESK_BOT_NAME,
-}

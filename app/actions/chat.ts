@@ -6,7 +6,8 @@ import { and, desc, eq, gt, ilike, inArray, lt, ne, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
 import { auth } from "@/lib/auth"
-import { generateHelpDeskReply, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
+import { generateHelpDeskReply } from "@/app/actions/helpdesk-ai"
+import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { ensureChatSchema } from "@/lib/chat-schema"
 import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable } from "@/db/schema"
 

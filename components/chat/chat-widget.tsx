@@ -5,7 +5,8 @@ import { Archive, ArchiveRestore, Bell, BellOff, ChevronLeft, FileText, Loader2,
 import { toast } from "sonner"
 
 import { createGroupRoom, deleteChatRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
-import { ensureHelpDeskRoom, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
+import { ensureHelpDeskRoom } from "@/app/actions/helpdesk-ai"
+import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
