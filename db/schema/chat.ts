@@ -19,8 +19,13 @@ export const chatRoomMembers = pgTable("chat_room_members", {
     userId: varchar("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
     lastReadAt: timestamp("last_read_at"), // untuk unread tracking
+    lastSeenAt: timestamp("last_seen_at"),
+    typingAt: timestamp("typing_at"),
     lastUnreadReminderAt: timestamp("last_unread_reminder_at"),
     unreadReminderCount: integer("unread_reminder_count").default(0).notNull(),
+    isMuted: boolean("is_muted").default(false).notNull(),
+    isArchived: boolean("is_archived").default(false).notNull(),
+    isPinned: boolean("is_pinned").default(false).notNull(),
 });
 
 // Chat Messages
@@ -29,6 +34,7 @@ export const chatMessages = pgTable("chat_messages", {
     roomId: integer("room_id").references(() => chatRooms.id, { onDelete: "cascade" }).notNull(),
     senderId: varchar("sender_id").references(() => user.id).notNull(),
     content: text("content").notNull(),
+    replyToMessageId: integer("reply_to_message_id"),
     // Document mention support
     mentionType: varchar("mention_type", { length: 20 }), // 'quotation' | 'sales-order' | 'delivery' | null
     mentionId: varchar("mention_id", { length: 100 }), // ID atau nomor dokumen

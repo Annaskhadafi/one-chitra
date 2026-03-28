@@ -1,127 +1,64 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
+import { Archive, ArchiveRestore, Bell, BellOff, ChevronLeft, FileText, Loader2, MessageCircle, Pin, PinOff, Plus, Reply, Search, Send, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
+import { toast } from "sonner"
+
+import { createGroupRoom, deleteChatRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
+import { ensureHelpDeskRoom, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import {
-    MessageCircle,
-    X,
-    Send,
-    ChevronLeft,
-    Users,
-    FileText,
-    ShoppingCart,
-    Truck,
-    Plus,
-    Search,
-    Loader2,
-    Trash2,
-} from "lucide-react"
-import {
-    getUserRooms,
-    getRoomMessages,
-    sendMessage,
-    deleteChatRoom,
-    getChatUsers,
-    getOrCreateDmRoom,
-    createGroupRoom,
-    searchDocumentsForMention,
-    type ChatRoomWithMeta,
-    type ChatMessage,
-} from "@/app/actions/chat"
-import { ensureHelpDeskRoom, HELP_DESK_CONFIG } from "@/app/actions/helpdesk-ai"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
-// ─── Document Mention Picker ───────────────────────────────────────────────
+type MentionResult = { type: "quotation" | "sales-order" | "delivery"; id: string; label: string; sublabel: string; url: string }
+type SearchResult = { id: number; content: string; createdAt: string; senderName: string }
 
-type MentionResult = {
-    type: "quotation" | "sales-order" | "delivery"
-    id: string
-    label: string
-    sublabel: string
-    url: string
+const MENTION_ICONS = { quotation: FileText, "sales-order": ShoppingCart, delivery: Truck }
+const MENTION_COLORS = { quotation: "bg-blue-100 text-blue-700", "sales-order": "bg-green-100 text-green-700", delivery: "bg-orange-100 text-orange-700" }
+const time = (value: string) => new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+const day = (value: string) => new Date(value).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })
+const mergeUnique = (...groups: ChatMessage[][]) => {
+    const map = new Map<number, ChatMessage>()
+    for (const group of groups) for (const message of group) map.set(message.id, message)
+    return Array.from(map.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id)
+}
+const lastSeenLabel = (iso: string | null) => {
+    if (!iso) return "Belum aktif"
+    const minutes = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
+    if (minutes < 2) return "Aktif sekarang"
+    if (minutes < 60) return `Aktif ${minutes} menit lalu`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `Aktif ${hours} jam lalu`
+    return `Aktif ${new Date(iso).toLocaleDateString("id-ID")}`
 }
 
-const mergeUniqueMessages = (...messageGroups: ChatMessage[][]): ChatMessage[] => {
-    const byId = new Map<number, ChatMessage>()
-
-    for (const group of messageGroups) {
-        for (const message of group) {
-            byId.set(message.id, message)
-        }
-    }
-
-    return Array.from(byId.values()).sort((left, right) => {
-        const timeDiff = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
-        return timeDiff !== 0 ? timeDiff : left.id - right.id
-    })
-}
-
-const MENTION_ICONS = {
-    quotation: FileText,
-    "sales-order": ShoppingCart,
-    delivery: Truck,
-}
-const MENTION_COLORS = {
-    quotation: "bg-blue-100 text-blue-700",
-    "sales-order": "bg-green-100 text-green-700",
-    delivery: "bg-orange-100 text-orange-700",
-}
-
-function DocumentMentionPicker({
-    query,
-    onSelect,
-    onClose,
-}: {
-    query: string
-    onSelect: (item: MentionResult) => void
-    onClose: () => void
-}) {
+function DocumentMentionPicker({ query, onSelect, onClose }: { query: string; onSelect: (item: MentionResult) => void; onClose: () => void }) {
     const [results, setResults] = useState<MentionResult[]>([])
     const [loading, setLoading] = useState(false)
-
     useEffect(() => {
         if (!query) { setResults([]); return }
         setLoading(true)
-        searchDocumentsForMention(query)
-            .then(setResults)
-            .finally(() => setLoading(false))
+        searchDocumentsForMention(query).then(setResults).catch(() => { toast.error("Pencarian dokumen gagal"); setResults([]) }).finally(() => setLoading(false))
     }, [query])
-
     return (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-popover border rounded-lg shadow-xl z-50 overflow-hidden">
-            <div className="px-3 py-2 bg-muted/50 border-b flex items-center gap-2 text-xs text-muted-foreground font-medium">
-                <FileText className="h-3 w-3" />
-                Mention Dokumen — ketik untuk cari, `/Quo` quotation saya, `/po` customer PO
+        <div className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-lg border bg-popover shadow-xl">
+            <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <FileText className="h-3 w-3" /> Mention Dokumen <span className="truncate">Gunakan `/Quo` atau `/po`.</span>
                 <button onClick={onClose} className="ml-auto"><X className="h-3 w-3" /></button>
             </div>
-            {loading && (
-                <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-            )}
-            {!loading && results.length === 0 && query && (
-                <p className="text-xs text-muted-foreground text-center py-4">Tidak ditemukan</p>
-            )}
+            {loading ? <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div> : null}
+            {!loading && results.length === 0 && query ? <p className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan</p> : null}
             {results.map((item) => {
                 const Icon = MENTION_ICONS[item.type]
                 return (
-                    <button
-                        key={`${item.type}-${item.id}`}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent text-left transition-colors"
-                        onClick={() => onSelect(item)}
-                    >
-                        <span className={cn("p-1.5 rounded", MENTION_COLORS[item.type])}>
-                            <Icon className="h-3 w-3" />
-                        </span>
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{item.label}</p>
-                            {item.sublabel && <p className="text-xs text-muted-foreground truncate">{item.sublabel}</p>}
-                        </div>
-                        <Badge variant="outline" className="ml-auto text-xs shrink-0">{item.type}</Badge>
+                    <button key={`${item.type}-${item.id}`} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent" onClick={() => onSelect(item)}>
+                        <span className={cn("rounded p-1.5", MENTION_COLORS[item.type])}><Icon className="h-3 w-3" /></span>
+                        <div className="min-w-0"><p className="truncate text-sm font-medium">{item.label}</p><p className="truncate text-xs text-muted-foreground">{item.sublabel}</p></div>
+                        <Badge variant="outline" className="ml-auto text-[10px] uppercase">{item.type}</Badge>
                     </button>
                 )
             })}
@@ -129,349 +66,69 @@ function DocumentMentionPicker({
     )
 }
 
-// ─── Single Message Bubble ──────────────────────────────────────────────────
-
-function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
+function MessageBubble({ msg, isOwn, highlighted, onReply }: { msg: ChatMessage; isOwn: boolean; highlighted: boolean; onReply: (msg: ChatMessage) => void }) {
     const Icon = msg.mentionType ? MENTION_ICONS[msg.mentionType as keyof typeof MENTION_ICONS] : null
     const color = msg.mentionType ? MENTION_COLORS[msg.mentionType as keyof typeof MENTION_COLORS] : ""
-    const url = msg.mentionType === "quotation"
-        ? `/dashboard/quotations/${msg.mentionId}`
-        : msg.mentionType === "sales-order"
-            ? `/dashboard/sales-orders?id=${msg.mentionId}`
-            : msg.mentionType === "delivery"
-                ? `/dashboard/deliveries?id=${msg.mentionId}`
-                : null
-
+    const url = msg.mentionType === "quotation" ? `/dashboard/quotations/${msg.mentionId}` : msg.mentionType === "sales-order" ? `/dashboard/sales-orders?id=${msg.mentionId}` : msg.mentionType === "delivery" ? `/dashboard/deliveries?id=${msg.mentionId}` : null
     return (
-        <div className={cn("flex gap-2 items-end mb-3", isOwn ? "flex-row-reverse" : "flex-row")}>
-            <Avatar className="h-6 w-6 shrink-0">
-                <AvatarImage src={msg.senderImage ?? undefined} />
-                <AvatarFallback className="text-xs">{msg.senderName?.[0]?.toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className={cn("max-w-[75%] flex flex-col gap-1", isOwn ? "items-end" : "items-start")}>
-                {!isOwn && <p className="text-xs text-muted-foreground ml-1">{msg.senderName}</p>}
-                <div className={cn(
-                    "px-3 py-2 rounded-2xl text-sm",
-                    isOwn
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted rounded-bl-sm"
-                )}>
-                    {msg.mentionType && msg.mentionId && Icon && url && (
-                        <a
-                            href={url}
-                            className={cn("inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium mb-1.5 hover:opacity-80 transition-opacity", color)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            <Icon className="h-3 w-3" />
-                            {msg.mentionLabel}
-                        </a>
-                    )}
+        <div className={cn("group mb-3 flex gap-2 items-end", isOwn ? "flex-row-reverse" : "flex-row")}>
+            <Avatar className="h-6 w-6 shrink-0"><AvatarImage src={msg.senderImage ?? undefined} /><AvatarFallback className="text-xs">{msg.senderName?.[0]?.toUpperCase()}</AvatarFallback></Avatar>
+            <div className={cn("flex max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
+                {!isOwn ? <p className="ml-1 text-xs text-muted-foreground">{msg.senderName}</p> : null}
+                <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm", isOwn ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted", highlighted && "ring-2 ring-primary/40")}>
+                    {msg.replyTo ? <div className={cn("mb-2 rounded-lg border px-2 py-1 text-xs", isOwn ? "border-primary-foreground/20 bg-primary-foreground/10" : "border-border bg-background/60")}><p className="font-medium">{msg.replyTo.senderName}</p><p className="truncate opacity-80">{msg.replyTo.content}</p></div> : null}
+                    {msg.mentionType && msg.mentionId && Icon && url ? <a href={url} target="_blank" rel="noopener noreferrer" className={cn("mb-1.5 inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", color)}><Icon className="h-3 w-3" />{msg.mentionLabel}</a> : null}
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                 </div>
-                <p className="text-[10px] text-muted-foreground mx-1">
-                    {new Date(msg.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-                </p>
+                <div className="mx-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>{time(msg.createdAt)}</span>
+                    {isOwn && msg.readBy.length > 1 ? <span>Dibaca {msg.readBy.length - 1}</span> : null}
+                    <button type="button" onClick={() => onReply(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Reply className="h-3 w-3" /></button>
+                </div>
             </div>
         </div>
     )
 }
 
-// ─── Conversation View ──────────────────────────────────────────────────────
-
-function ConversationView({
-    room,
-    currentUserId,
-    onBack,
-    onDeleteRoom,
-}: {
-    room: ChatRoomWithMeta
-    currentUserId: string
-    onBack: () => void
-    onDeleteRoom: (roomId: number) => Promise<void>
-}) {
-    const [messages, setMessages] = useState<ChatMessage[]>([])
-    const [input, setInput] = useState("")
-    const [sending, setSending] = useState(false)
-    const [mentionSearch, setMentionSearch] = useState<string | null>(null)
-    const [pendingMention, setPendingMention] = useState<MentionResult | null>(null)
-    const bottomRef = useRef<HTMLDivElement>(null)
-    const lastTimestampRef = useRef<string | null>(null)
-    const sendingRef = useRef(false)
-    const pollInFlightRef = useRef(false)
-    const renderedMessages = useMemo(() => mergeUniqueMessages(messages), [messages])
-
-    // Load initial messages
-    useEffect(() => {
-        getRoomMessages(room.id).then((msgs) => {
-            const uniqueMessages = mergeUniqueMessages(msgs)
-            setMessages(uniqueMessages)
-            if (uniqueMessages.length) lastTimestampRef.current = uniqueMessages[uniqueMessages.length - 1].createdAt
-        })
-    }, [room.id])
-
-    // Polling for new messages
-    useEffect(() => {
-        const poll = async () => {
-            if (!lastTimestampRef.current || pollInFlightRef.current) return
-            pollInFlightRef.current = true
-            try {
-                const res = await fetch(`/api/chat/messages?roomId=${room.id}&after=${encodeURIComponent(lastTimestampRef.current)}`)
-                if (!res.ok) return
-                const data = await res.json()
-                if (data.messages?.length) {
-                    setMessages((prev) => {
-                        const uniqueMessages = mergeUniqueMessages(prev, data.messages)
-                        lastTimestampRef.current = uniqueMessages[uniqueMessages.length - 1]?.createdAt ?? lastTimestampRef.current
-                        return uniqueMessages
-                    })
-                }
-            } finally {
-                pollInFlightRef.current = false
-            }
-        }
-        const interval = setInterval(poll, 3000)
-        return () => clearInterval(interval)
-    }, [room.id])
-
-    // Scroll to bottom on new messages
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-    }, [renderedMessages])
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        setInput(val)
-        // Detect "/" trigger
-        const match = val.match(/\/([^/\s]*)$/)
-        if (match) {
-            setMentionSearch(match[1])
-        } else {
-            setMentionSearch(null)
-        }
-    }
-
-    const handleMentionSelect = (item: MentionResult) => {
-        // Remove the "/" trigger from input
-        const cleaned = input.replace(/\/[^/\s]*$/, "").trim()
-        setInput(cleaned)
-        setPendingMention(item)
-        setMentionSearch(null)
-    }
-
-    const handleSend = async () => {
-        const trimmed = input.trim()
-        if (!trimmed && !pendingMention) return
-        if (sendingRef.current) return
-        sendingRef.current = true
-        setSending(true)
-        try {
-            await sendMessage(
-                room.id,
-                trimmed || `[Referensi: ${pendingMention?.label}]`,
-                pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined
-            )
-            setInput("")
-            setPendingMention(null)
-            // Immediately reload messages
-            const msgs = await getRoomMessages(room.id)
-            const uniqueMessages = mergeUniqueMessages(msgs)
-            setMessages(uniqueMessages)
-            if (uniqueMessages.length) lastTimestampRef.current = uniqueMessages[uniqueMessages.length - 1].createdAt
-        } finally {
-            sendingRef.current = false
-            setSending(false)
-        }
-    }
-
-    const otherMembers = room.members.filter((m) => m.userId !== currentUserId)
-
+function RoomList({ rooms, currentUserId, filter, onFilterChange, onSelectRoom, onNewChat, onOpenHelpDesk, onTogglePreference, totalUnread }: { rooms: ChatRoomWithMeta[]; currentUserId: string; filter: "active" | "archived"; onFilterChange: (value: "active" | "archived") => void; onSelectRoom: (room: ChatRoomWithMeta) => void; onNewChat: () => void; onOpenHelpDesk: () => void; onTogglePreference: (roomId: number, updates: Partial<Pick<ChatRoomWithMeta, "isMuted" | "isArchived" | "isPinned">>) => Promise<void>; totalUnread: number }) {
+    const [search, setSearch] = useState("")
+    const filteredRooms = rooms.filter((room) => {
+        if (filter === "active" && room.isArchived) return false
+        if (filter === "archived" && !room.isArchived) return false
+        const keyword = search.toLowerCase()
+        if (!keyword) return true
+        return (room.name ?? "").toLowerCase().includes(keyword) || (room.lastMessage?.content ?? "").toLowerCase().includes(keyword) || room.members.some((member) => member.name.toLowerCase().includes(keyword))
+    })
     return (
-        <div className="flex flex-col h-full min-h-0">
-            {/* Header */}
-            <div className="flex items-center gap-2 p-3 border-b bg-card">
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onBack}>
-                    <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="flex -space-x-1.5">
-                    {otherMembers.slice(0, 2).map((m) => (
-                        <Avatar key={m.userId} className="h-7 w-7 border-2 border-background">
-                            <AvatarImage src={m.image ?? undefined} />
-                            <AvatarFallback className="text-xs">{m.name?.[0]?.toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                    ))}
-                </div>
-                <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{room.name}</p>
-                    {room.type === "group" && (
-                        <p className="text-xs text-muted-foreground">{room.members.length} anggota</p>
-                    )}
-                </div>
-                {room.type !== "ai-helpdesk" && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
-                        title="Hapus chat"
-                        onClick={async () => {
-                            const confirmed = window.confirm("Hapus chat ini dari daftar Anda?")
-                            if (!confirmed) return
-                            await onDeleteRoom(room.id)
-                        }}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                )}
-            </div>
-
-            {/* Messages */}
-            <ScrollArea className="flex-1 min-h-0 p-3">
-                {renderedMessages.map((msg, index) => (
-                    <MessageBubble
-                        key={`${msg.id}-${msg.createdAt}-${index}`}
-                        msg={msg}
-                        isOwn={msg.senderId === currentUserId}
-                    />
-                ))}
-                <div ref={bottomRef} />
-            </ScrollArea>
-
-            {/* Input */}
-            <div className="p-3 border-t relative">
-                {mentionSearch !== null && (
-                    <DocumentMentionPicker
-                        query={mentionSearch}
-                        onSelect={handleMentionSelect}
-                        onClose={() => setMentionSearch(null)}
-                    />
-                )}
-                {pendingMention && (
-                    <div className="mb-2 flex items-center gap-2">
-                        <a
-                            href={pendingMention.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn("inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium", MENTION_COLORS[pendingMention.type])}
-                        >
-                            {React.createElement(MENTION_ICONS[pendingMention.type], { className: "h-3 w-3" })}
-                            {pendingMention.label}
-                        </a>
-                        <button onClick={() => setPendingMention(null)} className="text-muted-foreground hover:text-foreground">
-                            <X className="h-3.5 w-3.5" />
-                        </button>
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="space-y-3 border-b p-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-primary" /><span className="text-sm font-semibold">Pesan</span>{totalUnread > 0 ? <Badge className="h-4 min-w-4 px-1 text-[10px]">{totalUnread > 99 ? "99+" : totalUnread}</Badge> : null}</div>
+                    <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" className="h-8 px-2 text-[11px]" onClick={onOpenHelpDesk}>{HELP_DESK_CONFIG.botName}</Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onNewChat}><Plus className="h-4 w-4" /></Button>
                     </div>
-                )}
-                <div className="flex gap-2">
-                    <Input
-                        value={input}
-                        onChange={handleInputChange}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey && !e.repeat && !e.nativeEvent.isComposing) {
-                                e.preventDefault()
-                                handleSend()
-                            }
-                        }}
-                        placeholder="Ketik pesan... (/ untuk dokumen, /Quo quotation saya, /po customer PO)"
-                        className="flex-1 text-sm"
-                        autoComplete="off"
-                    />
-                    <Button size="icon" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention)}>
-                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
                 </div>
-            </div>
-        </div>
-    )
-}
-
-// ─── Room List / User Picker ───────────────────────────────────────────────
-
-function RoomList({
-    rooms,
-    currentUserId,
-    onSelectRoom,
-    onNewChat,
-    onOpenHelpDesk,
-    totalUnread,
-}: {
-    rooms: ChatRoomWithMeta[]
-    currentUserId: string
-    onSelectRoom: (room: ChatRoomWithMeta) => void
-    onNewChat: () => void
-    onOpenHelpDesk: () => void
-    totalUnread: number
-}) {
-    return (
-        <div className="flex flex-col h-full min-h-0">
-            <div className="flex items-center justify-between p-3 border-b">
-                <div className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4 text-primary" />
-                    <span className="font-semibold text-sm">Pesan</span>
-                    {totalUnread > 0 && (
-                        <Badge className="h-4 min-w-4 text-[10px] px-1">{totalUnread > 99 ? "99+" : totalUnread}</Badge>
-                    )}
-                </div>
-                <div className="flex items-center gap-1">
-                    <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={onOpenHelpDesk}>
-                        {HELP_DESK_CONFIG.botName}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onNewChat}>
-                        <Plus className="h-4 w-4" />
-                    </Button>
-                </div>
+                <div className="flex gap-2"><Button variant={filter === "active" ? "default" : "outline"} size="sm" className="h-8 flex-1" onClick={() => onFilterChange("active")}>Aktif</Button><Button variant={filter === "archived" ? "default" : "outline"} size="sm" className="h-8 flex-1" onClick={() => onFilterChange("archived")}>Arsip</Button></div>
+                <div className="relative"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="h-8 pl-7 text-sm" placeholder="Cari room atau pesan" /></div>
             </div>
             <ScrollArea className="flex-1 min-h-0">
-                {rooms.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
-                        <MessageCircle className="h-8 w-8 opacity-30" />
-                        <p className="text-sm">Belum ada percakapan</p>
-                        <Button size="sm" variant="outline" onClick={onNewChat} className="gap-1">
-                            <Plus className="h-3 w-3" /> Mulai Chat
-                        </Button>
-                    </div>
-                )}
-                {rooms.map((room) => {
-                    const others = room.members.filter((m) => m.userId !== currentUserId)
+                {filteredRooms.length === 0 ? <div className="flex h-40 flex-col items-center justify-center gap-2 text-muted-foreground"><MessageCircle className="h-8 w-8 opacity-30" /><p className="text-sm">Belum ada percakapan</p><Button size="sm" variant="outline" onClick={onNewChat} className="gap-1"><Plus className="h-3 w-3" />Mulai Chat</Button></div> : filteredRooms.map((room) => {
+                    const others = room.members.filter((member) => member.userId !== currentUserId)
+                    const typing = room.members.some((member) => member.userId !== currentUserId && member.isTyping)
                     return (
-                        <button
-                            key={room.id}
-                            className="w-full flex items-center gap-3 px-3 py-3 hover:bg-accent/50 transition-colors text-left border-b last:border-0"
-                            onClick={() => onSelectRoom(room)}
-                        >
-                            {room.type === "group" ? (
-                                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                    <Users className="h-4 w-4 text-primary" />
+                        <button key={room.id} className="w-full border-b px-3 py-3 text-left hover:bg-accent/50" onClick={() => onSelectRoom(room)}>
+                            <div className="flex items-center gap-3">
+                                {room.type === "group" ? <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10"><Users className="h-4 w-4 text-primary" /></div> : <Avatar className="h-9 w-9 shrink-0"><AvatarImage src={others[0]?.image ?? undefined} /><AvatarFallback>{room.type === "ai-helpdesk" ? "CJ" : others[0]?.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar>}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-1"><p className="truncate text-sm font-medium">{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className="h-4 px-1 text-[10px]">AI</Badge> : null}{room.isPinned ? <Pin className="h-3 w-3 text-primary" /> : null}{room.isMuted ? <BellOff className="h-3 w-3 text-muted-foreground" /> : null}</div>{room.lastMessage ? <p className="text-[10px] text-muted-foreground">{time(room.lastMessage.createdAt)}</p> : null}</div>
+                                    <div className="flex items-center justify-between gap-2">{room.lastMessage ? <p className="truncate text-xs text-muted-foreground">{typing ? "Sedang mengetik..." : `${room.lastMessage.senderName}: ${room.lastMessage.content}`}</p> : <p className="text-xs italic text-muted-foreground">Belum ada pesan</p>}{room.unreadCount > 0 ? <Badge className="h-4 min-w-4 px-1 text-[10px]">{room.unreadCount}</Badge> : null}</div>
                                 </div>
-                            ) : (
-                                <Avatar className="h-9 w-9 shrink-0">
-                                    <AvatarImage src={others[0]?.image ?? undefined} />
-                                    <AvatarFallback>{others[0]?.name?.[0]?.toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                            )}
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{room.name}</p>
-                                        {room.type === "ai-helpdesk" && <Badge variant="secondary" className="h-4 px-1 text-[10px]">AI</Badge>}
-                                    </div>
-                                    {room.lastMessage && (
-                                        <p className="text-[10px] text-muted-foreground shrink-0 ml-1">
-                                            {new Date(room.lastMessage.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="flex items-center justify-between gap-1">
-                                    {room.lastMessage ? (
-                                        <p className="text-xs text-muted-foreground truncate">
-                                            {room.lastMessage.senderName}: {room.lastMessage.content}
-                                        </p>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground italic">Belum ada pesan</p>
-                                    )}
-                                    {room.unreadCount > 0 && (
-                                        <Badge className="h-4 min-w-4 text-[10px] px-1 shrink-0">{room.unreadCount}</Badge>
-                                    )}
-                                </div>
+                            </div>
+                            <div className="mt-2 flex justify-end gap-1">
+                                <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={(event) => { event.stopPropagation(); onTogglePreference(room.id, { isPinned: !room.isPinned }) }}>{room.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</Button>
+                                <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={(event) => { event.stopPropagation(); onTogglePreference(room.id, { isMuted: !room.isMuted }) }}>{room.isMuted ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}</Button>
+                                <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={(event) => { event.stopPropagation(); onTogglePreference(room.id, { isArchived: !room.isArchived }) }}>{room.isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}</Button>
                             </div>
                         </button>
                     )
@@ -481,262 +138,213 @@ function RoomList({
     )
 }
 
-// ─── New Chat / Group Creator ──────────────────────────────────────────────
-
-import React from "react"
-
-function NewChatView({
-    currentUserId,
-    onRoomCreated,
-    onBack,
-}: {
-    currentUserId: string
-    onRoomCreated: (roomId: number) => void
-    onBack: () => void
-}) {
+function NewChatView({ currentUserId, onRoomCreated, onBack }: { currentUserId: string; onRoomCreated: (roomId: number) => void; onBack: () => void }) {
     const [users, setUsers] = useState<{ id: string; name: string; email: string; image: string | null }[]>([])
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [groupName, setGroupName] = useState("")
     const [search, setSearch] = useState("")
     const [creating, setCreating] = useState(false)
-
-    useEffect(() => {
-        getChatUsers().then((u) => setUsers(u.filter((x) => x.id !== currentUserId)))
-    }, [currentUserId])
-
-    const filtered = users.filter((u) =>
-        u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
-    )
-
-    const toggle = (id: string) => {
-        setSelected((prev) => {
-            const s = new Set(prev)
-            if (s.has(id)) {
-                s.delete(id)
-            } else {
-                s.add(id)
-            }
-            return s
-        })
-    }
-
+    useEffect(() => { getChatUsers().then((results) => setUsers(results.filter((user) => user.id !== currentUserId))) }, [currentUserId])
+    const filtered = users.filter((user) => user.name.toLowerCase().includes(search.toLowerCase()) || user.email.toLowerCase().includes(search.toLowerCase()))
+    const toggle = (userId: string) => setSelected((prev) => {
+        const next = new Set(prev)
+        if (next.has(userId)) next.delete(userId)
+        else next.add(userId)
+        return next
+    })
     const handleCreate = async () => {
         if (selected.size === 0) return
         setCreating(true)
         try {
             const memberIds = Array.from(selected)
-            let roomId: number
-            if (selected.size === 1 && !groupName) {
-                const res = await getOrCreateDmRoom(memberIds[0])
-                roomId = res.roomId
-            } else {
-                const res = await createGroupRoom(groupName || "Group Chat", memberIds)
-                roomId = res.roomId
-            }
+            const roomId = selected.size === 1 && !groupName ? (await getOrCreateDmRoom(memberIds[0])).roomId : (await createGroupRoom(groupName || "Group Chat", memberIds)).roomId
             onRoomCreated(roomId)
-        } finally {
-            setCreating(false)
-        }
+        } catch { toast.error("Gagal membuat percakapan") } finally { setCreating(false) }
     }
-
     return (
-        <div className="flex flex-col h-full min-h-0">
-            <div className="flex items-center gap-2 p-3 border-b">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBack}>
-                    <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <p className="font-semibold text-sm">Chat Baru</p>
-            </div>
-            {selected.size > 1 && (
-                <div className="p-3 border-b">
-                    <Input
-                        placeholder="Nama Group (opsional untuk group)"
-                        value={groupName}
-                        onChange={(e) => setGroupName(e.target.value)}
-                        className="text-sm"
-                    />
-                </div>
-            )}
-            <div className="px-3 pt-2 pb-1">
-                <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                        className="pl-7 text-sm h-8"
-                        placeholder="Cari user..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
-            </div>
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="flex items-center gap-2 border-b p-3"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBack}><ChevronLeft className="h-4 w-4" /></Button><p className="text-sm font-semibold">Chat Baru</p></div>
+            {selected.size > 1 ? <div className="border-b p-3"><Input placeholder="Nama group" value={groupName} onChange={(event) => setGroupName(event.target.value)} className="text-sm" /></div> : null}
+            <div className="px-3 pt-2 pb-1"><div className="relative"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input className="h-8 pl-7 text-sm" placeholder="Cari user" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
             <ScrollArea className="flex-1 min-h-0 px-3">
-                {filtered.map((u) => (
-                    <button
-                        key={u.id}
-                        className={cn(
-                            "w-full flex items-center gap-3 py-2.5 rounded-lg px-2 hover:bg-accent/50 transition-colors text-left mb-0.5",
-                            selected.has(u.id) && "bg-primary/10"
-                        )}
-                        onClick={() => toggle(u.id)}
-                    >
-                        <Avatar className="h-8 w-8 shrink-0">
-                            <AvatarImage src={u.image ?? undefined} />
-                            <AvatarFallback className="text-xs">{u.name?.[0]?.toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{u.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                        </div>
-                        {selected.has(u.id) && (
-                            <div className="ml-auto h-4 w-4 rounded-full bg-primary flex-shrink-0" />
-                        )}
-                    </button>
-                ))}
+                {filtered.map((user) => <button key={user.id} type="button" className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-accent/50", selected.has(user.id) && "bg-primary/10")} onClick={() => toggle(user.id)}><Avatar className="h-8 w-8 shrink-0"><AvatarImage src={user.image ?? undefined} /><AvatarFallback className="text-xs">{user.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate text-sm font-medium">{user.name}</p><p className="truncate text-xs text-muted-foreground">{user.email}</p></div></button>)}
             </ScrollArea>
-            <div className="p-3 border-t">
-                <Button
-                    className="w-full"
-                    disabled={selected.size === 0 || creating}
-                    onClick={handleCreate}
-                >
-                    {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    {selected.size > 1 ? "Buat Group" : "Mulai Chat"}
-                    {selected.size > 0 && ` (${selected.size})`}
-                </Button>
-            </div>
+            <div className="border-t p-3"><Button className="w-full" disabled={selected.size === 0 || creating} onClick={handleCreate}>{creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{selected.size > 1 ? "Buat Group" : "Mulai Chat"}{selected.size > 0 ? ` (${selected.size})` : ""}</Button></div>
         </div>
     )
 }
 
-// ─── Main Chat Widget ──────────────────────────────────────────────────────
+function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpdated }: { room: ChatRoomWithMeta; currentUserId: string; onBack: () => void; onDeleteRoom: (roomId: number) => Promise<void>; onRoomUpdated: () => Promise<void> }) {
+    const [messages, setMessages] = useState<ChatMessage[]>([])
+    const [hasMore, setHasMore] = useState(false)
+    const [typingMembers, setTypingMembers] = useState<{ userId: string; name: string }[]>([])
+    const [memberPresence, setMemberPresence] = useState<ChatRoomSnapshot["memberPresence"]>([])
+    const [input, setInput] = useState("")
+    const [sending, setSending] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [loadingOlder, setLoadingOlder] = useState(false)
+    const [mentionSearch, setMentionSearch] = useState<string | null>(null)
+    const [pendingMention, setPendingMention] = useState<MentionResult | null>(null)
+    const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+    const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null)
+    const bottomRef = useRef<HTMLDivElement>(null)
+    const messageRefs = useRef<Record<number, HTMLDivElement | null>>({})
+    const typingTimeoutRef = useRef<number | null>(null)
+    const draftKey = `chat-draft-${room.id}`
+    const others = room.members.filter((member) => member.userId !== currentUserId)
+    const applySnapshot = useCallback((snapshot: ChatRoomSnapshot, prepend = false) => { setHasMore(snapshot.hasMore); setTypingMembers(snapshot.typingMembers); setMemberPresence(snapshot.memberPresence); setMessages((prev) => prepend ? mergeUnique(snapshot.messages, prev) : mergeUnique(prev, snapshot.messages)) }, [])
+    const loadSnapshot = useCallback(async (options?: { before?: string; prepend?: boolean; limit?: number }) => {
+        const snapshot = await getRoomMessages(room.id, { before: options?.before, limit: options?.limit ?? 30 }); applySnapshot(snapshot, options?.prepend ?? false); return snapshot
+    }, [applySnapshot, room.id])
+    useEffect(() => {
+        const saved = window.localStorage.getItem(draftKey); if (saved) setInput(saved)
+        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null)
+        loadSnapshot().catch(() => toast.error("Gagal memuat percakapan")).finally(() => setLoading(false))
+    }, [draftKey, loadSnapshot, room.id])
+    useEffect(() => { window.localStorage.setItem(draftKey, input) }, [draftKey, input])
+    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages.length, typingMembers.length])
+    useEffect(() => {
+        const interval = window.setInterval(async () => {
+            try {
+                const latest = messages[messages.length - 1]?.createdAt
+                const response = await fetch(`/api/chat/messages?roomId=${room.id}${latest ? `&after=${encodeURIComponent(latest)}` : ""}`, { cache: "no-store" })
+                if (!response.ok) return
+                const data = await response.json()
+                setTypingMembers(data.typingMembers ?? [])
+                setMemberPresence(data.memberPresence ?? [])
+                if (data.messages?.length) { const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + data.messages.length, 30) }); applySnapshot(snapshot, false); onRoomUpdated().catch(() => undefined) }
+            } catch { return }
+        }, 1500)
+        return () => window.clearInterval(interval)
+    }, [applySnapshot, messages, onRoomUpdated, room.id])
+    useEffect(() => {
+        if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current)
+        if (input.trim()) typingTimeoutRef.current = window.setTimeout(() => { updateTypingStatus(room.id, true).catch(() => undefined) }, 300)
+        else updateTypingStatus(room.id, false).catch(() => undefined)
+        return () => { if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current) }
+    }, [input, room.id])
+    useEffect(() => () => { updateTypingStatus(room.id, false).catch(() => undefined) }, [room.id])
+    useEffect(() => {
+        if (!searchQuery.trim()) { setSearchResults([]); return }
+        const timeout = window.setTimeout(() => { searchRoomMessages(room.id, searchQuery).then(setSearchResults).catch(() => setSearchResults([])) }, 250)
+        return () => window.clearTimeout(timeout)
+    }, [room.id, searchQuery])
+    const status = typingMembers.length ? `${typingMembers.map((member) => member.name).join(", ")} sedang mengetik...` : others.some((member) => member.isTyping) ? "Sedang mengetik..." : others.some((member) => member.lastSeenAt && lastSeenLabel(member.lastSeenAt) === "Aktif sekarang") ? "Aktif sekarang" : lastSeenLabel(memberPresence.find((member) => member.userId === others[0]?.userId)?.lastSeenAt ?? others[0]?.lastSeenAt ?? null)
+    const onInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const value = event.target.value; setInput(value)
+        const match = value.match(/\/([^/\s]*)$/); if (match) setMentionSearch(match[1]); else setMentionSearch(null)
+    }
+    const onMentionSelect = (item: MentionResult) => { setInput((value) => value.replace(/\/[^/\s]*$/, "").trim()); setPendingMention(item); setMentionSearch(null) }
+    const handleSend = async () => {
+        const trimmed = input.trim(); if (!trimmed && !pendingMention) return
+        setSending(true)
+        try {
+            await sendMessage(room.id, trimmed || `[Referensi: ${pendingMention?.label}]`, pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined, replyTarget?.id ?? null)
+            setInput(""); setPendingMention(null); setReplyTarget(null); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
+            const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) }); applySnapshot(snapshot, false); await onRoomUpdated()
+        } catch { toast.error("Pesan gagal dikirim") } finally { setSending(false) }
+    }
+    const loadOlder = async () => {
+        if (!messages.length) return
+        setLoadingOlder(true)
+        try { await loadSnapshot({ before: messages[0].createdAt, prepend: true, limit: 30 }) } catch { toast.error("Gagal memuat pesan lama") } finally { setLoadingOlder(false) }
+    }
+    const jumpToMessage = async (messageId: number) => {
+        setHighlightedMessageId(messageId)
+        if (messageRefs.current[messageId]) { messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" }); return }
+        try { const snapshot = await getRoomMessages(room.id, { limit: 100 }); applySnapshot(snapshot, false); window.setTimeout(() => { messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" }) }, 50) } catch { toast.error("Pesan belum bisa ditampilkan") }
+    }
+    const togglePreference = async (key: "isMuted" | "isPinned" | "isArchived", value: boolean) => {
+        try { await updateRoomPreferences(room.id, { [key]: value }); await onRoomUpdated(); if (key === "isArchived" && value) onBack() } catch { toast.error("Pengaturan room gagal disimpan") }
+    }
+    return (
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="border-b bg-card">
+                <div className="flex items-center gap-2 p-3">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onBack}><ChevronLeft className="h-4 w-4" /></Button>
+                    <div className="flex -space-x-1.5">{others.slice(0, 2).map((member) => <Avatar key={member.userId} className="h-7 w-7 border-2 border-background"><AvatarImage src={member.image ?? undefined} /><AvatarFallback className="text-xs">{member.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar>)}</div>
+                    <div className="min-w-0"><div className="flex items-center gap-1"><p className="truncate text-sm font-semibold">{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className="h-4 px-1 text-[10px]">AI</Badge> : null}</div><p className="truncate text-xs text-muted-foreground">{status}</p></div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => togglePreference("isPinned", !room.isPinned)}>{room.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}</Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => togglePreference("isMuted", !room.isMuted)}>{room.isMuted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}</Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => togglePreference("isArchived", !room.isArchived)}>{room.isArchived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}</Button>
+                    {room.type !== "ai-helpdesk" ? <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={async () => { if (!window.confirm("Hapus chat ini dari daftar Anda?")) return; await onDeleteRoom(room.id) }}><Trash2 className="h-4 w-4" /></Button> : null}
+                </div>
+                <div className="px-3 pb-3">
+                    <div className="relative"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari pesan dalam room" className="h-8 pl-7 text-sm" /></div>
+                    {searchResults.length > 0 ? <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border bg-background">{searchResults.slice(0, 5).map((result) => <button key={result.id} type="button" onClick={() => jumpToMessage(result.id)} className="block w-full border-b px-3 py-2 text-left last:border-b-0 hover:bg-accent/50"><p className="truncate text-xs font-medium">{result.senderName}</p><p className="truncate text-xs text-muted-foreground">{result.content}</p></button>)}</div> : null}
+                </div>
+            </div>
+            <ScrollArea className="flex-1 min-h-0 p-3">
+                {loading ? <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div> : <>
+                    {hasMore ? <div className="mb-3 flex justify-center"><Button variant="outline" size="sm" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}Muat Pesan Lama</Button></div> : null}
+                    {messages.map((message, index) => {
+                        const showDate = !messages[index - 1] || day(messages[index - 1].createdAt) !== day(message.createdAt)
+                        return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }}>{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} onReply={setReplyTarget} /></div>
+                    })}
+                    {typingMembers.length > 0 ? <p className="mb-2 text-xs text-muted-foreground">{typingMembers.map((member) => member.name).join(", ")} sedang mengetik...</p> : null}
+                    <div ref={bottomRef} />
+                </>}
+            </ScrollArea>
+            <div className="relative border-t p-3">
+                {mentionSearch !== null ? <DocumentMentionPicker query={mentionSearch} onSelect={onMentionSelect} onClose={() => setMentionSearch(null)} /> : null}
+                {replyTarget ? <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 px-2 py-2"><Reply className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">{replyTarget.senderName}</p><p className="truncate text-xs text-muted-foreground">{replyTarget.content}</p></div><button type="button" onClick={() => setReplyTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
+                {pendingMention ? <div className="mb-2 flex items-center gap-2"><a href={pendingMention.url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", MENTION_COLORS[pendingMention.type])}>{React.createElement(MENTION_ICONS[pendingMention.type], { className: "h-3 w-3" })}{pendingMention.label}</a><button type="button" onClick={() => setPendingMention(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
+                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend() } }} placeholder="Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen" className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+            </div>
+        </div>
+    )
+}
 
 export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     const [isOpen, setIsOpen] = useState(false)
     const [rooms, setRooms] = useState<ChatRoomWithMeta[]>([])
     const [activeRoom, setActiveRoom] = useState<ChatRoomWithMeta | null>(null)
     const [showNewChat, setShowNewChat] = useState(false)
-
-    const totalUnread = rooms.reduce((s, r) => s + r.unreadCount, 0)
-
+    const [filter, setFilter] = useState<"active" | "archived">("active")
+    const previousRoomsRef = useRef<ChatRoomWithMeta[]>([])
+    const totalUnread = rooms.filter((room) => !room.isArchived).reduce((sum, room) => sum + room.unreadCount, 0)
     const loadRooms = useCallback(async () => {
-        const r = await getUserRooms()
-        setRooms(r)
-    }, [])
-
-    // Load rooms on open
-    useEffect(() => {
-        if (isOpen) loadRooms()
-    }, [isOpen, loadRooms])
-
-    // Poll unread count every 10s when closed
-    useEffect(() => {
-        const interval = setInterval(() => {
-            getUserRooms().then(setRooms)
-        }, 10000)
-        return () => clearInterval(interval)
-    }, [])
-
-    const handleSelectRoom = useCallback((room: ChatRoomWithMeta) => {
-        setActiveRoom(room)
-        setShowNewChat(false)
-    }, [])
-
-    const handleRoomCreated = useCallback(async (roomId: number) => {
-        await loadRooms()
-        const fresh = await getUserRooms()
-        const room = fresh.find((r) => r.id === roomId)
-        if (room) {
-            setActiveRoom(room)
-            setShowNewChat(false)
+        const nextRooms = await getUserRooms({ includeArchived: true })
+        for (const room of nextRooms) {
+            const previous = previousRoomsRef.current.find((item) => item.id === room.id)
+            const newUnread = room.unreadCount > (previous?.unreadCount ?? 0)
+            if (newUnread && !room.isMuted && (!isOpen || activeRoom?.id !== room.id)) toast.message(`Pesan baru dari ${room.name}`, { description: room.lastMessage?.content ?? "Ada pesan baru" })
         }
-    }, [loadRooms])
-
-    const handleDeleteRoom = useCallback(async (roomId: number) => {
-        await deleteChatRoom(roomId)
-        setActiveRoom(null)
-        setShowNewChat(false)
-        await loadRooms()
-    }, [loadRooms])
-
+        previousRoomsRef.current = nextRooms
+        setRooms(nextRooms)
+        setActiveRoom((current) => nextRooms.find((room) => room.id === current?.id) ?? current)
+    }, [activeRoom?.id, isOpen])
+    useEffect(() => { if (isOpen) loadRooms().catch(() => toast.error("Gagal memuat daftar chat")) }, [isOpen, loadRooms])
+    useEffect(() => { loadRooms().catch(() => undefined); const interval = window.setInterval(() => { loadRooms().catch(() => undefined) }, 6000); return () => window.clearInterval(interval) }, [loadRooms])
+    const togglePreference = useCallback(async (roomId: number, updates: Partial<Pick<ChatRoomWithMeta, "isMuted" | "isArchived" | "isPinned">>) => { try { await updateRoomPreferences(roomId, updates); await loadRooms() } catch { toast.error("Pengaturan room gagal diubah") } }, [loadRooms])
+    const handleRoomCreated = useCallback(async (roomId: number) => { const refreshed = await getUserRooms({ includeArchived: true }); previousRoomsRef.current = refreshed; setRooms(refreshed); setActiveRoom(refreshed.find((room) => room.id === roomId) ?? null); setShowNewChat(false); setFilter("active") }, [])
     const handleOpenHelpDesk = useCallback(async () => {
-        const { roomId } = await ensureHelpDeskRoom()
-        const fresh = await getUserRooms()
-        setRooms(fresh)
-        const room = fresh.find((item) => item.id === roomId)
-        if (room) {
-            setActiveRoom(room)
+        try {
+            const { roomId } = await ensureHelpDeskRoom()
+            const refreshed = await getUserRooms({ includeArchived: true })
+            previousRoomsRef.current = refreshed
+            setRooms(refreshed)
+            setActiveRoom(refreshed.find((room) => room.id === roomId) ?? null)
             setShowNewChat(false)
             setIsOpen(true)
+        } catch {
+            toast.error("Gagal membuka Chitra Jenius")
         }
     }, [])
-
+    const deleteRoom = useCallback(async (roomId: number) => { try { await deleteChatRoom(roomId); toast.success("Chat dihapus dari daftar Anda"); setActiveRoom(null); setShowNewChat(false); await loadRooms() } catch { toast.error("Gagal menghapus chat") } }, [loadRooms])
     return (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-            {/* Chat Panel */}
-            {isOpen && (
-                <div className="w-80 h-[520px] bg-background border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-                    {/* Title bar */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground shrink-0">
-                        <div className="flex items-center gap-2">
-                            <MessageCircle className="h-4 w-4" />
-                            <span className="font-semibold text-sm">Chat</span>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-primary-foreground hover:text-primary-foreground hover:bg-primary-foreground/20"
-                            onClick={() => {
-                                setIsOpen(false)
-                                setActiveRoom(null)
-                                setShowNewChat(false)
-                            }}
-                        >
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 overflow-hidden min-h-0">
-                        {showNewChat ? (
-                            <NewChatView
-                                currentUserId={currentUserId}
-                                onRoomCreated={handleRoomCreated}
-                                onBack={() => setShowNewChat(false)}
-                            />
-                        ) : activeRoom ? (
-                            <ConversationView
-                                room={activeRoom}
-                                currentUserId={currentUserId}
-                                onDeleteRoom={handleDeleteRoom}
-                                onBack={() => {
-                                    setActiveRoom(null)
-                                    loadRooms()
-                                }}
-                            />
-                        ) : (
-                            <RoomList
-                                rooms={rooms}
-                                currentUserId={currentUserId}
-                                onSelectRoom={handleSelectRoom}
-                                onNewChat={() => setShowNewChat(true)}
-                                onOpenHelpDesk={handleOpenHelpDesk}
-                                totalUnread={totalUnread}
-                            />
-                        )}
-                    </div>
+            {isOpen ? <div className="flex h-[620px] w-[380px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-200">
+                <div className="flex items-center justify-between bg-primary px-4 py-3 text-primary-foreground shrink-0"><div className="flex items-center gap-2"><MessageCircle className="h-4 w-4" /><span className="text-sm font-semibold">Chat Workspace</span></div><Button variant="ghost" size="icon" className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground" onClick={() => { setIsOpen(false); setActiveRoom(null); setShowNewChat(false) }}><X className="h-4 w-4" /></Button></div>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                    {showNewChat ? <NewChatView currentUserId={currentUserId} onRoomCreated={handleRoomCreated} onBack={() => setShowNewChat(false)} /> : activeRoom ? <ConversationView room={activeRoom} currentUserId={currentUserId} onBack={() => { setActiveRoom(null); loadRooms().catch(() => undefined) }} onDeleteRoom={deleteRoom} onRoomUpdated={loadRooms} /> : <RoomList rooms={rooms} currentUserId={currentUserId} filter={filter} onFilterChange={setFilter} onSelectRoom={(room) => { setActiveRoom(room); setShowNewChat(false) }} onNewChat={() => setShowNewChat(true)} onOpenHelpDesk={handleOpenHelpDesk} onTogglePreference={togglePreference} totalUnread={totalUnread} />}
                 </div>
-            )}
-
-            {/* Floating Button */}
-            <button
-                onClick={() => setIsOpen((v) => !v)}
-                className="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform active:scale-95 relative"
-            >
+            </div> : null}
+            <button type="button" onClick={() => setIsOpen((value) => !value)} className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95">
                 {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-                {!isOpen && totalUnread > 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                        {totalUnread > 99 ? "99+" : totalUnread}
-                    </span>
-                )}
+                {!isOpen && totalUnread > 0 ? <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">{totalUnread > 99 ? "99+" : totalUnread}</span> : null}
             </button>
         </div>
     )
