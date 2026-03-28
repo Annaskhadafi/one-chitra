@@ -140,6 +140,12 @@ export type SummaryOrderRow = {
     invoiceNo: string | null
     scanDo: string | null
     latestActivityDate: Date | null
+    deliveryCount: number
+    totalOrderedQty: number
+    totalDeliveredQty: number
+    syncSources: string[]
+    missingSyncFields: string[]
+    dataCompleteness: "Lengkap" | "Perlu Review"
     details: SummaryOrderProductItem[]
     deliveries: SummaryOrderDeliveryItem[]
 }

@@ -31,6 +31,20 @@ function uniqueJoined(values: Array<string | null | undefined>) {
     return normalized.length > 0 ? normalized.join(", ") : null
 }
 
+function collectUnique(values: Array<string | null | undefined>) {
+    return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))))
+}
+
+function getDeliverySortTime(delivery: {
+    deliveryDate: Date | null
+    scheduledDate: Date | null
+    createdAt: Date
+}) {
+    return delivery.deliveryDate?.getTime()
+        ?? delivery.scheduledDate?.getTime()
+        ?? delivery.createdAt.getTime()
+}
+
 export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
     noStore()
     await getAuthenticatedSession("sales-order-summary", "view")
@@ -67,14 +81,14 @@ export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
         })
         : []
 
-    const billingMap = new Map<string, { invoiceNo: string | null; doSap: string | null }>()
+    const billingMap = new Map<string, { invoiceNos: string[]; doSaps: string[] }>()
     if (billingResult.success) {
         for (const record of billingResult.data ?? []) {
             if (!record.poNo) continue
-            billingMap.set(record.poNo, {
-                invoiceNo: record.noInvSap ?? null,
-                doSap: record.nomorDoSap ?? null,
-            })
+            const existing = billingMap.get(record.poNo) ?? { invoiceNos: [], doSaps: [] }
+            existing.invoiceNos = collectUnique([...existing.invoiceNos, record.noInvSap ?? null])
+            existing.doSaps = collectUnique([...existing.doSaps, record.nomorDoSap ?? null])
+            billingMap.set(record.poNo, existing)
         }
     }
 
@@ -87,19 +101,20 @@ export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
 
     const rows: SummaryOrderRow[] = orders.map((order) => {
         const orderDeliveries = deliveryMap.get(order.id) ?? []
-        const latestDelivery = orderDeliveries[0] ?? null
+        const latestDelivery = [...orderDeliveries].sort((left, right) => getDeliverySortTime(right) - getDeliverySortTime(left))[0] ?? null
         const billingInfo = billingMap.get(order.customerPo ?? "")
 
         const details: SummaryOrderProductItem[] = order.items.map((item) => {
             const deliveredQty = orderDeliveries.reduce((sum, delivery) => {
-                const matchedItem = delivery.items.find((deliveryItem) => {
-                    if (deliveryItem.salesOrderItemId) {
-                        return deliveryItem.salesOrderItemId === item.id
-                    }
-                    return deliveryItem.productId === item.productId
-                })
+                const matchedQty = delivery.items.reduce((deliverySum, deliveryItem) => {
+                    const isMatch = deliveryItem.salesOrderItemId
+                        ? deliveryItem.salesOrderItemId === item.id
+                        : deliveryItem.productId === item.productId
 
-                return sum + Number(matchedItem?.deliveredQuantity ?? 0)
+                    return isMatch ? deliverySum + Number(deliveryItem.deliveredQuantity ?? 0) : deliverySum
+                }, 0)
+
+                return sum + matchedQty
             }, 0)
 
             return {
@@ -122,9 +137,28 @@ export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
             remark: delivery.remark ?? null,
         }))
 
-        const invoiceNo = uniqueJoined(orderDeliveries.map((delivery) => delivery.invoiceNumber)) ?? billingInfo?.invoiceNo ?? null
-        const doSapSummary = uniqueJoined(orderDeliveries.map((delivery) => delivery.doSap)) ?? billingInfo?.doSap ?? null
+        const deliveryInvoiceNo = uniqueJoined(orderDeliveries.map((delivery) => delivery.invoiceNumber))
+        const billingInvoiceNo = uniqueJoined(billingInfo?.invoiceNos ?? [])
+        const invoiceNo = deliveryInvoiceNo ?? billingInvoiceNo ?? null
+
+        const deliveryDoSap = uniqueJoined(orderDeliveries.map((delivery) => delivery.doSap))
+        const billingDoSap = uniqueJoined(billingInfo?.doSaps ?? [])
+        const doSapSummary = deliveryDoSap ?? billingDoSap ?? null
         const latestActivityDate = latestDelivery?.deliveryDate ?? latestDelivery?.scheduledDate ?? order.poReceive ?? order.salesDate ?? null
+        const totalOrderedQty = details.reduce((sum, detail) => sum + Number(detail.orderedQty ?? 0), 0)
+        const totalDeliveredQty = details.reduce((sum, detail) => sum + Number(detail.deliveredQty ?? 0), 0)
+        const syncSources = [
+            "Sales Order",
+            ...(orderDeliveries.length > 0 ? ["Delivery", "DO Monitoring"] : []),
+            ...(billingInfo ? ["Billing"] : []),
+        ]
+        const missingSyncFields = [
+            ...(!order.customerPo ? ["No. PO"] : []),
+            ...(!order.customerId ? ["Customer"] : []),
+            ...(orderDeliveries.length === 0 ? ["Delivery"] : []),
+            ...(!invoiceNo ? ["Invoice No"] : []),
+        ]
+        const dataCompleteness = missingSyncFields.length === 0 ? "Lengkap" : "Perlu Review"
 
         return {
             rowId: `so-${order.id}`,
@@ -147,6 +181,12 @@ export async function getSummaryOrders(): Promise<SummaryOrderRow[]> {
             invoiceNo,
             scanDo: latestDelivery?.scanDoDocument ?? null,
             latestActivityDate,
+            deliveryCount: orderDeliveries.length,
+            totalOrderedQty,
+            totalDeliveredQty,
+            syncSources,
+            missingSyncFields,
+            dataCompleteness,
             details,
             deliveries: deliveriesSummary,
         }
