@@ -8,6 +8,7 @@ import { z } from "zod"
 import { salesOrderSchema } from "@/lib/schemas"
 import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
+import { sendSalesOrderCreatedNotification } from "@/lib/delivery-notifications"
 import { sendEmail } from "@/lib/email"
 
 let hasSalesPersonColumnCache: boolean | null = null
@@ -375,7 +376,7 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
         }
 
         // Start transaction
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const [newOrder] = await tx.insert(salesOrders)
                 .values({
                     invoiceNumber: invoiceNumber!,
@@ -469,6 +470,19 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             revalidatePath("/dashboard/stock-transfers")
             return { success: true, id: newOrder.id }
         })
+
+        if (result.success && result.id) {
+            try {
+                const notificationResult = await sendSalesOrderCreatedNotification(result.id)
+                if (!notificationResult.success && !notificationResult.skipped) {
+                    console.error(`[SO EMAIL] Failed to send creation notification for SO ${result.id}:`, notificationResult.error)
+                }
+            } catch (error) {
+                console.error(`[SO EMAIL] Unexpected error for SO ${result.id}:`, error)
+            }
+        }
+
+        return result
     } catch (error: unknown) {
         console.error("Failed to create sales order:", error)
         const message = error instanceof Error ? error.message : String(error)

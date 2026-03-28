@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { deliveries, deliveryItems } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders } from "@/db/schema"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { formatWarehouseLabel } from "@/lib/sloc"
@@ -10,6 +10,28 @@ type DeliveryNotificationResult = {
     skipped?: boolean
     reason?: string
     error?: string
+}
+
+type SalesOrderNotificationOrder = {
+    id: number
+    invoiceNumber: string | null
+    customerPo: string | null
+    salesDate: Date
+    status: string
+    createdByUser: {
+        name: string
+    } | null
+    warehouse: {
+        sloc: string | null
+        description: string | null
+    } | null
+    customer: {
+        name: string | null
+    } | null
+    salesPerson: {
+        name: string
+        email: string
+    } | null
 }
 
 type DeliveryNotificationOrderItem = {
@@ -22,6 +44,7 @@ type DeliveryNotificationDelivery = {
     id: number
     salesOrderId: number
     deliveryNumber: string | null
+    status: string
     deliveryType: string
     doSap: string | null
     driverName: string | null
@@ -33,6 +56,9 @@ type DeliveryNotificationDelivery = {
     deliveryDate: Date | null
     createdAt: Date
     updatedAt: Date
+    createdByUser: {
+        name: string
+    } | null
     warehouse: {
         sloc: string | null
         description: string | null
@@ -106,6 +132,18 @@ function formatQuantity(value: number) {
 function normalizeText(value: string | null | undefined, fallback = "-") {
     const normalized = value?.trim()
     return normalized ? normalized : fallback
+}
+
+function toTitleCase(value: string | null | undefined) {
+    const normalized = value?.trim()
+    if (!normalized) return "-"
+
+    return normalized
+        .replace(/[_-]/g, " ")
+        .replace(/\s+/g, " ")
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ")
 }
 
 function resolveOrderItem(
@@ -292,6 +330,107 @@ export async function sendDeliveryDeliveredNotification(deliveryId: number): Pro
         return {
             success: false,
             error: result.error ?? "Failed to send delivery notification email",
+        }
+    }
+
+    return { success: true }
+}
+
+export async function sendSalesOrderCreatedNotification(salesOrderId: number): Promise<DeliveryNotificationResult> {
+    const order = await db.query.salesOrders.findFirst({
+        where: eq(salesOrders.id, salesOrderId),
+        with: {
+            customer: true,
+            warehouse: true,
+            createdByUser: true,
+            salesPerson: true,
+        },
+    }) as SalesOrderNotificationOrder | undefined
+
+    if (!order) {
+        return { success: false, skipped: true, reason: "Sales order not found" }
+    }
+
+    const salesPic = order.salesPerson
+    const salesPicEmail = salesPic?.email?.trim()
+    if (!salesPicEmail) {
+        return { success: false, skipped: true, reason: "Sales PIC email not found" }
+    }
+
+    const result = await sendSystemTemplatedEmailByCode({
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.salesOrderCreatedSalesPic,
+        to: salesPicEmail,
+        data: {
+            salesPicName: normalizeText(salesPic?.name, "Sales PIC"),
+            salesOrderNumber: normalizeText(order.invoiceNumber, `SO #${order.id}`),
+            customerPo: normalizeText(order.customerPo),
+            customerName: normalizeText(order.customer?.name),
+            salesDate: formatDate(order.salesDate),
+            statusLabel: toTitleCase(order.status),
+            warehouseName: formatWarehouseLabel(order.warehouse),
+            createdByName: normalizeText(order.createdByUser?.name, "System"),
+            actionUrl: `/dashboard/sales-orders/${order.id}`,
+        },
+    })
+
+    if (!result.success) {
+        return {
+            success: false,
+            error: result.error ?? "Failed to send sales order notification email",
+        }
+    }
+
+    return { success: true }
+}
+
+export async function sendDeliveryCreatedNotification(deliveryId: number): Promise<DeliveryNotificationResult> {
+    const delivery = await db.query.deliveries.findFirst({
+        where: eq(deliveries.id, deliveryId),
+        with: {
+            warehouse: true,
+            createdByUser: true,
+            salesOrder: {
+                with: {
+                    customer: true,
+                    salesPerson: true,
+                },
+            },
+        },
+    }) as DeliveryNotificationDelivery | undefined
+
+    if (!delivery) {
+        return { success: false, skipped: true, reason: "Delivery not found" }
+    }
+
+    const salesPic = delivery.salesOrder?.salesPerson
+    const salesPicEmail = salesPic?.email?.trim()
+    if (!salesPicEmail) {
+        return { success: false, skipped: true, reason: "Sales PIC email not found" }
+    }
+
+    const result = await sendSystemTemplatedEmailByCode({
+        code: SYSTEM_EMAIL_TEMPLATE_CODES.deliveryCreatedSalesPic,
+        to: salesPicEmail,
+        data: {
+            salesPicName: normalizeText(salesPic?.name, "Sales PIC"),
+            deliveryNumber: normalizeText(delivery.deliveryNumber, `Delivery #${delivery.id}`),
+            salesOrderNumber: normalizeText(delivery.salesOrder?.invoiceNumber, `SO #${delivery.salesOrderId}`),
+            customerPo: normalizeText(delivery.salesOrder?.customerPo),
+            customerName: normalizeText(delivery.salesOrder?.customer?.name),
+            scheduledDate: formatDate(delivery.scheduledDate),
+            deliveryTypeLabel: toTitleCase(delivery.deliveryType),
+            statusLabel: toTitleCase(delivery.status),
+            warehouseName: formatWarehouseLabel(delivery.warehouse),
+            shippingAddress: normalizeText(delivery.shippingAddress),
+            createdByName: normalizeText(delivery.createdByUser?.name, "System"),
+            actionUrl: `/dashboard/deliveries/${delivery.id}`,
+        },
+    })
+
+    if (!result.success) {
+        return {
+            success: false,
+            error: result.error ?? "Failed to send delivery created notification email",
         }
     }
 
