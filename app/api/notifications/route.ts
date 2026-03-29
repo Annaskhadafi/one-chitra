@@ -2,10 +2,6 @@ import { headers } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm"
 
-import { auth } from "@/lib/auth"
-import { db } from "@/db"
-import { emailLogs, userNotificationReads } from "@/db/schema"
-
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
 
@@ -15,8 +11,19 @@ function extractActionUrl(htmlContent?: string | null, textContent?: string | nu
     return match?.[0] ?? null
 }
 
+async function loadNotificationDeps() {
+    const [{ auth }, { db }, { emailLogs, userNotificationReads }] = await Promise.all([
+        import("@/lib/auth"),
+        import("@/db"),
+        import("@/db/schema"),
+    ])
+
+    return { auth, db, emailLogs, userNotificationReads }
+}
+
 export async function GET(request: NextRequest) {
     try {
+        const { auth, db, emailLogs, userNotificationReads } = await loadNotificationDeps()
         const session = await auth.api.getSession({ headers: await headers() })
         if (!session?.user?.id || !session.user.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -101,12 +108,13 @@ export async function GET(request: NextRequest) {
             notifications: [],
             unreadCount: 0,
             degraded: true,
-        })
+        }, { status: 200 })
     }
 }
 
 export async function POST(request: NextRequest) {
     try {
+        const { auth, db, emailLogs, userNotificationReads } = await loadNotificationDeps()
         const session = await auth.api.getSession({ headers: await headers() })
         if (!session?.user?.id || !session.user.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -197,6 +197,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "inventory",
                     },
                     {
+                        title: "Procurement Next",
+                        url: "/dashboard/procurement-next",
+                        resource: "inventory",
+                    },
+                    {
                         title: "Vendor Delivery Setup",
                         url: "/dashboard/inventory-ml/vendors",
                         resource: "inventory",

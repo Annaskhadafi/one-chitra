@@ -37,6 +37,7 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/inventory-ml/settings", resource: "inventory" },
     { prefix: "/dashboard/inventory-ml", resource: "inventory" },
     { prefix: "/dashboard/inventory", resource: "inventory" },
+    { prefix: "/dashboard/procurement-next", resource: "inventory" },
     { prefix: "/dashboard/logistics-costs", resource: "logistics-costs" },
     { prefix: "/dashboard/marketing/campaigns", resource: "marketing" },
     { prefix: "/dashboard/marketing/email-lists", resource: "marketing" },

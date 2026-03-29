@@ -43,6 +43,7 @@ function formatNotificationDate(dateIso: string) {
 
 export function NotificationBell() {
     const router = useRouter()
+    const [mounted, setMounted] = useState(false)
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [markingAll, setMarkingAll] = useState(false)
@@ -63,6 +64,10 @@ export function NotificationBell() {
         } finally {
             setLoading(false)
         }
+    }, [])
+
+    useEffect(() => {
+        setMounted(true)
     }, [])
 
     useEffect(() => {
@@ -129,6 +134,15 @@ export function NotificationBell() {
     const hasNotifications = data.notifications.length > 0
 
     const notifItems = useMemo(() => data.notifications, [data.notifications])
+
+    if (!mounted) {
+        return (
+            <Button variant="outline" size="icon" className="relative">
+                <Bell className="h-4 w-4" />
+                <span className="sr-only">Notifikasi</span>
+            </Button>
+        )
+    }
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
