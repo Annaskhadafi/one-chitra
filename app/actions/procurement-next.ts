@@ -28,8 +28,10 @@ export type ProcurementNextItem = {
     sold90d: number
     monthlyAvg: number
     dailyAvg30d: number
+    dailyAvg60d: number
     dailyAvg90d: number
     daysCover30d: number | null
+    daysCover60d: number | null
     daysCover90d: number | null
     lastSaleDate: string | null
     recommendedQty: number
@@ -65,6 +67,7 @@ type ProcurementNextResponse = {
             totalRecommendedQty: number
             totalRecommendedValue: number
             averageDaysCover30d: number | null
+            averageDaysCover60d: number | null
             averageDaysCover90d: number | null
             totalForecastQty: number
             totalPredictedLostSales: number
@@ -86,12 +89,6 @@ const PRIORITY_META = {
     watch: { label: "Watch", fill: "#0ea5e9" },
     healthy: { label: "Healthy", fill: "#16a34a" },
 } as const
-
-const FORECAST_ALGORITHM_LABELS: Record<ForecastingAlgorithm, string> = {
-    seasonal: "Seasonal",
-    moving_average: "Moving average",
-    trend: "Trend",
-}
 
 function monthKey(date: Date) {
     const year = date.getFullYear()
@@ -446,11 +443,13 @@ export async function getProcurementNextAnalytics(
             const minStock = normalizeNumber(row.minStock)
             const stockValue = normalizeNumber(row.stockValue)
             const dailyAvg30d = mergedSales.sold30d > 0 ? mergedSales.sold30d / 30 : 0
+            const dailyAvg60d = mergedSales.sold60d > 0 ? mergedSales.sold60d / 60 : 0
             const dailyAvg90d = mergedSales.sold90d > 0 ? mergedSales.sold90d / 90 : 0
             const monthlyAvg = mergedSales.totalQty / horizonMonths
             const daysCover30d = dailyAvg30d > 0 && currentStock > 0 ? Number((currentStock / dailyAvg30d).toFixed(1)) : null
+            const daysCover60d = dailyAvg60d > 0 && currentStock > 0 ? Number((currentStock / dailyAvg60d).toFixed(1)) : null
             const daysCover90d = dailyAvg90d > 0 && currentStock > 0 ? Number((currentStock / dailyAvg90d).toFixed(1)) : null
-            const targetStock = Math.max(minStock, Math.ceil(dailyAvg30d * 30))
+            const targetStock = Math.max(minStock, Math.ceil(dailyAvg60d * 60))
             const recommendedQty = Math.max(targetStock - currentStock, 0)
             const unitValue = currentStock > 0 ? stockValue / currentStock : 0
             const recommendedValue = recommendedQty * unitValue
@@ -458,11 +457,11 @@ export async function getProcurementNextAnalytics(
             let priority: ProcurementNextItem["priority"] = "healthy"
             if (currentStock <= 0 && mergedSales.sold90d > 0) {
                 priority = "urgent"
-            } else if (daysCover30d !== null && daysCover30d <= 14) {
+            } else if (daysCover60d !== null && daysCover60d <= 14) {
                 priority = "urgent"
-            } else if (currentStock <= minStock || (daysCover30d !== null && daysCover30d <= 30)) {
+            } else if (currentStock <= minStock || (daysCover60d !== null && daysCover60d <= 30)) {
                 priority = "soon"
-            } else if (mergedSales.sold90d > 0 && daysCover30d !== null && daysCover30d <= 60) {
+            } else if (mergedSales.sold90d > 0 && daysCover60d !== null && daysCover60d <= 60) {
                 priority = "watch"
             }
 
@@ -479,8 +478,10 @@ export async function getProcurementNextAnalytics(
                 sold90d: mergedSales.sold90d,
                 monthlyAvg: Number(monthlyAvg.toFixed(1)),
                 dailyAvg30d: Number(dailyAvg30d.toFixed(2)),
+                dailyAvg60d: Number(dailyAvg60d.toFixed(2)),
                 dailyAvg90d: Number(dailyAvg90d.toFixed(2)),
                 daysCover30d,
+                daysCover60d,
                 daysCover90d,
                 lastSaleDate: mergedSales.lastSaleDate ? mergedSales.lastSaleDate.slice(0, 10) : null,
                 recommendedQty,
@@ -544,6 +545,11 @@ export async function getProcurementNextAnalytics(
             totalRecommendedValue: items.reduce((sum, item) => sum + item.recommendedValue, 0),
             averageDaysCover30d: (() => {
                 const valid = items.filter((item) => item.daysCover30d !== null).map((item) => item.daysCover30d as number)
+                if (valid.length === 0) return null
+                return Number((valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1))
+            })(),
+            averageDaysCover60d: (() => {
+                const valid = items.filter((item) => item.daysCover60d !== null).map((item) => item.daysCover60d as number)
                 if (valid.length === 0) return null
                 return Number((valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1))
             })(),

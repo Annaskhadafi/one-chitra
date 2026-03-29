@@ -157,9 +157,9 @@ export function ProcurementNextClient() {
             "Category",
             "Current Stock",
             "Min Stock",
-            "Sold 30D",
+            "Sold 60D",
             "Monthly Avg",
-            "Days Cover 30D",
+            "Days Cover 60D",
             "Recommended Qty",
             "Last Sale",
         ]
@@ -171,9 +171,9 @@ export function ProcurementNextClient() {
             item.category,
             String(item.currentStock),
             String(item.minStock),
-            String(item.sold30d),
+            String(item.sold60d),
             String(item.monthlyAvg),
-            item.daysCover30d === null ? "No demand signal" : String(item.daysCover30d),
+            item.daysCover60d === null ? "No demand signal" : String(item.daysCover60d),
             String(item.recommendedQty),
             item.lastSaleDate ?? "",
         ])
@@ -256,11 +256,11 @@ export function ProcurementNextClient() {
                         <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-100 via-white to-lime-50 p-4 shadow-[0_10px_30px_rgba(52,211,153,0.08)]">
                             <div className="text-xs uppercase tracking-[0.2em] text-emerald-700">Average cover</div>
                             <div className="mt-2 text-3xl font-bold">
-                                {data?.summary.averageDaysCover30d !== null && data?.summary.averageDaysCover30d !== undefined
-                                    ? `${data.summary.averageDaysCover30d}d`
+                                {data?.summary.averageDaysCover60d !== null && data?.summary.averageDaysCover60d !== undefined
+                                    ? `${data.summary.averageDaysCover60d}d`
                                     : "-"}
                             </div>
-                            <div className="mt-1 text-xs text-emerald-700">Rata-rata hari perlindungan stok 30D</div>
+                            <div className="mt-1 text-xs text-emerald-700">Rata-rata hari perlindungan stok 60D</div>
                         </div>
                     </div>
                 </CardContent>
@@ -658,7 +658,7 @@ export function ProcurementNextClient() {
                                         <TableHead>Description</TableHead>
                                         <TableHead className="text-right">Current</TableHead>
                                         <TableHead className="text-right">Min</TableHead>
-                                        <TableHead className="text-right">Sold 30D</TableHead>
+                                        <TableHead className="text-right">Sold 60D</TableHead>
                                         <TableHead className="text-right">Monthly Avg</TableHead>
                                         <TableHead>Days Cover</TableHead>
                                         <TableHead className="text-right">Recommended Qty</TableHead>
@@ -685,9 +685,9 @@ export function ProcurementNextClient() {
                                                 </TableCell>
                                                 <TableCell className="text-right">{formatNumber(item.currentStock)}</TableCell>
                                                 <TableCell className="text-right">{formatNumber(item.minStock)}</TableCell>
-                                                <TableCell className="text-right">{formatNumber(item.sold30d)}</TableCell>
+                                                <TableCell className="text-right">{formatNumber(item.sold60d)}</TableCell>
                                                 <TableCell className="text-right">{formatNumber(item.monthlyAvg, 1)}</TableCell>
-                                                <TableCell>{formatDaysCover(item.daysCover30d)}</TableCell>
+                                                <TableCell>{formatDaysCover(item.daysCover60d)}</TableCell>
                                                 <TableCell className="text-right font-semibold">{formatNumber(item.recommendedQty)}</TableCell>
                                                 <TableCell>{item.lastSaleDate ?? "-"}</TableCell>
                                             </TableRow>
@@ -711,11 +711,11 @@ export function ProcurementNextClient() {
                     </div>
                     <div className="rounded-xl border bg-muted/30 p-4">
                         <div className="font-medium text-foreground">Coverage logic</div>
-                        <p className="mt-2">Days Cover dihitung dari Current Stock dibagi rata-rata demand 30 hari terakhir, jadi fokus pembacaannya tetap pada pergerakan 30D yang paling aktual.</p>
+                        <p className="mt-2">Days Cover dihitung dari Current Stock dibagi rata-rata demand 60 hari terakhir, jadi default pembacaannya sekarang lebih stabil untuk procurement planning.</p>
                     </div>
                     <div className="rounded-xl border bg-muted/30 p-4">
                         <div className="font-medium text-foreground">Recommended qty</div>
-                        <p className="mt-2">Saran replenishment memakai target tertinggi antara minimum stock dan proyeksi 30 hari demand. Ini insight analitik, bukan draft PO.</p>
+                        <p className="mt-2">Saran replenishment memakai target tertinggi antara minimum stock dan proyeksi 60 hari demand. Ini insight analitik, bukan draft PO.</p>
                     </div>
                 </CardContent>
             </Card>
