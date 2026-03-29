@@ -125,7 +125,7 @@ interface QuotationDetailData {
         unitPrice: string
         discount: string
         tax: string
-        product: Product
+        product: Product | null
     }[]
 }
 
@@ -221,6 +221,15 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
         return sum + (item.quantity * Number(item.unitPrice) - Number(item.discount) + Number(item.tax))
     }, 0)
     const grandTotal = itemsSubtotal - Number(quotation.discount) + Number(quotation.tax) + Number(quotation.shipping)
+
+    const getItemMaterialNumber = (item: QuotationDetailData["items"][number]) =>
+        item.product?.materialNumber || item.description || `ITEM-${item.id}`
+
+    const getItemMaterialDescription = (item: QuotationDetailData["items"][number]) =>
+        item.product?.materialDescription || item.description || "-"
+
+    const getItemCostSap = (item: QuotationDetailData["items"][number]) =>
+        item.product?.costSap || 0
 
     const handleConvert = async () => {
         setIsConverting(true)
@@ -545,14 +554,14 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                         <div className="min-w-0">
                                             <p className="text-[11px] text-muted-foreground">#{index + 1}</p>
                                             <div className="mt-1 flex items-center gap-2 text-sm font-semibold">
-                                                <span className="truncate">{item.product.materialNumber}</span>
+                                                <span className="truncate">{getItemMaterialNumber(item)}</span>
                                                 <ProductHistoryPopover
-                                                    materialNo={item.product.materialNumber}
-                                                    costSap={item.product.costSap || 0}
+                                                    materialNo={getItemMaterialNumber(item)}
+                                                    costSap={getItemCostSap(item)}
                                                 />
                                             </div>
                                             <p className="mt-1 break-words text-sm text-muted-foreground">
-                                                {item.product.materialDescription || "-"}
+                                                {getItemMaterialDescription(item)}
                                             </p>
                                             {item.description && (
                                                 <p className="mt-1 text-xs italic text-muted-foreground">{item.description}</p>
@@ -612,15 +621,15 @@ export function QuotationDetail({ quotation, autoOpenPdf = false }: QuotationDet
                                             <TableCell className="font-mono text-muted-foreground">{index + 1}</TableCell>
                                             <TableCell className="font-mono text-sm">
                                                 <div className="flex items-center gap-2">
-                                                    {item.product.materialNumber}
+                                                    {getItemMaterialNumber(item)}
                                                     <ProductHistoryPopover
-                                                        materialNo={item.product.materialNumber}
-                                                        costSap={item.product.costSap || 0}
+                                                        materialNo={getItemMaterialNumber(item)}
+                                                        costSap={getItemCostSap(item)}
                                                     />
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="font-medium">{item.product.materialDescription || "-"}</div>
+                                                <div className="font-medium">{getItemMaterialDescription(item)}</div>
                                                 {item.description && (
                                                     <div className="text-xs text-muted-foreground italic mt-0.5">{item.description}</div>
                                                 )}

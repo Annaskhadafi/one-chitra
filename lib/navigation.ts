@@ -109,6 +109,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "deliveries",
                     },
                     {
+                        title: "Delivery Planning Board",
+                        url: "/dashboard/delivery-planning-board",
+                        resource: "deliveries",
+                    },
+                    {
                         title: "DO Monitoring",
                         url: "/dashboard/do-monitoring",
                         resource: "deliveries",
@@ -294,6 +299,11 @@ export const navigationConfig: NavSection[] = [
                         title: "History Order",
                         url: "/dashboard/history-order",
                         resource: "history-order",
+                    },
+                    {
+                        title: "Customer 360 Workspace",
+                        url: "/dashboard/customer-360",
+                        resource: "customers",
                     },
                     {
                         title: "Harga Acuan Minerba",
