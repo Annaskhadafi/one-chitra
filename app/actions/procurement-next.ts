@@ -1,5 +1,6 @@
 "use server"
 
+import { ARIMA, AutoARIMA } from "ts-arima-forecast"
 import { db } from "@/db"
 import { stockLevels } from "@/db/schema/stock-levels"
 import { products } from "@/db/schema/products"
@@ -7,7 +8,7 @@ import { salesRevenueSap } from "@/db/schema/sap"
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm"
 
 export type ForecastGranularity = "weekly" | "monthly" | "quarterly" | "yearly"
-export type ForecastingAlgorithm = "seasonal" | "moving_average" | "trend"
+export type ForecastingAlgorithm = "auto_arima" | "seasonal" | "moving_average" | "trend"
 
 export type ProcurementNextFilters = {
     horizonMonths?: number
@@ -49,6 +50,12 @@ type ForecastChartPoint = {
     isForecast: boolean
 }
 
+type ForecastComputationResult = {
+    values: number[]
+    effectiveAlgorithm: ForecastingAlgorithm | "fallback_moving_average"
+    fallbackReason: string | null
+}
+
 type ProcurementNextResponse = {
     success: boolean
     data?: {
@@ -71,6 +78,8 @@ type ProcurementNextResponse = {
             averageDaysCover90d: number | null
             totalForecastQty: number
             totalPredictedLostSales: number
+            effectiveForecastAlgorithm: string
+            forecastFallbackReason: string | null
         }
         charts: {
             urgencyBreakdown: Array<{ name: string; value: number; fill: string }>
@@ -179,6 +188,13 @@ function normalizeNumber(value: unknown) {
     return Number.isFinite(num) ? num : 0
 }
 
+function sanitizeSeries(values: number[]) {
+    return values.map((value) => {
+        if (!Number.isFinite(value) || Number.isNaN(value)) return 0
+        return Math.max(Number(value.toFixed(1)), 0)
+    })
+}
+
 function getFuturePeriods(granularity: ForecastGranularity) {
     if (granularity === "weekly") return 8
     if (granularity === "monthly") return 6
@@ -205,6 +221,27 @@ function average(values: number[]) {
     return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
+function isForecastShapeReasonable(history: number[], forecast: number[]) {
+    if (forecast.length === 0) return false
+
+    const recentWindow = history.slice(-Math.min(4, history.length))
+    const recentAverage = average(recentWindow)
+    const maxHistory = Math.max(...history, 0)
+    const zeroLikeCount = forecast.filter((value) => value <= Math.max(recentAverage * 0.05, 1)).length
+    const allZeroLike = zeroLikeCount === forecast.length
+    const hasExtremeSpike = maxHistory > 0 && forecast.some((value) => value > maxHistory * 1.75)
+    const collapsesAfterFirstSpike =
+        forecast.length >= 3
+        && forecast[0] > Math.max(recentAverage * 1.2, 1)
+        && forecast.slice(1).every((value) => value <= Math.max(recentAverage * 0.05, 1))
+
+    if (allZeroLike && recentAverage > 0) return false
+    if (hasExtremeSpike) return false
+    if (collapsesAfterFirstSpike) return false
+
+    return true
+}
+
 function linearRegressionForecast(series: number[], futurePeriods: number) {
     if (series.length === 0) return Array.from({ length: futurePeriods }, () => 0)
     if (series.length === 1) return Array.from({ length: futurePeriods }, () => series[0])
@@ -229,36 +266,123 @@ function linearRegressionForecast(series: number[], futurePeriods: number) {
     })
 }
 
+function buildAutoArimaForecastValues(series: number[], futurePeriods: number) {
+    if (series.length < 6) {
+        return null
+    }
+
+    const uniquePoints = new Set(series.map((value) => Number(value.toFixed(4)))).size
+    if (uniquePoints < 2) {
+        return null
+    }
+
+    try {
+        const maxP = series.length >= 18 ? 3 : 2
+        const maxQ = series.length >= 18 ? 3 : 2
+        const selected = AutoARIMA.findBestARIMA(series, maxP, 2, maxQ, "aic")
+        const params = selected?.bestParams
+
+        if (
+            !params
+            || typeof params.p !== "number"
+            || typeof params.d !== "number"
+            || typeof params.q !== "number"
+        ) {
+            return null
+        }
+
+        const model = new ARIMA({
+            p: params.p,
+            d: params.d,
+            q: params.q,
+        })
+
+        model.fit(series)
+        const forecast = model.forecast(futurePeriods, 0.95)
+        const normalized = sanitizeSeries(forecast.forecast)
+
+        if (normalized.some((value) => !Number.isFinite(value) || Number.isNaN(value))) {
+            return null
+        }
+
+        return normalized
+    } catch (error) {
+        console.error("Auto ARIMA forecast failed, fallback to moving average:", error)
+        return null
+    }
+}
+
 function buildForecastValues(
     series: number[],
     granularity: ForecastGranularity,
     algorithm: ForecastingAlgorithm
-) {
+): ForecastComputationResult {
     const futurePeriods = getFuturePeriods(granularity)
     const fallback = average(series.slice(-Math.max(getWindowSize(granularity), 1)))
     if (series.length === 0) {
-        return Array.from({ length: futurePeriods }, () => 0)
+        return {
+            values: Array.from({ length: futurePeriods }, () => 0),
+            effectiveAlgorithm: algorithm,
+            fallbackReason: null,
+        }
+    }
+
+    if (algorithm === "auto_arima") {
+        const autoArimaForecast = buildAutoArimaForecastValues(series, futurePeriods)
+        if (autoArimaForecast && isForecastShapeReasonable(series, autoArimaForecast)) {
+            return {
+                values: sanitizeSeries(autoArimaForecast),
+                effectiveAlgorithm: "auto_arima",
+                fallbackReason: null,
+            }
+        }
+
+        const rolling = [...series]
+        const fallbackValues = sanitizeSeries(Array.from({ length: futurePeriods }, () => {
+            const window = rolling.slice(-getWindowSize(granularity))
+            const forecast = Number(average(window).toFixed(1))
+            rolling.push(forecast)
+            return forecast
+        }))
+
+        return {
+            values: fallbackValues,
+            effectiveAlgorithm: "fallback_moving_average",
+            fallbackReason: "Auto ARIMA menghasilkan pola forecast yang tidak stabil untuk histori saat ini.",
+        }
     }
 
     if (algorithm === "trend") {
-        return linearRegressionForecast(series, futurePeriods)
+        return {
+            values: sanitizeSeries(linearRegressionForecast(series, futurePeriods)),
+            effectiveAlgorithm: "trend",
+            fallbackReason: null,
+        }
     }
 
     if (algorithm === "seasonal") {
         const seasonLength = Math.min(getSeasonLength(granularity), series.length)
-        return Array.from({ length: futurePeriods }, (_value, index) => {
-            const seasonalValue = series[series.length - seasonLength + (index % seasonLength)]
-            return Number((seasonalValue ?? fallback).toFixed(1))
-        })
+        return {
+            values: sanitizeSeries(Array.from({ length: futurePeriods }, (_value, index) => {
+                const seasonalValue = series[series.length - seasonLength + (index % seasonLength)]
+                return Number((seasonalValue ?? fallback).toFixed(1))
+            })),
+            effectiveAlgorithm: "seasonal",
+            fallbackReason: null,
+        }
     }
 
     const rolling = [...series]
-    return Array.from({ length: futurePeriods }, () => {
-        const window = rolling.slice(-getWindowSize(granularity))
-        const forecast = Number(average(window).toFixed(1))
-        rolling.push(forecast)
-        return forecast
-    })
+    return {
+        values: sanitizeSeries(Array.from({ length: futurePeriods }, () => {
+            const window = rolling.slice(-getWindowSize(granularity))
+            const forecast = Number(average(window).toFixed(1))
+            rolling.push(forecast)
+            return forecast
+        })),
+        effectiveAlgorithm: "moving_average",
+        fallbackReason: null,
+    }
 }
 
 export async function getProcurementNextAnalytics(
@@ -267,7 +391,7 @@ export async function getProcurementNextAnalytics(
     try {
         const horizonMonths = Math.min(Math.max(Number(filters.horizonMonths ?? 6), 3), 18)
         const chartGranularity: ForecastGranularity = filters.chartGranularity ?? "monthly"
-        const forecastingAlgorithm: ForecastingAlgorithm = filters.forecastingAlgorithm ?? "seasonal"
+        const forecastingAlgorithm: ForecastingAlgorithm = filters.forecastingAlgorithm ?? "auto_arima"
 
         const stockRows = await db
             .select({
@@ -502,7 +626,8 @@ export async function getProcurementNextAnalytics(
         const historicalSeries = Array.from(historicalPeriodMap.values())
             .sort((left, right) => left.periodStart.getTime() - right.periodStart.getTime())
         const historicalSalesValues = historicalSeries.map((point) => Number(point.qty.toFixed(1)))
-        const forecastValues = buildForecastValues(historicalSalesValues, chartGranularity, forecastingAlgorithm)
+        const forecastComputation = buildForecastValues(historicalSalesValues, chartGranularity, forecastingAlgorithm)
+        const forecastValues = forecastComputation.values
 
         let runningProjectedStock = totalCurrentStock
         const futurePoints = forecastValues.map((forecastQty, index) => {
@@ -560,6 +685,8 @@ export async function getProcurementNextAnalytics(
             })(),
             totalForecastQty: Number(forecastValues.reduce((sum, value) => sum + value, 0).toFixed(1)),
             totalPredictedLostSales: Number(futurePoints.reduce((sum, point) => sum + (point.predictedLostSales ?? 0), 0).toFixed(1)),
+            effectiveForecastAlgorithm: forecastComputation.effectiveAlgorithm,
+            forecastFallbackReason: forecastComputation.fallbackReason,
         }
 
         const urgencyBreakdown = (Object.keys(PRIORITY_META) as Array<keyof typeof PRIORITY_META>)

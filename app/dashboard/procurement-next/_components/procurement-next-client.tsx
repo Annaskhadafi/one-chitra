@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { AlertTriangle, Boxes, CalendarRange, CircleAlert, Download, PackageSearch, RefreshCcw, Search, ShieldCheck, Tags, TrendingUp } from "lucide-react"
-import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { getProcurementNextAnalytics, type ProcurementNextItem } from "@/app/actions/procurement-next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,7 @@ import {
 type ProcurementAnalyticsData = Awaited<ReturnType<typeof getProcurementNextAnalytics>>["data"]
 
 const FORECAST_ALGORITHM_OPTIONS = [
+    { value: "auto_arima", label: "Auto ARIMA" },
     { value: "seasonal", label: "Seasonal" },
     { value: "moving_average", label: "Moving average" },
     { value: "trend", label: "Trend" },
@@ -43,6 +44,9 @@ const priorityBadgeClass: Record<ProcurementNextItem["priority"], string> = {
 }
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
+    if (!Number.isFinite(value) || Number.isNaN(value)) {
+        return "0"
+    }
     const fixed = maximumFractionDigits > 0 ? value.toFixed(maximumFractionDigits) : Math.round(value).toString()
     const [whole, fraction] = fixed.split(".")
     const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
@@ -85,7 +89,7 @@ export function ProcurementNextClient() {
     const [mounted, setMounted] = useState(false)
     const [horizonMonths, setHorizonMonths] = useState("6")
     const [chartGranularity, setChartGranularity] = useState("monthly")
-    const [forecastingAlgorithm, setForecastingAlgorithm] = useState("seasonal")
+    const [forecastingAlgorithm, setForecastingAlgorithm] = useState("auto_arima")
     const [category, setCategory] = useState("all")
     const [priority, setPriority] = useState("all")
     const [search, setSearch] = useState("")
@@ -103,7 +107,7 @@ export function ProcurementNextClient() {
             const result = await getProcurementNextAnalytics({
                 horizonMonths: Number(nextHorizonMonths),
                 chartGranularity: nextChartGranularity as "weekly" | "monthly" | "quarterly" | "yearly",
-                forecastingAlgorithm: nextForecastingAlgorithm as "seasonal" | "moving_average" | "trend",
+                forecastingAlgorithm: nextForecastingAlgorithm as "auto_arima" | "seasonal" | "moving_average" | "trend",
             })
 
             if (result.success && result.data) {
@@ -120,7 +124,7 @@ export function ProcurementNextClient() {
     }, [])
 
     useEffect(() => {
-        loadData("6", "monthly", "seasonal")
+        loadData("6", "monthly", "auto_arima")
     }, [loadData])
 
     const categoryOptions = useMemo(() => {
@@ -409,129 +413,133 @@ export function ProcurementNextClient() {
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
                 <Card>
                     <CardHeader>
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <CardTitle className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-emerald-600" />
+                            Demand forecast
+                        </CardTitle>
+                        <CardDescription>
+                            Grafik dinamis berbasis histori order untuk membaca actual sales, forecast sales, projected stock, dan predicted lost sales.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:grid-cols-2 xl:grid-cols-[220px_260px_1fr]">
                             <div className="space-y-2">
-                                <CardTitle className="flex items-center gap-2">
-                                    <TrendingUp className="h-5 w-5 text-emerald-600" />
-                                    Demand forecast
-                                </CardTitle>
-                                <CardDescription>
-                                    Grafik dinamis berbasis histori order untuk membaca actual sales, forecast sales, projected stock, dan predicted lost sales.
-                                </CardDescription>
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                        Granularity
-                                    </div>
-                                    <Select
-                                        value={chartGranularity}
-                                        onValueChange={(value) => {
-                                            setChartGranularity(value)
-                                            loadData(horizonMonths, value, forecastingAlgorithm)
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-full min-w-[160px]">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {GRANULARITY_OPTIONS.map((option) => (
-                                                <SelectItem key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                                    Granularity
                                 </div>
-                                <div className="space-y-2">
-                                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                        Forecast algorithm
-                                    </div>
-                                    <Select
-                                        value={forecastingAlgorithm}
-                                        onValueChange={(value) => {
-                                            setForecastingAlgorithm(value)
-                                            loadData(horizonMonths, chartGranularity, value)
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-full min-w-[180px]">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {FORECAST_ALGORITHM_OPTIONS.map((option) => (
-                                                <SelectItem key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <Select
+                                    value={chartGranularity}
+                                    onValueChange={(value) => {
+                                        setChartGranularity(value)
+                                        loadData(horizonMonths, value, forecastingAlgorithm)
+                                    }}
+                                >
+                                    <SelectTrigger className="w-full bg-white">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {GRANULARITY_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                                    Forecast algorithm
+                                </div>
+                                <Select
+                                    value={forecastingAlgorithm}
+                                    onValueChange={(value) => {
+                                        setForecastingAlgorithm(value)
+                                        loadData(horizonMonths, chartGranularity, value)
+                                    }}
+                                >
+                                    <SelectTrigger className="w-full bg-white">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {FORECAST_ALGORITHM_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="rounded-xl border border-cyan-200 bg-white px-4 py-3">
+                                <div className="text-xs uppercase tracking-[0.18em] text-cyan-700">Forecast note</div>
+                                <div className="mt-1 text-sm text-slate-600">
+                                    {data?.summary.forecastFallbackReason ?? "Semua angka forecast di chart ini dibaca sebagai qty unit, bukan nilai Rupiah atau Dollar. Auto ARIMA akan mencoba model terbaik dari histori yang tersedia, lalu fallback ke metode lebih aman bila hasilnya tidak stabil."}
                                 </div>
                             </div>
                         </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-3">
                             <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3">
                                 <div className="text-xs uppercase tracking-[0.18em] text-sky-700">Algorithm</div>
                                 <div className="mt-2 text-lg font-semibold text-slate-900">
-                                    {FORECAST_ALGORITHM_OPTIONS.find((option) => option.value === forecastingAlgorithm)?.label}
+                                    {data?.summary.effectiveForecastAlgorithm === "fallback_moving_average"
+                                        ? "Fallback Moving Average"
+                                        : FORECAST_ALGORITHM_OPTIONS.find((option) => option.value === data?.summary.effectiveForecastAlgorithm)?.label
+                                            ?? FORECAST_ALGORITHM_OPTIONS.find((option) => option.value === forecastingAlgorithm)?.label}
                                 </div>
                             </div>
                             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
-                                <div className="text-xs uppercase tracking-[0.18em] text-emerald-700">Future Sales</div>
+                                <div className="text-xs uppercase tracking-[0.18em] text-emerald-700">Forecast Demand Qty</div>
                                 <div className="mt-2 text-lg font-semibold text-slate-900">
                                     {formatNumber(data?.summary.totalForecastQty ?? 0, 1)}
                                 </div>
+                                <div className="mt-1 text-xs text-emerald-700">Total unit prediksi demand periode berikutnya</div>
                             </div>
                             <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                                <div className="text-xs uppercase tracking-[0.18em] text-rose-700">Future Lost Sales</div>
+                                <div className="text-xs uppercase tracking-[0.18em] text-rose-700">Potential Lost Qty</div>
                                 <div className="mt-2 text-lg font-semibold text-slate-900">
                                     {formatNumber(data?.summary.totalPredictedLostSales ?? 0, 1)}
                                 </div>
+                                <div className="mt-1 text-xs text-rose-700">Estimasi unit demand yang tidak tertutup stok</div>
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
-                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Past Sales</Badge>
-                            <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-700">Forecast Sales</Badge>
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Past Sales Qty</Badge>
+                            <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-700">Forecast Sales Qty</Badge>
                             <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">Projected Stock</Badge>
-                            <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">Predicted Lost Sales</Badge>
+                            <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">Predicted Lost Qty</Badge>
                         </div>
                         <div className="h-[360px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={data?.charts.forecastTrend ?? []} margin={{ left: 8, right: 8 }}>
-                                    <defs>
-                                        <linearGradient id="projectedStockFill" x1="0" x2="0" y1="0" y2="1">
-                                            <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.28} />
-                                            <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.04} />
-                                        </linearGradient>
-                                    </defs>
                                     <CartesianGrid vertical={false} strokeDasharray="3 3" />
                                     <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={20} />
-                                    <YAxis tickLine={false} axisLine={false} width={56} />
+                                    <YAxis yAxisId="sales" tickLine={false} axisLine={false} width={56} />
+                                    <YAxis yAxisId="stock" orientation="right" tickLine={false} axisLine={false} width={64} />
                                     <Tooltip
                                         formatter={(value: number | null, name: string) => {
                                             if (value === null || value === undefined) return ["-", name]
                                             return [formatNumber(value, 1), name]
                                         }}
                                     />
-                                    <Bar dataKey="actualSales" fill="#10b981" radius={[6, 6, 0, 0]} name="Past Sales" />
-                                    <Bar dataKey="predictedLostSales" fill="#fb7185" radius={[6, 6, 0, 0]} name="Pred. Lost Sales" />
-                                    <Area
+                                    <Bar yAxisId="sales" dataKey="actualSales" fill="#10b981" radius={[6, 6, 0, 0]} name="Past Sales Qty" />
+                                    <Bar yAxisId="sales" dataKey="predictedLostSales" fill="#fb7185" radius={[6, 6, 0, 0]} name="Pred. Lost Qty" />
+                                    <Line
+                                        yAxisId="stock"
                                         type="monotone"
                                         dataKey="projectedStock"
                                         stroke="#8b5cf6"
                                         strokeWidth={2}
-                                        fill="url(#projectedStockFill)"
+                                        dot={false}
                                         name="Pred. Stock"
                                     />
                                     <Line
+                                        yAxisId="sales"
                                         type="monotone"
                                         dataKey="forecastSales"
                                         stroke="#06b6d4"
                                         strokeWidth={3}
                                         dot={{ r: 3, fill: "#06b6d4" }}
                                         activeDot={{ r: 5 }}
-                                        name="Pred. Sales"
+                                        name="Pred. Sales Qty"
                                     />
                                 </ComposedChart>
                             </ResponsiveContainer>
@@ -707,7 +715,7 @@ export function ProcurementNextClient() {
                 <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
                     <div className="rounded-xl border bg-muted/30 p-4">
                         <div className="font-medium text-foreground">Demand signal</div>
-                        <p className="mt-2">Menggunakan histori order pada window yang dipilih untuk membaca qty terjual per material.</p>
+                        <p className="mt-2">Menggunakan histori order pada window yang dipilih untuk membaca qty unit terjual per material. Bukan nilai Rupiah atau Dollar.</p>
                     </div>
                     <div className="rounded-xl border bg-muted/30 p-4">
                         <div className="font-medium text-foreground">Coverage logic</div>
