@@ -6,7 +6,6 @@ import {
     useReactTable,
     getCoreRowModel,
     getSortedRowModel,
-    getFilteredRowModel,
     flexRender,
     ColumnDef,
     SortingState,
@@ -67,6 +66,44 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
             currency: "IDR",
             maximumFractionDigits: 0,
         }).format(typeof value === "string" ? parseFloat(value) : value)
+
+    const searchableData = useMemo(() => {
+        const query = globalFilter.trim().toLowerCase()
+        if (!query) return data
+
+        return data.filter((quotation) => {
+            const itemSearchText = quotation.items
+                .flatMap((item) => [
+                    item.itemName,
+                    item.qty,
+                    item.unit,
+                    item.unitPrice,
+                    item.totalPrice,
+                    item.remark,
+                    formatCurrency(item.unitPrice),
+                    formatCurrency(item.totalPrice),
+                ])
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            const quotationSearchText = [
+                quotation.quoteNumber,
+                quotation.vendorName,
+                quotation.quoteDate,
+                quotation.remark,
+                quotation.fileName,
+                quotation.fileUrl,
+                quotation.ocrStatus,
+                itemSearchText,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            return quotationSearchText.includes(query)
+        })
+    }, [data, globalFilter])
 
     const columns = useMemo<ColumnDef<VendorQuotationWithItems>[]>(
         () => [
@@ -215,17 +252,14 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     )
 
     const table = useReactTable({
-        data,
+        data: searchableData,
         columns,
         state: {
             sorting,
-            globalFilter,
         },
         onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
     })
 
     const { rows } = table.getRowModel()
@@ -445,7 +479,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
             </div>
 
             <div className="text-xs text-muted-foreground px-1">
-                Showing {rows.length} of {data.length} quotations. Table uses data-virtualization for high performance.
+                Showing {rows.length} of {data.length} quotations. Search mencakup semua item di dalam detail accordion.
             </div>
 
             <VendorQuotationDetailDialog
