@@ -49,7 +49,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+            <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-2">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -110,8 +110,8 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                         {/* Items Table */}
                         <div className="space-y-4">
                             <h3 className="font-semibold text-lg">Line Items</h3>
-                            <div className="border rounded-lg overflow-hidden">
-                                <Table>
+                            <div className="border rounded-lg overflow-hidden overflow-x-auto scrollbar-thin scrollbar-thumb-accent">
+                                <Table className="min-w-[700px]">
                                     <TableHeader className="bg-muted/50">
                                         <TableRow>
                                             <TableHead className="w-[40%]">Description</TableHead>

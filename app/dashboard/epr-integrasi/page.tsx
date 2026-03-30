@@ -10,7 +10,7 @@ const VIEW_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
 const MIN_DATE_REQUIRED = new Date("2026-01-01T00:00:00+08:00");
 
-const COLUMN_ORDER = ["18", "1", "50", "7", "30", "27", "22", "23", "38", "40", "41"] as const;
+const COLUMN_ORDER = ["18", "1", "50", "27", "22", "23", "38", "40", "41"] as const;
 
 type ColumnId = (typeof COLUMN_ORDER)[number];
 
