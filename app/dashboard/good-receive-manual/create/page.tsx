@@ -1,6 +1,6 @@
 import { GoodReceiveForm } from "../_components/good-receive-form";
 import { getWarehouses } from "@/app/actions/warehouse";
-import { getGoodReceiveManualNotificationTargets, getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
+import { getGoodReceiveManualNotificationTargets, getManualGoodReceiveEmailCcMap, getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +36,9 @@ export default async function CreateGoodReceiveManualPage() {
             ).values(),
         )
         : []
+    const eprEmailCcByPo = poOptionsResult.success
+        ? await getManualGoodReceiveEmailCcMap(poOptionsResult.data.poOptions.map((po) => po.poNumber))
+        : {}
     return (
         <div className="space-y-5 p-4 sm:space-y-6 sm:p-6">
             {/* Back Navigation */}
@@ -65,6 +68,7 @@ export default async function CreateGoodReceiveManualPage() {
                 poOptions={poOptionsResult.success ? poOptionsResult.data.poOptions : []}
                 poLineOptions={poOptionsResult.success ? poOptionsResult.data.poLineOptions : []}
                 productOptions={productOptions}
+                eprEmailCcByPo={eprEmailCcByPo}
                 notificationRoles={notificationTargets.roles}
                 notificationUsers={notificationTargets.users}
             />

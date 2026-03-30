@@ -110,6 +110,16 @@ const normalizeStringArray = (value: unknown): string[] => {
         .filter(Boolean)
 }
 
+const normalizeEmailListFromText = (value: string | null | undefined) =>
+    Array.from(
+        new Set(
+            (value ?? "")
+                .split(/[;,]/)
+                .map((entry) => entry.trim())
+                .filter((entry) => isEmailLike(entry)),
+        ),
+    )
+
 const escapeHtml = (value: string) =>
     value
         .replace(/&/g, "&amp;")
@@ -200,6 +210,41 @@ async function findEprRecipientByPoNumber(poNumber: string) {
         picName: picBc || emailBc || "PIC Sales",
         prNumber: getFirstStringValue(bestMatch["18"]) || "-",
     }
+}
+
+export async function getManualGoodReceiveEmailCcMap(poNumbers: string[]) {
+    const poNumberSet = new Set(poNumbers.map((entry) => entry.trim()).filter(Boolean))
+    if (poNumberSet.size === 0) {
+        return {} as Record<string, string>
+    }
+
+    const payload = await fetchJsonWithNestedString<EprNotificationEntriesPayload>(EPR_INTEGRATION_ENTRIES_URL)
+    const latestByPo = new Map<string, EprNotificationEntry>()
+
+    for (const entry of payload.entries ?? []) {
+        const poNumber = getFirstStringValue(entry["38"])
+        if (!poNumber || !poNumberSet.has(poNumber)) continue
+
+        const current = latestByPo.get(poNumber)
+        if (!current) {
+            latestByPo.set(poNumber, entry)
+            continue
+        }
+
+        const currentDate = new Date(getFirstStringValue(current["1"])).getTime()
+        const nextDate = new Date(getFirstStringValue(entry["1"])).getTime()
+        if ((Number.isFinite(nextDate) ? nextDate : 0) > (Number.isFinite(currentDate) ? currentDate : 0)) {
+            latestByPo.set(poNumber, entry)
+        }
+    }
+
+    return Array.from(latestByPo.entries()).reduce<Record<string, string>>((acc, [poNumber, entry]) => {
+        const emailCc = getFirstStringValue(entry["50"])
+        if (isEmailLike(emailCc)) {
+            acc[poNumber] = emailCc
+        }
+        return acc
+    }, {})
 }
 
 function buildGoodReceiveManualNotificationContent(params: {
@@ -441,6 +486,7 @@ export type CreateGoodReceiveManualInput = {
     deliveryType: "Partial" | "Complete"
     referenceDocument?: string
     vendorDoUrl?: string
+    emailCc?: string
     notifyRoles?: string[]
     notifyUserIds?: string[]
     items: {
@@ -476,6 +522,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
         const userId = session.user.id
         const notifyRoles = normalizeStringArray(input.notifyRoles)
         const notifyUserIds = normalizeStringArray(input.notifyUserIds)
+        const emailCcRecipients = normalizeEmailListFromText(input.emailCc)
 
         const notificationPayload = await db.transaction<ManualGoodReceiveNotificationPayload>(async (tx) => {
             const poNumber = input.poNumber.trim()
@@ -682,7 +729,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
         revalidatePath("/dashboard/epr-integrasi")
 
         let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
-        if (notifyRoles.length > 0 || notifyUserIds.length > 0) {
+        if (notifyRoles.length > 0 || notifyUserIds.length > 0 || emailCcRecipients.length > 0) {
             try {
                 const payload = notificationPayload
                 const [recipients, warehouse] = await Promise.all([
@@ -744,6 +791,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     const emailResult = await sendSystemTemplatedEmailByCode({
                         code: SYSTEM_EMAIL_TEMPLATE_CODES.goodReceiveManualNotification,
                         to: recipients,
+                        cc: emailCcRecipients,
                         data: {
                             poNumber: payload.poNumber,
                             supplier: payload.supplier,
@@ -833,7 +881,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     subject,
                     html,
                     text,
-                    channels: ["email", "push"],
+                    channels: ["push"],
                     logMeta: {
                         templateCode: "good-receive-manual-sales-pic",
                         templateName: "Good Receive Manual Sales PIC Notification",

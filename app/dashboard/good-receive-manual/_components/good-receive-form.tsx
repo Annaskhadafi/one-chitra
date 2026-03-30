@@ -32,6 +32,7 @@ const formSchema = z.object({
     deliveryType: z.enum(["Partial", "Complete"]),
     referenceDocument: z.string().optional(),
     vendorDoUrl: z.string().optional(),
+    emailCc: z.string().optional(),
     notifyRoles: z.array(z.string()).optional(),
     notifyUserIds: z.array(z.string()).optional(),
     items: z.array(z.object({
@@ -60,6 +61,7 @@ type GoodReceiveFormProps = {
     poOptions?: { poNumber: string; vendorName: string; poDate: string | null; totalPoQty: number; itemCount: number }[]
     poLineOptions?: { poNumber: string; vendorName: string; poItem: number; materialNumber: string; materialDescription: string; poQty: number; openQty: number; productId: number | null }[]
     productOptions?: { id: number; materialNumber: string; materialDescription: string | null; oldMaterialNo: string | null; materialNumberCk: string | null; sloc: string | null }[]
+    eprEmailCcByPo?: Record<string, string>
     notificationRoles?: string[]
     notificationUsers?: { id: string; name: string | null; email: string | null; role: string | null }[]
 }
@@ -69,6 +71,7 @@ export function GoodReceiveForm({
     poOptions = [],
     poLineOptions = [],
     productOptions = [],
+    eprEmailCcByPo = {},
     notificationRoles = [],
     notificationUsers = [],
 }: GoodReceiveFormProps) {
@@ -88,6 +91,7 @@ export function GoodReceiveForm({
             deliveryType: "Complete",
             referenceDocument: "",
             vendorDoUrl: "",
+            emailCc: "",
             notifyRoles: defaultNotifyRoles,
             notifyUserIds: [],
             items: [],
@@ -113,6 +117,9 @@ export function GoodReceiveForm({
         if (!selectedPoNumber) {
             if (form.getValues("items").length > 0) {
                 replace([])
+            }
+            if (form.getValues("emailCc")) {
+                form.setValue("emailCc", "", { shouldDirty: true })
             }
             return
         }
@@ -147,7 +154,12 @@ export function GoodReceiveForm({
         if (hasChanged) {
             replace(nextItems)
         }
-    }, [availableLines, form, replace, selectedPoNumber])
+
+        const nextEmailCc = eprEmailCcByPo[selectedPoNumber] ?? ""
+        if ((form.getValues("emailCc") ?? "") !== nextEmailCc) {
+            form.setValue("emailCc", nextEmailCc, { shouldDirty: true })
+        }
+    }, [availableLines, eprEmailCcByPo, form, replace, selectedPoNumber])
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
@@ -762,6 +774,27 @@ export function GoodReceiveForm({
                                     <Separator className="mt-4" />
                                     <CardContent className="pt-5 space-y-5">
                                         <div className="grid gap-5 lg:grid-cols-2">
+                                            <FormField
+                                                control={form.control}
+                                                name="emailCc"
+                                                render={({ field }) => (
+                                                    <FormItem className="lg:col-span-2">
+                                                        <FormLabel className="text-sm font-medium">Email CC</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                {...field}
+                                                                placeholder="Terisi otomatis dari Email-BC EPR berdasarkan PO Number"
+                                                                className="focus-visible:ring-indigo-500"
+                                                            />
+                                                        </FormControl>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Otomatis mengambil `Email-BC` dari EPR Integrasi yang match dengan `PO NO`. Jika perlu, Anda tetap bisa ubah manual dan pisahkan beberapa email dengan koma.
+                                                        </p>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
                                             <div className="space-y-3">
                                                 <div>
                                                     <p className="text-sm font-medium">Notify Roles</p>
