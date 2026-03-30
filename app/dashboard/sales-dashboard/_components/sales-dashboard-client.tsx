@@ -52,9 +52,14 @@ interface DashboardData {
 }
 
 export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardClientProps) {
+    const currentYear = new Date().getFullYear().toString();
+    const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+    const defaultYears = initialFilterOptions.years.includes(currentYear) ? [currentYear] : (initialFilterOptions.years.slice(0, 1));
+    const defaultMonths = Array.from({ length: parseInt(currentMonth) }, (_, i) => (i + 1).toString().padStart(2, '0'));
+
     const [filters, setFilters] = useState({
-        years: initialFilterOptions.years.slice(0, 5),
-        months: [] as string[],
+        years: defaultYears,
+        months: defaultMonths,
         salesman: [] as string[],
         customers: [] as string[],
         revTypes: [] as string[],
@@ -84,8 +89,8 @@ export function SalesDashboardClient({ initialFilterOptions }: SalesDashboardCli
 
     const handleReset = () => {
         setFilters({
-            years: initialFilterOptions.years.slice(0, 5),
-            months: [],
+            years: defaultYears,
+            months: defaultMonths,
             salesman: [],
             customers: [],
             revTypes: [],
