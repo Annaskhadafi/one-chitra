@@ -91,6 +91,55 @@ async function syncEmailManagementSchema() {
     `)
 
     await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS user_notification_reads (
+            id          VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+            user_id     TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            email_log_id VARCHAR(36) NOT NULL REFERENCES email_logs(id) ON DELETE CASCADE,
+            read_at     TIMESTAMP NOT NULL DEFAULT now(),
+            created_at  TIMESTAMP NOT NULL DEFAULT now()
+        );
+    `)
+
+    await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS user_notification_reads_user_log_unique
+        ON user_notification_reads(user_id, email_log_id);
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS user_notification_reads_user_idx
+        ON user_notification_reads(user_id);
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS user_notification_reads_log_idx
+        ON user_notification_reads(email_log_id);
+    `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id          VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+            user_id     TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            endpoint    TEXT NOT NULL,
+            p256dh      TEXT NOT NULL,
+            auth        TEXT NOT NULL,
+            user_agent  TEXT,
+            created_at  TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at  TIMESTAMP NOT NULL DEFAULT now(),
+            last_seen_at TIMESTAMP NOT NULL DEFAULT now()
+        );
+    `)
+
+    await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_unique
+        ON push_subscriptions(endpoint);
+    `)
+
+    await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx
+        ON push_subscriptions(user_id);
+    `)
+
+    await db.execute(sql`
         ALTER TABLE IF EXISTS email_templates
         ADD COLUMN IF NOT EXISTS code VARCHAR(120);
     `)

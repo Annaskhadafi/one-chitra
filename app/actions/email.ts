@@ -270,12 +270,14 @@ export async function getEmailLogs(limit = 50) {
         .limit(limit)
 }
 
-export async function clearEmailLogs() {
+export async function clearEmailLogs(deliveryChannel?: "email" | "push") {
     try {
         await ensureEmailManagementSchema()
-        const deletedRows = await db
-            .delete(emailLogs)
-            .returning({ id: emailLogs.id })
+        const query = db.delete(emailLogs)
+        const deletedRows = await (deliveryChannel
+            ? query.where(eq(emailLogs.deliveryChannel, deliveryChannel))
+            : query
+        ).returning({ id: emailLogs.id })
 
         revalidatePath("/dashboard/settings/email")
         return {

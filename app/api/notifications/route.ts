@@ -1,15 +1,11 @@
 import { headers } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
-import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm"
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm"
+
+import { extractActionUrlFromContent } from "@/lib/push-notifications"
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
-
-function extractActionUrl(htmlContent?: string | null, textContent?: string | null): string | null {
-    const combined = `${htmlContent ?? ""}\n${textContent ?? ""}`
-    const match = combined.match(/https?:\/\/[^\s"'<>]+/i)
-    return match?.[0] ?? null
-}
 
 async function loadNotificationDeps() {
     const [{ auth }, { db }, { emailLogs, userNotificationReads }] = await Promise.all([
@@ -34,6 +30,10 @@ export async function GET(request: NextRequest) {
         const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), MAX_LIMIT) : DEFAULT_LIMIT
 
         const userEmail = session.user.email.trim().toLowerCase()
+        const recipientMatch = or(
+            ilike(emailLogs.toEmail, `%${userEmail}%`),
+            ilike(emailLogs.ccEmail, `%${userEmail}%`),
+        )
 
         const items = await db
             .select({
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
             )
             .where(
                 and(
-                    ilike(emailLogs.toEmail, `%${userEmail}%`),
+                    recipientMatch,
                     eq(emailLogs.status, "sent"),
                     eq(emailLogs.deliveryChannel, "push"),
                 ),
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
             )
             .where(
                 and(
-                    ilike(emailLogs.toEmail, `%${userEmail}%`),
+                    recipientMatch,
                     eq(emailLogs.status, "sent"),
                     eq(emailLogs.deliveryChannel, "push"),
                     isNull(userNotificationReads.id),
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
             createdAt: item.createdAt.toISOString(),
             sentAt: item.sentAt?.toISOString() ?? null,
             isRead: Boolean(item.readAt),
-            actionUrl: extractActionUrl(item.htmlContent, item.textContent),
+            actionUrl: extractActionUrlFromContent(item.htmlContent, item.textContent),
         }))
 
         return NextResponse.json({
@@ -126,6 +126,10 @@ export async function POST(request: NextRequest) {
         }
 
         const userEmail = session.user.email.trim().toLowerCase()
+        const recipientMatch = or(
+            ilike(emailLogs.toEmail, `%${userEmail}%`),
+            ilike(emailLogs.ccEmail, `%${userEmail}%`),
+        )
 
         if (body.markAll) {
             const unreadRows = await db
@@ -140,7 +144,7 @@ export async function POST(request: NextRequest) {
                 )
                 .where(
                     and(
-                        ilike(emailLogs.toEmail, `%${userEmail}%`),
+                        recipientMatch,
                         eq(emailLogs.status, "sent"),
                         eq(emailLogs.deliveryChannel, "push"),
                         isNull(userNotificationReads.id),
@@ -172,7 +176,7 @@ export async function POST(request: NextRequest) {
             .where(
                 and(
                     eq(emailLogs.id, body.notificationId),
-                    ilike(emailLogs.toEmail, `%${userEmail}%`),
+                    recipientMatch,
                     eq(emailLogs.deliveryChannel, "push"),
                 ),
             )

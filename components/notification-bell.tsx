@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, CheckCheck, Loader2 } from "lucide-react"
+import { Bell, CheckCheck, Loader2, Smartphone } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,11 @@ interface NotificationResponse {
     unreadCount: number
 }
 
+type PushSubscriptionMeta = {
+    configured: boolean
+    publicKey: string | null
+}
+
 function formatNotificationDate(dateIso: string) {
     const date = new Date(dateIso)
     if (Number.isNaN(date.getTime())) return "-"
@@ -41,12 +46,57 @@ function formatNotificationDate(dateIso: string) {
     }).format(date)
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+    const rawData = window.atob(base64)
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
+}
+
+function navigateToNotificationTarget(router: ReturnType<typeof useRouter>, actionUrl?: string | null) {
+    const fallback = "/dashboard/settings/email"
+    const trimmed = actionUrl?.trim()
+
+    if (!trimmed) {
+        router.push(fallback)
+        return
+    }
+
+    if (trimmed.startsWith("/")) {
+        router.push(trimmed)
+        return
+    }
+
+    if (typeof window === "undefined") {
+        router.push(fallback)
+        return
+    }
+
+    try {
+        const targetUrl = new URL(trimmed, window.location.origin)
+        const currentOrigin = window.location.origin
+
+        if (targetUrl.origin === currentOrigin) {
+            const internalPath = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
+            router.push(internalPath || fallback)
+            return
+        }
+
+        window.location.assign(targetUrl.toString())
+    } catch {
+        router.push(fallback)
+    }
+}
+
 export function NotificationBell() {
     const router = useRouter()
     const [mounted, setMounted] = useState(false)
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [markingAll, setMarkingAll] = useState(false)
+    const [pushMeta, setPushMeta] = useState<PushSubscriptionMeta>({ configured: false, publicKey: null })
+    const [pushEnabled, setPushEnabled] = useState(false)
+    const [enablingPush, setEnablingPush] = useState(false)
     const [data, setData] = useState<NotificationResponse>({
         notifications: [],
         unreadCount: 0,
@@ -63,7 +113,6 @@ export function NotificationBell() {
             const result = await response.json() as NotificationResponse
             setData(result)
         } catch (error) {
-            // Ignore transient network failures during dev rebuilds/navigation aborts.
             if (error instanceof DOMException && error.name === "AbortError") {
                 return
             }
@@ -78,6 +127,31 @@ export function NotificationBell() {
         }
     }, [])
 
+    const loadPushStatus = useCallback(async () => {
+        if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+            return
+        }
+
+        try {
+            const response = await fetch("/api/notifications/subscriptions", {
+                cache: "no-store",
+            })
+
+            if (!response.ok) {
+                return
+            }
+
+            const result = await response.json() as PushSubscriptionMeta
+            setPushMeta(result)
+
+            const registration = await navigator.serviceWorker.ready
+            const subscription = await registration.pushManager.getSubscription()
+            setPushEnabled(Boolean(subscription))
+        } catch (error) {
+            console.error("Failed to load push status:", error)
+        }
+    }, [])
+
     useEffect(() => {
         setMounted(true)
     }, [])
@@ -85,6 +159,7 @@ export function NotificationBell() {
     useEffect(() => {
         const controller = new AbortController()
         void loadNotifications(controller.signal)
+        void loadPushStatus()
 
         const interval = window.setInterval(() => {
             const intervalController = new AbortController()
@@ -95,7 +170,7 @@ export function NotificationBell() {
             controller.abort()
             window.clearInterval(interval)
         }
-    }, [loadNotifications])
+    }, [loadNotifications, loadPushStatus])
 
     useEffect(() => {
         if (open) {
@@ -150,8 +225,57 @@ export function NotificationBell() {
         }
     }, [])
 
-    const hasNotifications = data.notifications.length > 0
+    const enablePushNotifications = useCallback(async () => {
+        if (!("serviceWorker" in navigator) || !("Notification" in window)) {
+            return
+        }
 
+        setEnablingPush(true)
+        try {
+            const permission = await Notification.requestPermission()
+            if (permission !== "granted") {
+                setPushEnabled(false)
+                return
+            }
+
+            const response = await fetch("/api/notifications/subscriptions", {
+                cache: "no-store",
+            })
+            if (!response.ok) return
+
+            const meta = await response.json() as PushSubscriptionMeta
+            setPushMeta(meta)
+
+            if (!meta.configured || !meta.publicKey) {
+                return
+            }
+
+            const registration = await navigator.serviceWorker.ready
+            let subscription = await registration.pushManager.getSubscription()
+
+            if (!subscription) {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(meta.publicKey),
+                })
+            }
+
+            await fetch("/api/notifications/subscriptions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(subscription.toJSON()),
+            })
+
+            setPushEnabled(true)
+        } catch (error) {
+            console.error("Failed to enable PWA push:", error)
+            setPushEnabled(false)
+        } finally {
+            setEnablingPush(false)
+        }
+    }, [])
+
+    const hasNotifications = data.notifications.length > 0
     const notifItems = useMemo(() => data.notifications, [data.notifications])
 
     if (!mounted) {
@@ -191,6 +315,18 @@ export function NotificationBell() {
                     </Button>
                 </div>
                 <DropdownMenuSeparator className="m-0" />
+                <div className="border-b px-4 py-3">
+                    <Button
+                        variant={pushEnabled ? "secondary" : "outline"}
+                        size="sm"
+                        className="h-8 w-full gap-2"
+                        onClick={enablePushNotifications}
+                        disabled={enablingPush || pushEnabled || !pushMeta.configured}
+                    >
+                        {enablingPush ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
+                        {pushEnabled ? "Push PWA Aktif" : pushMeta.configured ? "Aktifkan Push PWA" : "Push PWA Belum Diset Env"}
+                    </Button>
+                </div>
                 <ScrollArea className="max-h-[380px]">
                     {loading && !hasNotifications ? (
                         <div className="px-4 py-8 text-center text-sm text-muted-foreground">Memuat notifikasi...</div>
@@ -208,7 +344,7 @@ export function NotificationBell() {
                                             await markAsRead(item.id)
                                         }
                                         setOpen(false)
-                                        router.push(item.actionUrl ?? "/dashboard/settings/email")
+                                        navigateToNotificationTarget(router, item.actionUrl)
                                     }}
                                 >
                                     <div className="flex items-start justify-between gap-3">

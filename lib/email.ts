@@ -13,6 +13,12 @@ import {
 } from "@/lib/email-template-registry"
 import { ensureEmailManagementSchema } from "@/lib/email-schema"
 import { toCanonicalAppUrl } from "@/lib/app-url"
+import {
+    extractActionUrlFromContent,
+    extractPushBody,
+    findRecipientUserIdsByEmails,
+    sendPushNotificationToUsers,
+} from "@/lib/push-notifications"
 import { isRevenueReportTemplateManagedByAutomation } from "@/lib/revenue-report-config"
 
 export type SmtpConfig = {
@@ -146,7 +152,7 @@ async function writeEmailLog(params: {
     try {
         await ensureEmailManagementSchema()
 
-        await db.insert(emailLogs).values({
+        const [created] = await db.insert(emailLogs).values({
             templateId: params.templateId ?? null,
             templateCode: params.templateCode ?? null,
             templateName: params.templateName ?? null,
@@ -160,9 +166,14 @@ async function writeEmailLog(params: {
             status: params.status,
             errorMessage: params.errorMessage ?? null,
             sentAt: params.sentAt ?? null,
+        }).returning({
+            id: emailLogs.id,
         })
+
+        return created ?? null
     } catch (error) {
         console.error("[EMAIL] Failed to write email log:", error)
+        return null
     }
 }
 
@@ -176,7 +187,7 @@ async function writePushNotificationLog(params: {
     templateCode?: string | null
     templateName?: string | null
 }) {
-    await writeEmailLog({
+    return writeEmailLog({
         ...params,
         status: "sent",
         sentAt: new Date(),
@@ -243,7 +254,7 @@ async function dispatchTemplateMessage(args: {
 
     let pushLogged = false
     if (channels.includes("push")) {
-        await writePushNotificationLog({
+        const pushLog = await writePushNotificationLog({
             to: args.to,
             cc: args.cc,
             subject: args.subject,
@@ -253,6 +264,21 @@ async function dispatchTemplateMessage(args: {
             templateCode: args.logMeta?.templateCode ?? null,
             templateName: args.logMeta?.templateName ?? null,
         })
+
+        const recipientUserIds = await findRecipientUserIdsByEmails([...args.to, ...args.cc])
+        if (recipientUserIds.length > 0) {
+            await sendPushNotificationToUsers({
+                userIds: recipientUserIds,
+                payload: {
+                    title: args.subject,
+                    body: extractPushBody(args.text, args.html),
+                    url: extractActionUrlFromContent(args.html, args.text),
+                    tag: args.logMeta?.templateCode ?? args.logMeta?.templateName ?? "one-chitra-notification",
+                    notificationId: pushLog?.id,
+                },
+            })
+        }
+
         pushLogged = true
     }
 

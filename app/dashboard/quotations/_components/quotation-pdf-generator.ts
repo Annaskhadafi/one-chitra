@@ -75,6 +75,13 @@ function formatCurrency(value: number, currency = "IDR") {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(value)
 }
 
+function formatNumber(value: number) {
+    return new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(value)
+}
+
 function formatDate(date: Date) {
     return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
 }
@@ -85,6 +92,19 @@ function sanitizeFilenamePart(value: string | null | undefined) {
 
 function getItemTitle(item: QuotationPdfData["items"][number]) {
     return item.description || item.product?.materialDescription || item.product?.materialNumber || "Unnamed item"
+}
+
+function getItemSubtitle(item: QuotationPdfData["items"][number]) {
+    return item.longDescription || item.product?.materialNumber || ""
+}
+
+function buildMultilineText(value: string | null | undefined, fallback?: string) {
+    const lines = (value || fallback || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+    return lines.length > 0 ? lines : fallback ? [fallback] : []
 }
 
 export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): QuotationPdfData {
@@ -281,281 +301,224 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
             format: "a4"
         })
 
-        // Load background image
-        let base64data = ""
-        try {
-            const response = await fetch("/ChitraParatama_Stationery_Letterhead_jkt.jpg")
-            if (response.ok) {
+        const loadImageAsDataUrl = async (path: string) => {
+            try {
+                const response = await fetch(path)
+                if (!response.ok) return ""
                 const blob = await response.blob()
-                base64data = await new Promise<string>((resolve) => {
+                return await new Promise<string>((resolve) => {
                     const reader = new FileReader()
                     reader.onloadend = () => resolve(reader.result as string)
                     reader.readAsDataURL(blob)
                 })
+            } catch {
+                return ""
             }
-        } catch (e) {
-            console.error("Failed to load letterhead image", e)
         }
 
-        // Add background to first page
-        if (base64data) {
-            doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
-        }
-
-        // Override addPage to automatically add background to new pages
+        const logoData = await loadImageAsDataUrl("/brand/Chitra-Paratama.png")
         const originalAddPage = doc.addPage.bind(doc)
         const mutableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } }
+        const senderAddressLines = buildMultilineText(
+            quotation.address,
+            "Gedung TMT 1, Lt. 5, Jl. Cilandak KKO No. 1, Jakarta 12560 Indonesia",
+        )
+        const recipientAddressLines = [
+            quotation.customer.address1,
+            quotation.customer.address2,
+            quotation.customer.address3,
+            quotation.customer.address4,
+            quotation.customer.address5,
+        ].filter(Boolean) as string[]
+        const termsLines = buildMultilineText(quotation.termsConditions, "Payment Terms: 30 days after Date Invoice")
+        const noteLines = buildMultilineText(quotation.clientNote)
+        const brandColor: [number, number, number] = [54, 87, 157]
+        const titleColor: [number, number, number] = [45, 91, 178]
+        const darkText: [number, number, number] = [22, 49, 83]
+        const mutedText: [number, number, number] = [98, 115, 138]
+
+        const drawPageChrome = () => {
+            doc.setFillColor(255, 255, 255)
+            doc.rect(0, 0, 210, 297, "F")
+
+            doc.setFillColor(246, 249, 253)
+            doc.circle(-12, -10, 46, "F")
+
+            if (logoData) {
+                doc.setGState?.(new (jsPDF as unknown as { GState: new (opts: { opacity: number }) => unknown }).GState({ opacity: 0.08 }) as never)
+                doc.addImage(logoData, "PNG", 126, 208, 92, 92)
+                doc.setGState?.(new (jsPDF as unknown as { GState: new (opts: { opacity: number }) => unknown }).GState({ opacity: 1 }) as never)
+            }
+
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(6.4)
+            doc.setTextColor(95, 110, 132)
+            doc.text("PT Chitra Paratama", 14, 286)
+            doc.setFont("helvetica", "normal")
+            doc.setTextColor(122, 135, 153)
+            doc.text("Gedung TMT 1, Lt. 5, Jl. Cilandak KKO No. 1, Jakarta 12560 Indonesia", 14, 289.5)
+            doc.text("P +62 21 2997 6661 | F +62 21 2997 6660", 14, 293)
+            doc.setTextColor(54, 87, 157)
+            doc.setFont("helvetica", "bold")
+            doc.text("www.chitraparatama.co.id", 14, 296.5)
+        }
+
         doc.addPage = (...args: Parameters<typeof originalAddPage>) => {
             originalAddPage(...args)
-            if (base64data) {
-                doc.addImage(base64data, 'JPEG', 0, 0, 210, 297)
-            }
+            drawPageChrome()
             return doc
         }
 
-        // Constants
-        const brandColor: [number, number, number] = [37, 99, 235] // #2563eb
-        const darkText: [number, number, number] = [15, 23, 42]
-        const grayText: [number, number, number] = [71, 85, 105]
+        drawPageChrome()
 
-        // Company Logo / Header
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(24)
-        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2])
-        doc.text("QUOTATION", 195, 50, { align: "right" })
-        
-        doc.setFontSize(11)
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text(
-            `${quotation.quotationNumber || "DRAFT"}${quotation.currentRevision ? `  |  Rev.${quotation.currentRevision}` : ""}`,
-            195,
-            56,
-            { align: "right" },
-        )
-
-        // Company Info
-        doc.setFontSize(14)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text("PT Chitra Paratama", 15, 50)
-
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        const addressLines = doc.splitTextToSize(quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara\nKota Balikpapan Kalimantan Timur 7612", 90)
-        doc.text(addressLines, 15, 57)
-
-        // Line separator
-        let currentY = 70
-        doc.setDrawColor(brandColor[0], brandColor[1], brandColor[2])
-        doc.setLineWidth(0.5)
-        doc.line(15, currentY, 195, currentY)
-        currentY += 8
-
-        // Meta data box
-        doc.setFillColor(248, 250, 252) // slate-50
-        doc.setDrawColor(226, 232, 240) // slate-200
-        doc.setLineWidth(0.3)
-        
-        let metaBoxHeight = 28
-        const metaBoxY = currentY + 3
-        
-        // Measure TO address to adjust box height if needed
-        doc.setFontSize(10)
-        doc.setFont("helvetica", "bold")
-        const customerNameLines = doc.splitTextToSize(quotation.customer.name, 70)
-        
-        doc.setFontSize(9)
-        doc.setFont("helvetica", "normal")
-        const fullAddress = [quotation.customer.address1, quotation.customer.address2, quotation.customer.address3].filter(Boolean).join("\n")
-        const custAddressLines = doc.splitTextToSize(fullAddress || "-", 70)
-        
-        const rightColumnHeight = 8 + (customerNameLines.length * 4.5) + (custAddressLines.length * 4) + 2
-        if (rightColumnHeight > metaBoxHeight) {
-            metaBoxHeight = rightColumnHeight
+        if (logoData) {
+            doc.addImage(logoData, "PNG", 14, 10, 42, 18)
         }
-        
-        doc.roundedRect(15, metaBoxY, 180, metaBoxHeight, 2, 2, 'FD')
-        
-        // Vertical divider line
-        doc.setDrawColor(226, 232, 240)
-        doc.line(105, metaBoxY + 4, 105, metaBoxY + metaBoxHeight - 4)
 
-        // Left Meta Column
-        let leftStartY = metaBoxY + 6
-        const labelX = 20
-        const valueX = 45
-        
-        doc.setFontSize(8)
         doc.setFont("helvetica", "bold")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text("QUO DATE:", labelX, leftStartY)
-        doc.setFontSize(9)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text(formatDate(quotation.quotationDate), valueX, leftStartY)
-        leftStartY += 5.5
-
-        doc.setFontSize(8)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text("VALIDITY QUOTE:", labelX, leftStartY)
-        doc.setFontSize(9)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text(quotation.validUntil ? formatDate(quotation.validUntil) : "-", valueX, leftStartY)
-        leftStartY += 5.5
-
-        doc.setFontSize(8)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text("FROM:", labelX, leftStartY)
-        doc.setFontSize(9)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text(quotation.salesPerson?.name || "-", valueX, leftStartY)
-        leftStartY += 5.5
-
-        doc.setFontSize(8)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text("ATTN:", labelX, leftStartY)
-        doc.setFontSize(9)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        const attnLines = doc.splitTextToSize(quotation.attn || "-", 55)
-        doc.text(attnLines, valueX, leftStartY)
-
-        // Right Meta Column (To)
-        let rightStartY = metaBoxY + 6
-        
-        doc.setFontSize(8)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2])
-        doc.text("TO", 190, rightStartY, { align: "right" })
-        rightStartY += 5
-        
-        doc.setFontSize(10)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        customerNameLines.forEach((line: string) => {
-            doc.text(line, 190, rightStartY, { align: "right" })
-            rightStartY += 4.5
-        })
-
-        doc.setFontSize(9)
+        doc.setFontSize(8.6)
+        doc.setTextColor(15, 28, 56)
+        doc.text("PT Chitra Paratama", 14, 34)
         doc.setFont("helvetica", "normal")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        custAddressLines.forEach((line: string) => {
-            doc.text(line, 190, rightStartY, { align: "right" })
-            rightStartY += 4
+        doc.setFontSize(7.5)
+        doc.setTextColor(mutedText[0], mutedText[1], mutedText[2])
+        let senderY = 39
+        senderAddressLines.forEach((line) => {
+            doc.text(line, 14, senderY)
+            senderY += 3.4
         })
 
-        currentY = metaBoxY + metaBoxHeight + 10
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(23)
+        doc.setTextColor(titleColor[0], titleColor[1], titleColor[2])
+        doc.text("QUOTATION", 196, 18, { align: "right" })
+        doc.setFontSize(7.4)
+        doc.setTextColor(65, 84, 111)
+        doc.text(`${quotation.quotationNumber || "DRAFT"} | Rev.${quotation.currentRevision ?? 0}`, 196, 24, { align: "right" })
 
-        // Items Table
+        doc.setFontSize(7)
+        doc.setTextColor(61, 91, 134)
+        doc.text("TO", 196, 34, { align: "right" })
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(8)
+        doc.setTextColor(darkText[0], darkText[1], darkText[2])
+        const customerNameLines = doc.splitTextToSize(quotation.customer.name.toUpperCase(), 72)
+        let recipientY = 38
+        customerNameLines.forEach((line: string) => {
+            doc.text(line, 196, recipientY, { align: "right" })
+            recipientY += 3.6
+        })
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(7.2)
+        doc.setTextColor(mutedText[0], mutedText[1], mutedText[2])
+        const customerAddressLines = doc.splitTextToSize(recipientAddressLines.join("\n").toUpperCase() || "-", 72)
+        customerAddressLines.forEach((line: string) => {
+            doc.text(line, 196, recipientY, { align: "right" })
+            recipientY += 3.2
+        })
+
+        doc.setDrawColor(135, 164, 218)
+        doc.setLineWidth(0.4)
+        doc.line(14, 54, 196, 54)
+        doc.setFillColor(240, 244, 251)
+        doc.rect(14, 54.4, 182, 13.6, "F")
+        doc.setDrawColor(220, 230, 244)
+        doc.line(105, 54.4, 105, 68)
+
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(7.1)
+        doc.setTextColor(83, 112, 149)
+        doc.text("QUO DATE:", 18, 59.2)
+        doc.text("VALIDITY QUOTE:", 18, 63.9)
+        doc.text("FROM:", 109, 59.2)
+        doc.text("ATTN:", 109, 63.9)
+
+        doc.setTextColor(15, 28, 56)
+        doc.text(formatDate(quotation.quotationDate), 42, 59.2)
+        doc.text(quotation.validUntil ? formatDate(quotation.validUntil) : "-", 42, 63.9)
+        doc.text(quotation.salesPerson?.name || "-", 122, 59.2)
+        doc.text(quotation.attn || "-", 122, 63.9)
+
+        const tableStartY = 73
         const tableBody = quotation.items.map((item, index) => {
-            const lineTitle = getItemTitle(item)
-            // We just pass it simply to keep row data, we will wipe display and custom draw
-            const combinedContent = lineTitle
-
             const amount = item.quantity * Number(item.unitPrice)
-            
             return [
-                (index + 1).toString(),
-                combinedContent,
-                item.quantity.toString(),
-                Number(item.unitPrice).toLocaleString(),
-                amount.toLocaleString()
+                String(index + 1),
+                getItemTitle(item),
+                String(item.quantity),
+                formatNumber(Number(item.unitPrice)),
+                formatNumber(amount),
             ]
         })
 
-        let finalY = currentY
-
         autoTable(doc, {
-            startY: currentY,
-            margin: { top: 50, bottom: 65, left: 15, right: 15 },
-            head: [['#', 'ITEM', 'QTY', 'PRICE', 'AMOUNT']],
+            startY: tableStartY,
+            margin: { left: 14, right: 14, bottom: 55, top: 10 },
+            head: [["#", "ITEM", "QTY", "PRICE", "AMOUNT"]],
             body: tableBody,
-            theme: 'plain',
+            theme: "plain",
             headStyles: {
-                fillColor: [59, 89, 152] as [number, number, number], // #3b5998
-                textColor: [255, 255, 255] as [number, number, number],
-                fontStyle: 'bold',
-                fontSize: 9,
-                cellPadding: 5,
+                fillColor: brandColor,
+                textColor: [255, 255, 255],
+                fontStyle: "bold",
+                fontSize: 7,
+                cellPadding: { top: 3.4, right: 3, bottom: 3.2, left: 3 },
             },
             bodyStyles: {
-                fontSize: 9,
-                cellPadding: 5,
+                fontSize: 7.4,
                 textColor: darkText,
+                cellPadding: { top: 4.2, right: 3, bottom: 4.2, left: 3 },
+                lineWidth: 0,
             },
             columnStyles: {
-                0: { cellWidth: 15, halign: 'center' },
-                1: { cellWidth: 82 }, // dynamic custom drawn
-                2: { cellWidth: 18, halign: 'center' },
-                3: { cellWidth: 30, halign: 'right' },
-                4: { cellWidth: 35, halign: 'right' },
+                0: { cellWidth: 10, halign: "center" },
+                1: { cellWidth: 98 },
+                2: { cellWidth: 16, halign: "center" },
+                3: { cellWidth: 28, halign: "right" },
+                4: { cellWidth: 30, halign: "right" },
             },
-            alternateRowStyles: {
-                fillColor: [248, 250, 252] as [number, number, number]
-            },
-            // The critical part to avoid page cuts for descriptions
-            pageBreak: 'auto',
-            rowPageBreak: 'avoid', // Keep items together
             didParseCell: (data: AutoTableHookData) => {
-                if (data.section === 'body' && data.column.index === 1) {
+                if (data.section === "body" && data.column.index === 1) {
                     const item = quotation.items[data.row.index]
-                    const doc = data.doc
-
-                    let totalHeight = 8 
-                    
-                    doc.setFontSize(10.5)
-                    const descText = getItemTitle(item)
-                    totalHeight += doc.splitTextToSize(descText, 75).length * 4.2
-                    
-                    if (item.longDescription) {
-                        doc.setFontSize(8.5)
-                        totalHeight += 2
-                        totalHeight += doc.splitTextToSize(item.longDescription, 75).length * 3.4
-                    }
-                    
-                    data.cell.styles.minCellHeight = totalHeight + 2
+                    const titleLines = data.doc.splitTextToSize(getItemTitle(item), 90)
+                    const subtitle = getItemSubtitle(item)
+                    const subtitleLines = subtitle ? data.doc.splitTextToSize(subtitle, 90) : []
+                    data.cell.styles.minCellHeight = 8 + titleLines.length * 3.2 + subtitleLines.length * 3
                 }
             },
             willDrawCell: (data: AutoTableHookData) => {
-                if (data.section === 'body' && data.column.index === 1) {
-                    data.cell.text = []; // Clear text to prevent autoTable from rendering double text
+                if (data.section === "body" && data.column.index === 1) {
+                    data.cell.text = []
                 }
             },
             didDrawCell: (data: AutoTableHookData) => {
-                // Custom drawn cell text for Item column
-                if (data.section === 'body' && data.column.index === 1) {
-                    const item = quotation.items[data.row.index]
-                    const doc = data.doc
-                    const x = data.cell.x + 5
-                    let y = data.cell.y + 5 + 3.5 // offset to baseline
+                if (data.section !== "body" || data.column.index !== 1) return
+                const item = quotation.items[data.row.index]
+                const x = data.cell.x + 3
+                let y = data.cell.y + 4.6
 
-                    const descText = getItemTitle(item)
-                    doc.setFont("helvetica", "bold")
-                    doc.setFontSize(10.5)
-                    doc.setTextColor(15, 23, 42)
-                    const descLines = doc.splitTextToSize(descText, 75)
-                    doc.text(descLines, x, y)
-                    y += descLines.length * 4.2
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(7.5)
+                doc.setTextColor(darkText[0], darkText[1], darkText[2])
+                const titleLines = doc.splitTextToSize(getItemTitle(item), 90)
+                doc.text(titleLines, x, y)
+                y += titleLines.length * 3.2
 
-                    if (item.longDescription) {
-                        doc.setFont("helvetica", "italic")
-                        doc.setFontSize(8.5)
-                        doc.setTextColor(100, 116, 139)
-                        const longDescLines = doc.splitTextToSize(item.longDescription, 75)
-                        y += 2
-                        doc.text(longDescLines, x, y)
-                    }
+                const subtitle = getItemSubtitle(item)
+                if (subtitle) {
+                    doc.setFont("helvetica", "italic")
+                    doc.setFontSize(6.8)
+                    doc.setTextColor(106, 125, 149)
+                    const subtitleLines = doc.splitTextToSize(subtitle, 90)
+                    doc.text(subtitleLines, x, y + 0.3)
                 }
             },
             didDrawPage: () => {
-                // Optionally add footer here
-            }
+                drawPageChrome()
+            },
         })
 
-        finalY = (mutableDoc.lastAutoTable?.finalY ?? currentY) + 10
-
-        // Subtotals
+        let finalY = (mutableDoc.lastAutoTable?.finalY ?? tableStartY) + 9
         const itemsSubtotal = quotation.items.reduce((sum, item) => sum + (item.quantity * Number(item.unitPrice)), 0)
         const discountAmount = quotation.discountType === "percent"
             ? (itemsSubtotal * Number(quotation.discount)) / 100
@@ -563,74 +526,61 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
         const taxAmount = Number(quotation.tax)
         const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
 
-        // Draw Totals section immediately following table
-        const totalsXLabel = 140
-        const totalsXValue = 195
-
-        doc.setFontSize(10)
+        const totalsX = 135
         doc.setFont("helvetica", "bold")
-        doc.setTextColor(grayText[0], grayText[1], grayText[2])
-        doc.text("Sub Total", totalsXLabel, finalY)
-        doc.setTextColor(darkText[0], darkText[1], darkText[2])
-        doc.text(formatCurrency(itemsSubtotal, quotation.currency), totalsXValue, finalY, { align: "right" })
-        finalY += 7
+        doc.setFontSize(8)
+        doc.setTextColor(29, 51, 88)
+        doc.text("Sub Total", totalsX, finalY)
+        doc.text(formatCurrency(itemsSubtotal, quotation.currency), 196, finalY, { align: "right" })
+        finalY += 4.8
 
         if (discountAmount > 0) {
-            doc.setTextColor(grayText[0], grayText[1], grayText[2])
-            doc.text(`Discount ${quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}`, totalsXLabel, finalY)
-            doc.setTextColor(239, 68, 68) // Red
-            doc.text(`-${formatCurrency(discountAmount, quotation.currency)}`, totalsXValue, finalY, { align: "right" })
-            finalY += 7
+            doc.setFont("helvetica", "normal")
+            doc.setFontSize(7.5)
+            doc.setTextColor(81, 103, 133)
+            doc.text("Discount", totalsX, finalY)
+            doc.text(`-${formatCurrency(discountAmount, quotation.currency)}`, 196, finalY, { align: "right" })
+            finalY += 4.3
         }
 
         if (taxAmount > 0) {
-            doc.setTextColor(grayText[0], grayText[1], grayText[2])
-            doc.text("Tax (PPN)", totalsXLabel, finalY)
-            doc.setTextColor(darkText[0], darkText[1], darkText[2])
-            doc.text(formatCurrency(taxAmount, quotation.currency), totalsXValue, finalY, { align: "right" })
-            finalY += 7
+            doc.text("Tax", totalsX, finalY)
+            doc.text(formatCurrency(taxAmount, quotation.currency), 196, finalY, { align: "right" })
+            finalY += 4.3
         }
 
-        // Grand Total box with Shadow and Border
-        doc.setFillColor(203, 213, 225) // shadow color slate-300
-        doc.rect(totalsXLabel - 10, finalY - 4 + 1.5, 65, 10, 'F') // Drop shadow
-        
-        doc.setFillColor(37, 99, 235) // primary box
-        doc.setDrawColor(29, 78, 216) // darker border
-        doc.setLineWidth(0.5)
-        doc.rect(totalsXLabel - 10, finalY - 4, 65, 10, 'FD')
-        
+        doc.setFillColor(54, 87, 157)
+        doc.roundedRect(132, finalY - 1.8, 64, 9.4, 2.3, 2.3, "F")
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(8.8)
         doc.setTextColor(255, 255, 255)
-        doc.setFontSize(11)
-        doc.text("TOTAL", totalsXLabel - 5, finalY + 3)
-        doc.text(formatCurrency(grandTotal, quotation.currency), totalsXValue - 2, finalY + 3, { align: "right" })
-        
-        finalY += 15
+        doc.text("TOTAL", 140, finalY + 3.4)
+        doc.text(formatCurrency(grandTotal, quotation.currency), 192.5, finalY + 3.4, { align: "right" })
+        finalY += 16
 
-        // Terms and conditions
-        if (quotation.termsConditions || quotation.clientNote) {
-            let termsY = finalY
-            if (termsY > 240) {
-                doc.addPage()
-                termsY = 55
-            }
-
-            doc.setFillColor(248, 250, 252)
-            doc.rect(15, termsY - 5, 180, 50, 'F') // Approximation
-
-            doc.setTextColor(darkText[0], darkText[1], darkText[2])
-            doc.setFontSize(9)
-            doc.text("TERMS & CONDITIONS", 20, termsY + 2)
-            termsY += 8
-
-            doc.setFont("helvetica", "normal")
-            doc.setTextColor(grayText[0], grayText[1], grayText[2])
-            
-            const termsText = [quotation.termsConditions, quotation.clientNote].filter(Boolean).join("\n\n")
-            const formattedTerms = doc.splitTextToSize(termsText, 170)
-            doc.text(formattedTerms, 20, termsY)
-            finalY = termsY + (formattedTerms.length * 4) + 12
+        if (finalY > 226) {
+            doc.addPage()
+            finalY = 72
         }
+
+        doc.setFillColor(255, 243, 230)
+        doc.roundedRect(14, finalY, 82, 36, 3, 3, "F")
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(7.2)
+        doc.setTextColor(61, 79, 116)
+        doc.text("TERMS & CONDITIONS", 20, finalY + 6)
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(6.9)
+        doc.setTextColor(107, 111, 139)
+        let termsY = finalY + 10
+        ;[...termsLines, ...noteLines].forEach((line) => {
+            doc.text(line, 20, termsY)
+            termsY += 3.3
+        })
+        doc.text("PT. CHITRA PARATAMA", 20, termsY + 2)
+        doc.text("BANK MANDIRI", 20, termsY + 5.3)
+        doc.text("Branch Cilandak KKO, Jakarta Selatan 12560", 20, termsY + 8.6)
+        doc.text("IDR A/C NO:127 - 000 - 00 - 17416", 20, termsY + 11.9)
 
         const includedAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po") ?? []
         if (includedAttachments.length > 0) {

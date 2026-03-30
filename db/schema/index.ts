@@ -169,6 +169,7 @@ export {
     emailGroupMembersRelations,
 } from "./email-contacts";
 export { userNotificationReads } from "./user-notifications";
+export { pushSubscriptions } from "./push-subscriptions";
 export {
     chatRooms,
     chatRoomMembers,
