@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import {
     useReactTable,
     getCoreRowModel,
@@ -57,8 +57,63 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     const [globalFilter, setGlobalFilter] = useState("")
     const [selectedQuotation, setSelectedQuotation] = useState<VendorQuotationWithItems | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
-    const [expandedQuotationId, setExpandedQuotationId] = useState<number | null>(null)
+    const [expandedQuotationIds, setExpandedQuotationIds] = useState<Set<number>>(new Set())
     const [itemSearchByQuotation, setItemSearchByQuotation] = useState<Record<number, string>>({})
+    const [highlightedItemIds, setHighlightedItemIds] = useState<Set<number>>(new Set())
+    const [autoExpanded, setAutoExpanded] = useState(false)
+    const prevGlobalFilterRef = useRef("")
+
+    useEffect(() => {
+        const query = globalFilter.trim().toLowerCase()
+        const prevQuery = prevGlobalFilterRef.current.trim().toLowerCase()
+        
+        if (query && query !== prevQuery) {
+            const matchingQuotationIds = new Set<number>()
+            const matchingItemIds = new Set<number>()
+            
+            data.forEach((quotation) => {
+                const itemMatches = quotation.items.filter((item) => {
+                    const searchValue = [
+                        item.itemName,
+                        item.remark,
+                        item.unit,
+                        item.qty,
+                        item.unitPrice,
+                        item.totalPrice,
+                        formatCurrency(item.unitPrice),
+                        formatCurrency(item.totalPrice),
+                    ]
+                        .filter(Boolean)
+                        .join(" ")
+                        .toLowerCase()
+                    return searchValue.includes(query)
+                })
+                
+                if (itemMatches.length > 0) {
+                    matchingQuotationIds.add(quotation.id)
+                    itemMatches.forEach(item => matchingItemIds.add(item.id))
+                }
+            })
+            
+            if (matchingQuotationIds.size > 0) {
+                setExpandedQuotationIds(matchingQuotationIds)
+                setHighlightedItemIds(matchingItemIds)
+                setAutoExpanded(true)
+            } else {
+                if (autoExpanded) {
+                    setExpandedQuotationIds(new Set())
+                    setHighlightedItemIds(new Set())
+                    setAutoExpanded(false)
+                }
+            }
+        } else if (!query && autoExpanded) {
+            setExpandedQuotationIds(new Set())
+            setHighlightedItemIds(new Set())
+            setAutoExpanded(false)
+        }
+        
+        prevGlobalFilterRef.current = globalFilter
+    }, [globalFilter, data, autoExpanded])
 
     const formatCurrency = (value: string | number) =>
         new Intl.NumberFormat("id-ID", {
@@ -111,7 +166,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 id: "expand",
                 header: "",
                 cell: ({ row }) => {
-                    const isExpanded = expandedQuotationId === row.original.id
+                    const isExpanded = expandedQuotationIds.has(row.original.id)
                     return (
                         <Button
                             variant="ghost"
@@ -119,7 +174,15 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                             className="h-8 w-8"
                             onClick={(e) => {
                                 e.stopPropagation()
-                                setExpandedQuotationId((current) => (current === row.original.id ? null : row.original.id))
+                                setExpandedQuotationIds((current) => {
+                                    const newSet = new Set(current)
+                                    if (newSet.has(row.original.id)) {
+                                        newSet.delete(row.original.id)
+                                    } else {
+                                        newSet.add(row.original.id)
+                                    }
+                                    return newSet
+                                })
                             }}
                             title={isExpanded ? "Tutup detail item" : "Buka detail item"}
                         >
@@ -248,7 +311,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 ),
             },
         ],
-        [expandedQuotationId, onDelete, onOpenOcr]
+        [expandedQuotationIds, onDelete, onOpenOcr]
     )
 
     const table = useReactTable({
@@ -378,14 +441,22 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                         </TableHeader>
                         <TableBody>
                             {rows.map((row) => {
-                                const isExpanded = expandedQuotationId === row.original.id
+                                const isExpanded = expandedQuotationIds.has(row.original.id)
                                 const filteredItems = getFilteredItems(row.original)
                                 return (
                                     <React.Fragment key={row.id}>
                                         <TableRow
                                             className="cursor-pointer transition-colors hover:bg-muted/40"
                                             onClick={() => {
-                                                setExpandedQuotationId((current) => (current === row.original.id ? null : row.original.id))
+                                                setExpandedQuotationIds((current) => {
+                                                    const newSet = new Set(current)
+                                                    if (newSet.has(row.original.id)) {
+                                                        newSet.delete(row.original.id)
+                                                    } else {
+                                                        newSet.add(row.original.id)
+                                                    }
+                                                    return newSet
+                                                })
                                             }}
                                         >
                                             {row.getVisibleCells().map((cell) => (
@@ -439,8 +510,13 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                                                                 </TableHeader>
                                                                 <TableBody>
                                                                     {filteredItems.length > 0 ? (
-                                                                        filteredItems.map((item) => (
-                                                                            <TableRow key={item.id}>
+                                                                        filteredItems.map((item) => {
+                                                                            const isHighlighted = highlightedItemIds.has(item.id)
+                                                                            return (
+                                                                            <TableRow 
+                                                                                key={item.id}
+                                                                                className={isHighlighted ? "bg-yellow-100 dark:bg-yellow-900/30 animate-pulse" : undefined}
+                                                                            >
                                                                                 <TableCell className="font-medium">{item.itemName}</TableCell>
                                                                                 <TableCell className="text-right">{item.qty}</TableCell>
                                                                                 <TableCell>{item.unit || "—"}</TableCell>
@@ -448,7 +524,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                                                                                 <TableCell className="text-right font-medium">{formatCurrency(item.totalPrice)}</TableCell>
                                                                                 <TableCell className="text-muted-foreground">{item.remark || "—"}</TableCell>
                                                                             </TableRow>
-                                                                        ))
+                                                                        )})
                                                                     ) : (
                                                                         <TableRow>
                                                                             <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
