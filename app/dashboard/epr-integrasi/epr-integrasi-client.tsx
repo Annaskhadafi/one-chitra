@@ -166,6 +166,8 @@ function getQuotationUrls(entry: DisplayEntry) {
         .filter((value): value is string => Boolean(value));
 }
 
+const OCR_BATCH_CONCURRENCY = 3;
+
 export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrStatusMap }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -188,6 +190,61 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
         setOcrFileUrl(url);
         setOcrEntryId(entryId);
         setOcrDialogOpen(true);
+    };
+
+    const runOcrBatch = async (batchItems: { url: string; entryId: string; status?: string }[]) => {
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: batchItems.length });
+
+        let completedCount = 0;
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let startIndex = 0; startIndex < batchItems.length; startIndex += OCR_BATCH_CONCURRENCY) {
+            const chunk = batchItems.slice(startIndex, startIndex + OCR_BATCH_CONCURRENCY);
+
+            chunk.forEach((item) => {
+                setRuntimeOcrStatusMap((current) => ({
+                    ...current,
+                    [item.url]: "processing",
+                }));
+            });
+
+            const chunkResults = await Promise.all(
+                chunk.map(async (item) => {
+                    try {
+                        const result = await triggerVendorQuotationOcr(item.url, item.entryId);
+                        return { item, success: result.success };
+                    } catch (_error) {
+                        return { item, success: false };
+                    }
+                })
+            );
+
+            for (const result of chunkResults) {
+                completedCount += 1;
+                setBatchProgress({ current: completedCount, total: batchItems.length });
+
+                if (result.success) {
+                    successCount += 1;
+                    setRuntimeOcrStatusMap((current) => ({
+                        ...current,
+                        [result.item.url]: "done",
+                    }));
+                } else {
+                    failCount += 1;
+                    setRuntimeOcrStatusMap((current) => ({
+                        ...current,
+                        [result.item.url]: "failed",
+                    }));
+                }
+            }
+
+            router.refresh();
+        }
+
+        setIsBatchProcessing(false);
+        return { successCount, failCount };
     };
 
     const getPendingQuotationAttachments = (entry: DisplayEntry) => {
@@ -252,52 +309,7 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
         if (!confirm(`Akan diproses ${batchItems.length} attachment pending tahun ${currentYear} dari EPR Integration. Lanjutkan OCR otomatis untuk semua file?`)) {
             return;
         }
-
-        setIsBatchProcessing(true);
-        setBatchProgress({ current: 0, total: batchItems.length });
-
-        let successCount = 0;
-        let failCount = 0;
-
-        for (let i = 0; i < batchItems.length; i++) {
-            const item = batchItems[i];
-            setBatchProgress({ current: i + 1, total: batchItems.length });
-            setRuntimeOcrStatusMap((current) => ({
-                ...current,
-                [item.url]: "processing",
-            }));
-
-            try {
-                const result = await triggerVendorQuotationOcr(item.url, item.entryId);
-                if (result.success) {
-                    successCount++;
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [item.url]: "done",
-                    }));
-                } else {
-                    failCount++;
-                    console.error(`Gagal OCR attachment ${item.url}:`, result.error);
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [item.url]: "failed",
-                    }));
-                }
-            } catch (error) {
-                failCount++;
-                console.error(`Error OCR attachment ${item.url}:`, error);
-                setRuntimeOcrStatusMap((current) => ({
-                    ...current,
-                    [item.url]: "failed",
-                }));
-            }
-
-            if ((i + 1) % 2 === 0 || i === batchItems.length - 1) {
-                router.refresh();
-            }
-        }
-
-        setIsBatchProcessing(false);
+        const { successCount, failCount } = await runOcrBatch(batchItems);
         toast.success(`Batch OCR ${currentYear} selesai. Diproses: ${batchItems.length}, sukses: ${successCount}, gagal: ${failCount}.`);
         router.refresh();
     };
@@ -382,50 +394,7 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
         if (!confirm(`Akan diproses ${batchItems.length} file quotation dari ${selectedEntryIds.length} baris terpilih. Lanjutkan OCR?`)) {
             return;
         }
-
-        setIsBatchProcessing(true);
-        setBatchProgress({ current: 0, total: batchItems.length });
-
-        let successCount = 0;
-        let failCount = 0;
-
-        for (let i = 0; i < batchItems.length; i++) {
-            const item = batchItems[i];
-            setBatchProgress({ current: i + 1, total: batchItems.length });
-            setRuntimeOcrStatusMap((current) => ({
-                ...current,
-                [item.url]: "processing",
-            }));
-
-            try {
-                const result = await triggerVendorQuotationOcr(item.url, item.entryId);
-                if (result.success) {
-                    successCount++;
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [item.url]: "done",
-                    }));
-                } else {
-                    failCount++;
-                    setRuntimeOcrStatusMap((current) => ({
-                        ...current,
-                        [item.url]: "failed",
-                    }));
-                }
-            } catch (_error) {
-                failCount++;
-                setRuntimeOcrStatusMap((current) => ({
-                    ...current,
-                    [item.url]: "failed",
-                }));
-            }
-
-            if ((i + 1) % 2 === 0 || i === batchItems.length - 1) {
-                router.refresh();
-            }
-        }
-
-        setIsBatchProcessing(false);
+        const { successCount, failCount } = await runOcrBatch(batchItems);
         setSelectedEntryIds([]);
         toast.success(`OCR pilihan selesai. Diproses: ${batchItems.length}, sukses: ${successCount}, gagal: ${failCount}.`);
         router.refresh();
