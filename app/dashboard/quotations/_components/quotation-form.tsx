@@ -1366,9 +1366,9 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 <FloatingNavButton
                     onClick={() => setShowFloatingShortcuts(true)}
                     label="Tampilkan Shortcut"
-                    icon={<Eye className="h-4 w-4" />}
+                    icon={<Eye className="floating-eye-icon h-4 w-4" />}
                     position="middle-right"
-                    className="border-slate-300/70 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900"
+                    className="floating-eye-button border-blue-300/70 bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-500 hover:from-blue-700 hover:via-sky-700 hover:to-cyan-600"
                     iconOnly
                 />
             )}
