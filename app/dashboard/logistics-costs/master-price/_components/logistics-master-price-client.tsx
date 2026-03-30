@@ -120,6 +120,36 @@ const parseNullableInt = (value: string) => {
     return cleaned ? Number(cleaned) : null
 }
 
+function RingCapacityCell({ row }: { row: LogisticsMasterPriceRow }) {
+    const ringItems = [
+        { label: '24"', value: row.ring24 },
+        { label: '25"', value: row.ring25 },
+        { label: '29"', value: row.ring29 },
+        { label: '33"', value: row.ring33 },
+        { label: '35"', value: row.ring35 },
+        { label: '49"', value: row.ring49 },
+        { label: '51"', value: row.ring51 },
+        { label: '57"', value: row.ring57 },
+        { label: '63"', value: row.ring63 },
+    ]
+
+    return (
+        <div className="grid min-w-[260px] grid-cols-3 gap-1.5">
+            {ringItems.map((item) => (
+                <div
+                    key={item.label}
+                    className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] leading-tight"
+                >
+                    <div className="font-bold text-slate-500">Ring {item.label}</div>
+                    <div className="mt-0.5 font-semibold text-slate-900">
+                        {item.value !== null && item.value !== undefined ? `Max ${item.value} pcs` : "-"}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
 function toFormState(row?: LogisticsMasterPriceRow): FormState {
     if (!row) return emptyForm
 
@@ -486,8 +516,8 @@ export function LogisticsMasterPriceClient({ initialRows }: LogisticsMasterPrice
                                         <TableCell>{row.truckType || "-"}</TableCell>
                                         <TableCell className="max-w-[180px] truncate">{row.statusTb || "-"}</TableCell>
                                         <TableCell>{row.productType || "-"}</TableCell>
-                                        <TableCell className="text-xs text-muted-foreground">
-                                            24:{row.ring24 ?? "-"} 25:{row.ring25 ?? "-"} 29:{row.ring29 ?? "-"} 33:{row.ring33 ?? "-"} 35:{row.ring35 ?? "-"} 49:{row.ring49 ?? "-"} 51:{row.ring51 ?? "-"} 57:{row.ring57 ?? "-"} 63:{row.ring63 ?? "-"}
+                                        <TableCell>
+                                            <RingCapacityCell row={row} />
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
