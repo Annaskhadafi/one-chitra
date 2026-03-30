@@ -7,14 +7,13 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileText, Printer, Download, ExternalLink, Pencil, Trash2, Eye, X, AlertCircle } from "lucide-react"
+import { FileText, Printer, ExternalLink, Pencil, Trash2, Eye, X, AlertCircle } from "lucide-react"
 import { useState } from "react"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
+import { resolveUploadDocumentUrl } from "@/lib/upload-url"
 
 type Props = {
     quotation: VendorQuotationWithItems | null
@@ -45,15 +44,16 @@ function formatDate(date: Date | string | null) {
 
 export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onEdit, onDelete }: Props) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    const isImage = quotation?.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)
-    const isPdf = quotation?.fileUrl.match(/\.pdf/i)
     if (!quotation) return null
+
+    const documentUrl = resolveUploadDocumentUrl(quotation.fileUrl) ?? quotation.fileUrl
+    const isPreviewable = /\.(pdf|jpg|jpeg|png|webp|gif)(?:[?#].*)?$/i.test(documentUrl)
 
     const totalAmount = quotation.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[95vw] max-w-6xl h-[95vh] lg:h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-indigo-100">
+            <DialogContent className="w-[98vw] max-w-[98vw] xl:max-w-[1800px] h-[96vh] flex flex-col p-0 overflow-hidden shadow-2xl border-indigo-100">
                 <DialogHeader className="p-6 pb-2">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -77,8 +77,8 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                     </div>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1 p-6 pt-2">
-                    <div className="pdf-wrapper space-y-8 bg-card border rounded-xl p-8 shadow-sm">
+                <div className="flex-1 overflow-auto px-4 pb-4 sm:px-6">
+                    <div className="min-w-[1100px] space-y-8 rounded-xl border bg-card p-6 shadow-sm sm:p-8">
                         {/* Header Section */}
                         <div className="flex flex-col md:flex-row justify-between gap-6">
                             <div className="space-y-4">
@@ -99,7 +99,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                             <div className="flex flex-col items-end gap-3 no-print">
                                 <VendorQuotationOcrBadge status={quotation.ocrStatus} />
                                 <div className="flex flex-wrap justify-end gap-2">
-                                    {(isImage || isPdf) && (
+                                    {isPreviewable && (
                                         <Button 
                                             variant="secondary" 
                                             size="sm" 
@@ -107,11 +107,11 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                                             className="h-8 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300"
                                         >
                                             <Eye className="h-3.5 w-3.5 mr-2" />
-                                            Preview Document
+                                            View Detail Dokumen Asli
                                         </Button>
                                     )}
                                     <Button variant="outline" size="sm" asChild className="h-8">
-                                        <a href={quotation.fileUrl} target="_blank" rel="noopener noreferrer">
+                                        <a href={documentUrl} target="_blank" rel="noopener noreferrer">
                                             <ExternalLink className="h-3.5 w-3.5 mr-2" />
                                             Open Original
                                         </a>
@@ -125,13 +125,13 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                         {/* Items Table */}
                         <div className="space-y-4">
                             <h3 className="font-semibold text-lg">Line Items</h3>
-                            <div className="border rounded-lg overflow-hidden overflow-x-auto scrollbar-thin scrollbar-thumb-accent">
-                                <Table className="min-w-[700px]">
+                            <div className="max-h-[52vh] overflow-auto rounded-lg border">
+                                <Table className="min-w-[1100px]">
                                     <TableHeader className="bg-muted/50">
                                         <TableRow>
-                                            <TableHead className="w-[40%]">Description</TableHead>
+                                            <TableHead className="min-w-[360px]">Description</TableHead>
                                             <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead>Unit</TableHead>
+                                            <TableHead className="min-w-[110px]">Unit</TableHead>
                                             <TableHead className="text-right">Unit Price</TableHead>
                                             <TableHead className="text-right">Total Price</TableHead>
                                         </TableRow>
@@ -177,7 +177,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                             </div>
                         </div>
                     </div>
-                </ScrollArea>
+                </div>
                 
                 <div className="p-4 border-t bg-muted/20 flex justify-end gap-2 no-print">
                     {onDelete && (
@@ -191,7 +191,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
                 {/* Internal Preview Dialog */}
                 <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-                    <DialogContent className="max-w-[95vw] w-[1200px] h-[90vh] p-0 overflow-hidden flex flex-col border-indigo-200">
+                    <DialogContent className="w-[98vw] max-w-[98vw] xl:max-w-[1850px] h-[96vh] p-0 overflow-hidden flex flex-col border-indigo-200">
                         <DialogHeader className="p-4 border-b bg-muted/30 flex flex-row items-center justify-between space-y-0">
                             <DialogTitle className="text-sm font-medium flex items-center gap-2">
                                 <FileText className="h-4 w-4 text-indigo-500" />
@@ -206,20 +206,13 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                                 <X className="h-4 w-4" />
                             </Button>
                         </DialogHeader>
-                        <div className="flex-1 bg-slate-900/5 overflow-auto flex items-center justify-center p-4">
-                            {isPdf ? (
-                                <iframe 
-                                    src={`${quotation.fileUrl}#toolbar=0`} 
-                                    className="w-full h-full rounded-md shadow-lg bg-white"
-                                    title="PDF Preview"
-                                />
-                            ) : isImage ? (
-                                <div className="max-w-full max-h-full overflow-auto scrollbar-thin scrollbar-thumb-indigo-200">
-                                    <img 
-                                        src={quotation.fileUrl} 
-                                        alt="Quotation Preview" 
-                                        className="max-w-none shadow-2xl rounded-sm"
-                                        style={{ minWidth: "100%" }}
+                        <div className="flex-1 overflow-auto bg-slate-900/5 p-4">
+                            {isPreviewable ? (
+                                <div className="h-full min-w-[1100px] min-h-[720px] overflow-auto rounded-lg border bg-white shadow-lg">
+                                    <iframe
+                                        src={documentUrl}
+                                        className="h-full w-full min-w-[1100px] min-h-[720px] bg-white"
+                                        title="Original Document Preview"
                                     />
                                 </div>
                             ) : (
@@ -227,7 +220,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                                     <AlertCircle className="h-12 w-12 text-amber-500 mx-auto" />
                                     <p>Preview tidak tersedia untuk format ini.</p>
                                     <Button asChild>
-                                        <a href={quotation.fileUrl} target="_blank">Download File</a>
+                                        <a href={documentUrl} target="_blank" rel="noopener noreferrer">Download File</a>
                                     </Button>
                                 </div>
                             )}
@@ -239,11 +232,6 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
             <style jsx global>{`
                 @media print {
                     .no-print { display: none !important; }
-                    .pdf-wrapper { 
-                        box-shadow: none !important; 
-                        border: none !important; 
-                        padding: 0 !important;
-                    }
                     body { background: white !important; }
                 }
             `}</style>
