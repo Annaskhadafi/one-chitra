@@ -5,9 +5,10 @@ import { useEffect, useState, useRef } from "react"
 import {
     Dialog,
     DialogContent,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog"
-import { FileText, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { FileText } from "lucide-react"
 
 interface VendorQuotationSearchModalProps {
     open: boolean
@@ -28,13 +29,13 @@ export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotati
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh] flex flex-col p-0 overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b shrink-0">
-                    <div className="flex items-center gap-2">
+            <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] flex flex-col p-0 overflow-hidden">
+                <DialogHeader className="p-4 border-b shrink-0">
+                    <DialogTitle className="flex items-center gap-2 text-xl">
                         <FileText className="h-6 w-6" />
-                        <h2 className="text-xl font-bold">Vendor Quotation Database</h2>
-                    </div>
-                </div>
+                        Vendor Quotation Database
+                    </DialogTitle>
+                </DialogHeader>
 
                 <div className="flex-1 bg-muted/10">
                     <iframe

@@ -7,6 +7,8 @@ import { getBundleItemsForExpansion } from "@/app/actions/product-bundle"
 import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FloatingNavButton } from "@/components/floating-nav-button"
+import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search-modal"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
@@ -138,6 +140,7 @@ function calculateSellingPrice(costIdr: number, margin: number) {
 export function QuotationForm({ customers, products, users, currentUserId, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
+    const [isVendorQuotationOpen, setIsVendorQuotationOpen] = useState(false)
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
@@ -1268,6 +1271,17 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     Save & Preview PDF
                 </Button>
             </div>
+
+            <FloatingNavButton 
+                onClick={() => setIsVendorQuotationOpen(true)}
+                label="Cari Harga Vendor"
+                position="middle-right"
+            />
+
+            <VendorQuotationSearchModal
+                open={isVendorQuotationOpen}
+                onOpenChange={setIsVendorQuotationOpen}
+            />
         </div>
     )
 }

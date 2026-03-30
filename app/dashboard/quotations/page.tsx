@@ -4,8 +4,6 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus, FileText } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { FloatingNavButton } from "@/components/floating-nav-button"
-import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search-modal"
 import { Suspense } from "react"
 
 export const dynamic = 'force-dynamic'
@@ -36,21 +34,6 @@ export default async function QuotationsPage() {
                     <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
                 </Suspense>
             </div>
-
-            <FloatingNavButton 
-                onClick={() => {
-                    const event = new CustomEvent('openVendorQuotationModal')
-                    window.dispatchEvent(event)
-                }}
-                label="Cari Harga Vendor"
-                position="middle-right"
-            />
-
-            <VendorQuotationSearchModalWrapper />
         </div>
     )
-}
-
-function VendorQuotationSearchModalWrapper() {
-    return <VendorQuotationSearchModal />
 }
