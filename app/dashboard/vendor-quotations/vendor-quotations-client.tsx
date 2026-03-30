@@ -8,8 +8,9 @@ import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Plus, RefreshCcw, Loader2, ScanText, CheckCircle2, FileText } from "lucide-react"
+import { Plus, RefreshCcw, Loader2, ScanText } from "lucide-react"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
+import { isVendorQuotationFrom2026 } from "@/lib/vendor-quotation-filter"
 
 interface Props {
     initialData: VendorQuotationWithItems[]
@@ -22,6 +23,14 @@ export function VendorQuotationsClient({ initialData }: Props) {
     const [isBatchProcessing, setIsBatchProcessing] = useState(false)
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
     const router = useRouter()
+    const filteredData = initialData.filter((item) =>
+        isVendorQuotationFrom2026({
+            quoteDate: item.quoteDate,
+            quoteNumber: item.quoteNumber,
+            fileName: item.fileName,
+            fileUrl: item.fileUrl,
+        })
+    )
 
     const handleOpenOcr = (url?: string) => {
         setOcrUrl(url || "")
@@ -38,7 +47,7 @@ export function VendorQuotationsClient({ initialData }: Props) {
             } else {
                 toast.error(result.error || "Gagal sinkronisasi data dari EPR")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("Terjadi kesalahan sistem saat sinkronisasi")
         } finally {
             setIsSyncing(false)
@@ -46,24 +55,25 @@ export function VendorQuotationsClient({ initialData }: Props) {
     }
 
     const handleAutoOcrAll = async () => {
-        const pendingItems = initialData.filter(item => item.ocrStatus === "pending")
+        const pendingItems = filteredData.filter((item) => item.ocrStatus === "pending")
         if (pendingItems.length === 0) {
-            toast.info("Tidak ada quotation dengan status pending untuk di-OCR.")
+            toast.info("Tidak ada quotation tahun 2026 dengan status pending untuk di-OCR.")
             return
         }
 
-        if (!confirm(`Apakah Anda yakin ingin mengekstrak ${pendingItems.length} quotation secara otomatis? Proses ini mungkin memakan waktu.`)) {
+        const batchItems = pendingItems.slice(0, 10)
+        if (!confirm(`Akan diproses ${batchItems.length} quotation pending tahun 2026 pada batch ini. Lanjutkan OCR otomatis?`)) {
             return
         }
 
         setIsBatchProcessing(true)
-        setBatchProgress({ current: 0, total: pendingItems.length })
+        setBatchProgress({ current: 0, total: batchItems.length })
 
         let successCount = 0
         let failCount = 0
 
-        for (let i = 0; i < pendingItems.length; i++) {
-            const item = pendingItems[i]
+        for (let i = 0; i < batchItems.length; i++) {
+            const item = batchItems[i]
             setBatchProgress(prev => ({ ...prev, current: i + 1 }))
             
             try {
@@ -80,13 +90,13 @@ export function VendorQuotationsClient({ initialData }: Props) {
             }
             
             // Refresh periodic untuk Update UI tabel
-            if ((i + 1) % 2 === 0 || i === pendingItems.length - 1) {
+            if ((i + 1) % 2 === 0 || i === batchItems.length - 1) {
                 router.refresh()
             }
         }
 
         setIsBatchProcessing(false)
-        toast.success(`Proses Batch Selesai. Sukses: ${successCount}, Gagal: ${failCount}`)
+        toast.success(`Batch OCR 2026 selesai. Diproses: ${batchItems.length}, Sukses: ${successCount}, Gagal: ${failCount}`)
         router.refresh()
     }
 
@@ -133,7 +143,7 @@ export function VendorQuotationsClient({ initialData }: Props) {
                     ) : (
                         <>
                             <ScanText className="h-4 w-4" />
-                            Auto OCR All Pending
+                            Auto OCR Pending 2026
                         </>
                     )}
                 </Button>
@@ -144,7 +154,7 @@ export function VendorQuotationsClient({ initialData }: Props) {
             </div>
 
             <VendorQuotationTable 
-                data={initialData} 
+                data={filteredData} 
                 onDelete={handleDelete}
                 onOpenOcr={handleOpenOcr}
             />

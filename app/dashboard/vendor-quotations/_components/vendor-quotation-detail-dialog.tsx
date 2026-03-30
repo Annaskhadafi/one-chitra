@@ -6,11 +6,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Printer, ExternalLink, Pencil, Trash2, Eye, X, AlertCircle } from "lucide-react"
-import { useState } from "react"
+import { FileText, Printer, ExternalLink, Pencil, Trash2, Eye, X, AlertCircle, Search, PackageSearch } from "lucide-react"
+import { useMemo, useState } from "react"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
@@ -44,12 +46,36 @@ function formatDate(date: Date | string | null) {
 
 export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onEdit, onDelete }: Props) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-    if (!quotation) return null
+    const [itemSearch, setItemSearch] = useState("")
 
-    const documentUrl = resolveUploadDocumentUrl(quotation.fileUrl) ?? quotation.fileUrl
+    const quotationItems = useMemo(() => quotation?.items ?? [], [quotation?.items])
+    const documentUrl = resolveUploadDocumentUrl(quotation?.fileUrl) ?? quotation?.fileUrl ?? ""
     const isPreviewable = /\.(pdf|jpg|jpeg|png|webp|gif)(?:[?#].*)?$/i.test(documentUrl)
+    const totalAmount = quotationItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+    const normalizedSearch = itemSearch.trim().toLowerCase()
+    const filteredItems = useMemo(() => {
+        if (!normalizedSearch) return quotationItems
 
-    const totalAmount = quotation.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+        return quotationItems.filter((item) => {
+            const searchValue = [
+                item.itemName,
+                item.remark,
+                item.unit,
+                item.qty,
+                formatCurrency(item.unitPrice),
+                formatCurrency(item.totalPrice),
+                item.unitPrice,
+                item.totalPrice,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            return searchValue.includes(normalizedSearch)
+        })
+    }, [normalizedSearch, quotationItems])
+
+    if (!quotation) return null
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -122,37 +148,85 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
                         <Separator />
 
-                        {/* Items Table */}
-                        <div className="space-y-4">
-                            <h3 className="font-semibold text-lg">Line Items</h3>
-                            <div className="max-h-[52vh] overflow-auto rounded-lg border">
-                                <Table className="min-w-[1100px]">
-                                    <TableHeader className="bg-muted/50">
-                                        <TableRow>
-                                            <TableHead className="min-w-[360px]">Description</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="min-w-[110px]">Unit</TableHead>
-                                            <TableHead className="text-right">Unit Price</TableHead>
-                                            <TableHead className="text-right">Total Price</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {quotation.items.map((item) => (
-                                            <TableRow key={item.id}>
-                                                <TableCell className="font-medium">
-                                                    <div>{item.itemName}</div>
-                                                    {item.remark && <p className="text-xs text-muted-foreground mt-1">{item.remark}</p>}
-                                                </TableCell>
-                                                <TableCell className="text-right">{item.qty}</TableCell>
-                                                <TableCell>{item.unit || "—"}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
-                                                <TableCell className="text-right font-medium">{formatCurrency(item.totalPrice)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
+                        <Accordion type="single" collapsible className="w-full">
+                            <AccordionItem value="sales-item-detail" className="border-none">
+                                <AccordionTrigger className="rounded-xl border bg-card px-5 py-4 shadow-sm transition-all hover:bg-accent/40 hover:no-underline [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                                    <div className="flex flex-1 items-center justify-between gap-4 pr-4 text-left">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600">
+                                                <PackageSearch className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <div className="font-semibold text-base">Detail Item Sales</div>
+                                                <div className="text-sm text-muted-foreground">
+                                                    Buka untuk cari item dan bandingkan harga vendor dengan cepat.
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm text-muted-foreground">
+                                            {filteredItems.length}/{quotation.items.length} item
+                                        </div>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="rounded-b-xl border border-t-0 bg-card p-5 shadow-sm">
+                                    <div className="space-y-4">
+                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                            <div>
+                                                <h3 className="font-semibold text-lg">Line Items</h3>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Search item untuk bantu sales cek harga vendor, qty, dan total penawaran.
+                                                </p>
+                                            </div>
+                                            <div className="relative w-full lg:w-[360px]">
+                                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                <Input
+                                                    value={itemSearch}
+                                                    onChange={(e) => setItemSearch(e.target.value)}
+                                                    placeholder="Cari nama item, remark, qty, unit, atau harga..."
+                                                    className="pl-9"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="max-h-[52vh] overflow-auto rounded-lg border">
+                                            <Table className="min-w-[1100px]">
+                                                <TableHeader className="bg-muted/50">
+                                                    <TableRow>
+                                                        <TableHead className="min-w-[360px]">Description</TableHead>
+                                                        <TableHead className="text-right">Qty</TableHead>
+                                                        <TableHead className="min-w-[110px]">Unit</TableHead>
+                                                        <TableHead className="text-right">Unit Price</TableHead>
+                                                        <TableHead className="text-right">Total Price</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {filteredItems.length > 0 ? (
+                                                        filteredItems.map((item) => (
+                                                            <TableRow key={item.id}>
+                                                                <TableCell className="font-medium">
+                                                                    <div>{item.itemName}</div>
+                                                                    {item.remark && <p className="mt-1 text-xs text-muted-foreground">{item.remark}</p>}
+                                                                </TableCell>
+                                                                <TableCell className="text-right">{item.qty}</TableCell>
+                                                                <TableCell>{item.unit || "—"}</TableCell>
+                                                                <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                                                                <TableCell className="text-right font-medium">{formatCurrency(item.totalPrice)}</TableCell>
+                                                            </TableRow>
+                                                        ))
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                                                                Tidak ada item yang cocok dengan pencarian sales.
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
 
                         {/* Footer Section */}
                         <div className="flex flex-col md:flex-row justify-between gap-8 pt-4">

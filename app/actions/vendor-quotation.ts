@@ -1,23 +1,28 @@
 "use server"
 
 import { db } from "@/db"
-import { vendorQuotations, vendorQuotationItems } from "@/db/schema"
+import { vendorQuotations } from "@/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
+import { isVendorQuotationFrom2026 } from "@/lib/vendor-quotation-filter"
 
 const VIEW_ID = "2354";
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
 
-function mapToSerializable(row: any): VendorQuotationWithItems {
+type VendorQuotationRow = Awaited<ReturnType<typeof db.query.vendorQuotations.findMany>>[number]
+type VendorQuotationItemRow = VendorQuotationRow["items"][number]
+type GravityViewEntry = Record<string, string | string[] | null | undefined>
+
+function mapToSerializable(row: VendorQuotationRow): VendorQuotationWithItems {
     return {
         ...row,
         extractedAt: row.extractedAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
-        items: (row.items || []).map((item: any) => ({
+        items: (row.items || []).map((item: VendorQuotationItemRow) => ({
             ...item,
             qty: String(item.qty),
             unitPrice: String(item.unitPrice),
@@ -33,7 +38,17 @@ export async function getVendorQuotations(): Promise<VendorQuotationWithItems[]>
             items: true,
         },
     })
-    return rows.map(mapToSerializable)
+
+    return rows
+        .filter((row) =>
+            isVendorQuotationFrom2026({
+                quoteDate: row.quoteDate,
+                quoteNumber: row.quoteNumber,
+                fileName: row.fileName,
+                fileUrl: row.fileUrl,
+            })
+        )
+        .map(mapToSerializable)
 }
 
 export async function getVendorQuotationById(id: number): Promise<VendorQuotationWithItems | null> {
@@ -115,8 +130,11 @@ export async function syncVendorQuotationsFromEpr(): Promise<{ success: boolean;
         if (!response.ok) throw new Error(`GravityView API returned ${response.status}`);
 
         const text = await response.text();
-        const parsed = JSON.parse(text);
-        const entries = (typeof parsed === "string" ? JSON.parse(parsed) : parsed).entries as any[];
+        const parsed: unknown = JSON.parse(text);
+        const root = typeof parsed === "string" ? JSON.parse(parsed) : parsed
+        const entries = Array.isArray((root as { entries?: unknown })?.entries)
+            ? ((root as { entries: unknown[] }).entries as GravityViewEntry[])
+            : []
 
         if (!entries || !Array.isArray(entries)) return { success: true, count: 0 };
 
