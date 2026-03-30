@@ -23,7 +23,7 @@ export async function extractVendorQuotationViaOllama(params: {
     const rawUrl = process.env.OLLAMA_URL?.trim() || "http://localhost:11434"
     const baseUrl = rawUrl.replace(/\/$/, "")
     const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
-    const model = process.env.OLLAMA_MODEL_VISION?.trim() || "llama3.2-vision:latest"
+    const model = process.env.OLLAMA_MODEL_VISION?.trim() || "qwen3.5:397b-cloud"
     const apiKey = process.env.OLLAMA_API_KEY?.trim() || ""
 
     // 1. Prepare image (Ollama Vision needs images)

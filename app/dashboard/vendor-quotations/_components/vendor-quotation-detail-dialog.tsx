@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileText, Printer, Download, ExternalLink, Pencil, Trash2 } from "lucide-react"
+import { FileText, Printer, Download, ExternalLink, Pencil, Trash2, Eye, X, AlertCircle } from "lucide-react"
+import { useState } from "react"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
 
@@ -43,6 +44,9 @@ function formatDate(date: Date | string | null) {
 }
 
 export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onEdit, onDelete }: Props) {
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+    const isImage = quotation?.fileUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)
+    const isPdf = quotation?.fileUrl.match(/\.pdf/i)
     if (!quotation) return null
 
     const totalAmount = quotation.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
@@ -94,11 +98,22 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
                             <div className="flex flex-col items-end gap-3 no-print">
                                 <VendorQuotationOcrBadge status={quotation.ocrStatus} />
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" asChild>
+                                <div className="flex flex-wrap justify-end gap-2">
+                                    {(isImage || isPdf) && (
+                                        <Button 
+                                            variant="secondary" 
+                                            size="sm" 
+                                            onClick={() => setIsPreviewOpen(true)}
+                                            className="h-8 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300"
+                                        >
+                                            <Eye className="h-3.5 w-3.5 mr-2" />
+                                            Preview Document
+                                        </Button>
+                                    )}
+                                    <Button variant="outline" size="sm" asChild className="h-8">
                                         <a href={quotation.fileUrl} target="_blank" rel="noopener noreferrer">
                                             <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                                            View Source File
+                                            Open Original
                                         </a>
                                     </Button>
                                 </div>
@@ -173,6 +188,52 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                     )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
                 </div>
+
+                {/* Internal Preview Dialog */}
+                <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                    <DialogContent className="max-w-[95vw] w-[1200px] h-[90vh] p-0 overflow-hidden flex flex-col border-indigo-200">
+                        <DialogHeader className="p-4 border-b bg-muted/30 flex flex-row items-center justify-between space-y-0">
+                            <DialogTitle className="text-sm font-medium flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-indigo-500" />
+                                Document Preview: {quotation.fileName || "Quotation"}
+                            </DialogTitle>
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8" 
+                                onClick={() => setIsPreviewOpen(false)}
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </DialogHeader>
+                        <div className="flex-1 bg-slate-900/5 overflow-auto flex items-center justify-center p-4">
+                            {isPdf ? (
+                                <iframe 
+                                    src={`${quotation.fileUrl}#toolbar=0`} 
+                                    className="w-full h-full rounded-md shadow-lg bg-white"
+                                    title="PDF Preview"
+                                />
+                            ) : isImage ? (
+                                <div className="max-w-full max-h-full overflow-auto scrollbar-thin scrollbar-thumb-indigo-200">
+                                    <img 
+                                        src={quotation.fileUrl} 
+                                        alt="Quotation Preview" 
+                                        className="max-w-none shadow-2xl rounded-sm"
+                                        style={{ minWidth: "100%" }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="text-center space-y-4">
+                                    <AlertCircle className="h-12 w-12 text-amber-500 mx-auto" />
+                                    <p>Preview tidak tersedia untuk format ini.</p>
+                                    <Button asChild>
+                                        <a href={quotation.fileUrl} target="_blank">Download File</a>
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </DialogContent>
 
             <style jsx global>{`

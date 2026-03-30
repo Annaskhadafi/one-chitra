@@ -330,12 +330,8 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
                                         data-index={virtualRow.index}
                                         className="hover:bg-muted/40 transition-colors"
                                         onClick={() => {
-                                            if (row.original.ocrStatus === "pending") {
-                                                onOpenOcr?.(row.original.fileUrl)
-                                            } else {
-                                                setSelectedQuotation(row.original)
-                                                setIsDetailOpen(true)
-                                            }
+                                            setSelectedQuotation(row.original)
+                                            setIsDetailOpen(true)
                                         }}
                                         style={{ cursor: "pointer" }}
                                     >
