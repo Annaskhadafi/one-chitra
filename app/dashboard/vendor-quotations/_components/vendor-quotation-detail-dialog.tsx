@@ -53,7 +53,7 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+            <DialogContent className="w-[95vw] max-w-6xl h-[95vh] lg:h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-indigo-100">
                 <DialogHeader className="p-6 pb-2">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { goodReceiveManual } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { stockMovements } from "@/db/schema/stock-movements";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { EprIntegrasiClient } from "./epr-integrasi-client";
 import { getOcrStatusMap } from "@/app/actions/vendor-quotation";
 
