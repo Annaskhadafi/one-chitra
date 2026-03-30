@@ -52,7 +52,7 @@ interface QuotationPdfData {
         unitPrice: string
         discount: string
         tax: string
-        product: Product
+        product: Product | null
     }[]
     attachments?: {
         id: number
@@ -91,6 +91,10 @@ function formatDate(date: Date) {
         month: "2-digit",
         year: "numeric",
     })
+}
+
+function getItemTitle(item: QuotationPdfData["items"][number]) {
+    return item.description || item.product?.materialDescription || item.product?.materialNumber || "Unnamed item"
 }
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
@@ -415,7 +419,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                             <td style={{ width: '45px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', color: '#64748b', textAlign: 'center', fontWeight: 'bold' }}>{index + 1}</td>
                                             <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt' }}>
                                                 <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>
-                                                    {item.description || item.product.materialDescription || item.product.materialNumber}
+                                                    {getItemTitle(item)}
                                                 </div>
                                                 {item.longDescription && (
                                                     <div className="item-longdesc" style={{ fontStyle: 'italic', color: '#64748b', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
@@ -440,7 +444,7 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                             <td style={{ width: '45px', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt', color: '#64748b', textAlign: 'center', fontWeight: 'bold' }}>{index + 1}</td>
                                             <td style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', verticalAlign: 'top', fontSize: '10pt' }}>
                                                 <div className="item-name" style={{ fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', marginBottom: 4 }}>
-                                                    {item.description || item.product.materialDescription || item.product.materialNumber}
+                                                    {getItemTitle(item)}
                                                 </div>
                                                 {item.longDescription && (
                                                     <div className="item-longdesc" style={{ fontStyle: 'italic', color: '#64748b', fontSize: '9pt', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>

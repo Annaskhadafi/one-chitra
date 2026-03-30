@@ -19,7 +19,7 @@ interface QuotationPdfData {
     termsConditions: string | null
     clientNote: string | null
     items: {
-        product: Product
+        product: Product | null
         description: string | null
         longDescription: string | null
         quantity: number
@@ -52,7 +52,7 @@ type QuotationPdfPayloadSource = {
     termsConditions: string | null
     clientNote: string | null
     items: {
-        product: Product
+        product: Product | null
         description: string | null
         longDescription: string | null
         quantity: number
@@ -81,6 +81,10 @@ function formatDate(date: Date) {
 
 function sanitizeFilenamePart(value: string | null | undefined) {
     return (value || "Draft").replace(/[\\/:*?"<>|]+/g, "-").trim() || "Draft"
+}
+
+function getItemTitle(item: QuotationPdfData["items"][number]) {
+    return item.description || item.product?.materialDescription || item.product?.materialNumber || "Unnamed item"
 }
 
 export function buildQuotationPdfPayload(source: QuotationPdfPayloadSource): QuotationPdfData {
@@ -445,7 +449,7 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
 
         // Items Table
         const tableBody = quotation.items.map((item, index) => {
-            const lineTitle = item.product.materialDescription || item.product.materialNumber
+            const lineTitle = getItemTitle(item)
             // We just pass it simply to keep row data, we will wipe display and custom draw
             const combinedContent = lineTitle
 
@@ -501,7 +505,7 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     let totalHeight = 8 
                     
                     doc.setFontSize(10.5)
-                    const descText = item.description || item.product.materialDescription || item.product.materialNumber || ""
+                    const descText = getItemTitle(item)
                     totalHeight += doc.splitTextToSize(descText, 75).length * 4.2
                     
                     if (item.longDescription) {
@@ -526,7 +530,7 @@ export async function generateQuotationPdf(quotation: QuotationPdfData) {
                     const x = data.cell.x + 5
                     let y = data.cell.y + 5 + 3.5 // offset to baseline
 
-                    const descText = item.description || item.product.materialDescription || item.product.materialNumber || ""
+                    const descText = getItemTitle(item)
                     doc.setFont("helvetica", "bold")
                     doc.setFontSize(10.5)
                     doc.setTextColor(15, 23, 42)
