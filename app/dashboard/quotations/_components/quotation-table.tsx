@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
+import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { deleteQuotation, bulkDeleteQuotations, getQuotations, duplicateQuotation, updateQuotationStatus, bulkUpdateQuotationStatus, uploadQuotationCustomerPo } from "@/app/actions/quotation"
 import { uploadFile } from "@/app/actions/upload"
 import {
@@ -539,6 +540,8 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
     const [isUploadingPo, setIsUploadingPo] = useState(false)
     const [deliveryDialogQuotation, setDeliveryDialogQuotation] = useState<QuotationWithRelations | null>(null)
     const [expandedQuotationIds, setExpandedQuotationIds] = useState<number[]>([])
+    const [customerPoFileUrl, setCustomerPoFileUrl] = useState<string | null>(null)
+    const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
 
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
@@ -1184,16 +1187,18 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                     <Truck className={iconClassName} />
                 </Button>
                 {quotation.customerPoDocument && (
-                    <Link href={quotation.customerPoDocument} target="_blank">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn(buttonClassName, "text-amber-600 hover:text-amber-700")}
-                            title={quotation.customerPoNumber ? `Lihat file PO ${quotation.customerPoNumber}` : "Lihat file PO customer"}
-                        >
-                            <FileSearch className={iconClassName} />
-                        </Button>
-                    </Link>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(buttonClassName, "text-amber-600 hover:text-amber-700")}
+                        title={quotation.customerPoNumber ? `Lihat file PO ${quotation.customerPoNumber}` : "Lihat file PO customer"}
+                        onClick={() => {
+                            setCustomerPoFileUrl(quotation.customerPoDocument)
+                            setIsCustomerPoPreviewOpen(true)
+                        }}
+                    >
+                        <Eye className={iconClassName} />
+                    </Button>
                 )}
                 {quotation.salesOrderId && (
                     <Link href={`/dashboard/sales-orders/${quotation.salesOrderId}/edit`}>
@@ -2667,6 +2672,13 @@ export function QuotationTable({ data: initialData }: QuotationTableProps) {
                 onOpenChange={setShowSuccessDialog}
                 title="Status Diperbarui"
                 description={successMessage}
+            />
+
+            <PoPreviewDialog
+                open={isCustomerPoPreviewOpen}
+                onOpenChange={setIsCustomerPoPreviewOpen}
+                poDocument={customerPoFileUrl}
+                title="Customer PO Document"
             />
         </div>
     )

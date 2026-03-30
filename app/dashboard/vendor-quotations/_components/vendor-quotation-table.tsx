@@ -45,6 +45,7 @@ import {
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationDetailDialog } from "./vendor-quotation-detail-dialog"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
+import { PoPreviewDialog } from "@/components/po-preview-dialog"
 
 interface VendorQuotationTableProps {
     data: VendorQuotationWithItems[]
@@ -62,6 +63,8 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     const [highlightedItemIds, setHighlightedItemIds] = useState<Set<number>>(new Set())
     const [autoExpanded, setAutoExpanded] = useState(false)
     const prevGlobalFilterRef = useRef("")
+    const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
     useEffect(() => {
         const query = globalFilter.trim().toLowerCase()
@@ -270,6 +273,19 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 header: "Actions",
                 cell: ({ row }) => (
                     <div className="flex justify-end gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Preview File"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setPreviewFileUrl(row.original.fileUrl)
+                                setIsPreviewOpen(true)
+                            }}
+                        >
+                            <Eye className="h-4 w-4" />
+                        </Button>
                          <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -566,6 +582,13 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                     setIsDetailOpen(false)
                     onDelete(id)
                 } : undefined}
+            />
+
+            <PoPreviewDialog
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                poDocument={previewFileUrl}
+                title="Vendor Quotation Document"
             />
         </div>
     )

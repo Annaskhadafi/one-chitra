@@ -220,10 +220,20 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
                     </div>
                     <p className="text-muted-foreground text-sm">Menampilkan data EPR dari GravityView API Proc-Share dengan label field sesuai konfigurasi view, difilter untuk Date Required mulai 2026.</p>
                 </div>
-                <a href={entriesUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted">
-                    <RefreshCcw className="h-4 w-4" />
-                    Buka Source API
-                </a>
+                <div className="flex flex-wrap gap-2">
+                    <Button 
+                        variant="outline"
+                        onClick={() => setOcrDialogOpen(true)}
+                        className="gap-2"
+                    >
+                        <ScanText className="h-4 w-4" />
+                        Add via OCR
+                    </Button>
+                    <a href={entriesUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted">
+                        <RefreshCcw className="h-4 w-4" />
+                        Buka Source API
+                    </a>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1.5fr)_180px_180px_180px]">

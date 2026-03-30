@@ -2,8 +2,9 @@ import { getQuotations } from "@/app/actions/quotation"
 import { QuotationTable } from "./_components/quotation-table"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText } from "lucide-react"
+import { Plus, FileText, Users } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
+import { FloatingNavButton } from "@/components/floating-nav-button"
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,12 @@ export default async function QuotationsPage() {
             <div className="flex-1">
                 <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
             </div>
+
+            <FloatingNavButton 
+                href="/dashboard/vendor-quotations" 
+                label="Cari Harga Vendor"
+                position="middle-right"
+            />
         </div>
     )
 }
