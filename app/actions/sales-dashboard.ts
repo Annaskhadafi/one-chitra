@@ -24,7 +24,10 @@ export async function getSalesDashboardFilters() {
             isNotNull(salesRevenueSap.billingDate),
             or(
                 sql`${salesRevenueSap.customerName} IS NULL`,
-                notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
+                and(
+                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                    notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%')
+                )
             )
         );
 
@@ -112,7 +115,10 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                 isNotNull(salesRevenueSap.billingDate),
                 or(
                     sql`${salesRevenueSap.customerName} IS NULL`,
-                    notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%')
+                    and(
+                        notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
+                        notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%')
+                    )
                 )
             )
         ];
