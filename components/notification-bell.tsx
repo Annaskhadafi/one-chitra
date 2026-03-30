@@ -324,7 +324,7 @@ export function NotificationBell() {
                         disabled={enablingPush || pushEnabled || !pushMeta.configured}
                     >
                         {enablingPush ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
-                        {pushEnabled ? "Push PWA Aktif" : pushMeta.configured ? "Aktifkan Push PWA" : "Push PWA Belum Diset Env"}
+                        {pushEnabled ? "Notifikasi Realtime Aktif" : pushMeta.configured ? "Aktifkan Notifikasi Realtime" : "Notifikasi Realtime Belum Diset Env"}
                     </Button>
                 </div>
                 <ScrollArea className="max-h-[380px]">

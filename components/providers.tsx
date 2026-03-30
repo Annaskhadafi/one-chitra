@@ -33,7 +33,17 @@ function syncServiceWorkerRegistration() {
         return
     }
 
-    navigator.serviceWorker.register("/sw.js")
+    fetch("/sw.js", {
+        method: "HEAD",
+        cache: "no-store",
+    })
+        .then((response) => {
+            if (!response.ok) {
+                return
+            }
+
+            return navigator.serviceWorker.register("/sw.js")
+        })
         .catch((error) => {
             console.error("Failed to register service worker:", error)
         })
