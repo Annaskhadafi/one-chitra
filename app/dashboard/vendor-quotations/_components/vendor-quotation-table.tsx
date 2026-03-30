@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo } from "react"
 import {
     useReactTable,
     getCoreRowModel,
@@ -11,7 +11,6 @@ import {
     ColumnDef,
     SortingState,
 } from "@tanstack/react-table"
-import { useVirtualizer } from "@tanstack/react-virtual"
 import {
     Table,
     TableBody,
@@ -32,7 +31,9 @@ import {
     MoreHorizontal,
     ArrowUpDown,
     ExternalLink,
-    ScanText
+    ScanText,
+    ChevronDown,
+    ChevronUp
 } from "lucide-react"
 import {
     DropdownMenu,
@@ -42,8 +43,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 import { VendorQuotationDetailDialog } from "./vendor-quotation-detail-dialog"
 import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
@@ -51,18 +50,47 @@ import { VendorQuotationOcrBadge } from "./vendor-quotation-ocr-dialog"
 interface VendorQuotationTableProps {
     data: VendorQuotationWithItems[]
     onDelete?: (id: number) => Promise<void>
-    onRefresh?: () => void
     onOpenOcr?: (url?: string) => void
 }
 
-export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: VendorQuotationTableProps) {
+export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotationTableProps) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
     const [globalFilter, setGlobalFilter] = useState("")
     const [selectedQuotation, setSelectedQuotation] = useState<VendorQuotationWithItems | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
+    const [expandedQuotationId, setExpandedQuotationId] = useState<number | null>(null)
+    const [itemSearchByQuotation, setItemSearchByQuotation] = useState<Record<number, string>>({})
+
+    const formatCurrency = (value: string | number) =>
+        new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            maximumFractionDigits: 0,
+        }).format(typeof value === "string" ? parseFloat(value) : value)
 
     const columns = useMemo<ColumnDef<VendorQuotationWithItems>[]>(
         () => [
+            {
+                id: "expand",
+                header: "",
+                cell: ({ row }) => {
+                    const isExpanded = expandedQuotationId === row.original.id
+                    return (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setExpandedQuotationId((current) => (current === row.original.id ? null : row.original.id))
+                            }}
+                            title={isExpanded ? "Tutup detail item" : "Buka detail item"}
+                        >
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                    )
+                },
+            },
             {
                 accessorKey: "quoteNumber",
                 header: ({ column }) => (
@@ -112,15 +140,7 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
                 header: "Total Price",
                 cell: ({ row }) => {
                     const total = row.original.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
-                    return (
-                        <span className="font-semibold">
-                            {new Intl.NumberFormat("id-ID", {
-                                style: "currency",
-                                currency: "IDR",
-                                maximumFractionDigits: 0,
-                            }).format(total)}
-                        </span>
-                    )
+                    return <span className="font-semibold">{formatCurrency(total)}</span>
                 },
             },
             {
@@ -191,7 +211,7 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
                 ),
             },
         ],
-        [onDelete]
+        [expandedQuotationId, onDelete, onOpenOcr]
     )
 
     const table = useReactTable({
@@ -209,20 +229,6 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
     })
 
     const { rows } = table.getRowModel()
-    const parentRef = useRef<HTMLDivElement>(null)
-
-    const rowVirtualizer = useVirtualizer({
-        count: rows.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 60,
-        overscan: 10,
-    })
-
-    const virtualRows = rowVirtualizer.getVirtualItems()
-    const totalSize = rowVirtualizer.getTotalSize()
-
-    const paddingTop = virtualRows.length > 0 ? virtualRows?.[0]?.start || 0 : 0
-    const paddingBottom = virtualRows.length > 0 ? totalSize - (virtualRows?.[virtualRows.length - 1]?.end || 0) : 0
 
     const exportToCsv = () => {
         // Flattened view for CSV
@@ -270,6 +276,29 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
         document.body.removeChild(link)
     }
 
+    const getFilteredItems = (quotation: VendorQuotationWithItems) => {
+        const searchTerm = itemSearchByQuotation[quotation.id]?.trim().toLowerCase() ?? ""
+        if (!searchTerm) return quotation.items
+
+        return quotation.items.filter((item) => {
+            const searchValue = [
+                item.itemName,
+                item.remark,
+                item.unit,
+                item.qty,
+                item.unitPrice,
+                item.totalPrice,
+                formatCurrency(item.unitPrice),
+                formatCurrency(item.totalPrice),
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            return searchValue.includes(searchTerm)
+        })
+    }
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -295,10 +324,7 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
             </div>
 
             <div className="rounded-md border bg-card overflow-hidden">
-                <div 
-                    ref={parentRef} 
-                    className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent"
-                >
+                <div className="h-[600px] overflow-auto relative scrollbar-thin scrollbar-thumb-accent">
                     <Table className="relative">
                         <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-md shadow-sm">
                             {table.getHeaderGroups().map((headerGroup) => (
@@ -317,40 +343,95 @@ export function VendorQuotationTable({ data, onDelete, onRefresh, onOpenOcr }: V
                             ))}
                         </TableHeader>
                         <TableBody>
-                            {paddingTop > 0 && (
-                                <TableRow style={{ height: `${paddingTop}px` }}>
-                                    <TableCell colSpan={columns.length} />
-                                </TableRow>
-                            )}
-                            {virtualRows.map((virtualRow) => {
-                                const row = rows[virtualRow.index]
+                            {rows.map((row) => {
+                                const isExpanded = expandedQuotationId === row.original.id
+                                const filteredItems = getFilteredItems(row.original)
                                 return (
-                                    <TableRow
-                                        key={row.id}
-                                        data-index={virtualRow.index}
-                                        className="hover:bg-muted/40 transition-colors"
-                                        onClick={() => {
-                                            setSelectedQuotation(row.original)
-                                            setIsDetailOpen(true)
-                                        }}
-                                        style={{ cursor: "pointer" }}
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id}>
-                                                {flexRender(
-                                                    cell.column.columnDef.cell,
-                                                    cell.getContext()
-                                                )}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
+                                    <React.Fragment key={row.id}>
+                                        <TableRow
+                                            className="cursor-pointer transition-colors hover:bg-muted/40"
+                                            onClick={() => {
+                                                setExpandedQuotationId((current) => (current === row.original.id ? null : row.original.id))
+                                            }}
+                                        >
+                                            {row.getVisibleCells().map((cell) => (
+                                                <TableCell key={cell.id}>
+                                                    {flexRender(
+                                                        cell.column.columnDef.cell,
+                                                        cell.getContext()
+                                                    )}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                        {isExpanded && (
+                                            <TableRow className="bg-muted/20">
+                                                <TableCell colSpan={columns.length} className="p-0">
+                                                    <div className="space-y-4 border-t bg-background p-4">
+                                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                            <div>
+                                                                <div className="text-sm font-semibold">Detail Item Sales</div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Cari item untuk bantu sales cek harga vendor tanpa buka preview.
+                                                                </div>
+                                                            </div>
+                                                            <div className="relative w-full lg:w-[360px]">
+                                                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                                <Input
+                                                                    value={itemSearchByQuotation[row.original.id] ?? ""}
+                                                                    onChange={(e) =>
+                                                                        setItemSearchByQuotation((current) => ({
+                                                                            ...current,
+                                                                            [row.original.id]: e.target.value,
+                                                                        }))
+                                                                    }
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    placeholder="Cari item, qty, unit, atau harga vendor..."
+                                                                    className="pl-9"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="overflow-auto rounded-md border">
+                                                            <Table className="min-w-[900px]">
+                                                                <TableHeader className="bg-muted/50">
+                                                                    <TableRow>
+                                                                        <TableHead className="min-w-[320px]">Item</TableHead>
+                                                                        <TableHead className="text-right">Qty</TableHead>
+                                                                        <TableHead>Unit</TableHead>
+                                                                        <TableHead className="text-right">Harga Vendor</TableHead>
+                                                                        <TableHead className="text-right">Total</TableHead>
+                                                                        <TableHead>Remark</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {filteredItems.length > 0 ? (
+                                                                        filteredItems.map((item) => (
+                                                                            <TableRow key={item.id}>
+                                                                                <TableCell className="font-medium">{item.itemName}</TableCell>
+                                                                                <TableCell className="text-right">{item.qty}</TableCell>
+                                                                                <TableCell>{item.unit || "—"}</TableCell>
+                                                                                <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                                                                                <TableCell className="text-right font-medium">{formatCurrency(item.totalPrice)}</TableCell>
+                                                                                <TableCell className="text-muted-foreground">{item.remark || "—"}</TableCell>
+                                                                            </TableRow>
+                                                                        ))
+                                                                    ) : (
+                                                                        <TableRow>
+                                                                            <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                                                                                Tidak ada item yang cocok dengan pencarian.
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    )}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </React.Fragment>
                                 )
                             })}
-                            {paddingBottom > 0 && (
-                                <TableRow style={{ height: `${paddingBottom}px` }}>
-                                    <TableCell colSpan={columns.length} />
-                                </TableRow>
-                            )}
                         </TableBody>
                     </Table>
                     {rows.length === 0 && (

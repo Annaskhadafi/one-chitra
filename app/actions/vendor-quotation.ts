@@ -99,7 +99,10 @@ export async function triggerVendorQuotationOcr(
         const session = await auth.api.getSession({ headers: headersList })
         const userId = session?.user?.id ?? null
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+        const forwardedProto = headersList.get("x-forwarded-proto")
+        const forwardedHost = headersList.get("x-forwarded-host") ?? headersList.get("host")
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+            ?? (forwardedHost ? `${forwardedProto ?? "https"}://${forwardedHost}` : "http://localhost:3000")
         const response = await fetch(`${baseUrl}/api/ocr-vendor-quotation`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

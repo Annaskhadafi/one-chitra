@@ -89,7 +89,6 @@ async function extractVendorQuotationOcr(fileBuffer: Buffer, filename: string): 
 
     // Konversi gambar ke PDF jika perlu (sama seperti lib/mistral-ocr)
     let finalBuffer = fileBuffer
-    let finalFilename = filename
     const lower = filename.toLowerCase()
     if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
         const { PDFDocument } = await import("pdf-lib")
@@ -117,7 +116,6 @@ async function extractVendorQuotationOcr(fileBuffer: Buffer, filename: string): 
         })
 
         finalBuffer = Buffer.from(await pdf.save())
-        finalFilename = filename.replace(/\.(png|jpg|jpeg)$/i, ".pdf")
     }
 
     const base64 = finalBuffer.toString("base64")
@@ -213,7 +211,7 @@ export async function POST(req: NextRequest) {
         const { buffer, filename } = await fetchFileFromUrl(fileUrl)
 
         // Jalankan OCR (Utamakan Ollama sesuai request user untuk kecepatan)
-        let extracted: any = null
+        let extracted: Awaited<ReturnType<typeof extractVendorQuotationViaOllama>> | Awaited<ReturnType<typeof extractVendorQuotationOcr>> | null = null
         let ocrError: string | null = null
 
         try {
@@ -234,24 +232,52 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: ocrError || "Gagal mengekstrak data dari dokumen" }, { status: 500 })
         }
 
-        // Simpan ke database
-        const [newRecord] = await db
-            .insert(vendorQuotations)
-            .values({
-                eprEntryId: eprEntryId ?? null,
-                fileUrl: fileUrl.slice(0, 2000),
-                fileName: filename.slice(0, 500),
-                vendorName: extracted.vendorName?.slice(0, 500) ?? null,
-                quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
-                quoteDate: extracted.quoteDate?.slice(0, 100) ?? null,
-                remark: extracted.remark ?? null,
-                ocrStatus: "done",
-                extractedAt: new Date(),
-                createdBy: userId ?? null,
-            })
-            .returning({ id: vendorQuotations.id })
+        const existingRecord = await db.query.vendorQuotations.findFirst({
+            where: eq(vendorQuotations.fileUrl, fileUrl.slice(0, 2000)),
+            columns: { id: true },
+        })
 
-        const quotationId = newRecord.id
+        let quotationId: number
+
+        if (existingRecord) {
+            quotationId = existingRecord.id
+
+            await db
+                .update(vendorQuotations)
+                .set({
+                    eprEntryId: eprEntryId ?? null,
+                    fileName: filename.slice(0, 500),
+                    vendorName: extracted.vendorName?.slice(0, 500) ?? null,
+                    quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
+                    quoteDate: extracted.quoteDate?.slice(0, 100) ?? null,
+                    remark: extracted.remark ?? null,
+                    ocrStatus: "done",
+                    extractedAt: new Date(),
+                    createdBy: userId ?? null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(vendorQuotations.id, quotationId))
+
+            await db.delete(vendorQuotationItems).where(eq(vendorQuotationItems.vendorQuotationId, quotationId))
+        } else {
+            const [newRecord] = await db
+                .insert(vendorQuotations)
+                .values({
+                    eprEntryId: eprEntryId ?? null,
+                    fileUrl: fileUrl.slice(0, 2000),
+                    fileName: filename.slice(0, 500),
+                    vendorName: extracted.vendorName?.slice(0, 500) ?? null,
+                    quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
+                    quoteDate: extracted.quoteDate?.slice(0, 100) ?? null,
+                    remark: extracted.remark ?? null,
+                    ocrStatus: "done",
+                    extractedAt: new Date(),
+                    createdBy: userId ?? null,
+                })
+                .returning({ id: vendorQuotations.id })
+
+            quotationId = newRecord.id
+        }
 
         // Simpan items jika ada
         if (extracted.items.length > 0) {
@@ -267,12 +293,6 @@ export async function POST(req: NextRequest) {
                 }))
             )
         }
-
-        // Update status done
-        await db
-            .update(vendorQuotations)
-            .set({ updatedAt: new Date() })
-            .where(eq(vendorQuotations.id, quotationId))
 
         return Response.json({
             id: quotationId,
