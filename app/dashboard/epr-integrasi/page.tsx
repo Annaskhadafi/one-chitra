@@ -2,8 +2,9 @@ import { db } from "@/db";
 import { goodReceiveManual } from "@/db/schema";
 import { user } from "@/db/schema/auth";
 import { stockMovements } from "@/db/schema/stock-movements";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { EprIntegrasiClient } from "./epr-integrasi-client";
+import { getOcrStatusMap } from "@/app/actions/vendor-quotation";
 
 const VIEW_ID = "2354";
 const VIEW_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}`;
@@ -95,7 +96,7 @@ function buildLatestGrManualByPo(rows: GrManualRow[]) {
 }
 
 export default async function EprIntegrasiPage() {
-    const [viewPayload, entriesPayload, goodReceiveRows] = await Promise.all([
+    const [viewPayload, entriesPayload, goodReceiveRows, ocrStatusMap] = await Promise.all([
         fetchJsonWithNestedString<ViewPayload>(VIEW_URL),
         fetchJsonWithNestedString<EntriesPayload>(ENTRIES_URL),
         db
@@ -128,6 +129,7 @@ export default async function EprIntegrasiPage() {
                 goodReceiveManual.createdAt,
             )
             .orderBy(desc(goodReceiveManual.receiveDate), desc(goodReceiveManual.createdAt)),
+        getOcrStatusMap(),
     ]);
 
     const directoryColumns = viewPayload.fields?.["directory_table-columns"] ?? {};
@@ -158,5 +160,5 @@ export default async function EprIntegrasiPage() {
             };
         });
 
-    return <EprIntegrasiClient columns={columns} entries={entries} entriesUrl={ENTRIES_URL} viewId={VIEW_ID} />;
+    return <EprIntegrasiClient columns={columns} entries={entries} entriesUrl={ENTRIES_URL} viewId={VIEW_ID} ocrStatusMap={ocrStatusMap} />;
 }

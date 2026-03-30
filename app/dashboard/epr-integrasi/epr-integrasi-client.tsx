@@ -38,6 +38,7 @@ type Props = {
     entries: DisplayEntry[];
     entriesUrl: string;
     viewId: string;
+    ocrStatusMap?: Record<string, string>;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -61,32 +62,80 @@ function formatStatusTone(status: string) {
     return "border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300";
 }
 
-function renderFileLinks(value: string | string[]) {
+function renderOcrStatus(status?: string) {
+    if (!status) return null;
+    
+    if (status === "done") {
+        return (
+            <Badge variant="outline" className="ml-2 h-5 bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 font-medium">
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                Ter-ekstrak
+            </Badge>
+        );
+    }
+    
+    if (status === "processing") {
+        return (
+            <Badge variant="outline" className="ml-2 h-5 bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-medium animate-pulse">
+                Proses
+            </Badge>
+        );
+    }
+
+    if (status === "failed") {
+        return (
+            <Badge variant="outline" className="ml-2 h-5 bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 font-medium">
+                Gagal
+            </Badge>
+        );
+    }
+
+    return null;
+}
+
+function renderFileLinks(value: string | string[], entryId?: string, ocrStatusMap?: Record<string, string>, handleOpenOcr?: (url: string, entryId: string) => void) {
     const urls = (Array.isArray(value) ? value : [value]).filter(Boolean);
     if (urls.length === 0) return <span className="text-muted-foreground/60">—</span>;
     return (
         <div className="flex flex-col gap-1.5">
-            {urls.map((url, index) => (
-                <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300">
-                    <FileText className="h-3.5 w-3.5 shrink-0" />
-                    <span>Attachment {index + 1}</span>
-                </a>
-            ))}
+            {urls.map((url, index) => {
+                const status = ocrStatusMap?.[url];
+                return (
+                    <div key={`${url}-${index}`} className="flex items-center gap-2">
+                        <a href={url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300">
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span>Attachment {index + 1}</span>
+                        </a>
+                        
+                        {renderOcrStatus(status)}
+
+                        {status !== "done" && status !== "processing" && handleOpenOcr && entryId && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                handleOpenOcr(url, entryId);
+                                            }}
+                                        >
+                                            <ScanText className="h-3 w-3" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p className="text-xs">Extract as Vendor Quotation (OCR)</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
-}
-
-function renderCellValue(columnId: ColumnId, value: string | string[] | undefined) {
-    if (value == null || (typeof value === "string" && value.trim() === "")) return <span className="text-muted-foreground/60">—</span>;
-    if (columnId === "22" || columnId === "23") return renderFileLinks(value);
-    if (columnId === "1" || columnId === "40") return <span>{formatDate(Array.isArray(value) ? value[0] : value)}</span>;
-    if (columnId === "27") return <span className="font-medium">{formatCurrency(Array.isArray(value) ? value[0] : value)}</span>;
-    if (columnId === "41") {
-        const status = Array.isArray(value) ? value[0] : value;
-        return <Badge variant="outline" className={formatStatusTone(status)}>{status}</Badge>;
-    }
-    if (Array.isArray(value)) return <span>{value.join(", ")}</span>;
-    return <span>{value}</span>;
 }
 
 function renderOptionalText(value: string | null | undefined) {
@@ -103,7 +152,7 @@ function toSearchableString(value: string | string[] | null | undefined) {
     return (value ?? "").toLowerCase();
 }
 
-export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Props) {
+export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrStatusMap }: Props) {
     const searchParams = useSearchParams();
     const initialSearch = searchParams.get("search") ?? "";
     const [search, setSearch] = useState(initialSearch);
@@ -121,46 +170,9 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Pro
         setOcrDialogOpen(true);
     };
 
-    function renderFileLinks(value: string | string[], entryId: string) {
-        const urls = (Array.isArray(value) ? value : [value]).filter(Boolean);
-        if (urls.length === 0) return <span className="text-muted-foreground/60">—</span>;
-        return (
-            <div className="flex flex-col gap-1.5">
-                {urls.map((url, index) => (
-                    <div key={`${url}-${index}`} className="flex items-center gap-2">
-                        <a href={url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300">
-                            <FileText className="h-3.5 w-3.5 shrink-0" />
-                            <span>Attachment {index + 1}</span>
-                        </a>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            handleOpenOcr(url, entryId);
-                                        }}
-                                    >
-                                        <ScanText className="h-3 w-3" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="text-xs">Extract as Vendor Quotation (OCR)</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
     function renderCellValue(columnId: ColumnId, value: string | string[] | undefined, entryId: string) {
         if (value == null || (typeof value === "string" && value.trim() === "")) return <span className="text-muted-foreground/60">—</span>;
-        if (columnId === "22" || columnId === "23") return renderFileLinks(value, entryId);
+        if (columnId === "22" || columnId === "23") return renderFileLinks(value, entryId, ocrStatusMap, handleOpenOcr);
         if (columnId === "1" || columnId === "40") return <span>{formatDate(Array.isArray(value) ? value[0] : value)}</span>;
         if (columnId === "27") return <span className="font-medium">{formatCurrency(Array.isArray(value) ? value[0] : value)}</span>;
         if (columnId === "41") {

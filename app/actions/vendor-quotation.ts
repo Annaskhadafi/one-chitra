@@ -159,3 +159,18 @@ export async function syncVendorQuotationsFromEpr(): Promise<{ success: boolean;
         return { success: false, count: 0, error: error instanceof Error ? error.message : "Gagal sinkronisasi data" };
     }
 }
+export async function getOcrStatusMap(): Promise<Record<string, string>> {
+    const rows = await db.query.vendorQuotations.findMany({
+        columns: {
+            fileUrl: true,
+            ocrStatus: true,
+        }
+    })
+    
+    const map: Record<string, string> = {}
+    rows.forEach(row => {
+        map[row.fileUrl] = row.ocrStatus
+    })
+    
+    return map
+}
