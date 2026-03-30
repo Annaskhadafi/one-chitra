@@ -139,7 +139,7 @@ async function normalizeImageToBase64(fileBuffer: Buffer) {
     return normalized.toString("base64")
 }
 
-async function renderPdfToImages(fileBuffer: Buffer, selectedPages?: number[]) {
+export async function renderPdfToImages(fileBuffer: Buffer, selectedPages?: number[]) {
     const puppeteerModule = await import("puppeteer")
     const puppeteer = puppeteerModule.default
     const browser = await puppeteer.launch({

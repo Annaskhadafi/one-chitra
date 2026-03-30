@@ -95,6 +95,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/epr-integrasi",
                         resource: "good-receive-manual",
                     },
+                    {
+                        title: "Database Quotation Vendor",
+                        url: "/dashboard/vendor-quotations",
+                        resource: "vendor-quotations",
+                    },
                 ],
             },
             {

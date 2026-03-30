@@ -152,6 +152,13 @@ export {
 } from "./evhs";
 export { ocrExtractions } from "./ocr-extractions";
 export {
+    vendorQuotations,
+    vendorQuotationItems,
+    vendorQuotationsRelations,
+    vendorQuotationItemsRelations,
+    vendorQuotationOcrStatusEnum,
+} from "./vendor-quotations";
+export {
     emailGroups,
     emailContacts,
     emailGroupMembers,

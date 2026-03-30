@@ -7,7 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, Database, FileText, RefreshCcw, Search } from "lucide-react";
+import { AlertCircle, CheckCircle2, Database, FileText, RefreshCcw, Search, ScanText } from "lucide-react";
+import { VendorQuotationOcrDialog } from "../vendor-quotations/_components/vendor-quotation-ocr-dialog";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 type ColumnId = "18" | "1" | "50" | "7" | "30" | "27" | "22" | "23" | "38" | "40" | "41";
 
@@ -105,6 +109,67 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Pro
     const [search, setSearch] = useState(initialSearch);
     const [statusFilter, setStatusFilter] = useState("all");
     const [matchFilter, setMatchFilter] = useState("all");
+
+    // OCR State
+    const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+    const [ocrFileUrl, setOcrFileUrl] = useState("");
+    const [ocrEntryId, setOcrEntryId] = useState("");
+
+    const handleOpenOcr = (url: string, entryId: string) => {
+        setOcrFileUrl(url);
+        setOcrEntryId(entryId);
+        setOcrDialogOpen(true);
+    };
+
+    function renderFileLinks(value: string | string[], entryId: string) {
+        const urls = (Array.isArray(value) ? value : [value]).filter(Boolean);
+        if (urls.length === 0) return <span className="text-muted-foreground/60">—</span>;
+        return (
+            <div className="flex flex-col gap-1.5">
+                {urls.map((url, index) => (
+                    <div key={`${url}-${index}`} className="flex items-center gap-2">
+                        <a href={url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300">
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span>Attachment {index + 1}</span>
+                        </a>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            handleOpenOcr(url, entryId);
+                                        }}
+                                    >
+                                        <ScanText className="h-3 w-3" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="text-xs">Extract as Vendor Quotation (OCR)</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    function renderCellValue(columnId: ColumnId, value: string | string[] | undefined, entryId: string) {
+        if (value == null || (typeof value === "string" && value.trim() === "")) return <span className="text-muted-foreground/60">—</span>;
+        if (columnId === "22" || columnId === "23") return renderFileLinks(value, entryId);
+        if (columnId === "1" || columnId === "40") return <span>{formatDate(Array.isArray(value) ? value[0] : value)}</span>;
+        if (columnId === "27") return <span className="font-medium">{formatCurrency(Array.isArray(value) ? value[0] : value)}</span>;
+        if (columnId === "41") {
+            const status = Array.isArray(value) ? value[0] : value;
+            return <Badge variant="outline" className={formatStatusTone(status)}>{status}</Badge>;
+        }
+        if (Array.isArray(value)) return <span>{value.join(", ")}</span>;
+        return <span>{value}</span>;
+    }
 
     const filteredEntries = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -214,7 +279,7 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Pro
                                                         <p className="text-xs font-semibold text-foreground">{column.label}</p>
                                                         <Badge variant="outline" className="text-[10px]">ID {column.id}</Badge>
                                                     </div>
-                                                    <div className="text-sm break-words">{renderCellValue(column.id, entry.values[column.id])}</div>
+                                                    <div className="text-sm break-words">{renderCellValue(column.id, entry.values[column.id], entry.id)}</div>
                                                 </div>
                                             ))}
                                             <div className="space-y-1"><p className="text-xs font-semibold text-foreground">Receive Date</p><div className="text-sm break-words">{entry.grManual.matched ? formatDate(entry.grManual.receiveDate) : renderNoGrMatch()}</div></div>
@@ -246,7 +311,7 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Pro
                                         <TableBody>
                                             {filteredEntries.map((entry) => (
                                                 <TableRow key={entry.id} className="align-top hover:bg-muted/40">
-                                                    {columns.map((column) => <TableCell key={`${entry.id}-${column.id}`} className="text-sm leading-relaxed">{renderCellValue(column.id, entry.values[column.id])}</TableCell>)}
+                                                    {columns.map((column) => <TableCell key={`${entry.id}-${column.id}`} className="text-sm leading-relaxed">{renderCellValue(column.id, entry.values[column.id], entry.id)}</TableCell>)}
                                                     <TableCell className="text-sm leading-relaxed">{entry.grManual.matched ? formatDate(entry.grManual.receiveDate) : renderNoGrMatch()}</TableCell>
                                                     <TableCell className="text-sm leading-relaxed">{entry.grManual.matched ? renderOptionalText(entry.grManual.supplier) : renderNoGrMatch()}</TableCell>
                                                     <TableCell className="text-sm leading-relaxed">{entry.grManual.matched ? renderOptionalText(entry.grManual.deliveryType) : renderNoGrMatch()}</TableCell>
@@ -262,6 +327,12 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId }: Pro
                     )}
                 </CardContent>
             </Card>
+
+            <VendorQuotationOcrDialog
+                open={ocrDialogOpen}
+                onOpenChange={setOcrDialogOpen}
+                initialUrl={ocrFileUrl}
+            />
         </div>
     );
 }

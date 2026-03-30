@@ -253,6 +253,13 @@
       "when": 1774429447688,
       "tag": "0035_icy_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1774853223990,
+      "tag": "0036_optimal_domino",
+      "breakpoints": true
     }
   ]
 }
