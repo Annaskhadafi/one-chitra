@@ -881,6 +881,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     subject,
                     html,
                     text,
+                    actionUrl,
                     channels: ["push"],
                     logMeta: {
                         templateCode: "good-receive-manual-sales-pic",

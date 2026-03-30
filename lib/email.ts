@@ -46,6 +46,7 @@ export type EmailOptions = {
     subject: string
     html?: string
     text?: string
+    actionUrl?: string
     replyTo?: string
     attachments?: Array<{
         filename: string
@@ -141,6 +142,7 @@ async function writeEmailLog(params: {
     subject: string
     html?: string | null
     text?: string | null
+    actionUrl?: string | null
     status: "sent" | "failed" | "pending"
     errorMessage?: string | null
     sentAt?: Date | null
@@ -163,6 +165,7 @@ async function writeEmailLog(params: {
             subject: params.subject,
             htmlContent: params.html ?? null,
             textContent: params.text ?? null,
+            actionUrl: params.actionUrl ?? null,
             status: params.status,
             errorMessage: params.errorMessage ?? null,
             sentAt: params.sentAt ?? null,
@@ -183,6 +186,7 @@ async function writePushNotificationLog(params: {
     subject: string
     html?: string | null
     text?: string | null
+    actionUrl?: string | null
     templateId?: string | null
     templateCode?: string | null
     templateName?: string | null
@@ -201,6 +205,7 @@ async function dispatchTemplateMessage(args: {
     subject: string
     html?: string
     text?: string
+    actionUrl?: string
     replyTo?: string
     attachments?: Array<{
         filename: string
@@ -221,6 +226,7 @@ async function dispatchTemplateMessage(args: {
                 subject: args.subject,
                 html: args.html ?? null,
                 text: args.text ?? null,
+                actionUrl: args.actionUrl ?? null,
                 status: "failed",
                 errorMessage: error,
                 templateId: args.logMeta?.templateId ?? null,
@@ -246,6 +252,7 @@ async function dispatchTemplateMessage(args: {
             subject: args.subject,
             html: args.html,
             text: args.text,
+            actionUrl: args.actionUrl,
             replyTo: args.replyTo,
             attachments: args.attachments,
             logMeta: args.logMeta,
@@ -260,6 +267,7 @@ async function dispatchTemplateMessage(args: {
             subject: args.subject,
             html: args.html ?? null,
             text: args.text ?? null,
+            actionUrl: args.actionUrl ?? null,
             templateId: args.logMeta?.templateId ?? null,
             templateCode: args.logMeta?.templateCode ?? null,
             templateName: args.logMeta?.templateName ?? null,
@@ -272,7 +280,7 @@ async function dispatchTemplateMessage(args: {
                 payload: {
                     title: args.subject,
                     body: extractPushBody(args.text, args.html),
-                    url: extractActionUrlFromContent(args.html, args.text),
+                    url: args.actionUrl ?? extractActionUrlFromContent(args.html, args.text),
                     tag: args.logMeta?.templateCode ?? args.logMeta?.templateName ?? "one-chitra-notification",
                     notificationId: pushLog?.id,
                 },
@@ -374,6 +382,25 @@ function normalizeSystemTemplateData(data: TemplateData) {
     ) as TemplateData
 }
 
+function resolveActionUrlFromTemplateData(data: TemplateData) {
+    const candidates = [
+        data.actionUrl,
+        data.detailUrl,
+        data.resetUrl,
+        data.magicLink,
+        data.vendorDoUrl,
+        data.vendorDoLink,
+    ]
+
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value
+        }
+    }
+
+    return undefined
+}
+
 export async function getEmailTemplateByCode(code: string, includeInactive = false) {
     await ensureEmailManagementSchema()
     await ensureSystemEmailTemplates()
@@ -410,6 +437,7 @@ export async function sendEmail(
             subject: options.subject,
             html: options.html ?? null,
             text: options.text ?? null,
+            actionUrl: options.actionUrl ?? null,
             status: "failed",
             errorMessage: result.error,
             templateId: options.logMeta?.templateId ?? null,
@@ -453,6 +481,7 @@ export async function sendEmail(
         subject: options.subject,
         html: options.html ?? null,
         text: options.text ?? null,
+        actionUrl: options.actionUrl ?? null,
         status: result.success ? "sent" : "failed",
         errorMessage: result.error ?? null,
         sentAt: result.success ? new Date() : null,
@@ -510,6 +539,7 @@ export async function sendTemplatedEmail(
         subject,
         html,
         text,
+        actionUrl: typeof data.actionUrl === "string" ? data.actionUrl : undefined,
         channels: normalizeDeliveryChannels(template.deliveryChannels, ["email"]),
         logMeta: {
             templateId: template.id,
@@ -570,6 +600,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
     const template = activeTemplate ?? starterTemplate
     const templateType = activeTemplate?.type ?? starterTemplate?.type ?? "notification"
     const normalizedData = normalizeSystemTemplateData(args.data)
+    const resolvedActionUrl = resolveActionUrlFromTemplateData(normalizedData)
     const subjectSource = args.customSubject ?? template.subject
     const htmlSource = template.htmlContent
     const textSource = template.textContent ?? undefined
@@ -596,6 +627,7 @@ export async function sendSystemTemplatedEmailByCode(args: {
         subject: replaceTemplateVariables(subjectSource, normalizedData),
         html: replaceTemplateVariables(htmlSource, normalizedData),
         text: textSource ? replaceTemplateVariables(textSource, normalizedData) : undefined,
+        actionUrl: resolvedActionUrl,
         channels: deliveryChannels,
         attachments: args.attachments,
         logMeta: {
@@ -660,6 +692,7 @@ export async function sendLoggedNotificationMessage(args: {
     subject: string
     html?: string
     text?: string
+    actionUrl?: string
     replyTo?: string
     attachments?: Array<{
         filename: string
@@ -675,6 +708,7 @@ export async function sendLoggedNotificationMessage(args: {
         subject: args.subject,
         html: args.html,
         text: args.text,
+        actionUrl: args.actionUrl,
         replyTo: args.replyTo,
         attachments: args.attachments,
         channels: normalizeDeliveryChannels(args.channels, ["email", "push"]),

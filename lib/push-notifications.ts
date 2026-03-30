@@ -53,8 +53,25 @@ function configureWebPush() {
 
 export function extractActionUrlFromContent(htmlContent?: string | null, textContent?: string | null) {
     const combined = `${htmlContent ?? ""}\n${textContent ?? ""}`
-    const match = combined.match(/https?:\/\/[^\s"'<>]+/i)
-    return match?.[0] ?? "/dashboard"
+    const priorityPatterns = [
+        /(?:detail\s*url|action\s*url|buka\s+dashboard|buka\s+approval|buka\s+epr\s+integrasi|buka)\s*[:\-]?\s*(https?:\/\/[^\s"'<>]+)/i,
+        /href="(https?:\/\/[^"]+)"/i,
+    ]
+
+    for (const pattern of priorityPatterns) {
+        const match = combined.match(pattern)
+        if (match?.[1]) {
+            return match[1]
+        }
+    }
+
+    const urlMatches = combined.match(/https?:\/\/[^\s"'<>]+/gi) ?? []
+    const dashboardMatch = urlMatches.find((entry) => /\/dashboard(?:\/|$|\?)/i.test(entry))
+    if (dashboardMatch) {
+        return dashboardMatch
+    }
+
+    return urlMatches[0] ?? "/dashboard"
 }
 
 export function extractPushBody(textContent?: string | null, htmlContent?: string | null) {

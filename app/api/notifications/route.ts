@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
                 subject: emailLogs.subject,
                 textContent: emailLogs.textContent,
                 htmlContent: emailLogs.htmlContent,
+                actionUrl: emailLogs.actionUrl,
                 status: emailLogs.status,
                 createdAt: emailLogs.createdAt,
                 sentAt: emailLogs.sentAt,
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
             createdAt: item.createdAt.toISOString(),
             sentAt: item.sentAt?.toISOString() ?? null,
             isRead: Boolean(item.readAt),
-            actionUrl: extractActionUrlFromContent(item.htmlContent, item.textContent),
+            actionUrl: item.actionUrl ?? extractActionUrlFromContent(item.htmlContent, item.textContent),
         }))
 
         return NextResponse.json({

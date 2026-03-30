@@ -67,6 +67,7 @@ export const emailLogs = pgTable("email_logs", {
     subject: varchar("subject", { length: 500 }).notNull(),
     htmlContent: text("html_content"),
     textContent: text("text_content"),
+    actionUrl: text("action_url"),
     status: varchar("status", { length: 50 }).notNull().default("pending"),
     errorMessage: text("error_message"),
     sentAt: timestamp("sent_at"),

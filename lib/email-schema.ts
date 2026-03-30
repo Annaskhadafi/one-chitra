@@ -247,6 +247,11 @@ async function syncEmailManagementSchema() {
     `)
 
     await db.execute(sql`
+        ALTER TABLE IF EXISTS email_logs
+        ADD COLUMN IF NOT EXISTS action_url TEXT;
+    `)
+
+    await db.execute(sql`
         CREATE TABLE IF NOT EXISTS email_notification_rules (
             id           VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::text,
             name         VARCHAR(255) NOT NULL,
