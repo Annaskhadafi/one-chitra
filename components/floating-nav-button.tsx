@@ -16,6 +16,8 @@ interface FloatingNavButtonProps {
     icon?: React.ReactNode
     position?: "bottom-right" | "middle-right" | "top-right"
     onClick?: () => void
+    className?: string
+    iconOnly?: boolean
 }
 
 export function FloatingNavButton({ 
@@ -23,7 +25,9 @@ export function FloatingNavButton({
     label = "Buka halaman", 
     icon,
     position = "middle-right",
-    onClick
+    onClick,
+    className,
+    iconOnly = false
 }: FloatingNavButtonProps) {
     const positionClasses = {
         "bottom-right": "bottom-6 right-6",
@@ -34,12 +38,12 @@ export function FloatingNavButton({
     const button = (
         <Button
             size="sm"
-            className={`fixed ${positionClasses[position]} z-50 h-12 rounded-full border border-indigo-300/60 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 px-4 text-white shadow-[0_18px_40px_rgba(37,99,235,0.35)] transition-all duration-300 hover:scale-[1.03] hover:from-indigo-700 hover:via-blue-700 hover:to-cyan-600`}
+            className={`fixed ${positionClasses[position]} z-50 rounded-full border border-indigo-300/60 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 text-white shadow-[0_18px_40px_rgba(37,99,235,0.35)] transition-all duration-300 hover:scale-[1.03] hover:from-indigo-700 hover:via-blue-700 hover:to-cyan-600 ${iconOnly ? "h-12 w-12 px-0" : "h-12 px-4"} ${className || ""}`}
             onClick={onClick}
         >
             <span className="flex items-center gap-2">
                 {icon || <FileSearch className="h-4 w-4" />}
-                <span className="text-sm font-semibold">{label}</span>
+                {!iconOnly && <span className="text-sm font-semibold">{label}</span>}
             </span>
         </Button>
     )

@@ -242,6 +242,25 @@ export const priceListItemSchema = z.object({
     notes: z.string().optional().nullable(),
 })
 
+export const logisticsMasterPriceSchema = z.object({
+    fromLocation: z.string().min(1, "From is required"),
+    toLocation: z.string().min(1, "To is required"),
+    cost: z.number().min(0, "Cost cannot be negative"),
+    truckType: z.string().optional().nullable(),
+    statusTb: z.string().optional().nullable(),
+    ring24: z.number().int().min(0).optional().nullable(),
+    ring25: z.number().int().min(0).optional().nullable(),
+    ring29: z.number().int().min(0).optional().nullable(),
+    ring33: z.number().int().min(0).optional().nullable(),
+    ring35: z.number().int().min(0).optional().nullable(),
+    ring49: z.number().int().min(0).optional().nullable(),
+    ring51: z.number().int().min(0).optional().nullable(),
+    ring57: z.number().int().min(0).optional().nullable(),
+    ring63: z.number().int().min(0).optional().nullable(),
+    productType: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+})
+
 export const signatureEntrySchema = z.object({
     name: z.string().min(1, "Participant name is required"),
     position: z.string().min(1, "Participant position is required"),

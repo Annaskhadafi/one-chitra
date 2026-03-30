@@ -12,6 +12,13 @@ import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import {
     Select,
     SelectContent,
     SelectItem,
@@ -42,7 +49,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Search, ChevronsUpDown, Check, Package, FileDown, Pencil, AlertTriangle, XCircle, Loader2, Calculator, Copy, Eye, EyeOff, Truck } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Customer, Product } from "@/lib/types"
@@ -117,6 +124,12 @@ function formatCurrency(value: number) {
     }).format(value)
 }
 
+function formatIntegerInput(value: number) {
+    return new Intl.NumberFormat("id-ID", {
+        maximumFractionDigits: 0,
+    }).format(value)
+}
+
 function ceilToThousand(value: number) {
     return Math.ceil(value / 1000) * 1000
 }
@@ -141,6 +154,8 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const router = useRouter()
     const isEdit = !!initialData
     const [isVendorQuotationOpen, setIsVendorQuotationOpen] = useState(false)
+    const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
+    const [showFloatingShortcuts, setShowFloatingShortcuts] = useState(true)
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
@@ -178,6 +193,10 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [globalMargin, setGlobalMargin] = useState<number>(11)
     const [exchangeRate, setExchangeRate] = useState<number>(1)
     const [isApplyingMargin, startApplyingMarginTransition] = useTransition()
+    const [calculatorBasePrice, setCalculatorBasePrice] = useState<number>(0)
+    const [calculatorMargin, setCalculatorMargin] = useState<number>(11)
+    const [calculatorDiscountType, setCalculatorDiscountType] = useState<"fixed" | "percent">("percent")
+    const [calculatorDiscountValue, setCalculatorDiscountValue] = useState<number>(0)
 
     useEffect(() => {
         const fetchRate = async () => {
@@ -403,6 +422,33 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
         const discAmount = discountType === "percent" ? (subTotal * discount) / 100 : discount
         return subTotal - discAmount + tax + shipping
     }, [subTotal, discount, discountType, tax, shipping])
+
+    const calculatorPriceAfterMargin = useMemo(() => {
+        return calculatorBasePrice > 0
+            ? calculateSellingPrice(calculatorBasePrice, calculatorMargin)
+            : 0
+    }, [calculatorBasePrice, calculatorMargin])
+
+    const calculatorDiscountAmount = useMemo(() => {
+        if (calculatorDiscountType === "percent") {
+            return (calculatorPriceAfterMargin * calculatorDiscountValue) / 100
+        }
+
+        return calculatorDiscountValue
+    }, [calculatorDiscountType, calculatorDiscountValue, calculatorPriceAfterMargin])
+
+    const calculatorFinalPrice = useMemo(() => {
+        return Math.max(calculatorPriceAfterMargin - calculatorDiscountAmount, 0)
+    }, [calculatorDiscountAmount, calculatorPriceAfterMargin])
+
+    const copyCalculatorValue = useCallback(async (value: number, label: string) => {
+        try {
+            await navigator.clipboard.writeText(String(Math.round(value)))
+            toast.success(`${label} berhasil dicopy`)
+        } catch {
+            toast.error(`Gagal copy ${label.toLowerCase()}`)
+        }
+    }, [])
 
     const handleSubmit = async () => {
         if (!customerId) {
@@ -1272,16 +1318,199 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 </Button>
             </div>
 
-            <FloatingNavButton 
-                onClick={() => setIsVendorQuotationOpen(true)}
-                label="Cari dari Vendor"
-                position="middle-right"
-            />
+            {showFloatingShortcuts ? (
+                <>
+                    <FloatingNavButton 
+                        onClick={() => setIsVendorQuotationOpen(true)}
+                        label="Cari dari Vendor"
+                        position="middle-right"
+                    />
+
+                    <FloatingNavButton
+                        onClick={() => setIsCalculatorOpen(true)}
+                        label="Kalkulator"
+                        icon={<Calculator className="h-4 w-4" />}
+                        position="middle-right"
+                        className="translate-y-[4.25rem] border-emerald-300/60 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-500 hover:from-emerald-700 hover:via-teal-700 hover:to-cyan-600"
+                    />
+
+                    <FloatingNavButton
+                        href="/dashboard/logistics-costs/master-price"
+                        label="Price Delivery"
+                        icon={<Truck className="h-4 w-4" />}
+                        position="middle-right"
+                        className="translate-y-[8.5rem] border-orange-300/60 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600"
+                    />
+
+                    <FloatingNavButton
+                        onClick={() => setShowFloatingShortcuts(false)}
+                        label="Hide"
+                        icon={<EyeOff className="h-4 w-4" />}
+                        position="middle-right"
+                        className="translate-y-[12.75rem] border-slate-300/70 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900"
+                    />
+                </>
+            ) : (
+                <FloatingNavButton
+                    onClick={() => setShowFloatingShortcuts(true)}
+                    label="Tampilkan Shortcut"
+                    icon={<Eye className="h-4 w-4" />}
+                    position="middle-right"
+                    className="border-slate-300/70 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900"
+                    iconOnly
+                />
+            )}
 
             <VendorQuotationSearchModal
                 open={isVendorQuotationOpen}
                 onOpenChange={setIsVendorQuotationOpen}
             />
+
+            <Dialog open={isCalculatorOpen} onOpenChange={setIsCalculatorOpen}>
+                <DialogContent className="sm:max-w-4xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-emerald-700">
+                            <Calculator className="h-5 w-5" />
+                            Kalkulator Margin & Diskon
+                        </DialogTitle>
+                        <DialogDescription>
+                            Hitung harga jual dari harga dasar dengan tambahan margin dan diskon, lalu pakai marginnya langsung ke form quotation.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-5 md:grid-cols-[minmax(320px,1fr)_minmax(420px,1.2fr)]">
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="calculator-base-price">Harga Dasar</Label>
+                                <Input
+                                    id="calculator-base-price"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="0"
+                                    value={calculatorBasePrice > 0 ? formatIntegerInput(calculatorBasePrice) : ""}
+                                    onChange={(e) => {
+                                        const numericValue = Number(e.target.value.replace(/\D/g, ""))
+                                        setCalculatorBasePrice(numericValue || 0)
+                                    }}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="calculator-margin">Margin (%)</Label>
+                                <Input
+                                    id="calculator-margin"
+                                    type="number"
+                                    value={calculatorMargin}
+                                    onChange={(e) => setCalculatorMargin(Number(e.target.value))}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-[1fr_110px] gap-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="calculator-discount">Diskon</Label>
+                                    <Input
+                                        id="calculator-discount"
+                                        type="number"
+                                        min="0"
+                                        value={calculatorDiscountValue}
+                                        onChange={(e) => setCalculatorDiscountValue(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Tipe</Label>
+                                    <Select
+                                        value={calculatorDiscountType}
+                                        onValueChange={(value) => setCalculatorDiscountType(value as "fixed" | "percent")}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percent">%</SelectItem>
+                                            <SelectItem value="fixed">Rp</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => {
+                                    setGlobalMargin(calculatorMargin)
+                                    toast.success("Margin kalkulator diterapkan ke form quotation")
+                                }}
+                            >
+                                Pakai Margin Ini di Form
+                            </Button>
+                        </div>
+
+                        <div className="space-y-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-5">
+                            <div className="rounded-lg bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Harga setelah margin</p>
+                                        <p className="mt-1 break-words text-[clamp(1.75rem,3vw,2.75rem)] font-black leading-tight tracking-tight text-emerald-700 [overflow-wrap:anywhere]">
+                                            {formatCurrency(calculatorPriceAfterMargin)}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 shrink-0 text-emerald-700 hover:bg-emerald-100"
+                                        onClick={() => copyCalculatorValue(calculatorPriceAfterMargin, "Harga setelah margin")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">Dibulatkan ke ribuan terdekat ke atas.</p>
+                            </div>
+
+                            <div className="rounded-lg bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nilai diskon</p>
+                                        <p className="mt-1 break-words text-[clamp(1.35rem,2.3vw,2rem)] font-bold leading-tight tracking-tight text-amber-600 [overflow-wrap:anywhere]">
+                                            {formatCurrency(calculatorDiscountAmount)}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 shrink-0 text-amber-600 hover:bg-amber-100"
+                                        onClick={() => copyCalculatorValue(calculatorDiscountAmount, "Nilai diskon")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg bg-emerald-600 p-4 text-white shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-100">Harga final</p>
+                                        <p className="mt-1 break-words text-[clamp(1.65rem,2.6vw,2.75rem)] font-black leading-tight tracking-tight [overflow-wrap:anywhere]">
+                                            {formatCurrency(calculatorFinalPrice)}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="icon"
+                                        className="h-8 w-8 shrink-0 border border-white/30 bg-white/15 text-white hover:bg-white/25"
+                                        onClick={() => copyCalculatorValue(calculatorFinalPrice, "Harga final")}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

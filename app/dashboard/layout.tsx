@@ -185,7 +185,12 @@ const ensureLogisticsSettlementMenu = (sections: RuntimeNavSection[]): RuntimeNa
   return sections.map((section) => ({
     ...section,
     items: section.items.map((item) => {
-      const isLogisticsGroup = item.title === "Logistics & Cost" || item.url === "/dashboard/logistics-costs"
+      const normalizedTitle = item.title.trim().toLowerCase()
+      const isLogisticsGroup =
+        normalizedTitle === "logistics & cost" ||
+        normalizedTitle === "logistics" ||
+        normalizedTitle === "logistic" ||
+        item.url === "/dashboard/logistics-costs"
       if (!isLogisticsGroup) {
         return item
       }

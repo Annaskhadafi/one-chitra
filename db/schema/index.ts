@@ -92,6 +92,7 @@ export {
     priceHistoryRelations,
 } from "./price-management";
 export { forecasts } from "./forecasts";
+export { logisticsMasterPrices } from "./logistics-master-prices";
 export {
     approvalDefinitionStatusEnum,
     approvalApproverTypeEnum,

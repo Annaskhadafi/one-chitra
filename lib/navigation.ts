@@ -235,6 +235,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "logistics-costs",
                     },
                     {
+                        title: "Master Price Delivery",
+                        url: "/dashboard/logistics-costs/master-price",
+                        resource: "logistics-costs",
+                    },
+                    {
                         title: "Cost Settlement",
                         url: "/dashboard/cost-settlements",
                         resource: "cost-settlements",
