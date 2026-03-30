@@ -306,6 +306,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "customers",
                     },
                     {
+                        title: "Customer Segmentasi",
+                        url: "/dashboard/customer-segmentation",
+                        resource: "customer-segmentation",
+                    },
+                    {
                         title: "Harga Acuan Minerba",
                         url: "/dashboard/harga-acuan-minerba",
                         resource: "sales-documents",
