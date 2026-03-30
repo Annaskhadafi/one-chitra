@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, ScanText, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react"
+import { Loader2, ScanText, CheckCircle2, AlertCircle, ExternalLink, Upload } from "lucide-react"
 import { triggerVendorQuotationOcr, type TriggerOcrResult } from "@/app/actions/vendor-quotation"
+import { uploadFile } from "@/app/actions/upload"
 
 type OcrResultData = NonNullable<TriggerOcrResult["data"]>
 
@@ -35,8 +36,10 @@ function formatCurrency(value: number) {
 }
 
 export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", onSuccess }: Props) {
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
     const [fileUrl, setFileUrl] = useState(initialUrl)
     const [loading, setLoading] = useState(false)
+    const [uploading, setUploading] = useState(false)
     const [result, setResult] = useState<OcrResultData | null>(null)
     const [savedId, setSavedId] = useState<number | null>(null)
 
@@ -51,12 +54,57 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
             setResult(null)
             setSavedId(null)
             setFileUrl(initialUrl)
+            setUploading(false)
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ""
+            }
+        }
+    }
+
+    async function handleManualFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+        const selectedFile = event.target.files?.[0]
+        if (!selectedFile) {
+            return
+        }
+
+        const allowedTypes = [
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/webp",
+        ]
+
+        if (!allowedTypes.includes(selectedFile.type)) {
+            toast.error("File harus berupa PDF, PNG, JPG, atau WEBP")
+            event.target.value = ""
+            return
+        }
+
+        setUploading(true)
+        try {
+            const formData = new FormData()
+            formData.append("file", selectedFile)
+            const uploadResult = await uploadFile(formData)
+
+            if (!uploadResult.success || !uploadResult.url) {
+                toast.error(uploadResult.error || "Upload file gagal")
+                return
+            }
+
+            setFileUrl(uploadResult.url)
+            toast.success("File berhasil diupload. Lanjutkan Extract Sekarang untuk menjalankan OCR.")
+        } catch {
+            toast.error("Terjadi kesalahan saat upload file")
+        } finally {
+            setUploading(false)
+            event.target.value = ""
         }
     }
 
     async function handleExtract() {
         if (!fileUrl.trim()) {
-            toast.error("URL file tidak boleh kosong")
+            toast.error("Upload file atau masukkan URL file terlebih dahulu")
             return
         }
         setLoading(true)
@@ -93,6 +141,33 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
 
                 <div className="space-y-4">
                     <div className="space-y-2">
+                        <Label>Upload File Manual (PDF / Gambar)</Label>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+                            className="hidden"
+                            onChange={handleManualFileSelect}
+                            disabled={loading || uploading}
+                        />
+                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 p-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={loading || uploading}
+                                className="gap-2"
+                            >
+                                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                {uploading ? "Uploading..." : "Upload PDF / Gambar"}
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                                File yang diupload akan disimpan lalu bisa langsung diextract ke Vendor Quotation Database.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
                         <Label htmlFor="vq-file-url">URL File Quotation (PDF / Gambar)</Label>
                         <div className="flex gap-2">
                             <Input
@@ -100,7 +175,7 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                                 placeholder="https://example.com/quotation.pdf"
                                 value={fileUrl}
                                 onChange={(e) => setFileUrl(e.target.value)}
-                                disabled={loading}
+                                disabled={loading || uploading}
                                 className="flex-1"
                             />
                             {fileUrl && (
@@ -116,19 +191,23 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                             )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Masukkan URL langsung ke file PDF atau gambar dokumen quotation dari vendor.
+                            Bisa isi URL langsung, atau upload file manual di atas lalu URL akan terisi otomatis.
                         </p>
                     </div>
 
-                    {loading && (
+                    {(loading || uploading) && (
                         <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-10 text-muted-foreground">
                             <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                            <p className="text-sm font-medium">Memproses OCR... Mohon tunggu</p>
-                            <p className="text-xs">Mengunduh file dan mengekstrak data dengan AI</p>
+                            <p className="text-sm font-medium">
+                                {uploading ? "Mengupload file... Mohon tunggu" : "Memproses OCR... Mohon tunggu"}
+                            </p>
+                            <p className="text-xs">
+                                {uploading ? "Menyimpan file PDF/gambar agar bisa diproses OCR" : "Mengunduh file dan mengekstrak data dengan AI"}
+                            </p>
                         </div>
                     )}
 
-                    {result && !loading && (
+                    {result && !loading && !uploading && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
                                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -199,11 +278,11 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                         </div>
                     )}
 
-                    {!result && !loading && (
+                    {!result && !loading && !uploading && (
                         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/20">
                             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                             <p className="text-xs text-amber-700 dark:text-amber-400">
-                                OCR akan mengekstrak data secara otomatis dari file dan langsung menyimpannya ke database. Pastikan URL file dapat diakses secara publik.
+                                OCR akan mengekstrak data dari file PDF/gambar lalu langsung menyimpannya ke Vendor Quotation Database. Anda bisa upload file manual atau pakai URL publik.
                             </p>
                         </div>
                     )}
@@ -214,15 +293,15 @@ export function VendorQuotationOcrDialog({ open, onOpenChange, initialUrl = "", 
                         <Button onClick={handleClose} variant="outline">Tutup</Button>
                     ) : (
                         <>
-                            <Button variant="outline" onClick={handleClose} disabled={loading}>
-                                Batal
-                            </Button>
-                            <Button
-                                onClick={handleExtract}
-                                disabled={loading || !fileUrl.trim()}
-                                className="gap-2"
-                            >
-                                {loading ? (
+                        <Button variant="outline" onClick={handleClose} disabled={loading}>
+                            Batal
+                        </Button>
+                        <Button
+                            onClick={handleExtract}
+                            disabled={loading || uploading || !fileUrl.trim()}
+                            className="gap-2"
+                        >
+                            {loading ? (
                                     <><Loader2 className="h-4 w-4 animate-spin" /> Memproses...</>
                                 ) : (
                                     <><ScanText className="h-4 w-4" /> Extract Sekarang</>
