@@ -32,6 +32,25 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 
+function isMissingServerActionError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.includes("Server Action") && message.includes("was not found on the server")
+}
+
+async function runServerAction<T>(action: () => Promise<T>): Promise<T> {
+    try {
+        return await action()
+    } catch (error) {
+        if (typeof window !== "undefined" && isMissingServerActionError(error)) {
+            toast.error("Versi aplikasi baru terdeteksi. Halaman akan dimuat ulang.")
+            window.setTimeout(() => {
+                window.location.reload()
+            }, 300)
+        }
+        throw error
+    }
+}
+
 export default function EmailListsPage() {
     const [activeTab, setActiveTab] = useState("contacts")
     const [contacts, setContacts] = useState<any[]>([])
@@ -43,17 +62,24 @@ export default function EmailListsPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const [contactsData, groupsData] = await Promise.all([
-            getEmailContacts({ 
-                search, 
-                category: filterCategory, 
-                groupId: filterGroup !== "0" ? parseInt(filterGroup) : undefined 
-            }),
-            getEmailGroups()
-        ])
-        setContacts(contactsData)
-        setGroups(groupsData)
-        setLoading(false)
+        try {
+            const [contactsData, groupsData] = await Promise.all([
+                runServerAction(() => getEmailContacts({
+                    search,
+                    category: filterCategory,
+                    groupId: filterGroup !== "0" ? parseInt(filterGroup) : undefined
+                })),
+                runServerAction(() => getEmailGroups())
+            ])
+            setContacts(contactsData)
+            setGroups(groupsData)
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Gagal memuat data email list")
+            }
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => {
@@ -212,9 +238,18 @@ function GroupDialog({ group, onComplete }: { group?: any, onComplete: () => voi
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
-        const res = group 
-            ? await updateEmailGroup(group.id, formData)
-            : await createEmailGroup(formData)
+        let res
+        try {
+            res = group
+                ? await runServerAction(() => updateEmailGroup(group.id, formData))
+                : await runServerAction(() => createEmailGroup(formData))
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Terjadi kesalahan")
+            }
+            setLoading(false)
+            return
+        }
         
         if (res.success) {
             toast.success(group ? "Grup diperbarui" : "Grup dibuat")
@@ -287,9 +322,18 @@ function ContactDialog({ contact, groups, onComplete }: { contact?: any, groups:
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
-        const res = contact 
-            ? await updateEmailContact(contact.id, formData)
-            : await createEmailContact(formData)
+        let res
+        try {
+            res = contact
+                ? await runServerAction(() => updateEmailContact(contact.id, formData))
+                : await runServerAction(() => createEmailContact(formData))
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Terjadi kesalahan")
+            }
+            setLoading(false)
+            return
+        }
         
         if (res.success) {
             toast.success(contact ? "Kontak diperbarui" : "Kontak ditambahkan")
@@ -403,7 +447,15 @@ function ContactDialog({ contact, groups, onComplete }: { contact?: any, groups:
 
 function DeleteGroupDialog({ id, name, onComplete }: { id: number, name: string, onComplete: () => void }) {
     const handleDelete = async () => {
-        const res = await deleteEmailGroup(id)
+        let res
+        try {
+            res = await runServerAction(() => deleteEmailGroup(id))
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Gagal menghapus")
+            }
+            return
+        }
         if (res.success) { toast.success("Grup dihapus"); onComplete() }
         else toast.error(res.error || "Gagal menghapus")
     }
@@ -428,7 +480,15 @@ function DeleteGroupDialog({ id, name, onComplete }: { id: number, name: string,
 
 function DeleteContactDialog({ id, name, onComplete }: { id: number, name: string, onComplete: () => void }) {
     const handleDelete = async () => {
-        const res = await deleteEmailContact(id)
+        let res
+        try {
+            res = await runServerAction(() => deleteEmailContact(id))
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Gagal menghapus")
+            }
+            return
+        }
         if (res.success) { toast.success("Kontak dihapus"); onComplete() }
         else toast.error(res.error || "Gagal menghapus")
     }
@@ -476,12 +536,18 @@ function MultiImportDialog({ groups, onComplete, initialGroupId, isIcon = false 
     }, [open, activeTab, platformSearch])
 
     const fetchPlatformData = async () => {
-        if (activeTab === "users") {
-            const data = await getPlatformUsers(platformSearch)
-            setPlatformUsers(data)
-        } else if (activeTab === "customers") {
-            const data = await getPlatformCustomers(platformSearch)
-            setPlatformCustomers(data)
+        try {
+            if (activeTab === "users") {
+                const data = await runServerAction(() => getPlatformUsers(platformSearch))
+                setPlatformUsers(data)
+            } else if (activeTab === "customers") {
+                const data = await runServerAction(() => getPlatformCustomers(platformSearch))
+                setPlatformCustomers(data)
+            }
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Gagal memuat data platform")
+            }
         }
     }
 
@@ -529,7 +595,16 @@ function MultiImportDialog({ groups, onComplete, initialGroupId, isIcon = false 
             }).filter(r => r.email.includes("@"))
         }
 
-        const res = await importEmailContacts(rowsToImport, targetGroup !== "0" ? parseInt(targetGroup) : undefined)
+        let res
+        try {
+            res = await runServerAction(() => importEmailContacts(rowsToImport, targetGroup !== "0" ? parseInt(targetGroup) : undefined))
+        } catch (error) {
+            if (!isMissingServerActionError(error)) {
+                toast.error("Gagal impor")
+            }
+            setLoading(false)
+            return
+        }
         if (res.success) {
             toast.success(`Berhasil impor ${res.imported} kontak`)
             setOpen(false)
