@@ -14,6 +14,7 @@ import { AlertCircle, CheckCircle2, Database, FileText, RefreshCcw } from "lucid
 const VIEW_ID = "2354";
 const VIEW_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}`;
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
+const MIN_DATE_REQUIRED = new Date("2026-01-01T00:00:00+08:00");
 
 const COLUMN_ORDER = [
     "18",
@@ -95,6 +96,16 @@ function formatCurrency(value: string | null | undefined) {
         currency: "IDR",
         maximumFractionDigits: 0,
     }).format(amount);
+}
+
+function isDateRequiredFrom2026(value: string | string[] | undefined) {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    if (!rawValue) return false;
+
+    const date = new Date(rawValue);
+    if (Number.isNaN(date.getTime())) return false;
+
+    return date >= MIN_DATE_REQUIRED;
 }
 
 function formatStatusTone(status: string) {
@@ -186,8 +197,8 @@ export default async function EprIntegrasiPage() {
         };
     });
 
-    const entries = entriesPayload.entries ?? [];
-    const totalEntries = entriesPayload.total ?? entries.length;
+    const entries = (entriesPayload.entries ?? []).filter((entry) => isDateRequiredFrom2026(entry["1"]));
+    const totalEntries = entries.length;
     const completedCount = entries.filter((entry) => `${entry["41"] ?? ""}`.trim().toLowerCase() === "completed").length;
     const submittedCount = entries.filter((entry) => {
         const status = `${entry["41"] ?? ""}`.trim().toLowerCase();
@@ -205,7 +216,7 @@ export default async function EprIntegrasiPage() {
                         </Badge>
                     </div>
                     <p className="text-muted-foreground text-sm">
-                        Menampilkan data EPR dari GravityView API Proc-Share dengan label field sesuai konfigurasi view.
+                        Menampilkan data EPR dari GravityView API Proc-Share dengan label field sesuai konfigurasi view, difilter untuk Date Required mulai 2026.
                     </p>
                 </div>
                 <a
@@ -229,7 +240,7 @@ export default async function EprIntegrasiPage() {
                     </CardHeader>
                     <CardContent className="px-5 pb-4">
                         <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{totalEntries}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Seluruh entry dari API view 2354</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Entry dengan Date Required mulai 01/01/2026</p>
                     </CardContent>
                 </Card>
 
@@ -266,7 +277,7 @@ export default async function EprIntegrasiPage() {
                 <CardHeader className="pb-3">
                     <CardTitle className="text-base">Data Table</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                        Header kolom mengikuti label dan ID field dari view GravityView.
+                        Header kolom mengikuti label dan ID field dari view GravityView. Data dibatasi untuk Date Required mulai tahun 2026.
                     </p>
                 </CardHeader>
                 <CardContent className="px-0 sm:px-6">
