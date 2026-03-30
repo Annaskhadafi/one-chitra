@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Plus, FileText } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Suspense } from "react"
+import { Providers } from "@/components/providers"
 
 export const dynamic = 'force-dynamic'
 
@@ -30,9 +31,11 @@ export default async function QuotationsPage() {
             </div>
 
             <div className="flex-1">
-                <Suspense fallback={<div>Loading...</div>}>
-                    <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
-                </Suspense>
+                <Providers>
+                    <Suspense fallback={<div>Loading...</div>}>
+                        <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
+                    </Suspense>
+                </Providers>
             </div>
         </div>
     )

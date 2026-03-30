@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FileText } from "lucide-react"
+import { FileSearch } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Tooltip,
@@ -33,11 +33,14 @@ export function FloatingNavButton({
 
     const button = (
         <Button
-            size="icon"
-            className={`fixed ${positionClasses[position]} z-50 h-14 w-14 rounded-full shadow-lg bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 hover:scale-110`}
+            size="sm"
+            className={`fixed ${positionClasses[position]} z-50 h-12 rounded-full border border-indigo-300/60 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 px-4 text-white shadow-[0_18px_40px_rgba(37,99,235,0.35)] transition-all duration-300 hover:scale-[1.03] hover:from-indigo-700 hover:via-blue-700 hover:to-cyan-600`}
             onClick={onClick}
         >
-            {icon || <FileText className="h-6 w-6" />}
+            <span className="flex items-center gap-2">
+                {icon || <FileSearch className="h-4 w-4" />}
+                <span className="text-sm font-semibold">{label}</span>
+            </span>
         </Button>
     )
 

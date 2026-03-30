@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { VendorQuotationWithItems } from "@/types/vendor-quotation"
-import { isVendorQuotationFrom2026 } from "@/lib/vendor-quotation-filter"
+import { isVendorQuotationFromYear } from "@/lib/vendor-quotation-filter"
 
 const VIEW_ID = "2354";
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
@@ -32,6 +32,7 @@ function mapToSerializable(row: VendorQuotationRow): VendorQuotationWithItems {
 }
 
 export async function getVendorQuotations(): Promise<VendorQuotationWithItems[]> {
+    const currentYear = new Date().getFullYear()
     const rows = await db.query.vendorQuotations.findMany({
         orderBy: [desc(vendorQuotations.createdAt)],
         with: {
@@ -41,12 +42,12 @@ export async function getVendorQuotations(): Promise<VendorQuotationWithItems[]>
 
     return rows
         .filter((row) =>
-            isVendorQuotationFrom2026({
+            isVendorQuotationFromYear({
                 quoteDate: row.quoteDate,
                 quoteNumber: row.quoteNumber,
                 fileName: row.fileName,
                 fileUrl: row.fileUrl,
-            })
+            }, currentYear)
         )
         .map(mapToSerializable)
 }

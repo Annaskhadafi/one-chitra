@@ -1274,7 +1274,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
             <FloatingNavButton 
                 onClick={() => setIsVendorQuotationOpen(true)}
-                label="Cari Harga Vendor"
+                label="Cari dari Vendor"
                 position="middle-right"
             />
 

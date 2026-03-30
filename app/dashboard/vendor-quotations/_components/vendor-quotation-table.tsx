@@ -54,7 +54,7 @@ interface VendorQuotationTableProps {
 }
 
 export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotationTableProps) {
-    const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }])
+    const [sorting, setSorting] = useState<SortingState>([{ id: "quoteDate", desc: true }])
     const [globalFilter, setGlobalFilter] = useState("")
     const [selectedQuotation, setSelectedQuotation] = useState<VendorQuotationWithItems | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -214,17 +214,33 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                     <Button
                         variant="ghost"
                         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                        className="-ml-4"
+                        className="-ml-4 w-[280px] justify-start"
                     >
                         Vendor
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
                 ),
-                cell: ({ row }) => <span className="font-semibold">{row.original.vendorName || "—"}</span>,
+                cell: ({ row }) => (
+                    <span
+                        className="block max-w-[280px] truncate font-semibold"
+                        title={row.original.vendorName || "—"}
+                    >
+                        {row.original.vendorName || "—"}
+                    </span>
+                ),
             },
             {
                 accessorKey: "quoteDate",
                 header: "Tanggal Quote",
+                sortingFn: (rowA, rowB, columnId) => {
+                    const left = Date.parse(String(rowA.getValue(columnId) ?? ""))
+                    const right = Date.parse(String(rowB.getValue(columnId) ?? ""))
+
+                    if (Number.isNaN(left) && Number.isNaN(right)) return 0
+                    if (Number.isNaN(left)) return -1
+                    if (Number.isNaN(right)) return 1
+                    return left - right
+                },
                 cell: ({ row }) => row.original.quoteDate || "—",
             },
             {
@@ -415,14 +431,19 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     return (
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between gap-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search quotation, vendor, or items..."
-                        value={globalFilter}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                        className="pl-9"
-                    />
+                <div className="flex-1 max-w-xl space-y-2">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search quotation, vendor, or items..."
+                            value={globalFilter}
+                            onChange={(e) => setGlobalFilter(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        Data pencarian perlu divalidasi kembali ke stock dan harga terbaru ke vendor untuk memastikan barang masih tersedia dan harga masih sama.
+                    </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={exportToCsv} className="gap-2">
@@ -563,8 +584,10 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                     {rows.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                             <FileText className="h-12 w-12 mb-4 opacity-20" />
-                            <p>No vendor quotations found</p>
-                            <p className="text-xs">Start by adding one via OCR from your EPR Integrate dashboard.</p>
+                            <p>Tidak ada data vendor quotation yang cocok.</p>
+                            <p className="text-xs text-center">
+                                Silahkan minta ke tim Product Accessories atau Procurement, lalu validasi kembali stock dan harga ke vendor apakah barangnya masih ada dan harganya masih sama.
+                            </p>
                         </div>
                     )}
                 </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useEffect, useState, useRef } from "react"
+import { useEffect } from "react"
 import {
     Dialog,
     DialogContent,
@@ -16,8 +16,6 @@ interface VendorQuotationSearchModalProps {
 }
 
 export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotationSearchModalProps) {
-    const iframeRef = useRef<HTMLIFrameElement>(null)
-
     useEffect(() => {
         const handleOpenModal = () => {
             onOpenChange(true)
@@ -29,7 +27,7 @@ export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotati
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] flex flex-col p-0 overflow-hidden">
+            <DialogContent className="!left-1/2 !top-1/2 !h-[94vh] !max-h-none !w-[96vw] !max-w-[1720px] !-translate-x-1/2 !-translate-y-1/2 rounded-[28px] border border-slate-200 p-0 flex flex-col overflow-hidden shadow-[0_32px_120px_rgba(15,23,42,0.30)]">
                 <DialogHeader className="p-4 border-b shrink-0">
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         <FileText className="h-6 w-6" />
@@ -39,8 +37,7 @@ export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotati
 
                 <div className="flex-1 bg-muted/10">
                     <iframe
-                        ref={iframeRef}
-                        src="/dashboard/vendor-quotations"
+                        src="/vendor-quotations-modal"
                         className="w-full h-full border-0"
                         title="Vendor Quotation Database"
                     />

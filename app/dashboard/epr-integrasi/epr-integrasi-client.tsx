@@ -1,16 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, Database, FileText, RefreshCcw, Search, ScanText } from "lucide-react";
+import { AlertCircle, CheckCircle2, Database, FileText, Loader2, RefreshCcw, Search, ScanText } from "lucide-react";
 import { VendorQuotationOcrDialog } from "../vendor-quotations/_components/vendor-quotation-ocr-dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "sonner";
+import { triggerVendorQuotationOcr } from "@/app/actions/vendor-quotation";
 
 
 type ColumnId = "18" | "1" | "50" | "7" | "30" | "27" | "22" | "23" | "38" | "40" | "41";
@@ -153,11 +156,15 @@ function toSearchableString(value: string | string[] | null | undefined) {
 }
 
 export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrStatusMap }: Props) {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const initialSearch = searchParams.get("search") ?? "";
     const [search, setSearch] = useState(initialSearch);
     const [statusFilter, setStatusFilter] = useState("all");
     const [matchFilter, setMatchFilter] = useState("all");
+    const currentYear = new Date().getFullYear();
+    const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
     // OCR State
     const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
@@ -168,6 +175,69 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
         setOcrFileUrl(url);
         setOcrEntryId(entryId);
         setOcrDialogOpen(true);
+    };
+
+    const handleAutoOcrPending = async () => {
+        const pendingAttachments = entries
+            .flatMap((entry) => {
+                const entryId = `${entry.values["18"] ?? entry.id}`;
+                const urls = [entry.values["22"], entry.values["23"]]
+                    .flatMap((value) => Array.isArray(value) ? value : [value])
+                    .filter((value): value is string => Boolean(value));
+
+                return urls.map((url) => ({
+                    url,
+                    entryId,
+                    status: ocrStatusMap?.[url],
+                }));
+            })
+            .filter((item) => item.status !== "done" && item.status !== "processing");
+
+        const dedupedAttachments = Array.from(
+            new Map(pendingAttachments.map((item) => [item.url, item])).values()
+        );
+
+        if (dedupedAttachments.length === 0) {
+            toast.info(`Tidak ada attachment pending untuk OCR tahun ${currentYear}.`);
+            return;
+        }
+
+        const batchItems = dedupedAttachments.slice(0, 10);
+        if (!confirm(`Akan diproses ${batchItems.length} attachment pending tahun ${currentYear} dari EPR Integration. Lanjutkan OCR otomatis?`)) {
+            return;
+        }
+
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: batchItems.length });
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < batchItems.length; i++) {
+            const item = batchItems[i];
+            setBatchProgress({ current: i + 1, total: batchItems.length });
+
+            try {
+                const result = await triggerVendorQuotationOcr(item.url, item.entryId);
+                if (result.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    console.error(`Gagal OCR attachment ${item.url}:`, result.error);
+                }
+            } catch (error) {
+                failCount++;
+                console.error(`Error OCR attachment ${item.url}:`, error);
+            }
+
+            if ((i + 1) % 2 === 0 || i === batchItems.length - 1) {
+                router.refresh();
+            }
+        }
+
+        setIsBatchProcessing(false);
+        toast.success(`Batch OCR ${currentYear} selesai. Diproses: ${batchItems.length}, sukses: ${successCount}, gagal: ${failCount}.`);
+        router.refresh();
     };
 
     function renderCellValue(columnId: ColumnId, value: string | string[] | undefined, entryId: string) {
@@ -221,6 +291,24 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
                     <p className="text-muted-foreground text-sm">Menampilkan data EPR dari GravityView API Proc-Share dengan label field sesuai konfigurasi view, difilter untuk Date Required mulai 2026.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={handleAutoOcrPending}
+                        disabled={isBatchProcessing}
+                        className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+                    >
+                        {isBatchProcessing ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                OCR ({batchProgress.current}/{batchProgress.total})
+                            </>
+                        ) : (
+                            <>
+                                <ScanText className="h-4 w-4" />
+                                {`Auto OCR Pending ${currentYear}`}
+                            </>
+                        )}
+                    </Button>
                     <Button 
                         variant="outline"
                         onClick={() => setOcrDialogOpen(true)}
@@ -354,6 +442,7 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
                 open={ocrDialogOpen}
                 onOpenChange={setOcrDialogOpen}
                 initialUrl={ocrFileUrl}
+                onSuccess={() => router.refresh()}
             />
         </div>
     );
