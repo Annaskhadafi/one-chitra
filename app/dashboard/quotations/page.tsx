@@ -1,6 +1,12 @@
 import { getQuotations } from "@/app/actions/quotation"
 import { QuotationTable } from "./_components/quotation-table"
-import { QuotationsPageClient } from "./_components/quotations-page-client"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Plus, FileText } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { FloatingNavButton } from "@/components/floating-nav-button"
+import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search-modal"
+import { Suspense } from "react"
 
 export const dynamic = 'force-dynamic'
 
@@ -8,8 +14,43 @@ export default async function QuotationsPage() {
     const quotations = await getQuotations()
 
     return (
-        <QuotationsPageClient 
-            data={quotations as Parameters<typeof QuotationTable>[0]["data"]} 
-        />
+        <div className="flex flex-1 flex-col gap-6 p-4 md:p-8 lg:p-10">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex-1">
+                    <PageHeader
+                        title="Quotations"
+                        subtitle="Manage quotations and pricing proposals."
+                        icon={FileText}
+                    />
+                </div>
+                <Link href="/dashboard/quotations/create">
+                    <Button>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Quotation
+                    </Button>
+                </Link>
+            </div>
+
+            <div className="flex-1">
+                <Suspense fallback={<div>Loading...</div>}>
+                    <QuotationTable data={quotations as Parameters<typeof QuotationTable>[0]["data"]} />
+                </Suspense>
+            </div>
+
+            <FloatingNavButton 
+                onClick={() => {
+                    const event = new CustomEvent('openVendorQuotationModal')
+                    window.dispatchEvent(event)
+                }}
+                label="Cari Harga Vendor"
+                position="middle-right"
+            />
+
+            <VendorQuotationSearchModalWrapper />
+        </div>
     )
+}
+
+function VendorQuotationSearchModalWrapper() {
+    return <VendorQuotationSearchModal />
 }
