@@ -90,6 +90,11 @@ export const navigationConfig: NavSection[] = [
                         url: "/dashboard/good-receive-manual",
                         resource: "good-receive-manual",
                     },
+                    {
+                        title: "EPR Integrasi",
+                        url: "/dashboard/epr-integrasi",
+                        resource: "good-receive-manual",
+                    },
                 ],
             },
             {
