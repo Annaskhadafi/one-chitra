@@ -117,7 +117,8 @@ export async function getSalesDashboardData(filters: SalesDashboardFilters = {})
                     sql`${salesRevenueSap.customerName} IS NULL`,
                     and(
                         notIlike(salesRevenueSap.customerName, '%Chitra Paratama Singapore Branch%'),
-                        notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%')
+                        notIlike(salesRevenueSap.customerName, '%Transitetyre B.V%'),
+                        notIlike(salesRevenueSap.customerName, '%TRANSITYRE B.V%')
                     )
                 )
             )
