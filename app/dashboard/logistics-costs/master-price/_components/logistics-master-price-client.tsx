@@ -208,6 +208,7 @@ function inferMapping(columns: string[]) {
 
 export function LogisticsMasterPriceClient({ initialRows }: LogisticsMasterPriceClientProps) {
     const [rows, setRows] = useState(initialRows)
+    const [searchInput, setSearchInput] = useState("")
     const [search, setSearch] = useState("")
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [editingId, setEditingId] = useState<number | null>(null)
@@ -231,6 +232,16 @@ export function LogisticsMasterPriceClient({ initialRows }: LogisticsMasterPrice
                 row.statusTb,
                 row.productType,
                 row.notes,
+                row.cost,
+                row.ring24,
+                row.ring25,
+                row.ring29,
+                row.ring33,
+                row.ring35,
+                row.ring49,
+                row.ring51,
+                row.ring57,
+                row.ring63,
             ]
                 .filter(Boolean)
                 .some((value) => String(value).toLowerCase().includes(keyword))
@@ -239,6 +250,15 @@ export function LogisticsMasterPriceClient({ initialRows }: LogisticsMasterPrice
 
     const totalRoutes = rows.length
     const totalCost = rows.reduce((sum, row) => sum + Number(row.cost || 0), 0)
+
+    const applySearch = () => {
+        setSearch(searchInput.trim())
+    }
+
+    const resetSearch = () => {
+        setSearchInput("")
+        setSearch("")
+    }
 
     const openCreateDialog = () => {
         setEditingId(null)
@@ -467,14 +487,29 @@ export function LogisticsMasterPriceClient({ initialRows }: LogisticsMasterPrice
             <Card>
                 <CardContent className="space-y-4 pt-6">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="relative w-full max-w-md">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                value={search}
-                                onChange={(event) => setSearch(event.target.value)}
-                                className="pl-9"
-                                placeholder="Cari from, to, truck type, product type..."
-                            />
+                        <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row">
+                            <div className="relative flex-1">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={searchInput}
+                                    onChange={(event) => setSearchInput(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                            event.preventDefault()
+                                            applySearch()
+                                        }
+                                    }}
+                                    className="pl-9"
+                                    placeholder="Cari from, to, cost, truck type, status TB, product type..."
+                                />
+                            </div>
+                            <Button type="button" variant="outline" onClick={applySearch}>
+                                <Search className="mr-2 h-4 w-4" />
+                                Search
+                            </Button>
+                            <Button type="button" variant="ghost" onClick={resetSearch}>
+                                Reset
+                            </Button>
                         </div>
 
                         <div className="flex flex-wrap gap-2">

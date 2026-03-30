@@ -2,7 +2,8 @@
 
 import { db } from "@/db"
 import { evhsMasterPrices } from "@/db/schema/evhs"
-import { eq, and, sql } from "drizzle-orm"
+import { products } from "@/db/schema/products"
+import { eq, and, sql, inArray, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 type ImportedMasterPriceRow = {
@@ -17,6 +18,18 @@ function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Terjadi kesalahan yang tidak diketahui"
 }
 
+function normalizeMaterialKey(value?: string | null) {
+    const normalized = value?.trim()
+    if (!normalized) return null
+
+    const upper = normalized.toUpperCase()
+    if (upper === "N/A" || upper === "NA" || upper === "-") {
+        return null
+    }
+
+    return normalized
+}
+
 export async function getEvhsMasterPrices() {
     try {
         const data = await db.query.evhsMasterPrices.findMany({
@@ -25,7 +38,60 @@ export async function getEvhsMasterPrices() {
             },
             orderBy: (prices, { desc }) => [desc(prices.createdAt)]
         })
-        return data
+
+        const materialNumbers = Array.from(
+            new Set(
+                data
+                    .flatMap((item) => [
+                        normalizeMaterialKey(item.materialNumberCk),
+                        normalizeMaterialKey(item.materialNumberCp),
+                    ])
+                    .filter((value): value is string => Boolean(value))
+            )
+        )
+
+        if (materialNumbers.length === 0) {
+            return data.map((item) => ({
+                ...item,
+                productDescription: null,
+            }))
+        }
+
+        const matchedProducts = await db
+            .select({
+                materialNumber: products.materialNumber,
+                materialNumberCk: products.materialNumberCk,
+                materialDescription: products.materialDescription,
+            })
+            .from(products)
+            .where(
+                or(
+                    inArray(products.materialNumberCk, materialNumbers),
+                    inArray(products.materialNumber, materialNumbers)
+                )
+            )
+
+        const productDescriptionByMaterial = new Map(
+            matchedProducts.flatMap((product) => {
+                const description = product.materialDescription?.trim() || null
+                const keys = [product.materialNumberCk?.trim(), product.materialNumber?.trim()].filter(
+                    (value): value is string => Boolean(value)
+                )
+
+                return keys.map((key) => [key, description] as const)
+            })
+        )
+
+        return data.map((item) => ({
+            ...item,
+            productDescription:
+                (normalizeMaterialKey(item.materialNumberCk)
+                    ? (productDescriptionByMaterial.get(normalizeMaterialKey(item.materialNumberCk)!) ?? null)
+                    : null) ??
+                (normalizeMaterialKey(item.materialNumberCp)
+                    ? (productDescriptionByMaterial.get(normalizeMaterialKey(item.materialNumberCp)!) ?? null)
+                    : null),
+        }))
     } catch (error) {
         console.error("Error fetching master prices:", error)
         return []

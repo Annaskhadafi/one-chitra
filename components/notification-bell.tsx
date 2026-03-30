@@ -52,17 +52,29 @@ export function NotificationBell() {
         unreadCount: 0,
     })
 
-    const loadNotifications = useCallback(async () => {
+    const loadNotifications = useCallback(async (signal?: AbortSignal) => {
         setLoading(true)
         try {
-            const response = await fetch("/api/notifications?limit=20", { cache: "no-store" })
+            const response = await fetch("/api/notifications?limit=20", {
+                cache: "no-store",
+                signal,
+            })
             if (!response.ok) return
             const result = await response.json() as NotificationResponse
             setData(result)
         } catch (error) {
+            // Ignore transient network failures during dev rebuilds/navigation aborts.
+            if (error instanceof DOMException && error.name === "AbortError") {
+                return
+            }
+            if (error instanceof TypeError) {
+                return
+            }
             console.error("Failed to load notifications:", error)
         } finally {
-            setLoading(false)
+            if (!signal?.aborted) {
+                setLoading(false)
+            }
         }
     }, [])
 
@@ -71,18 +83,25 @@ export function NotificationBell() {
     }, [])
 
     useEffect(() => {
-        void loadNotifications()
+        const controller = new AbortController()
+        void loadNotifications(controller.signal)
 
         const interval = window.setInterval(() => {
-            void loadNotifications()
+            const intervalController = new AbortController()
+            void loadNotifications(intervalController.signal)
         }, 30_000)
 
-        return () => window.clearInterval(interval)
+        return () => {
+            controller.abort()
+            window.clearInterval(interval)
+        }
     }, [loadNotifications])
 
     useEffect(() => {
         if (open) {
-            void loadNotifications()
+            const controller = new AbortController()
+            void loadNotifications(controller.signal)
+            return () => controller.abort()
         }
     }, [open, loadNotifications])
 

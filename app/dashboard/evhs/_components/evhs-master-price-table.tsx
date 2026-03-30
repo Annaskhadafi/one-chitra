@@ -130,6 +130,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
     const filteredPrices = prices.filter((p) =>
         p.materialNumberCp?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.materialNumberCk?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.productDescription?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.warehouse?.sloc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.warehouse?.description?.toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -343,6 +344,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                             <TableHead className="w-[150px] border-r">Warehouse Name</TableHead>
                             <TableHead className="border-r">Material CP</TableHead>
                             <TableHead className="border-r">Material CK</TableHead>
+                            <TableHead className="border-r">Product Description</TableHead>
                             <TableHead className="text-right border-r">Price (IDR)</TableHead>
                             <TableHead className="w-[80px] text-center">Aksi</TableHead>
                         </TableRow>
@@ -373,6 +375,9 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                                     </TableCell>
                                     <TableCell className="font-mono font-medium border-r">{p.materialNumberCp}</TableCell>
                                     <TableCell className="text-slate-600 font-mono border-r">{p.materialNumberCk || "-"}</TableCell>
+                                    <TableCell className="border-r text-slate-700 max-w-[260px] truncate" title={p.productDescription || "-"}>
+                                        {p.productDescription || "-"}
+                                    </TableCell>
                                     <TableCell className="text-right font-mono font-bold text-slate-800 border-r">
                                         {Number(p.price).toLocaleString('id-ID', { minimumFractionDigits: 2 })}
                                     </TableCell>

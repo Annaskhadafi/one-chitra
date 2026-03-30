@@ -8,6 +8,8 @@ import { getSetting } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FloatingNavButton } from "@/components/floating-nav-button"
+import { EvhsMasterPriceModal } from "@/components/evhs-master-price-modal"
+import { LogisticsMasterPriceModal } from "@/components/logistics-master-price-modal"
 import { VendorQuotationSearchModal } from "@/components/vendor-quotation-search-modal"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -155,7 +157,9 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const isEdit = !!initialData
     const [isVendorQuotationOpen, setIsVendorQuotationOpen] = useState(false)
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
-    const [showFloatingShortcuts, setShowFloatingShortcuts] = useState(true)
+    const [isDeliveryPriceOpen, setIsDeliveryPriceOpen] = useState(false)
+    const [isEvhsMasterPriceOpen, setIsEvhsMasterPriceOpen] = useState(false)
+    const [showFloatingShortcuts, setShowFloatingShortcuts] = useState(false)
 
     // Form State
     const [quotationNumber, setQuotationNumber] = useState(initialData?.quotationNumber || "")
@@ -1335,7 +1339,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     />
 
                     <FloatingNavButton
-                        href="/dashboard/logistics-costs/master-price"
+                        onClick={() => setIsDeliveryPriceOpen(true)}
                         label="Price Delivery"
                         icon={<Truck className="h-4 w-4" />}
                         position="middle-right"
@@ -1343,11 +1347,19 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                     />
 
                     <FloatingNavButton
+                        onClick={() => setIsEvhsMasterPriceOpen(true)}
+                        label="Master Price CK"
+                        icon={<Package className="h-4 w-4" />}
+                        position="middle-right"
+                        className="translate-y-[12.75rem] border-cyan-300/60 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 hover:from-cyan-600 hover:via-sky-600 hover:to-blue-600"
+                    />
+
+                    <FloatingNavButton
                         onClick={() => setShowFloatingShortcuts(false)}
                         label="Hide"
                         icon={<EyeOff className="h-4 w-4" />}
                         position="middle-right"
-                        className="translate-y-[12.75rem] border-slate-300/70 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900"
+                        className="translate-y-[17rem] border-slate-300/70 bg-gradient-to-r from-slate-600 via-slate-700 to-slate-800 hover:from-slate-700 hover:via-slate-800 hover:to-slate-900"
                     />
                 </>
             ) : (
@@ -1364,6 +1376,16 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
             <VendorQuotationSearchModal
                 open={isVendorQuotationOpen}
                 onOpenChange={setIsVendorQuotationOpen}
+            />
+
+            <LogisticsMasterPriceModal
+                open={isDeliveryPriceOpen}
+                onOpenChange={setIsDeliveryPriceOpen}
+            />
+
+            <EvhsMasterPriceModal
+                open={isEvhsMasterPriceOpen}
+                onOpenChange={setIsEvhsMasterPriceOpen}
             />
 
             <Dialog open={isCalculatorOpen} onOpenChange={setIsCalculatorOpen}>
