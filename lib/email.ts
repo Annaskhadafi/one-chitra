@@ -627,3 +627,31 @@ export async function sendNotificationEmail(
         appName: "One Chitra",
     })
 }
+
+export async function sendLoggedNotificationMessage(args: {
+    to: string | string[]
+    cc?: string | string[]
+    subject: string
+    html?: string
+    text?: string
+    replyTo?: string
+    attachments?: Array<{
+        filename: string
+        content: Buffer | string
+        contentType?: string
+    }>
+    channels?: NotificationDeliveryChannel[]
+    logMeta?: EmailOptions["logMeta"]
+}) {
+    return dispatchTemplateMessage({
+        to: normalizeEmailList(args.to),
+        cc: normalizeEmailList(args.cc),
+        subject: args.subject,
+        html: args.html,
+        text: args.text,
+        replyTo: args.replyTo,
+        attachments: args.attachments,
+        channels: normalizeDeliveryChannels(args.channels, ["email", "push"]),
+        logMeta: args.logMeta,
+    })
+}

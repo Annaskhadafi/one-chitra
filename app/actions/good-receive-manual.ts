@@ -6,9 +6,10 @@ import { revalidatePath } from "next/cache"
 import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
-import { sendSystemTemplatedEmailByCode } from "@/lib/email"
+import { sendLoggedNotificationMessage, sendSystemTemplatedEmailByCode } from "@/lib/email"
 import { SYSTEM_EMAIL_TEMPLATE_CODES } from "@/lib/email-template-registry"
 import { readManagedUpload } from "@/lib/upload-storage"
+import { toCanonicalAppUrl } from "@/lib/app-url"
 
 export type ManualGoodReceivePoOption = {
     poNumber: string
@@ -30,6 +31,20 @@ export type ManualGoodReceivePoLineOption = {
 }
 
 type Me2lRow = Awaited<ReturnType<typeof db.query.me2lPurchDocsSap.findMany>>[number]
+
+const EPR_INTEGRATION_ENTRIES_URL = "https://proc-share.com/wp-json/gravityview/v1/views/2354/entries.json?limit=0"
+
+type EprNotificationEntry = {
+    "1"?: string | string[]
+    "18"?: string | string[]
+    "38"?: string | string[]
+    "49"?: string | string[]
+    "50"?: string | string[]
+}
+
+type EprNotificationEntriesPayload = {
+    entries?: EprNotificationEntry[]
+}
 
 function parseManualGrReference(referenceNumber: string | null | undefined) {
     const normalized = referenceNumber?.trim() || ""
@@ -128,6 +143,63 @@ async function getNotificationRecipientEmails(roleNames: string[], userIds: stri
         .filter(Boolean)
 
     return Array.from(new Set(recipients))
+}
+
+function getFirstStringValue(value: string | string[] | undefined) {
+    if (Array.isArray(value)) {
+        return typeof value[0] === "string" ? value[0].trim() : ""
+    }
+
+    return typeof value === "string" ? value.trim() : ""
+}
+
+function isEmailLike(value: string | null | undefined) {
+    if (!value) return false
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+async function fetchJsonWithNestedString<T>(url: string): Promise<T> {
+    const response = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+    })
+
+    if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`)
+    }
+
+    const text = await response.text()
+    const parsed = JSON.parse(text) as T | string
+    return (typeof parsed === "string" ? JSON.parse(parsed) : parsed) as T
+}
+
+async function findEprRecipientByPoNumber(poNumber: string) {
+    const normalizedPoNumber = poNumber.trim()
+    if (!normalizedPoNumber) return null
+
+    const payload = await fetchJsonWithNestedString<EprNotificationEntriesPayload>(EPR_INTEGRATION_ENTRIES_URL)
+    const matches = (payload.entries ?? [])
+        .filter((entry) => getFirstStringValue(entry["38"]) === normalizedPoNumber)
+        .sort((left, right) => {
+            const leftDate = new Date(getFirstStringValue(left["1"])).getTime()
+            const rightDate = new Date(getFirstStringValue(right["1"])).getTime()
+            return (Number.isFinite(rightDate) ? rightDate : 0) - (Number.isFinite(leftDate) ? leftDate : 0)
+        })
+
+    const bestMatch = matches[0]
+    if (!bestMatch) return null
+
+    const emailBc = getFirstStringValue(bestMatch["50"])
+    const picBc = getFirstStringValue(bestMatch["49"])
+    const recipientEmail = isEmailLike(emailBc) ? emailBc : isEmailLike(picBc) ? picBc : ""
+
+    if (!recipientEmail) return null
+
+    return {
+        recipientEmail,
+        picName: picBc || emailBc || "PIC Sales",
+        prNumber: getFirstStringValue(bestMatch["18"]) || "-",
+    }
 }
 
 function buildGoodReceiveManualNotificationContent(params: {
@@ -607,6 +679,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
         revalidatePath("/dashboard/good-receive-manual")
         revalidatePath("/dashboard/stocks")
         revalidatePath("/dashboard/stock-movements")
+        revalidatePath("/dashboard/epr-integrasi")
 
         let notificationResult: { sent: boolean; reason?: string; recipientCount?: number } | null = null
         if (notifyRoles.length > 0 || notifyUserIds.length > 0) {
@@ -702,7 +775,93 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
             }
         }
 
-        return { success: true, notification: notificationResult }
+        let salesPicNotificationResult: { sent: boolean; reason?: string; recipient?: string } | null = null
+        try {
+            const eprRecipient = await findEprRecipientByPoNumber(notificationPayload.poNumber)
+
+            if (!eprRecipient) {
+                salesPicNotificationResult = {
+                    sent: false,
+                    reason: "PIC Sales EPR untuk PO ini tidak ditemukan",
+                }
+            } else {
+                const receiveDateText = new Date(notificationPayload.receiveDate).toLocaleDateString("id-ID", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                })
+                const actionUrl = toCanonicalAppUrl(`/dashboard/epr-integrasi?search=${encodeURIComponent(notificationPayload.poNumber)}`)
+                const subject = `GR Manual sudah dibuat untuk PO ${notificationPayload.poNumber}`
+                const safePicName = escapeHtml(eprRecipient.picName)
+                const safePoNumber = escapeHtml(notificationPayload.poNumber)
+                const safeSupplier = escapeHtml(notificationPayload.supplier)
+                const safeReceiveDate = escapeHtml(receiveDateText)
+                const safeDeliveryType = escapeHtml(notificationPayload.deliveryType)
+                const safeCreatedBy = escapeHtml(session.user.name?.trim() || session.user.email || "System")
+                const safePrNumber = escapeHtml(eprRecipient.prNumber)
+                const safeActionUrl = escapeHtml(actionUrl)
+
+                const html = `
+                    <p>Halo ${safePicName},</p>
+                    <p>GR Manual untuk PO <strong>${safePoNumber}</strong> sudah dibuat.</p>
+                    <table style="border-collapse:collapse;margin:16px 0;">
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>PR No</strong></td><td style="padding:4px 0;">${safePrNumber}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>PO Number</strong></td><td style="padding:4px 0;">${safePoNumber}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>Supplier</strong></td><td style="padding:4px 0;">${safeSupplier}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>Receive Date</strong></td><td style="padding:4px 0;">${safeReceiveDate}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>Delivery Type</strong></td><td style="padding:4px 0;">${safeDeliveryType}</td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;"><strong>Dibuat Oleh</strong></td><td style="padding:4px 0;">${safeCreatedBy}</td></tr>
+                    </table>
+                    <p><a href="${safeActionUrl}" target="_blank" rel="noopener noreferrer">Buka EPR Integrasi untuk PO ini</a></p>
+                `
+                const text = [
+                    `Halo ${eprRecipient.picName},`,
+                    "",
+                    `GR Manual untuk PO ${notificationPayload.poNumber} sudah dibuat.`,
+                    `PR No: ${eprRecipient.prNumber}`,
+                    `PO Number: ${notificationPayload.poNumber}`,
+                    `Supplier: ${notificationPayload.supplier}`,
+                    `Receive Date: ${receiveDateText}`,
+                    `Delivery Type: ${notificationPayload.deliveryType}`,
+                    `Dibuat Oleh: ${session.user.name?.trim() || session.user.email || "System"}`,
+                    "",
+                    `Buka EPR Integrasi: ${actionUrl}`,
+                ].join("\n")
+
+                const notificationSendResult = await sendLoggedNotificationMessage({
+                    to: eprRecipient.recipientEmail,
+                    subject,
+                    html,
+                    text,
+                    channels: ["email", "push"],
+                    logMeta: {
+                        templateCode: "good-receive-manual-sales-pic",
+                        templateName: "Good Receive Manual Sales PIC Notification",
+                    },
+                })
+
+                if (!notificationSendResult.success) {
+                    salesPicNotificationResult = {
+                        sent: false,
+                        reason: notificationSendResult.error || "Gagal mengirim notifikasi ke PIC Sales",
+                        recipient: eprRecipient.recipientEmail,
+                    }
+                } else {
+                    salesPicNotificationResult = {
+                        sent: true,
+                        recipient: eprRecipient.recipientEmail,
+                    }
+                }
+            }
+        } catch (salesPicNotificationError) {
+            console.error("GR manual sales PIC notification error:", salesPicNotificationError)
+            salesPicNotificationResult = {
+                sent: false,
+                reason: "Terjadi error saat mengirim notifikasi PIC Sales",
+            }
+        }
+
+        return { success: true, notification: notificationResult, salesPicNotification: salesPicNotificationResult }
     } catch (error) {
         console.error("Error creating manual good receive:", error)
         return { success: false, error: "Failed to create good receive record" }
