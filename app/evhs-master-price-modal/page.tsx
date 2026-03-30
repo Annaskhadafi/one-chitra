@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { EvhsMasterPriceTable } from "@/app/dashboard/evhs/_components/evhs-master-price-table"
 import { Badge } from "@/components/ui/badge"
+import { Providers } from "@/components/providers"
 import { Boxes, Search, ShieldCheck } from "lucide-react"
 
 export const metadata = {
@@ -61,7 +62,9 @@ export default async function EvhsMasterPriceModalPage() {
                 </section>
 
                 <div className="mt-5 flex-1 overflow-hidden">
-                    <EvhsMasterPriceTable warehouses={warehouses} />
+                    <Providers>
+                        <EvhsMasterPriceTable warehouses={warehouses} />
+                    </Providers>
                 </div>
             </div>
         </main>
