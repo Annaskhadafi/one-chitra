@@ -196,6 +196,7 @@ async function extractVendorQuotationOcr(fileBuffer: Buffer, filename: string): 
 }
 
 export async function POST(req: NextRequest) {
+    let trackedQuotationId: number | null = null
     try {
         const body = await req.json().catch(() => null) as { fileUrl?: string; eprEntryId?: string; userId?: string } | null
         if (!body) {
@@ -205,6 +206,37 @@ export async function POST(req: NextRequest) {
         const { fileUrl, eprEntryId, userId } = body
         if (!fileUrl) {
             return Response.json({ error: "fileUrl wajib diisi" }, { status: 400 })
+        }
+
+        const sanitizedFileUrl = fileUrl.slice(0, 2000)
+        const existingBeforeProcess = await db.query.vendorQuotations.findFirst({
+            where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
+            columns: { id: true },
+        })
+
+        if (existingBeforeProcess) {
+            trackedQuotationId = existingBeforeProcess.id
+            await db
+                .update(vendorQuotations)
+                .set({
+                    eprEntryId: eprEntryId ?? null,
+                    ocrStatus: "processing",
+                    updatedAt: new Date(),
+                })
+                .where(eq(vendorQuotations.id, trackedQuotationId))
+        } else {
+            const [createdPendingRecord] = await db
+                .insert(vendorQuotations)
+                .values({
+                    eprEntryId: eprEntryId ?? null,
+                    fileUrl: sanitizedFileUrl,
+                    fileName: fileUrl.split("/").pop()?.split("?")[0] || "Quotation",
+                    ocrStatus: "processing",
+                    createdBy: userId ?? null,
+                })
+                .returning({ id: vendorQuotations.id })
+
+            trackedQuotationId = createdPendingRecord.id
         }
 
         // Fetch file dari URL
@@ -233,7 +265,7 @@ export async function POST(req: NextRequest) {
         }
 
         const existingRecord = await db.query.vendorQuotations.findFirst({
-            where: eq(vendorQuotations.fileUrl, fileUrl.slice(0, 2000)),
+            where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
             columns: { id: true },
         })
 
@@ -264,7 +296,7 @@ export async function POST(req: NextRequest) {
                 .insert(vendorQuotations)
                 .values({
                     eprEntryId: eprEntryId ?? null,
-                    fileUrl: fileUrl.slice(0, 2000),
+                    fileUrl: sanitizedFileUrl,
                     fileName: filename.slice(0, 500),
                     vendorName: extracted.vendorName?.slice(0, 500) ?? null,
                     quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
@@ -300,6 +332,15 @@ export async function POST(req: NextRequest) {
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR gagal"
+        if (trackedQuotationId) {
+            await db
+                .update(vendorQuotations)
+                .set({
+                    ocrStatus: "failed",
+                    updatedAt: new Date(),
+                })
+                .where(eq(vendorQuotations.id, trackedQuotationId))
+        }
         if (message.includes("MISTRAL_API_KEY is not set")) {
             return Response.json({ error: "Konfigurasi OCR belum lengkap: MISTRAL_API_KEY belum diset" }, { status: 500 })
         }
