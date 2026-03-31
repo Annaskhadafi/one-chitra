@@ -12,6 +12,7 @@ import { deleteFile } from "./upload"
 import { recordStockMovement } from "./stock-movement"
 import { sendDeliveryCreatedNotification, sendDeliveryDeliveredNotification } from "@/lib/delivery-notifications"
 import { formatWarehouseLabel, normalizeSlocFields } from "@/lib/sloc"
+import { recordActivity } from "@/lib/audit"
 import { normalizeCodeValue, normalizeSapDocumentFields } from "@/lib/formatters"
 
 const isConsignmentCategory = (categoryPo: string | null | undefined) => {
@@ -661,7 +662,8 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
         })
 
         if (result.success) {
-            await notifyCreatedDelivery(result.id)
+            await recordActivity({ action: "CREATE", tableName: "deliveries", recordId: result.id.toString(), description: `Membuat Delivery baru ${deliveryNumber}` });
+        await notifyCreatedDelivery(result.id)
         }
 
         if (result.success && result.deliveredNotificationIds.length > 0) {
@@ -943,6 +945,8 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
         if (result.deliveredNotificationIds.length > 0) {
             await notifyDeliveredDeliveries(result.deliveredNotificationIds)
         }
+
+        await recordActivity({ action: "UPDATE", tableName: "deliveries", recordId: id.toString(), description: `Memperbarui Delivery ${data.deliveryNumber || originalDelivery.deliveryNumber}` });
 
         return { success: true }
     } catch (error) {

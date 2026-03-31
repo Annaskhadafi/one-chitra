@@ -7,6 +7,8 @@ export const dashboardRoutePermissionRules: DashboardRoutePermissionRule[] = [
     { prefix: "/dashboard/account", resource: null },
     { prefix: "/dashboard/admin/users", resource: "users" },
     { prefix: "/dashboard/admin/roles", resource: "roles" },
+    { prefix: "/dashboard/admin/operational-activity-log", resource: "admin" },
+    { prefix: "/dashboard/security/audit-logs", resource: "admin" },
     { prefix: "/dashboard/abc-analysis", resource: "abc-analysis" },
     { prefix: "/dashboard/approvals/matrix", resource: "approvals-matrix" },
     { prefix: "/dashboard/approvals", resource: "approvals-inbox" },

@@ -47,7 +47,7 @@ export {
 } from "./quotations";
 export { deliveries, deliveryItems, deliveriesRelations, deliveryItemsRelations } from "./deliveries";
 export { billingRecords } from "./billing";
-export { auditLogs } from "./audit-logs";
+export { auditLogs, auditLogsRelations } from "./audit-logs";
 export { customers } from "./customers";
 export { customerAddresses, customerAddressesRelations } from "./customer-addresses";
 export { coverLetters, coverLetterItems } from "./cover-letters";

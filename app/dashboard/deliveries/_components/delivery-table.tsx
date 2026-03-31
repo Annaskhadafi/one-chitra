@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { DeliveryPreview } from "./delivery-preview"
 import { DeliveryPdfPreview } from "./delivery-pdf-preview"
+import { DeliveryBulkPdf } from "./delivery-bulk-pdf"
 import { DeliveryItemsTable } from "./delivery-items-table"
 import {
     DropdownMenu,
@@ -33,7 +34,6 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
-import { BulkActions } from "@/components/bulk-actions"
 import { DataTableFacetedFilter } from "@/app/dashboard/billing/_components/data-table-faceted-filter"
 import {
     Select,
@@ -54,7 +54,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle } from "lucide-react"
+import { Search, Pencil, Trash2, Truck, CalendarClock, MapPin, User, MoreHorizontal, Eye, FileDown, Download, FileText, RefreshCcw, ChevronUp, ChevronDown, Calendar as CalendarIcon, PackageSearch, AlertTriangle, FileStack } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -246,6 +246,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const [isPdfOpen, setIsPdfOpen] = useState(false)
     const [poPreviewDelivery, setPoPreviewDelivery] = useState<DeliveryWithRelations | null>(null)
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
+    const [isBulkPdfOpen, setIsBulkPdfOpen] = useState(false)
 
     // Supply Chain Filters
     const [selectedYear, setSelectedYear] = useState<string>("all")
@@ -1020,6 +1021,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         },
     })
 
+    const selectedDeliveries = table.getSelectedRowModel().flatRows.map((row) => row.original)
     const rows = table.getRowModel().rows
     const today = useMemo(() => new Date(), [])
     const todayDateKey = toDateKey(today)
@@ -2535,12 +2537,40 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 </div>
 
                 {selectedCount > 0 && (canEdit || canDelete) && (
-                    <BulkActions
-                        selectedCount={selectedCount}
-                        onDelete={canDelete ? handleBulkDelete : () => { }}
-                        onEdit={canEdit ? handleBulkUpdateStatus : () => { }}
-                        entityName="delivery"
-                    />
+                    <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-background p-2 shadow-lg animate-in slide-in-from-bottom-5">
+                        <div className="flex items-center gap-2 px-2">
+                            <span className="font-medium">{selectedCount}</span>
+                            <span className="text-sm text-muted-foreground">delivery(s) selected</span>
+                        </div>
+                        <div className="h-4 w-px bg-border" />
+                        <div className="flex items-center gap-2">
+                            {canEdit && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleBulkUpdateStatus}
+                                >
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Edit
+                                </Button>
+                            )}
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => setIsBulkPdfOpen(true)}
+                        >
+                            <FileStack className="h-4 w-4 mr-2" />
+                            Bulk Download ({selectedCount})
+                        </Button>
+                            {canDelete && (
+                                <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 )}
 
             </>)}
@@ -2572,6 +2602,11 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 onOpenChange={setShowSuccessDialog}
                 title="Status Diperbarui"
                 description={successMessage}
+            />
+            <DeliveryBulkPdf
+                deliveries={selectedDeliveries}
+                open={isBulkPdfOpen}
+                onClose={() => setIsBulkPdfOpen(false)}
             />
         </div>
     )

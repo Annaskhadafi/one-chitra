@@ -188,6 +188,11 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
             cell: ({ row }) => <span className="font-mono text-purple-600 dark:text-purple-400 font-medium">{row.original.deliveryNumber || "-"}</span>,
         },
         {
+            accessorKey: "doSap",
+            header: "DO SAP",
+            cell: ({ row }) => <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">{row.original.doSap || "-"}</span>,
+        },
+        {
             accessorKey: "invoiceNumber",
             header: "No SO Internal",
             cell: ({ row }) => <span className="font-mono text-blue-600 dark:text-blue-400 font-medium">{row.original.invoiceNumber || "-"}</span>,
@@ -277,7 +282,7 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
     }, [globalFilter, statusFilter, categoryFilter, customerFilter, yearFilter, monthFilter])
 
     const handleExport = () => {
-        const headers = ["Product Name", "Product No", "Old Material No", "Category", "Customer", "PO Customer", "Delivery No (DO)", "SO Internal", "Delivery Date", "Status", "Qty Delivered", "Qty Ordered", "Driver/Vendor", "Vehicle", "Warehouse"]
+        const headers = ["Product Name", "Product No", "Old Material No", "Category", "Customer", "PO Customer", "Delivery No (DO Internal)", "DO SAP", "SO Internal", "Delivery Date", "Status", "Qty Delivered", "Qty Ordered", "Driver/Vendor", "Vehicle", "Warehouse"]
         const csvData = table.getFilteredRowModel().rows.map(row => {
             const item = row.original
             const date = item.deliveryDate || item.scheduledDate
@@ -289,6 +294,7 @@ export function DeliveryItemsTable({ data }: DeliveryItemsTableProps) {
                 `"${item.customerName || ""}"`,
                 item.customerPo || "",
                 item.deliveryNumber || "",
+                item.doSap || "",
                 item.invoiceNumber || "",
                 date ? new Date(date).toLocaleDateString("id-ID") : "",
                 item.status,

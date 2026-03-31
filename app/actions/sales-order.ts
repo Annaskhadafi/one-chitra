@@ -10,6 +10,7 @@ import { checkPermission, getAuthenticatedSession } from "@/lib/rbac"
 import { deleteFile } from "./upload"
 import { sendSalesOrderCreatedNotification } from "@/lib/delivery-notifications"
 import { sendEmail } from "@/lib/email"
+import { recordActivity } from "@/lib/audit"
 
 let hasSalesPersonColumnCache: boolean | null = null
 type SalesPersonRecord = typeof user.$inferSelect
@@ -468,6 +469,14 @@ export async function createSalesOrder(data: z.infer<typeof salesOrderSchema>) {
             revalidatePath("/dashboard/deliveries")
             revalidatePath("/dashboard/deliveries/create")
             revalidatePath("/dashboard/stock-transfers")
+            
+            await recordActivity({
+                action: "CREATE",
+                tableName: "sales_orders",
+                recordId: newOrder.id.toString(),
+                description: `Membuat Sales Order baru ${newOrder.invoiceNumber}`,
+            })
+
             return { success: true, id: newOrder.id }
         })
 
@@ -674,6 +683,15 @@ export async function updateSalesOrder(id: number, data: z.infer<typeof salesOrd
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")
             revalidatePath("/dashboard/deliveries/create")
+            
+
+            await recordActivity({
+                action: "UPDATE",
+                tableName: "sales_orders",
+                recordId: id.toString(),
+                description: `Memperbarui Sales Order ${data.invoiceNumber}`,
+            })
+
             return { success: true }
         })
     } catch (error) {
@@ -802,6 +820,13 @@ export async function deleteSalesOrder(id: number) {
             // 4. Final Deletion
             await tx.delete(salesOrderItems).where(eq(salesOrderItems.salesOrderId, id))
             await tx.delete(salesOrders).where(eq(salesOrders.id, id))
+
+            await recordActivity({
+                action: "DELETE",
+                tableName: "sales_orders",
+                recordId: id.toString(),
+                description: `Menghapus Sales Order ${order.invoiceNumber}`,
+            })
 
             revalidatePath("/dashboard/sales-orders")
             revalidatePath("/dashboard/deliveries")

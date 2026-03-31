@@ -5,7 +5,7 @@ import { user, session as sessionTable } from "@/db/schema/auth"
 import { roles, permissions, rolePermissions } from "@/db/schema"
 import { auditLogs } from "@/db/schema/audit-logs"
 import { userWarehouseAccess } from "@/db/schema/user-warehouse-access"
-import { eq, desc, and, gte, lte, ilike, sql, count } from "drizzle-orm"
+import { eq, desc, and, gte, lte, ilike, sql, count, or } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { getAuthenticatedSession } from "@/lib/rbac"
@@ -505,7 +505,7 @@ export async function getAuditLogs(params: {
     from?: Date
     to?: Date
 }) {
-    await getAuthenticatedSession("security", "view")
+    await getAuthenticatedSession("admin", "view")
 
     const { page = 1, pageSize = 50, userId, action, from, to } = params
 
@@ -541,6 +541,71 @@ export async function getAuditLogs(params: {
 
     return {
         logs,
+        total: total.count,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total.count / pageSize),
+    }
+}
+
+export async function getOperationalActivityLogs(params: {
+    page?: number
+    pageSize?: number
+    userId?: string
+    action?: string
+}) {
+    await getAuthenticatedSession("admin", "view")
+
+    const { page = 1, pageSize = 50, userId, action } = params
+    const commonConditions = []
+    if (userId) commonConditions.push(eq(auditLogs.userId, userId))
+    if (action) commonConditions.push(ilike(auditLogs.action, `%${action}%`))
+
+    const selectShape = {
+        id: auditLogs.id,
+        userId: auditLogs.userId,
+        action: auditLogs.action,
+        tableName: sql<string | null>`null`,
+        recordId: sql<string | null>`null`,
+        description: auditLogs.description,
+        createdAt: auditLogs.createdAt,
+        userName: user.name,
+        userEmail: user.email,
+    }
+
+    const fallbackWhereClause = and(
+        or(
+            ilike(auditLogs.description, "%sales order%"),
+            ilike(auditLogs.description, "%delivery%"),
+            ilike(auditLogs.description, "%do monitoring%"),
+            ilike(auditLogs.description, "% do %")
+        )!,
+        ...commonConditions
+    )
+
+    const [total] = await db
+        .select({ count: count() })
+        .from(auditLogs)
+        .where(fallbackWhereClause)
+
+    const logs = await db
+        .select(selectShape)
+        .from(auditLogs)
+        .leftJoin(user, eq(auditLogs.userId, user.id))
+        .where(fallbackWhereClause)
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize)
+
+    return {
+        logs: logs.map((log) => ({
+            ...log,
+            tableName:
+                log.tableName ??
+                (/sales order/i.test(log.description ?? "")
+                    ? "sales_orders"
+                    : "deliveries"),
+        })),
         total: total.count,
         page,
         pageSize,

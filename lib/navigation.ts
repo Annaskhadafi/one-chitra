@@ -430,11 +430,6 @@ export const navigationConfig: NavSection[] = [
                         resource: "security",
                     },
                     {
-                        title: "Audit Logs",
-                        url: "/dashboard/security/audit-logs",
-                        resource: "security",
-                    },
-                    {
                         title: "Sessions",
                         url: "/dashboard/security/sessions",
                         resource: "security",
@@ -468,6 +463,11 @@ export const navigationConfig: NavSection[] = [
                     {
                         title: "Navbar Settings",
                         url: "/dashboard/settings/navbar",
+                        resource: "admin",
+                    },
+                    {
+                        title: "Operational Activity Log",
+                        url: "/dashboard/admin/operational-activity-log",
                         resource: "admin",
                     },
                 ],
