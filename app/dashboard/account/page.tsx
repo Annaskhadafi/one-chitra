@@ -25,8 +25,10 @@ export default async function AccountPage() {
 
             <div className="grid gap-6">
                 <ProfileForm user={{
+                    id: user.id,
                     name: user.name,
                     email: user.email,
+                    image: dbUser?.image ?? user.image ?? null,
                     department: dbUser?.department ?? "",
                     jobTitle: dbUser?.jobTitle ?? "",
                 }} />

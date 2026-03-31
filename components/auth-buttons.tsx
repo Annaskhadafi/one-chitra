@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAvatarInitials, getGeneratedAvatarDataUri } from "@/lib/avatar";
 
 export function AuthButtons() {
   const { data: session, isPending } = useSession();
@@ -45,20 +46,20 @@ export function AuthButtons() {
 
   if (session?.user) {
     const user = session.user;
-    const initials = user.name
-      ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-      : user.email?.[0]?.toUpperCase() || "U";
+    const initials = getAvatarInitials(user.name, user.email);
+    const avatarSrc = getGeneratedAvatarDataUri({
+      image: user.image,
+      name: user.name,
+      email: user.email,
+      seed: user.id ?? user.email,
+    });
 
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user.image || undefined} alt={user.name || "User"} />
+              <AvatarImage src={avatarSrc} alt={user.name || "User"} />
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
           </Button>

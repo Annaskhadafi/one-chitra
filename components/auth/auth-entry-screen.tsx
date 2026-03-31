@@ -215,14 +215,14 @@ export function AuthEntryScreen() {
 
     if (isSessionPending || session?.user) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-100">
+            <div suppressHydrationWarning className="flex min-h-screen items-center justify-center bg-slate-100">
                 <Loader2 className="h-8 w-8 animate-spin text-[#5233FF]" />
             </div>
         )
     }
 
     return (
-        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-100 p-4 font-sans text-gray-900">
+        <div suppressHydrationWarning className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-100 p-4 font-sans text-gray-900">
             <div
                 ref={vantaRef}
                 className={`absolute inset-0 transition-opacity duration-700 ${isVantaReady ? "opacity-100" : "opacity-0"}`}

@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { getAvatarInitials, getGeneratedAvatarDataUri } from "@/lib/avatar"
 
 type MentionResult = { type: "quotation" | "sales-order" | "delivery"; id: string; label: string; sublabel: string; url: string }
 type SearchResult = { id: number; content: string; createdAt: string; senderName: string }
@@ -62,6 +63,12 @@ const getAttachmentUrl = (attachment: Pick<ChatAttachment, "kind" | "url"> & { p
     attachment.previewUrl || resolveUploadDocumentUrl(attachment.url) || attachment.url || null
 const isVisualAttachment = (attachment: Pick<ChatAttachment, "kind" | "contentType" | "url" | "name">) =>
     attachment.kind === "image" || attachment.kind === "gif" || isUploadImageFile(attachment.url) || isGifAttachment(attachment)
+const getChatAvatarSrc = (params: {
+    image?: string | null
+    name?: string | null
+    email?: string | null
+    seed?: string | number | null
+}) => getGeneratedAvatarDataUri(params)
 const playIncomingMessageSound = async () => {
     if (typeof window === "undefined") return
 
@@ -174,9 +181,14 @@ function MessageBubble({ msg, isOwn, highlighted, onReply }: { msg: ChatMessage;
     const Icon = msg.mentionType ? MENTION_ICONS[msg.mentionType as keyof typeof MENTION_ICONS] : null
     const color = msg.mentionType ? MENTION_COLORS[msg.mentionType as keyof typeof MENTION_COLORS] : ""
     const url = msg.mentionType === "quotation" ? `/dashboard/quotations/${msg.mentionId}` : msg.mentionType === "sales-order" ? `/dashboard/sales-orders?id=${msg.mentionId}` : msg.mentionType === "delivery" ? `/dashboard/deliveries?id=${msg.mentionId}` : null
+    const avatarSrc = getChatAvatarSrc({
+        image: msg.senderImage,
+        name: msg.senderName,
+        seed: msg.senderId,
+    })
     return (
         <div className={cn("group mb-3 flex gap-2 items-end", isOwn ? "flex-row-reverse" : "flex-row")}>
-            <Avatar className="h-6 w-6 shrink-0"><AvatarImage src={msg.senderImage ?? undefined} /><AvatarFallback className="text-xs">{msg.senderName?.[0]?.toUpperCase()}</AvatarFallback></Avatar>
+            <Avatar className="h-6 w-6 shrink-0"><AvatarImage src={avatarSrc} /><AvatarFallback className="text-xs">{getAvatarInitials(msg.senderName)}</AvatarFallback></Avatar>
             <div className={cn("flex max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
                 {!isOwn ? <p className="ml-1 text-xs text-muted-foreground">{msg.senderName}</p> : null}
                 <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm", isOwn ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted", highlighted && "ring-2 ring-primary/40")}>
@@ -237,8 +249,8 @@ function UserMentionPicker({ query, users, onSelect, onClose }: { query: string;
             {results.map((user) => (
                 <button key={user.userId} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent" onClick={() => onSelect(user)}>
                     <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarImage src={user.image ?? undefined} />
-                        <AvatarFallback className="text-xs">{user.name?.[0]?.toUpperCase()}</AvatarFallback>
+                        <AvatarImage src={getChatAvatarSrc({ image: user.image, name: user.name, email: user.email, seed: user.userId })} />
+                        <AvatarFallback className="text-xs">{getAvatarInitials(user.name, user.email)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{user.name}</p>
@@ -300,7 +312,7 @@ function RoomList({ rooms, currentUserId, filter, selectedRoomId, onFilterChange
                             }}
                         >
                             <div className="flex items-center gap-3">
-                                {room.type === "group" ? <div className={cn("relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full", isSelected ? "bg-white/20" : "bg-gradient-to-br from-fuchsia-100 to-cyan-100")}><Users className={cn("h-4 w-4", isSelected ? "text-white" : "text-fuchsia-600")} />{isUnread && !isSelected ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" /> : null}</div> : <Avatar className={cn("h-9 w-9 shrink-0 ring-2", isSelected ? "ring-white/30" : isUnread ? "ring-rose-200" : "ring-white")}><AvatarImage src={others[0]?.image ?? undefined} /><AvatarFallback>{room.type === "ai-helpdesk" ? "CJ" : others[0]?.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar>}
+                                {room.type === "group" ? <div className={cn("relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full", isSelected ? "bg-white/20" : "bg-gradient-to-br from-fuchsia-100 to-cyan-100")}><Users className={cn("h-4 w-4", isSelected ? "text-white" : "text-fuchsia-600")} />{isUnread && !isSelected ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" /> : null}</div> : <Avatar className={cn("h-9 w-9 shrink-0 ring-2", isSelected ? "ring-white/30" : isUnread ? "ring-rose-200" : "ring-white")}><AvatarImage src={getChatAvatarSrc({ image: others[0]?.image, name: others[0]?.name, email: others[0]?.email, seed: others[0]?.userId })} /><AvatarFallback>{room.type === "ai-helpdesk" ? "CJ" : getAvatarInitials(others[0]?.name, others[0]?.email)}</AvatarFallback></Avatar>}
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-1"><p className={cn("truncate text-sm font-medium", isUnread && !isSelected && "text-slate-900", isSelected && "text-white")}>{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className={cn("h-4 px-1 text-[10px]", isSelected ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-700")}>MAGIC</Badge> : null}{room.isPinned ? <Pin className={cn("h-3 w-3", isSelected ? "text-white" : "text-fuchsia-500")} /> : null}{room.isMuted ? <BellOff className={cn("h-3 w-3", isSelected ? "text-white/80" : "text-muted-foreground")} /> : null}</div>{room.lastMessage ? <p className={cn("text-[10px]", isSelected ? "text-white/80" : isUnread ? "font-semibold text-rose-500" : "text-muted-foreground")}>{time(room.lastMessage.createdAt)}</p> : null}</div>
                                     <div className="flex items-center justify-between gap-2">{room.lastMessage ? <p className={cn("truncate text-xs", isSelected ? "text-white/90" : isUnread ? "font-medium text-slate-700" : "text-muted-foreground")}>{typing ? "Sedang mengetik..." : `${room.lastMessage.senderName}: ${room.lastMessage.content}`}</p> : <p className={cn("text-xs italic", isSelected ? "text-white/80" : "text-muted-foreground")}>{isHelpDeskRoom(room) ? "Tanya cara pakai sistem atau modul" : "Belum ada pesan"}</p>}{room.unreadCount > 0 ? <Badge className={cn("h-5 min-w-5 rounded-full px-1.5 text-[10px] shadow-sm", isSelected ? "bg-white text-rose-500" : "bg-gradient-to-r from-rose-500 to-orange-400 text-white")}>{room.unreadCount}</Badge> : null}</div>
@@ -372,7 +384,7 @@ function NewChatView({ users, loadingUsers, loadError, onRetryLoadUsers, onRoomC
                 {loadingUsers ? <div className="flex h-32 items-center justify-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div> : null}
                 {!loadingUsers && loadError ? <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-muted-foreground"><p className="text-sm">{loadError}</p><Button variant="outline" size="sm" onClick={onRetryLoadUsers}>Coba Lagi</Button></div> : null}
                 {!loadingUsers && !loadError && filtered.length === 0 ? <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-muted-foreground"><p className="text-sm">{users.length === 0 ? "Belum ada user lain yang bisa di-chat" : "User tidak ditemukan"}</p></div> : null}
-                {!loadingUsers && !loadError ? filtered.map((user) => <button key={user.id} type="button" className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-accent/50", selected.has(user.id) && "bg-primary/10")} onClick={() => toggle(user.id)}><Avatar className="h-8 w-8 shrink-0"><AvatarImage src={user.image ?? undefined} /><AvatarFallback className="text-xs">{user.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate text-sm font-medium">{user.name}</p><p className="truncate text-xs text-muted-foreground">{user.email}</p></div></button>) : null}
+                {!loadingUsers && !loadError ? filtered.map((user) => <button key={user.id} type="button" className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-accent/50", selected.has(user.id) && "bg-primary/10")} onClick={() => toggle(user.id)}><Avatar className="h-8 w-8 shrink-0"><AvatarImage src={getChatAvatarSrc({ image: user.image, name: user.name, email: user.email, seed: user.id })} /><AvatarFallback className="text-xs">{getAvatarInitials(user.name, user.email)}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate text-sm font-medium">{user.name}</p><p className="truncate text-xs text-muted-foreground">{user.email}</p></div></button>) : null}
             </ScrollArea>
             <div className="border-t p-3">
                 <Button
@@ -682,7 +694,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             <div className="border-b border-white/60 bg-gradient-to-r from-fuchsia-500 via-rose-500 to-orange-400 text-white">
                 <div className="flex items-center gap-2 p-3">
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-white hover:bg-white/15 hover:text-white" onClick={onBack}><ChevronLeft className="h-4 w-4" /></Button>
-                    <div className="flex -space-x-1.5">{others.slice(0, 2).map((member) => <Avatar key={member.userId} className="h-7 w-7 border-2 border-background"><AvatarImage src={member.image ?? undefined} /><AvatarFallback className="text-xs">{member.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar>)}</div>
+                    <div className="flex -space-x-1.5">{others.slice(0, 2).map((member) => <Avatar key={member.userId} className="h-7 w-7 border-2 border-background"><AvatarImage src={getChatAvatarSrc({ image: member.image, name: member.name, email: member.email, seed: member.userId })} /><AvatarFallback className="text-xs">{getAvatarInitials(member.name, member.email)}</AvatarFallback></Avatar>)}</div>
                     <div className="min-w-0"><div className="flex items-center gap-1"><p className="truncate text-sm font-semibold">{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className="h-4 bg-white/20 px-1 text-[10px] text-white">Help Desk MAGIC</Badge> : null}</div><p className="truncate text-xs text-white/80">{status}</p></div>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => togglePreference("isPinned", !room.isPinned)}>{room.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}</Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => togglePreference("isMuted", !room.isMuted)}>{room.isMuted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}</Button>

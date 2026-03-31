@@ -30,6 +30,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { getAvatarInitials, getGeneratedAvatarDataUri } from "@/lib/avatar"
 
 export function NavUser({
   user,
@@ -57,8 +58,14 @@ export function NavUser({
   }
 
   const userInitials = user.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase()
-    : user.email[0].toUpperCase()
+    ? getAvatarInitials(user.name, user.email)
+    : getAvatarInitials(undefined, user.email)
+  const avatarSrc = getGeneratedAvatarDataUri({
+    image: user.avatar,
+    name: user.name,
+    email: user.email,
+    seed: user.email,
+  })
 
   return (
     <SidebarMenu>
@@ -71,7 +78,7 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={avatarSrc} alt={user.name} />
                 <AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -92,7 +99,7 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  <AvatarImage src={avatarSrc} alt={user.name} />
                   <AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">

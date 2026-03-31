@@ -231,6 +231,7 @@ export async function updateProfile(data: { name: string; image?: string; depart
             .where(eq(user.id, session.user.id))
 
         revalidatePath('/dashboard/account')
+        revalidatePath('/dashboard')
         return { success: true }
     } catch (error) {
         console.error("Failed to update profile:", error)
