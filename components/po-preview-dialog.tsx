@@ -3,6 +3,7 @@
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -33,6 +34,9 @@ export function PoPreviewDialog({
             <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100vw-2rem)] sm:max-w-7xl">
                 <DialogHeader className="flex flex-col gap-3 border-b px-4 py-4 sm:px-6">
                     <DialogTitle className="pr-10 text-left text-base sm:text-lg">{title}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Preview the attached customer PO document and open or edit the related sales order.
+                    </DialogDescription>
                     <div className="mr-8 flex flex-wrap items-center gap-2">
                         {editUrl && (
                             <Link href={editUrl}>

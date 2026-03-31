@@ -3,6 +3,7 @@
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -22,6 +23,9 @@ export function EvhsMasterPriceModal({ open, onOpenChange }: EvhsMasterPriceModa
                         <Package className="h-6 w-6" />
                         Master Price CK
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Embedded master price CK reference in a fullscreen dialog.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 bg-muted/10">

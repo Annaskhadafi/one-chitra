@@ -418,7 +418,24 @@ function downloadExcelFile(rows: Record<string, string | number>[], filename: st
     return true
 }
 
-export function QuotationTable({ data: initialData }: QuotationTableProps) {
+/**
+ * Wrapper component to avoid "No QueryClient set" error during SSR.
+ */
+export function QuotationTable(props: QuotationTableProps) {
+    const mounted = useMounted()
+
+    if (!mounted) {
+        return (
+            <div className="space-y-6">
+                <div className="h-64 rounded-md border bg-muted/20 animate-pulse" />
+            </div>
+        )
+    }
+
+    return <QuotationTableInner {...props} />
+}
+
+function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()

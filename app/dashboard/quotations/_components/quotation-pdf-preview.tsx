@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -100,21 +101,8 @@ function formatDate(date: Date) {
     })
 }
 
-function getItemTitle(item: QuotationPdfData["items"][number]) {
+function getItemLabel(item: QuotationPdfData["items"][number]) {
     return item.description || item.product?.materialDescription || item.product?.materialNumber || "Unnamed item"
-}
-
-function getItemSubtitle(item: QuotationPdfData["items"][number]) {
-    return item.longDescription || item.product?.materialNumber || ""
-}
-
-function buildMultilineText(value: string | null | undefined, fallback?: string) {
-    const lines = (value || fallback || "")
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-
-    return lines.length > 0 ? lines : fallback ? [fallback] : []
 }
 
 export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPreviewProps) {
@@ -137,20 +125,12 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
 
     const taxAmount = Number(quotation.tax)
     const grandTotal = itemsSubtotal - discountAmount + taxAmount + Number(quotation.shipping)
-    const senderAddressLines = buildMultilineText(
-        quotation.address,
-        "Gedung TMT 1, Lt. 5, Jl. Cilandak KKO No. 1, Jakarta 12560 Indonesia",
-    )
     const recipientAddressLines = [
         quotation.customer.address1,
         quotation.customer.address2,
         quotation.customer.address3,
-        quotation.customer.address4,
-        quotation.customer.address5,
     ].filter(Boolean)
-    const termsLines = buildMultilineText(quotation.termsConditions, "Payment Terms: 30 days after Date Invoice")
-    const noteLines = buildMultilineText(quotation.clientNote)
-    const visibleAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf && attachment.kind !== "customer_po") ?? []
+    const visibleAttachments = quotation.attachments?.filter((attachment) => attachment.includeInPdf) ?? []
 
     useEffect(() => {
         if (!open) {
@@ -268,6 +248,9 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="max-h-[95vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto bg-slate-50 p-0 sm:max-w-7xl">
                 <DialogHeader className="no-print sticky top-0 z-10 border-b bg-background px-4 py-4 sm:px-6">
+                    <DialogDescription className="sr-only">
+                        Preview quotation PDF with the same layout used by the downloadable file.
+                    </DialogDescription>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <DialogTitle className="pr-10 text-base sm:text-lg">Quotation Preview</DialogTitle>
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -298,118 +281,114 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 width: isMobilePreview ? `${A4_PAGE_WIDTH}px` : undefined,
                                 minHeight: `${A4_PAGE_HEIGHT}px`,
                                 transform: isMobilePreview ? `scale(${mobileScale})` : undefined,
-                                background: "linear-gradient(180deg, #ffffff 0%, #fffdfa 100%)",
+                                background: "#ffffff",
                                 color: "#163153",
                                 boxShadow: isMobilePreview ? "none" : "0 25px 50px -12px rgba(15, 23, 42, 0.18)",
-                                border: isMobilePreview ? "none" : "1px solid #dbe5f2",
+                                border: isMobilePreview ? "none" : "1px solid #e2e8f0",
                                 fontFamily: "Arial, Helvetica, sans-serif",
                                 lineHeight: "1.35",
                                 position: "relative",
                                 overflow: "hidden",
                             }}
                         >
-                            <div
-                                className="pointer-events-none absolute inset-0"
-                                style={{
-                                    backgroundImage:
-                                        "radial-gradient(circle at top left, rgba(35,115,197,0.05), transparent 30%), radial-gradient(circle at bottom right, rgba(36,173,197,0.08), transparent 22%)",
-                                }}
-                            />
                             <img
-                                src="/brand/Chitra-Paratama.png"
+                                src="/ChitraParatama_Stationery_Letterhead_jkt.jpg"
                                 alt=""
-                                className="pointer-events-none absolute bottom-10 right-[-34mm] select-none"
-                                style={{ width: "120mm", opacity: 0.08, transform: "rotate(-12deg)" }}
+                                className="pointer-events-none absolute inset-0 h-full w-full select-none"
+                                style={{ objectFit: "cover" }}
                             />
-
-                            <div className="relative z-10 px-[14mm] pb-[16mm] pt-[12mm]">
+                            <div className="relative z-10 px-[15mm] pb-[22mm] pt-[14mm]">
                                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12mm", alignItems: "flex-start" }}>
-                                    <div style={{ width: "84mm" }}>
-                                        <img src="/brand/Chitra-Paratama.png" alt="Chitra Paratama" style={{ width: "42mm", marginBottom: "7mm" }} />
-                                        <div style={{ fontSize: "8.6pt", fontWeight: 800, color: "#0f1c38", marginBottom: "2.5mm" }}>PT Chitra Paratama</div>
-                                        <div style={{ fontSize: "7.5pt", color: "#54657e", maxWidth: "65mm" }}>
-                                            {senderAddressLines.map((line, index) => (
-                                                <div key={`sender-${index}`}>{line}</div>
-                                            ))}
+                                    <div style={{ width: "92mm" }}>
+                                        <div style={{ height: "28mm" }} />
+                                        <div style={{ fontSize: "14pt", fontWeight: 700, color: "#0f172a", marginBottom: "2.5mm" }}>
+                                            PT Chitra Paratama
+                                        </div>
+                                        <div style={{ fontSize: "9pt", color: "#64748b", maxWidth: "82mm", whiteSpace: "pre-line", lineHeight: 1.35 }}>
+                                            {quotation.address || "Jl. Amd No.69 Karang Joang Kec. Balikpapan Utara\nKota Balikpapan Kalimantan Timur 7612"}
                                         </div>
                                     </div>
 
-                                    <div style={{ width: "78mm", textAlign: "right" }}>
-                                        <div style={{ fontSize: "23pt", fontWeight: 800, color: "#2d5bb2", letterSpacing: "-0.02em", marginBottom: "1.5mm" }}>
+                                    <div style={{ width: "74mm", textAlign: "right" }}>
+                                        <div style={{ fontSize: "24pt", fontWeight: 700, color: "#2563eb", marginBottom: "2mm" }}>
                                             QUOTATION
                                         </div>
-                                        <div style={{ fontSize: "7.4pt", color: "#41546f", fontWeight: 700, marginBottom: "10mm" }}>
-                                            {quotation.quotationNumber || "DRAFT"} | Rev.{quotation.currentRevision ?? 0}
-                                        </div>
-                                        <div style={{ fontSize: "7pt", color: "#3d5b86", fontWeight: 700, marginBottom: "1mm" }}>TO</div>
-                                        <div style={{ fontSize: "8pt", color: "#16284c", fontWeight: 800, textTransform: "uppercase", marginBottom: "1mm" }}>
-                                            {quotation.customer.name}
-                                        </div>
-                                        <div style={{ fontSize: "7.2pt", color: "#62738a", textTransform: "uppercase" }}>
-                                            {recipientAddressLines.length > 0 ? (
-                                                recipientAddressLines.map((line, index) => <div key={`recipient-${index}`}>{line}</div>)
-                                            ) : (
-                                                <div>-</div>
-                                            )}
+                                        <div style={{ fontSize: "11pt", color: "#334155", fontWeight: 700, marginBottom: "7mm" }}>
+                                            {quotation.quotationNumber || "DRAFT"}{quotation.currentRevision ? ` | Rev.${quotation.currentRevision}` : ""}
                                         </div>
                                     </div>
                                 </div>
 
+                                <div style={{ marginTop: "4mm", borderTop: "1px solid #2563eb" }} />
+
                                 <div
                                     style={{
-                                        marginTop: "6mm",
+                                        marginTop: "8mm",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "2mm",
+                                        background: "#f8fafc",
+                                        padding: "5mm",
                                         display: "grid",
                                         gridTemplateColumns: "1fr 1fr",
-                                        borderTop: "1.2px solid #87a4da",
-                                        borderBottom: "1px solid #dce6f4",
-                                        background: "rgba(240, 244, 251, 0.95)",
+                                        columnGap: "8mm",
                                     }}
                                 >
-                                    <div style={{ padding: "3mm 4mm", borderRight: "1px solid #dce6f4" }}>
-                                        <div style={{ display: "grid", gridTemplateColumns: "24mm 1fr", rowGap: "1.3mm", fontSize: "7.1pt" }}>
-                                            <div style={{ color: "#537095", fontWeight: 700 }}>QUO DATE:</div>
-                                            <div style={{ color: "#0f1c38", fontWeight: 700 }}>{formatDate(quotation.quotationDate)}</div>
-                                            <div style={{ color: "#537095", fontWeight: 700 }}>VALIDITY QUOTE:</div>
-                                            <div style={{ color: "#0f1c38", fontWeight: 700 }}>{quotation.validUntil ? formatDate(quotation.validUntil) : "-"}</div>
+                                    <div style={{ borderRight: "1px solid #e2e8f0", paddingRight: "6mm" }}>
+                                        <div style={{ display: "grid", gridTemplateColumns: "24mm 1fr", rowGap: "2.2mm", fontSize: "8pt" }}>
+                                            <div style={{ color: "#64748b", fontWeight: 700 }}>QUO DATE:</div>
+                                            <div style={{ color: "#0f172a", fontWeight: 700 }}>{formatDate(quotation.quotationDate)}</div>
+                                            <div style={{ color: "#64748b", fontWeight: 700 }}>VALIDITY QUOTE:</div>
+                                            <div style={{ color: "#0f172a", fontWeight: 700 }}>{quotation.validUntil ? formatDate(quotation.validUntil) : "-"}</div>
+                                            <div style={{ color: "#64748b", fontWeight: 700 }}>FROM:</div>
+                                            <div style={{ color: "#0f172a", fontWeight: 700 }}>{quotation.salesPerson?.name || "-"}</div>
+                                            <div style={{ color: "#64748b", fontWeight: 700 }}>ATTN:</div>
+                                            <div style={{ color: "#0f172a", fontWeight: 700 }}>{quotation.attn || "-"}</div>
                                         </div>
                                     </div>
-                                    <div style={{ padding: "3mm 4mm" }}>
-                                        <div style={{ display: "grid", gridTemplateColumns: "14mm 1fr", rowGap: "1.3mm", fontSize: "7.1pt" }}>
-                                            <div style={{ color: "#537095", fontWeight: 700 }}>FROM:</div>
-                                            <div style={{ color: "#0f1c38", fontWeight: 700 }}>{quotation.salesPerson?.name || "-"}</div>
-                                            <div style={{ color: "#537095", fontWeight: 700 }}>ATTN:</div>
-                                            <div style={{ color: "#0f1c38", fontWeight: 700 }}>{quotation.attn || "-"}</div>
+
+                                    <div style={{ textAlign: "right" }}>
+                                        <div style={{ fontSize: "8pt", color: "#2563eb", fontWeight: 700, marginBottom: "2mm" }}>TO</div>
+                                        <div style={{ fontSize: "10pt", color: "#0f172a", fontWeight: 700, marginBottom: "2mm" }}>
+                                            <div style={{ textTransform: "uppercase" }}>{quotation.customer.name}</div>
+                                        </div>
+                                        <div style={{ fontSize: "9pt", color: "#475569", whiteSpace: "pre-line" }}>
+                                            {recipientAddressLines.length > 0 ? (
+                                                recipientAddressLines.join("\n")
+                                            ) : (
+                                                "-"
+                                            )}
                                         </div>
                                     </div>
                                 </div>
 
                                 <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "5mm" }}>
                                     <thead>
-                                        <tr style={{ background: "#36579d", color: "#ffffff" }}>
-                                            <th style={{ width: "10mm", padding: "3.4mm 2.5mm", fontSize: "7pt", fontWeight: 700, textAlign: "center", borderRight: "1px solid rgba(255,255,255,0.15)" }}>#</th>
-                                            <th style={{ padding: "3.4mm 3mm", fontSize: "7pt", fontWeight: 700, textAlign: "left", borderRight: "1px solid rgba(255,255,255,0.15)" }}>ITEM</th>
-                                            <th style={{ width: "16mm", padding: "3.4mm 2mm", fontSize: "7pt", fontWeight: 700, textAlign: "center", borderRight: "1px solid rgba(255,255,255,0.15)" }}>QTY</th>
-                                            <th style={{ width: "28mm", padding: "3.4mm 3mm", fontSize: "7pt", fontWeight: 700, textAlign: "right", borderRight: "1px solid rgba(255,255,255,0.15)" }}>PRICE</th>
-                                            <th style={{ width: "30mm", padding: "3.4mm 3mm", fontSize: "7pt", fontWeight: 700, textAlign: "right" }}>AMOUNT</th>
+                                        <tr style={{ background: "#3b5998", color: "#ffffff" }}>
+                                            <th style={{ width: "15mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>#</th>
+                                            <th style={{ padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "left" }}>ITEM</th>
+                                            <th style={{ width: "18mm", padding: "3.5mm 3mm", fontSize: "9pt", fontWeight: 700, textAlign: "center" }}>QTY</th>
+                                            <th style={{ width: "30mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>PRICE</th>
+                                            <th style={{ width: "35mm", padding: "3.5mm 4mm", fontSize: "9pt", fontWeight: 700, textAlign: "right" }}>AMOUNT</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {quotation.items.map((item, index) => {
                                             const lineAmount = item.quantity * Number(item.unitPrice)
-                                            const subtitle = getItemSubtitle(item)
 
                                             return (
-                                                <tr key={item.id} style={{ verticalAlign: "top" }}>
-                                                    <td style={{ padding: "4.2mm 2.5mm", fontSize: "7.4pt", color: "#4e6385", textAlign: "center" }}>{index + 1}</td>
-                                                    <td style={{ padding: "4.2mm 3mm", fontSize: "7.5pt", color: "#163153" }}>
-                                                        <div style={{ fontWeight: 700, marginBottom: subtitle ? "1mm" : 0 }}>{getItemTitle(item)}</div>
-                                                        {subtitle ? (
-                                                            <div style={{ fontStyle: "italic", color: "#6a7d95", fontSize: "6.8pt", whiteSpace: "pre-wrap" }}>{subtitle}</div>
+                                                <tr key={item.id} style={{ verticalAlign: "top", background: index % 2 === 1 ? "#f8fafc" : "#ffffff" }}>
+                                                    <td style={{ padding: "5mm 3mm", fontSize: "9pt", color: "#475569", textAlign: "center" }}>{index + 1}</td>
+                                                    <td style={{ padding: "5mm 4mm", fontSize: "9pt", color: "#0f172a" }}>
+                                                        <div style={{ fontWeight: 700 }}>{getItemLabel(item)}</div>
+                                                        {item.longDescription ? (
+                                                            <div style={{ fontStyle: "italic", color: "#64748b", fontSize: "8.5pt", marginTop: "2mm", whiteSpace: "pre-wrap" }}>
+                                                                {item.longDescription}
+                                                            </div>
                                                         ) : null}
                                                     </td>
-                                                    <td style={{ padding: "4.2mm 2mm", fontSize: "7.5pt", color: "#163153", textAlign: "center" }}>{item.quantity}</td>
-                                                    <td style={{ padding: "4.2mm 3mm", fontSize: "7.5pt", color: "#163153", textAlign: "right" }}>{formatNumber(Number(item.unitPrice))}</td>
-                                                    <td style={{ padding: "4.2mm 3mm", fontSize: "7.5pt", color: "#163153", textAlign: "right" }}>{formatNumber(lineAmount)}</td>
+                                                    <td style={{ padding: "5mm 3mm", fontSize: "9pt", color: "#0f172a", textAlign: "center" }}>{item.quantity}</td>
+                                                    <td style={{ padding: "5mm 4mm", fontSize: "9pt", color: "#0f172a", textAlign: "right" }}>{formatNumber(Number(item.unitPrice))}</td>
+                                                    <td style={{ padding: "5mm 4mm", fontSize: "9pt", color: "#0f172a", textAlign: "right" }}>{formatNumber(lineAmount)}</td>
                                                 </tr>
                                             )
                                         })}
@@ -417,101 +396,82 @@ export function QuotationPdfPreview({ quotation, open, onClose }: QuotationPdfPr
                                 </table>
 
                                 <div style={{ marginTop: "8mm", display: "flex", justifyContent: "flex-end" }}>
-                                    <div style={{ width: "62mm" }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8pt", fontWeight: 700, color: "#1d3358", marginBottom: "2.4mm" }}>
+                                    <div style={{ width: "65mm" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10pt", fontWeight: 700, color: "#475569", marginBottom: "3mm" }}>
                                             <span>Sub Total</span>
                                             <span>{formatCurrency(itemsSubtotal, quotation.currency)}</span>
                                         </div>
                                         {discountAmount > 0 ? (
-                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "7.5pt", color: "#516785", marginBottom: "2mm" }}>
-                                                <span>Discount</span>
-                                                <span>-{formatCurrency(discountAmount, quotation.currency)}</span>
+                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10pt", color: "#475569", marginBottom: "3mm" }}>
+                                                <span>Discount {quotation.discountType === "percent" ? `(${quotation.discount}%)` : ""}</span>
+                                                <span style={{ color: "#ef4444" }}>-{formatCurrency(discountAmount, quotation.currency)}</span>
                                             </div>
                                         ) : null}
                                         {taxAmount > 0 ? (
-                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "7.5pt", color: "#516785", marginBottom: "2mm" }}>
-                                                <span>Tax</span>
+                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10pt", color: "#475569", marginBottom: "3mm" }}>
+                                                <span>Tax (PPN)</span>
                                                 <span>{formatCurrency(taxAmount, quotation.currency)}</span>
                                             </div>
                                         ) : null}
                                         <div
                                             style={{
+                                                marginTop: "4mm",
                                                 display: "flex",
                                                 justifyContent: "space-between",
                                                 alignItems: "center",
-                                                background: "#36579d",
+                                                background: "#2563eb",
                                                 color: "#ffffff",
-                                                borderRadius: "8px",
+                                                border: "1px solid #1d4ed8",
+                                                boxShadow: "2px 2px 0 rgba(203,213,225,0.95)",
                                                 padding: "3.2mm 4.5mm",
-                                                boxShadow: "0 6px 16px rgba(54,87,157,0.18)",
-                                                fontSize: "8.8pt",
-                                                fontWeight: 800,
+                                                fontSize: "11pt",
+                                                fontWeight: 700,
                                             }}
                                         >
-                                            <span style={{ letterSpacing: "0.08em" }}>TOTAL</span>
+                                            <span>TOTAL</span>
                                             <span>{formatCurrency(grandTotal, quotation.currency)}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div style={{ marginTop: "12mm", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "10mm" }}>
+                                <div style={{ marginTop: "12mm", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10mm" }}>
                                     <div
                                         style={{
-                                            width: "82mm",
-                                            minHeight: "33mm",
-                                            background: "linear-gradient(135deg, rgba(255,243,230,0.95) 0%, rgba(244,209,248,0.95) 100%)",
-                                            borderRadius: "10px",
+                                            width: "100%",
+                                            maxWidth: "128mm",
+                                            background: "rgba(248,250,252,0.95)",
+                                            border: "1px solid #dde6f0",
                                             padding: "5mm",
-                                            boxShadow: "0 10px 24px rgba(215,162,201,0.18)",
+                                            minHeight: "40mm",
                                         }}
                                     >
-                                        <div style={{ fontSize: "7.2pt", fontWeight: 800, color: "#3d4f74", marginBottom: "2mm" }}>TERMS & CONDITIONS</div>
-                                        <div style={{ fontSize: "6.9pt", color: "#6b6f8b", lineHeight: 1.4 }}>
-                                            {termsLines.map((line, index) => <div key={`term-${index}`}>{line}</div>)}
-                                            {noteLines.length > 0 ? (
-                                                <div style={{ marginTop: "2mm" }}>
-                                                    {noteLines.map((line, index) => <div key={`note-${index}`}>{line}</div>)}
-                                                </div>
-                                            ) : null}
-                                            <div style={{ marginTop: "4mm" }}>PT. CHITRA PARATAMA</div>
-                                            <div>BANK MANDIRI</div>
-                                            <div>Branch Cilandak KKO, Jakarta Selatan 12560</div>
-                                            <div>IDR A/C NO:127 - 000 - 00 - 17416</div>
+                                        <div style={{ fontSize: "9pt", fontWeight: 700, color: "#0f172a", marginBottom: "3mm" }}>TERMS & CONDITIONS</div>
+                                        <div style={{ fontSize: "8.5pt", color: "#475569", lineHeight: 1.45, whiteSpace: "pre-line" }}>
+                                            {[quotation.termsConditions, quotation.clientNote].filter(Boolean).join("\n\n") || "-"}
                                         </div>
                                     </div>
+                                    <div style={{ width: "50mm" }} />
+                                </div>
 
-                                    {visibleAttachments.length > 0 ? (
-                                        <div style={{ width: "58mm", paddingBottom: "1mm" }}>
-                                            <div style={{ fontSize: "7.1pt", fontWeight: 800, color: "#3d4f74", marginBottom: "2mm", textAlign: "right" }}>ATTACHMENTS</div>
-                                            <div style={{ fontSize: "6.7pt", color: "#6b7a8f", textAlign: "right", lineHeight: 1.4 }}>
-                                                {visibleAttachments.map((attachment, index) => (
-                                                    <div key={attachment.id}>{index + 1}. {attachment.title}</div>
-                                                ))}
-                                            </div>
+                                {visibleAttachments.length > 0 ? (
+                                    <div
+                                        style={{
+                                            marginTop: "10mm",
+                                            background: "#f8fafc",
+                                            border: "1px solid #e2e8f0",
+                                            padding: "5mm",
+                                        }}
+                                    >
+                                        <div style={{ fontSize: "9pt", fontWeight: 700, color: "#0f172a", marginBottom: "3mm" }}>
+                                            ATTACHMENT PACKAGE
                                         </div>
-                                    ) : (
-                                        <div style={{ width: "58mm" }} />
-                                    )}
-                                </div>
-
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        left: "14mm",
-                                        right: "14mm",
-                                        bottom: "10mm",
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "flex-end",
-                                    }}
-                                >
-                                    <div style={{ fontSize: "6.4pt", color: "#7a8799", maxWidth: "78mm" }}>
-                                        <div style={{ fontWeight: 800, color: "#5f6e84", marginBottom: "1mm" }}>PT Chitra Paratama</div>
-                                        <div>Gedung TMT 1, Lt. 5, Jl. Cilandak KKO No. 1, Jakarta 12560 Indonesia</div>
-                                        <div>P +62 21 2997 6661 | F +62 21 2997 6660</div>
-                                        <div style={{ color: "#36579d", fontWeight: 700, marginTop: "1mm" }}>www.chitraparatama.co.id</div>
+                                        <div style={{ fontSize: "8.5pt", color: "#475569", lineHeight: 1.5 }}>
+                                            {visibleAttachments.map((attachment, index) => (
+                                                <div key={attachment.id}>{index + 1}. {attachment.title} ({attachment.fileName})</div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                ) : null}
                             </div>
                         </div>
                     </div>

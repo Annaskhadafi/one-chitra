@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -33,6 +34,9 @@ export function VendorQuotationSearchModal({ open, onOpenChange }: VendorQuotati
                         <FileText className="h-6 w-6" />
                         Vendor Quotation Database
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Search and review vendor quotation records in an embedded fullscreen dialog.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 bg-muted/10">
