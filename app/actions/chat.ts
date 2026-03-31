@@ -10,13 +10,16 @@ import { generateHelpDeskReply } from "@/app/actions/helpdesk-ai"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { ensureChatSchema } from "@/lib/chat-schema"
 import { sendLoggedNotificationMessage } from "@/lib/email"
-import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable } from "@/db/schema"
+import { sendPushNotificationToUsers } from "@/lib/push-notifications"
+import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord } from "@/db/schema"
 
 type MentionPayload = {
     type: string
     id: string
     label: string
 }
+
+export type ChatAttachment = ChatAttachmentRecord
 
 export type ChatRoomMemberMeta = {
     userId: string
@@ -48,6 +51,7 @@ export type ChatMessage = {
     senderName: string
     senderImage: string | null
     content: string
+    attachments: ChatAttachment[]
     mentionType: string | null
     mentionId: string | null
     mentionLabel: string | null
@@ -159,6 +163,33 @@ async function getMemberRows(roomId: number) {
         .where(eq(chatRoomMembers.roomId, roomId))
 }
 
+function normalizeAttachments(value: unknown): ChatAttachment[] {
+    if (!Array.isArray(value)) return []
+
+    return value
+        .map((entry) => {
+            if (!entry || typeof entry !== "object") return null
+            const attachment = entry as Record<string, unknown>
+            const kind = typeof attachment.kind === "string" ? attachment.kind : null
+            const name = typeof attachment.name === "string" ? attachment.name.trim() : ""
+
+            if (!kind || !["image", "gif", "file", "sticker"].includes(kind) || !name) {
+                return null
+            }
+
+            return {
+                kind: kind as ChatAttachment["kind"],
+                name,
+                url: typeof attachment.url === "string" ? attachment.url : null,
+                contentType: typeof attachment.contentType === "string" ? attachment.contentType : null,
+                size: typeof attachment.size === "number" && Number.isFinite(attachment.size) ? attachment.size : null,
+                sticker: typeof attachment.sticker === "string" ? attachment.sticker : null,
+            } satisfies ChatAttachment
+        })
+        .filter((attachment): attachment is ChatAttachment => Boolean(attachment))
+        .slice(0, 8)
+}
+
 async function enrichMessages(
     roomId: number,
     rawMessages: {
@@ -168,6 +199,7 @@ async function enrichMessages(
         senderName: string
         senderImage: string | null
         content: string
+        attachments: unknown
         mentionType: string | null
         mentionId: string | null
         mentionLabel: string | null
@@ -202,6 +234,7 @@ async function enrichMessages(
         senderName: message.senderName,
         senderImage: message.senderImage,
         content: message.content,
+        attachments: normalizeAttachments(message.attachments),
         mentionType: message.mentionType,
         mentionId: message.mentionId,
         mentionLabel: message.mentionLabel,
@@ -241,6 +274,7 @@ async function getRoomSnapshotInternal(
             senderName: userTable.name,
             senderImage: userTable.image,
             content: chatMessages.content,
+            attachments: chatMessages.attachments,
             mentionType: chatMessages.mentionType,
             mentionId: chatMessages.mentionId,
             mentionLabel: chatMessages.mentionLabel,
@@ -484,7 +518,8 @@ export async function sendMessage(
     content: string,
     mention?: MentionPayload,
     replyToMessageId?: number | null,
-    mentionedUserIds?: string[]
+    mentionedUserIds?: string[],
+    attachments?: ChatAttachment[]
 ) {
     const currentUser = await getCurrentUser()
     const currentUserId = currentUser.id
@@ -496,7 +531,8 @@ export async function sendMessage(
     }
 
     const cleanContent = content.trim()
-    if (!cleanContent && !mention) {
+    const normalizedAttachments = normalizeAttachments(attachments)
+    if (!cleanContent && !mention && normalizedAttachments.length === 0) {
         throw new Error("Message cannot be empty")
     }
 
@@ -519,11 +555,23 @@ export async function sendMessage(
     const mentionedRecipients = normalizedMentionedUserIds
         .map((userId) => roomMemberById.get(userId))
         .filter((member): member is Awaited<ReturnType<typeof getMemberRows>>[number] => Boolean(member?.email))
+    const pushRecipientIds = roomMembers
+        .filter((member) => member.userId !== currentUserId && !member.isMuted)
+        .map((member) => member.userId)
 
     await db.insert(chatMessages).values({
         roomId,
         senderId: currentUserId,
-        content: cleanContent || `[Referensi: ${mention?.label ?? "Dokumen"}]`,
+        content:
+            cleanContent ||
+            (normalizedAttachments.length > 0
+                ? normalizedAttachments[0]?.kind === "sticker"
+                    ? `[Stiker: ${normalizedAttachments[0]?.name}]`
+                    : normalizedAttachments.length === 1
+                        ? `[Lampiran: ${normalizedAttachments[0]?.name}]`
+                        : `[${normalizedAttachments.length} lampiran]`
+                : `[Referensi: ${mention?.label ?? "Dokumen"}]`),
+        attachments: normalizedAttachments,
         mentionType: mention?.type ?? null,
         mentionId: mention?.id ?? null,
         mentionLabel: mention?.label ?? null,
@@ -535,9 +583,35 @@ export async function sendMessage(
         .set({ updatedAt: new Date() })
         .where(eq(chatRooms.id, roomId))
 
+    const roomLabel =
+        room.type === "dm"
+            ? currentUser.name || "Chat"
+            : room.name?.trim() || "Group Chat"
+    const pushBody =
+        cleanContent ||
+        mention?.label ||
+        normalizedAttachments[0]?.name ||
+        "Ada pesan baru di chat workspace"
+
+    await sendPushNotificationToUsers({
+        userIds: pushRecipientIds,
+        payload: {
+            title: roomLabel,
+            body: pushBody.length > 140 ? `${pushBody.slice(0, 137)}...` : pushBody,
+            url: "/dashboard",
+            tag: `chat-room-${roomId}`,
+            notificationId: `chat-room-${roomId}-${Date.now()}`,
+        },
+    }).catch((error) => {
+        console.error("Failed to send chat push notification", error)
+    })
+
     if (room.type === "group" && mentionedRecipients.length > 0) {
-        const roomLabel = room.name?.trim() || "Group Chat"
-        const messagePreview = cleanContent || mention?.label || "Anda mendapat mention baru di chat"
+        const messagePreview =
+            cleanContent ||
+            mention?.label ||
+            normalizedAttachments[0]?.name ||
+            "Anda mendapat mention baru di chat"
         const safePreview = messagePreview.length > 140 ? `${messagePreview.slice(0, 137)}...` : messagePreview
 
         await sendLoggedNotificationMessage({

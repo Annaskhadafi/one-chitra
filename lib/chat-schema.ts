@@ -49,6 +49,11 @@ async function syncChatSchema() {
         ALTER TABLE IF EXISTS chat_messages
         ADD COLUMN IF NOT EXISTS reply_to_message_id INTEGER;
     `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `)
 }
 
 export async function ensureChatSchema() {

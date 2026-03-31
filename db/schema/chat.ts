@@ -1,6 +1,16 @@
-import { pgTable, serial, integer, varchar, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { user } from "./auth";
+
+export type ChatAttachmentRecord = {
+    kind: "image" | "gif" | "file" | "sticker"
+    name: string
+    url?: string | null
+    contentType?: string | null
+    size?: number | null
+    sticker?: string | null
+}
 
 // Chat Rooms (supports both DM and Group)
 export const chatRooms = pgTable("chat_rooms", {
@@ -34,6 +44,7 @@ export const chatMessages = pgTable("chat_messages", {
     roomId: integer("room_id").references(() => chatRooms.id, { onDelete: "cascade" }).notNull(),
     senderId: varchar("sender_id").references(() => user.id).notNull(),
     content: text("content").notNull(),
+    attachments: jsonb("attachments").$type<ChatAttachmentRecord[]>().default(sql`'[]'::jsonb`).notNull(),
     replyToMessageId: integer("reply_to_message_id"),
     // Document mention support
     mentionType: varchar("mention_type", { length: 20 }), // 'quotation' | 'sales-order' | 'delivery' | null
