@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 
 type MentionResult = { type: "quotation" | "sales-order" | "delivery"; id: string; label: string; sublabel: string; url: string }
 type SearchResult = { id: number; content: string; createdAt: string; senderName: string }
+type MentionableUser = { userId: string; name: string; email: string; image: string | null }
 
 const MENTION_ICONS = { quotation: FileText, "sales-order": ShoppingCart, delivery: Truck }
 const MENTION_COLORS = { quotation: "bg-blue-100 text-blue-700", "sales-order": "bg-green-100 text-green-700", delivery: "bg-orange-100 text-orange-700" }
@@ -113,6 +114,36 @@ function HelpDeskPromptChips({ prompts, disabled, onSelect }: { prompts: string[
                     </button>
                 ))}
             </div>
+        </div>
+    )
+}
+
+function UserMentionPicker({ query, users, onSelect, onClose }: { query: string; users: MentionableUser[]; onSelect: (user: MentionableUser) => void; onClose: () => void }) {
+    const normalizedQuery = query.trim().toLowerCase()
+    const results = users.filter((user) => {
+        if (!normalizedQuery) return true
+        return user.name.toLowerCase().includes(normalizedQuery) || user.email.toLowerCase().includes(normalizedQuery)
+    })
+
+    return (
+        <div className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-lg border bg-popover shadow-xl">
+            <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <Users className="h-3 w-3" /> Mention User <span className="truncate">Gunakan `@` untuk tag member group.</span>
+                <button onClick={onClose} className="ml-auto"><X className="h-3 w-3" /></button>
+            </div>
+            {results.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">Member tidak ditemukan</p> : null}
+            {results.map((user) => (
+                <button key={user.userId} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent" onClick={() => onSelect(user)}>
+                    <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarImage src={user.image ?? undefined} />
+                        <AvatarFallback className="text-xs">{user.name?.[0]?.toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{user.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                </button>
+            ))}
         </div>
     )
 }
@@ -257,7 +288,9 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const [loading, setLoading] = useState(true)
     const [loadingOlder, setLoadingOlder] = useState(false)
     const [mentionSearch, setMentionSearch] = useState<string | null>(null)
+    const [userMentionSearch, setUserMentionSearch] = useState<string | null>(null)
     const [pendingMention, setPendingMention] = useState<MentionResult | null>(null)
+    const [selectedUserMentions, setSelectedUserMentions] = useState<MentionableUser[]>([])
     const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -269,6 +302,12 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const typingTimeoutRef = useRef<number | null>(null)
     const draftKey = `chat-draft-${room.id}`
     const others = room.members.filter((member) => member.userId !== currentUserId)
+    const mentionableUsers: MentionableUser[] = others.map((member) => ({
+        userId: member.userId,
+        name: member.name,
+        email: member.email,
+        image: member.image,
+    }))
     const applySnapshot = useCallback((snapshot: ChatRoomSnapshot, prepend = false) => { setHasMore(snapshot.hasMore); setTypingMembers(snapshot.typingMembers); setMemberPresence(snapshot.memberPresence); setMessages((prev) => prepend ? mergeUnique(snapshot.messages, prev) : mergeUnique(prev, snapshot.messages)) }, [])
     const loadSnapshot = useCallback(async (options?: { before?: string; prepend?: boolean; limit?: number }) => {
         const snapshot = await getRoomMessages(room.id, { before: options?.before, limit: options?.limit ?? 30 }); applySnapshot(snapshot, options?.prepend ?? false); return snapshot
@@ -276,7 +315,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     useEffect(() => {
         let active = true
         const saved = window.localStorage.getItem(draftKey); if (saved) setInput(saved)
-        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false)
+        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false)
         loadSnapshot()
             .catch(() => { if (active) toast.error("Gagal memuat percakapan") })
             .finally(() => { if (active) setLoading(false) })
@@ -351,17 +390,43 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         ? assistantThinking ? "Sedang menyiapkan jawaban..." : "Siap membantu penggunaan sistem"
         : typingMembers.length ? `${typingMembers.map((member) => member.name).join(", ")} sedang mengetik...` : others.some((member) => member.isTyping) ? "Sedang mengetik..." : others.some((member) => member.lastSeenAt && lastSeenLabel(member.lastSeenAt) === "Aktif sekarang") ? "Aktif sekarang" : lastSeenLabel(memberPresence.find((member) => member.userId === others[0]?.userId)?.lastSeenAt ?? others[0]?.lastSeenAt ?? null)
     const onInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const value = event.target.value; setInput(value)
-        const match = value.match(/\/([^/\s]*)$/); if (match) setMentionSearch(match[1]); else setMentionSearch(null)
+        const value = event.target.value
+        const cursorText = value.slice(0, event.target.selectionStart ?? value.length)
+        setInput(value)
+
+        const documentMatch = cursorText.match(/\/([^/\s]*)$/)
+        setMentionSearch(documentMatch ? documentMatch[1] : null)
+
+        if (room.type === "group") {
+            const userMatch = cursorText.match(/(?:^|\s)@([^\s@]*)$/)
+            setUserMentionSearch(userMatch ? userMatch[1] : null)
+        } else {
+            setUserMentionSearch(null)
+        }
     }
     const onMentionSelect = (item: MentionResult) => { setInput((value) => value.replace(/\/[^/\s]*$/, "").trim()); setPendingMention(item); setMentionSearch(null) }
+    const onUserMentionSelect = (user: MentionableUser) => {
+        setInput((value) => value.replace(/(^|\s)@[^\s@]*$/, `$1@${user.name} `))
+        setSelectedUserMentions((current) => current.some((item) => item.userId === user.userId) ? current : [...current, user])
+        setUserMentionSearch(null)
+    }
     const handleSend = async () => {
         const trimmed = input.trim(); if (!trimmed && !pendingMention) return
         setSending(true)
         if (isHelpDeskRoom(room)) setAssistantThinking(true)
         try {
-            await sendMessage(room.id, trimmed || `[Referensi: ${pendingMention?.label}]`, pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined, replyTarget?.id ?? null)
-            setInput(""); setPendingMention(null); setReplyTarget(null); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
+            const mentionedUserIds = selectedUserMentions
+                .filter((user) => input.includes(`@${user.name}`))
+                .map((user) => user.userId)
+
+            await sendMessage(
+                room.id,
+                trimmed || `[Referensi: ${pendingMention?.label}]`,
+                pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined,
+                replyTarget?.id ?? null,
+                mentionedUserIds
+            )
+            setInput(""); setPendingMention(null); setSelectedUserMentions([]); setReplyTarget(null); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
             const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) })
             applySnapshot(snapshot, false)
             onRoomUpdated().catch(() => undefined)
@@ -420,9 +485,10 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             </ScrollArea>
             <div className="relative border-t p-3">
                 {mentionSearch !== null ? <DocumentMentionPicker query={mentionSearch} onSelect={onMentionSelect} onClose={() => setMentionSearch(null)} /> : null}
+                {userMentionSearch !== null && room.type === "group" ? <UserMentionPicker query={userMentionSearch} users={mentionableUsers} onSelect={onUserMentionSelect} onClose={() => setUserMentionSearch(null)} /> : null}
                 {replyTarget ? <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 px-2 py-2"><Reply className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">{replyTarget.senderName}</p><p className="truncate text-xs text-muted-foreground">{replyTarget.content}</p></div><button type="button" onClick={() => setReplyTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
                 {pendingMention ? <div className="mb-2 flex items-center gap-2"><a href={pendingMention.url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", MENTION_COLORS[pendingMention.type])}>{React.createElement(MENTION_ICONS[pendingMention.type], { className: "h-3 w-3" })}{pendingMention.label}</a><button type="button" onClick={() => setPendingMention(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
-                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? "Tanyakan cara memakai menu, modul, atau alur kerja di sistem ini" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen"} className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? "Tanyakan cara memakai menu, modul, atau alur kerja di sistem ini" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen"} className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
             </div>
         </div>
     )

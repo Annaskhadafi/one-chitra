@@ -123,6 +123,15 @@ export type RuntimeNavSection = {
     items: RuntimeNavItem[]
 }
 
+export type PermissionMenuEntry = {
+    key: string
+    title: string
+    url: string
+    resource: string
+    sectionTitle: string
+    parentTitle?: string
+}
+
 export type EditableNavEntry = EditableNavItem | EditableNavSubItem
 
 const slugify = (value: string) =>
@@ -740,6 +749,41 @@ const mergeWithDefaultNavigationConfig = (config: EditableNavSection[]): Editabl
     }
 
     return sanitizeEditableNavigationConfig(dedupeEditableNavigationConfig(merged))
+}
+
+export const collectPermissionMenuEntries = (config: EditableNavSection[]): PermissionMenuEntry[] => {
+    const entries: PermissionMenuEntry[] = []
+
+    for (const section of config) {
+        for (const item of section.items) {
+            if (!item.hidden && item.url !== "#" && item.resource) {
+                entries.push({
+                    key: item.id,
+                    title: item.title,
+                    url: item.url,
+                    resource: item.resource,
+                    sectionTitle: section.title,
+                })
+            }
+
+            for (const subItem of item.items) {
+                if (subItem.hidden || subItem.url === "#" || !subItem.resource) {
+                    continue
+                }
+
+                entries.push({
+                    key: subItem.id,
+                    title: subItem.title,
+                    url: subItem.url,
+                    resource: subItem.resource,
+                    sectionTitle: section.title,
+                    parentTitle: item.title,
+                })
+            }
+        }
+    }
+
+    return entries
 }
 
 export const parseNavigationConfigFromSetting = (rawSetting: string | null): EditableNavSection[] => {

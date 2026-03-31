@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth"
 import { generateHelpDeskReply } from "@/app/actions/helpdesk-ai"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { ensureChatSchema } from "@/lib/chat-schema"
+import { sendLoggedNotificationMessage } from "@/lib/email"
 import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable } from "@/db/schema"
 
 type MentionPayload = {
@@ -482,9 +483,11 @@ export async function sendMessage(
     roomId: number,
     content: string,
     mention?: MentionPayload,
-    replyToMessageId?: number | null
+    replyToMessageId?: number | null,
+    mentionedUserIds?: string[]
 ) {
-    const currentUserId = await getCurrentUserId()
+    const currentUser = await getCurrentUser()
+    const currentUserId = currentUser.id
     await assertMembership(roomId, currentUserId)
     const room = await db.query.chatRooms.findFirst({ where: eq(chatRooms.id, roomId) })
 
@@ -507,6 +510,16 @@ export async function sendMessage(
         }
     }
 
+    const normalizedMentionedUserIds = Array.from(
+        new Set((mentionedUserIds ?? []).map((userId) => userId.trim()).filter((userId) => userId && userId !== currentUserId))
+    )
+
+    const roomMembers = await getMemberRows(roomId)
+    const roomMemberById = new Map(roomMembers.map((member) => [member.userId, member]))
+    const mentionedRecipients = normalizedMentionedUserIds
+        .map((userId) => roomMemberById.get(userId))
+        .filter((member): member is Awaited<ReturnType<typeof getMemberRows>>[number] => Boolean(member?.email))
+
     await db.insert(chatMessages).values({
         roomId,
         senderId: currentUserId,
@@ -521,6 +534,27 @@ export async function sendMessage(
         .update(chatRooms)
         .set({ updatedAt: new Date() })
         .where(eq(chatRooms.id, roomId))
+
+    if (room.type === "group" && mentionedRecipients.length > 0) {
+        const roomLabel = room.name?.trim() || "Group Chat"
+        const messagePreview = cleanContent || mention?.label || "Anda mendapat mention baru di chat"
+        const safePreview = messagePreview.length > 140 ? `${messagePreview.slice(0, 137)}...` : messagePreview
+
+        await sendLoggedNotificationMessage({
+            to: mentionedRecipients.map((member) => member.email),
+            subject: `${currentUser.name} mention Anda di ${roomLabel}`,
+            text: `${currentUser.name} menandai Anda di group ${roomLabel}: ${safePreview}`,
+            html: `<p><strong>${currentUser.name}</strong> menandai Anda di group <strong>${roomLabel}</strong>.</p><p>${safePreview}</p>`,
+            actionUrl: "/dashboard",
+            channels: ["push"],
+            logMeta: {
+                templateCode: "chat-mention",
+                templateName: "Chat Mention Notification",
+            },
+        }).catch((error) => {
+            console.error("Failed to send chat mention notification", error)
+        })
+    }
 
     if (room.type === "ai-helpdesk" && cleanContent) {
         let aiReply = "Maaf, Chitra Jenius sedang belum bisa merespons. Silakan coba lagi sebentar lagi."

@@ -36,6 +36,40 @@ type PushSubscriptionMeta = {
     publicKey: string | null
 }
 
+const SERVICE_WORKER_URL = "/sw.js"
+
+async function registerNotificationServiceWorker() {
+    const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL)
+
+    if (registration.active) {
+        return registration
+    }
+
+    const worker = registration.installing ?? registration.waiting
+    if (!worker) {
+        return registration
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            reject(new Error("Service worker activation timed out"))
+        }, 10_000)
+
+        const handleStateChange = () => {
+            if (worker.state === "activated") {
+                window.clearTimeout(timeout)
+                worker.removeEventListener("statechange", handleStateChange)
+                resolve()
+            }
+        }
+
+        worker.addEventListener("statechange", handleStateChange)
+        handleStateChange()
+    })
+
+    return registration
+}
+
 function formatNotificationDate(dateIso: string) {
     const date = new Date(dateIso)
     if (Number.isNaN(date.getTime())) return "-"
@@ -144,7 +178,7 @@ export function NotificationBell() {
             const result = await response.json() as PushSubscriptionMeta
             setPushMeta(result)
 
-            const registration = await navigator.serviceWorker.ready
+            const registration = await registerNotificationServiceWorker()
             const subscription = await registration.pushManager.getSubscription()
             setPushEnabled(Boolean(subscription))
         } catch (error) {
@@ -250,7 +284,7 @@ export function NotificationBell() {
                 return
             }
 
-            const registration = await navigator.serviceWorker.ready
+            const registration = await registerNotificationServiceWorker()
             let subscription = await registration.pushManager.getSubscription()
 
             if (!subscription) {
@@ -260,11 +294,15 @@ export function NotificationBell() {
                 })
             }
 
-            await fetch("/api/notifications/subscriptions", {
+            const saveResponse = await fetch("/api/notifications/subscriptions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(subscription.toJSON()),
             })
+
+            if (!saveResponse.ok) {
+                throw new Error("Failed to save push subscription")
+            }
 
             setPushEnabled(true)
         } catch (error) {

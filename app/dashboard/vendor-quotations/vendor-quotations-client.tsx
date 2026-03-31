@@ -21,6 +21,7 @@ export function VendorQuotationsClient({ initialData, standalone = false }: Prop
     const [ocrUrl, setOcrUrl] = useState("")
     const [isSyncing, setIsSyncing] = useState(false)
     const router = useRouter()
+    const extractedOnlyData = initialData.filter((quotation) => quotation.ocrStatus === "done")
 
     const handleOpenOcr = (url?: string) => {
         setOcrUrl(url || "")
@@ -75,7 +76,7 @@ export function VendorQuotationsClient({ initialData, standalone = false }: Prop
             </div>
 
             <VendorQuotationTable 
-                data={initialData} 
+                data={extractedOnlyData} 
                 onDelete={handleDelete}
                 onOpenOcr={handleOpenOcr}
             />

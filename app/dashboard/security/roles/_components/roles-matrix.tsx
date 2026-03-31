@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -21,6 +20,7 @@ import {
     deleteSecurityRole,
 } from "@/app/actions/security"
 import { useRouter } from "next/navigation"
+import type { PermissionMenuEntry } from "@/lib/navigation-menu"
 
 type Permission = { id: number; resource: string; action: string; description: string | null }
 type RolePermission = { permissionId: number; resource: string; action: string }
@@ -36,11 +36,19 @@ type Role = {
 interface RolesMatrixProps {
     roles: Role[]
     allPermissions: Permission[]
+    menuEntries: PermissionMenuEntry[]
 }
 
 const ACTIONS = ["view", "create", "edit", "delete"] as const
 
-export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrixProps) {
+type PermissionRow = {
+    key: string
+    label: string
+    resource: string
+    description: string
+}
+
+export function RolesMatrix({ roles: initialRoles, allPermissions, menuEntries }: RolesMatrixProps) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
     const [createOpen, setCreateOpen] = useState(false)
@@ -55,8 +63,26 @@ export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrix
     const [editingRole, setEditingRole] = useState<number | null>(null)
     const [editPermIds, setEditPermIds] = useState<number[]>([])
 
-    // Group permissions by resource
     const resources = Array.from(new Set(allPermissions.map((p) => p.resource))).sort()
+    const menuResourceSet = new Set(menuEntries.map((entry) => entry.resource))
+    const permissionRows: PermissionRow[] = [
+        ...menuEntries.map((entry) => ({
+            key: entry.key,
+            label: entry.title,
+            resource: entry.resource,
+            description: entry.parentTitle
+                ? `${entry.sectionTitle} / ${entry.parentTitle} / ${entry.url}`
+                : `${entry.sectionTitle} / ${entry.url}`,
+        })),
+        ...resources
+            .filter((resource) => !menuResourceSet.has(resource))
+            .map((resource) => ({
+                key: `resource-${resource}`,
+                label: resource,
+                resource,
+                description: "Additional permission resource",
+            })),
+    ]
 
     function getPermId(resource: string, action: string) {
         return allPermissions.find((p) => p.resource === resource && p.action === action)?.id
@@ -185,17 +211,23 @@ export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrix
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {resources.map((resource) => {
+                                                {permissionRows.map((row) => {
                                                     const allResourcePermIds = allPermissions
-                                                        .filter((p) => p.resource === resource)
+                                                        .filter((p) => p.resource === row.resource)
                                                         .map((p) => p.id)
                                                     const allChecked = allResourcePermIds.every((id) => currentPermIds.includes(id))
 
                                                     return (
-                                                        <tr key={resource} className="border-t">
-                                                            <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{resource}</td>
+                                                        <tr key={row.key} className="border-t">
+                                                            <td className="py-2 pr-4 align-top">
+                                                                <div className="space-y-1">
+                                                                    <div className="font-medium text-sm">{row.label}</div>
+                                                                    <div className="text-[11px] text-muted-foreground">{row.description}</div>
+                                                                    <div className="font-mono text-[11px] text-muted-foreground">{row.resource}</div>
+                                                                </div>
+                                                            </td>
                                                             {ACTIONS.map((action) => {
-                                                                const permId = getPermId(resource, action)
+                                                                const permId = getPermId(row.resource, action)
                                                                 const checked = permId ? currentPermIds.includes(permId) : false
                                                                 return (
                                                                     <td key={action} className="py-2 px-3 text-center">
@@ -214,7 +246,7 @@ export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrix
                                                                     <Checkbox
                                                                         checked={allChecked}
                                                                         onCheckedChange={(c) =>
-                                                                            setEditPermIds(toggleResource(editPermIds, resource, !!c))
+                                                                            setEditPermIds(toggleResource(editPermIds, row.resource, !!c))
                                                                         }
                                                                     />
                                                                 </td>
@@ -309,12 +341,18 @@ export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrix
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {resources.map((resource) => {
-                                            const resPerms = allPermissions.filter((p) => p.resource === resource)
+                                        {permissionRows.map((row) => {
+                                            const resPerms = allPermissions.filter((p) => p.resource === row.resource)
                                             const allChecked = resPerms.every((p) => newRolePermIds.includes(p.id))
                                             return (
-                                                <tr key={resource} className="border-t">
-                                                    <td className="py-1 pr-4 font-mono text-xs text-muted-foreground">{resource}</td>
+                                                <tr key={row.key} className="border-t">
+                                                    <td className="py-2 pr-4 align-top">
+                                                        <div className="space-y-1">
+                                                            <div className="font-medium text-sm">{row.label}</div>
+                                                            <div className="text-[11px] text-muted-foreground">{row.description}</div>
+                                                            <div className="font-mono text-[11px] text-muted-foreground">{row.resource}</div>
+                                                        </div>
+                                                    </td>
                                                     {ACTIONS.map((action) => {
                                                         const perm = resPerms.find((p) => p.action === action)
                                                         return (
@@ -336,7 +374,7 @@ export function RolesMatrix({ roles: initialRoles, allPermissions }: RolesMatrix
                                                         <Checkbox
                                                             checked={allChecked}
                                                             onCheckedChange={(c) =>
-                                                                setNewRolePermIds(toggleResource(newRolePermIds, resource, !!c))
+                                                                setNewRolePermIds(toggleResource(newRolePermIds, row.resource, !!c))
                                                             }
                                                         />
                                                     </td>
