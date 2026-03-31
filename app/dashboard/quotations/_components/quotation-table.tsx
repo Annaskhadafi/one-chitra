@@ -41,6 +41,13 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -48,7 +55,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2 } from "lucide-react"
+import { Search, Pencil, Trash2, Eye, FileText, Clock, CheckCircle, ArrowRightLeft, User, ChevronUp, ChevronDown, Copy, Calendar, Filter, ShoppingCart, Loader2, BarChart3, Download, FileUp, ExternalLink, FileSearch, Truck, ChevronRight, Maximize2, Minimize2, MoreHorizontal } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
@@ -1159,17 +1166,18 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
         const canDeleteRow = canDelete && isOwner
         const canUploadPo = quotation.status !== "rejected"
         const hasDeliveryContext = quotation.salesOrderId !== null || quotation.relatedDeliveries.length > 0
-        const uploadPoTitle = quotation.customerPoDocument
-            ? "Update customer PO dan sinkronkan via OCR"
-            : "Upload customer PO dan validasi OCR"
         const deleteDisabledReason = !canDelete
             ? "You do not have permission to delete quotations"
             : "You can only delete quotations you created"
         const buttonClassName = mobile ? "h-9 w-9" : "h-8 w-8"
         const iconClassName = mobile ? "h-4 w-4" : "h-3.5 w-3.5"
+        const moreButtonClassName = cn(
+            buttonClassName,
+            "rounded-full border border-border/60 text-muted-foreground hover:text-foreground"
+        )
 
         return (
-            <div className={cn("flex flex-wrap items-center gap-1.5", mobile ? "justify-start" : "justify-end")}>
+            <div className={cn("flex items-center gap-1", mobile ? "justify-start" : "justify-end")}>
                 <Link href={`/dashboard/quotations/${quotation.id}`}>
                     <Button variant="ghost" size="icon" className={buttonClassName} title="View quotation">
                         <Eye className={iconClassName} />
@@ -1180,55 +1188,6 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                         <Pencil className={iconClassName} />
                     </Button>
                 </Link>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(buttonClassName, "text-sky-600 hover:text-sky-700")}
-                    title={canUploadPo ? uploadPoTitle : "Rejected quotation tidak bisa upload PO"}
-                    disabled={!canUploadPo}
-                    onClick={() => {
-                        setPoDialogQuotation(quotation)
-                        setPoFile(null)
-                    }}
-                >
-                    <FileUp className={iconClassName} />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(buttonClassName, "text-cyan-600 hover:text-cyan-700")}
-                    title={hasDeliveryContext ? "Lihat delivery terkait quotation ini" : "Belum ada delivery terkait quotation ini"}
-                    disabled={!hasDeliveryContext}
-                    onClick={() => setDeliveryDialogQuotation(quotation)}
-                >
-                    <Truck className={iconClassName} />
-                </Button>
-                {quotation.customerPoDocument && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(buttonClassName, "text-amber-600 hover:text-amber-700")}
-                        title={quotation.customerPoNumber ? `Lihat file PO ${quotation.customerPoNumber}` : "Lihat file PO customer"}
-                        onClick={() => {
-                            setCustomerPoFileUrl(quotation.customerPoDocument)
-                            setIsCustomerPoPreviewOpen(true)
-                        }}
-                    >
-                        <Eye className={iconClassName} />
-                    </Button>
-                )}
-                {quotation.salesOrderId && (
-                    <Link href={`/dashboard/sales-orders/${quotation.salesOrderId}/edit`}>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn(buttonClassName, "text-emerald-600 hover:text-emerald-700")}
-                            title={`Buka Sales Order #${quotation.salesOrderId}`}
-                        >
-                            <ExternalLink className={iconClassName} />
-                        </Button>
-                    </Link>
-                )}
                 <Button
                     variant="ghost"
                     size="icon"
@@ -1258,56 +1217,107 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                         <Copy className={iconClassName} />
                     )}
                 </Button>
-                {canDeleteRow ? (
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(buttonClassName, "text-destructive hover:text-destructive")}
-                                title="Delete quotation"
-                            >
-                                <Trash2 className={iconClassName} />
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This will permanently delete quotation {quotation.quotationNumber} and all its items.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={async () => {
-                                        const result = await deleteQuotation(quotation.id)
-                                        if (result.success) {
-                                            toast.success("Quotation deleted")
-                                            refetch()
-                                        } else {
-                                            toast.error(result.error || "Failed to delete")
-                                        }
-                                    }}
-                                >
-                                    Delete
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                ) : (
-                    <span title={deleteDisabledReason}>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className={cn(buttonClassName, "cursor-not-allowed text-muted-foreground opacity-45")}
-                            disabled
-                            aria-label={deleteDisabledReason}
+                            className={moreButtonClassName}
+                            title="More actions"
+                            aria-label="More actions"
                         >
-                            <Trash2 className={iconClassName} />
+                            <MoreHorizontal className={iconClassName} />
                         </Button>
-                    </span>
-                )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem
+                            disabled={!canUploadPo}
+                            onSelect={(event) => {
+                                event.preventDefault()
+                                if (!canUploadPo) return
+                                setPoDialogQuotation(quotation)
+                                setPoFile(null)
+                            }}
+                        >
+                            <FileUp className={iconClassName} />
+                            {quotation.customerPoDocument ? "Update customer PO" : "Upload customer PO"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            disabled={!hasDeliveryContext}
+                            onSelect={(event) => {
+                                event.preventDefault()
+                                if (!hasDeliveryContext) return
+                                setDeliveryDialogQuotation(quotation)
+                            }}
+                        >
+                            <Truck className={iconClassName} />
+                            View related delivery
+                        </DropdownMenuItem>
+                        {quotation.customerPoDocument && (
+                            <DropdownMenuItem
+                                onSelect={(event) => {
+                                    event.preventDefault()
+                                    setCustomerPoFileUrl(quotation.customerPoDocument)
+                                    setIsCustomerPoPreviewOpen(true)
+                                }}
+                            >
+                                <Eye className={iconClassName} />
+                                View customer PO
+                            </DropdownMenuItem>
+                        )}
+                        {quotation.salesOrderId && (
+                            <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/sales-orders/${quotation.salesOrderId}/edit`}>
+                                    <ExternalLink className={iconClassName} />
+                                    Open Sales Order
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        {canDeleteRow ? (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onSelect={(event) => event.preventDefault()}
+                                    >
+                                        <Trash2 className={iconClassName} />
+                                        Delete quotation
+                                    </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete quotation?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This will permanently delete quotation {quotation.quotationNumber} and all its items.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={async () => {
+                                                const result = await deleteQuotation(quotation.id)
+                                                if (result.success) {
+                                                    toast.success("Quotation deleted")
+                                                    refetch()
+                                                } else {
+                                                    toast.error(result.error || "Failed to delete")
+                                                }
+                                            }}
+                                        >
+                                            Delete
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        ) : (
+                            <DropdownMenuItem disabled title={deleteDisabledReason}>
+                                <Trash2 className={iconClassName} />
+                                Delete quotation
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         )
     }, [canDelete, currentUserId, isDuplicating, refetch])
