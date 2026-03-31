@@ -10,7 +10,6 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { RefreshCcw, Loader2 } from "lucide-react"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
-import { isVendorQuotationFromYear } from "@/lib/vendor-quotation-filter"
 
 interface Props {
     initialData: VendorQuotationWithItems[]
@@ -18,21 +17,10 @@ interface Props {
 }
 
 export function VendorQuotationsClient({ initialData, standalone = false }: Props) {
-    const currentYear = new Date().getFullYear()
     const [isOcrOpen, setIsOcrOpen] = useState(false)
     const [ocrUrl, setOcrUrl] = useState("")
     const [isSyncing, setIsSyncing] = useState(false)
     const router = useRouter()
-    const filteredData = initialData.filter((item) => {
-        const isCurrentYear = isVendorQuotationFromYear({
-            quoteDate: item.quoteDate,
-            quoteNumber: item.quoteNumber,
-            fileName: item.fileName,
-            fileUrl: item.fileUrl,
-        }, currentYear)
-
-        return isCurrentYear && item.ocrStatus === "done"
-    })
 
     const handleOpenOcr = (url?: string) => {
         setOcrUrl(url || "")
@@ -87,7 +75,7 @@ export function VendorQuotationsClient({ initialData, standalone = false }: Prop
             </div>
 
             <VendorQuotationTable 
-                data={filteredData} 
+                data={initialData} 
                 onDelete={handleDelete}
                 onOpenOcr={handleOpenOcr}
             />
