@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import {
     useReactTable,
     getCoreRowModel,
@@ -55,7 +55,7 @@ interface VendorQuotationTableProps {
 
 export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotationTableProps) {
     const [sorting, setSorting] = useState<SortingState>([{ id: "quoteDate", desc: true }])
-    const [globalFilter, setGlobalFilter] = useState("")
+    const [searchInput, setSearchInput] = useState("")
     const [selectedQuotation, setSelectedQuotation] = useState<VendorQuotationWithItems | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
     const [expandedQuotationIds, setExpandedQuotationIds] = useState<Set<number>>(new Set())
@@ -63,60 +63,9 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
     const [highlightedItemIds, setHighlightedItemIds] = useState<Set<number>>(new Set())
     const [autoExpanded, setAutoExpanded] = useState(false)
     const prevGlobalFilterRef = useRef("")
+    const deferredGlobalFilter = useDeferredValue(searchInput)
     const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-
-    useEffect(() => {
-        const query = globalFilter.trim().toLowerCase()
-        const prevQuery = prevGlobalFilterRef.current.trim().toLowerCase()
-        
-        if (query && query !== prevQuery) {
-            const matchingQuotationIds = new Set<number>()
-            const matchingItemIds = new Set<number>()
-            
-            data.forEach((quotation) => {
-                const itemMatches = quotation.items.filter((item) => {
-                    const searchValue = [
-                        item.itemName,
-                        item.remark,
-                        item.unit,
-                        item.qty,
-                        item.unitPrice,
-                        item.totalPrice,
-                        formatCurrency(item.unitPrice),
-                        formatCurrency(item.totalPrice),
-                    ]
-                        .filter(Boolean)
-                        .join(" ")
-                        .toLowerCase()
-                    return searchValue.includes(query)
-                })
-                
-                if (itemMatches.length > 0) {
-                    matchingQuotationIds.add(quotation.id)
-                    itemMatches.forEach(item => matchingItemIds.add(item.id))
-                }
-            })
-            
-            if (matchingQuotationIds.size > 0) {
-                setExpandedQuotationIds(matchingQuotationIds)
-                setHighlightedItemIds(matchingItemIds)
-                setAutoExpanded(true)
-            } else {
-                if (autoExpanded) {
-                    setExpandedQuotationIds(new Set())
-                    setHighlightedItemIds(new Set())
-                    setAutoExpanded(false)
-                }
-            }
-        } else if (!query && autoExpanded) {
-            setExpandedQuotationIds(new Set())
-            setHighlightedItemIds(new Set())
-            setAutoExpanded(false)
-        }
-        
-        prevGlobalFilterRef.current = globalFilter
-    }, [globalFilter, data, autoExpanded])
 
     const formatCurrency = (value: string | number) =>
         new Intl.NumberFormat("id-ID", {
@@ -125,43 +74,109 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
             maximumFractionDigits: 0,
         }).format(typeof value === "string" ? parseFloat(value) : value)
 
-    const searchableData = useMemo(() => {
-        const query = globalFilter.trim().toLowerCase()
-        if (!query) return data
-
-        return data.filter((quotation) => {
-            const itemSearchText = quotation.items
-                .flatMap((item) => [
+    const indexedQuotations = useMemo(() => {
+        return data.map((quotation) => {
+            const itemIndexes = quotation.items.map((item) => {
+                const searchText = [
                     item.itemName,
-                    item.qty,
+                    item.remark,
                     item.unit,
+                    item.qty,
                     item.unitPrice,
                     item.totalPrice,
-                    item.remark,
                     formatCurrency(item.unitPrice),
                     formatCurrency(item.totalPrice),
-                ])
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase()
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase()
 
-            const quotationSearchText = [
-                quotation.quoteNumber,
-                quotation.vendorName,
-                quotation.quoteDate,
-                quotation.remark,
-                quotation.fileName,
-                quotation.fileUrl,
-                quotation.ocrStatus,
-                itemSearchText,
-            ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase()
+                return {
+                    id: item.id,
+                    searchText,
+                }
+            })
 
-            return quotationSearchText.includes(query)
+            const totalAmount = quotation.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+
+            return {
+                quotation,
+                itemIndexes,
+                totalAmount,
+                itemsSummary: quotation.items.length > 0
+                    ? quotation.items.map((item) => item.itemName).join(", ")
+                    : "No items",
+                searchText: [
+                    quotation.quoteNumber,
+                    quotation.vendorName,
+                    quotation.quoteDate,
+                    quotation.remark,
+                    quotation.fileName,
+                    quotation.fileUrl,
+                    quotation.ocrStatus,
+                    formatCurrency(totalAmount),
+                    ...itemIndexes.map((item) => item.searchText),
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase(),
+            }
         })
-    }, [data, globalFilter])
+    }, [data])
+
+    useEffect(() => {
+        const query = deferredGlobalFilter.trim().toLowerCase()
+        const prevQuery = prevGlobalFilterRef.current.trim().toLowerCase()
+
+        if (query && query !== prevQuery) {
+            const matchingQuotationIds = new Set<number>()
+            const matchingItemIds = new Set<number>()
+
+            indexedQuotations.forEach(({ quotation, itemIndexes }) => {
+                const matchingItems = itemIndexes.filter((item) => item.searchText.includes(query))
+
+                if (matchingItems.length > 0) {
+                    matchingQuotationIds.add(quotation.id)
+                    matchingItems.forEach((item) => matchingItemIds.add(item.id))
+                }
+            })
+
+            if (matchingQuotationIds.size > 0) {
+                setExpandedQuotationIds(matchingQuotationIds)
+                setHighlightedItemIds(matchingItemIds)
+                setAutoExpanded(true)
+            } else if (autoExpanded) {
+                setExpandedQuotationIds(new Set())
+                setHighlightedItemIds(new Set())
+                setAutoExpanded(false)
+            }
+        } else if (!query && autoExpanded) {
+            setExpandedQuotationIds(new Set())
+            setHighlightedItemIds(new Set())
+            setAutoExpanded(false)
+        }
+
+        prevGlobalFilterRef.current = deferredGlobalFilter
+    }, [autoExpanded, deferredGlobalFilter, indexedQuotations])
+
+    const searchableData = useMemo(() => {
+        const query = deferredGlobalFilter.trim().toLowerCase()
+        if (!query) {
+            return indexedQuotations.map(({ quotation }) => quotation)
+        }
+
+        return indexedQuotations
+            .filter(({ searchText }) => searchText.includes(query))
+            .map(({ quotation }) => quotation)
+    }, [deferredGlobalFilter, indexedQuotations])
+
+    const quotationMetaById = useMemo(() => {
+        const map = new Map<number, (typeof indexedQuotations)[number]>()
+        indexedQuotations.forEach((entry) => {
+            map.set(entry.quotation.id, entry)
+        })
+        return map
+    }, [indexedQuotations])
 
     const columns = useMemo<ColumnDef<VendorQuotationWithItems>[]>(
         () => [
@@ -246,19 +261,20 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
             {
                 id: "itemsSummary",
                 header: "Items",
-                cell: ({ row }) => (
-                    <div className="max-w-[200px] truncate text-xs text-muted-foreground">
-                        {row.original.items.length > 0 
-                            ? row.original.items.map(i => i.itemName).join(", ")
-                            : "No items"}
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const meta = quotationMetaById.get(row.original.id)
+                    return (
+                        <div className="max-w-[200px] truncate text-xs text-muted-foreground">
+                            {meta?.itemsSummary ?? "No items"}
+                        </div>
+                    )
+                },
             },
             {
                 id: "totalAmount",
                 header: "Total Price",
                 cell: ({ row }) => {
-                    const total = row.original.items.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0)
+                    const total = quotationMetaById.get(row.original.id)?.totalAmount ?? 0
                     return <span className="font-semibold">{formatCurrency(total)}</span>
                 },
             },
@@ -343,7 +359,7 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                 ),
             },
         ],
-        [expandedQuotationIds, onDelete, onOpenOcr]
+        [expandedQuotationIds, onDelete, onOpenOcr, quotationMetaById]
     )
 
     const table = useReactTable({
@@ -436,8 +452,8 @@ export function VendorQuotationTable({ data, onDelete, onOpenOcr }: VendorQuotat
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search quotation, vendor, or items..."
-                            value={globalFilter}
-                            onChange={(e) => setGlobalFilter(e.target.value)}
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
                             className="pl-9"
                         />
                     </div>

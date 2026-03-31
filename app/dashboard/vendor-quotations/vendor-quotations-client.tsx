@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { VendorQuotationTable } from "./_components/vendor-quotation-table"
 import { VendorQuotationOcrDialog } from "./_components/vendor-quotation-ocr-dialog"
 import { deleteVendorQuotation, syncVendorQuotationsFromEpr } from "@/app/actions/vendor-quotation"
@@ -21,7 +21,10 @@ export function VendorQuotationsClient({ initialData, standalone = false }: Prop
     const [ocrUrl, setOcrUrl] = useState("")
     const [isSyncing, setIsSyncing] = useState(false)
     const router = useRouter()
-    const extractedOnlyData = initialData.filter((quotation) => quotation.ocrStatus === "done")
+    const extractedOnlyData = useMemo(
+        () => initialData.filter((quotation) => quotation.ocrStatus === "done"),
+        [initialData],
+    )
 
     const handleOpenOcr = (url?: string) => {
         setOcrUrl(url || "")

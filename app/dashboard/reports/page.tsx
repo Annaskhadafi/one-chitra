@@ -1,4 +1,4 @@
-import { getDashboardStats } from "@/app/actions/dashboard"
+import { getDashboardStats } from "@/lib/server/dashboard-overview"
 import { ReportsHubClient } from "./reports-hub-client"
 
 function clamp(value: number, min = 0, max = 100) {

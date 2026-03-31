@@ -17,7 +17,7 @@ import { getPermissionsByRoleName } from "@/lib/rbac"
 import { headers } from "next/headers"
 import { PermissionsProvider } from "@/hooks/use-permissions"
 import { getNavbarTheme } from "@/lib/navbar-theme"
-import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
+import { getNavbarMenuSettings } from "@/lib/server/navbar-menu"
 import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigation-menu"
 import { getDashboardRouteResource } from "@/lib/route-permissions"
 import { ChatWidget } from "@/components/chat/chat-widget"
@@ -284,7 +284,7 @@ export default async function DashboardLayout({
   let roleLower = ""
   const [navbarTheme, navbarMenuSettings] = await Promise.all([
     getNavbarTheme(),
-    getNavbarMenuSettingsAction(),
+    getNavbarMenuSettings(),
   ])
   const runtimeNavigationSections = dedupeRuntimeNavigationUrls(
     normalizeBusinessNavigation(

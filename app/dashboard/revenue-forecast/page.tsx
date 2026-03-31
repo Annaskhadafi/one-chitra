@@ -1,4 +1,8 @@
-import { getDashboardRevenueForecast, getAllSalesRevenueData, getDashboardInventory } from "@/app/actions/dashboard-revenue"
+import {
+    getAllSalesRevenueDataForPage,
+    getDashboardInventoryData,
+    getDashboardRevenueForecastData,
+} from "@/lib/server/dashboard-revenue"
 import { RevenueClient } from "./_components/revenue-client"
 import { SalesRevenueTable } from "./_components/sales-revenue-table"
 import { format } from "date-fns"
@@ -11,9 +15,9 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
     const params = await searchParams;
     const period = params.period || format(new Date(), 'MM.yyyy')
 
-    const response = await getDashboardRevenueForecast({ period })
-    const salesRevenueResponse = await getAllSalesRevenueData({ period })
-    const inventoryResponse = await getDashboardInventory()
+    const response = await getDashboardRevenueForecastData({ period })
+    const salesRevenueResponse = await getAllSalesRevenueDataForPage({ period })
+    const inventoryResponse = await getDashboardInventoryData()
 
     const defaultData = {
         period,

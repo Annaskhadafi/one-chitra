@@ -1,5 +1,5 @@
-import { getDashboardStats } from "@/app/actions/dashboard"
-import { getDashboardRevenueForecast } from "@/app/actions/dashboard-revenue"
+import { getDashboardStats } from "@/lib/server/dashboard-overview"
+import { getDashboardRevenueForecastData } from "@/lib/server/dashboard-revenue"
 import { DashboardModernOverview } from "@/components/dashboard/dashboard-modern-overview"
 
 type RangeOption = "this-week" | "this-month" | "this-quarter"
@@ -23,7 +23,7 @@ export default async function DashboardPage({
 
   const [stats, revenueVsForecastResponse] = await Promise.all([
     getDashboardStats(selectedRange),
-    getDashboardRevenueForecast({ period, range: selectedRange }),
+    getDashboardRevenueForecastData({ period, range: selectedRange }),
   ])
 
     const dashboardData = (revenueVsForecastResponse as any).success 

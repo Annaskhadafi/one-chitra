@@ -52,16 +52,16 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[98vw] max-w-[98vw] xl:max-w-[1800px] h-[96vh] flex flex-col p-0 overflow-hidden shadow-2xl border-indigo-100">
+            <DialogContent className="flex h-[96vh] w-[98vw] max-w-[98vw] flex-col overflow-hidden border-indigo-100 p-0 shadow-2xl xl:max-w-[1800px]">
                 <DialogHeader className="p-6 pb-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-center gap-2">
                             <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
                                 <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                             </div>
                             <DialogTitle className="text-xl">Quotation Detail</DialogTitle>
                         </div>
-                        <div className="flex items-center gap-2 no-print">
+                        <div className="flex flex-wrap items-center gap-2 no-print">
                             <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8">
                                 <Printer className="h-4 w-4 mr-2" />
                                 Print
@@ -77,17 +77,19 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                 </DialogHeader>
 
                 <div className="flex-1 overflow-auto px-4 pb-4 sm:px-6">
-                    <div className="min-w-[1100px] space-y-8 rounded-xl border bg-card p-6 shadow-sm sm:p-8">
+                    <div className="space-y-8 rounded-xl border bg-card p-4 shadow-sm sm:p-6 xl:p-8">
                         {/* Header Section */}
-                        <div className="flex flex-col md:flex-row justify-between gap-6">
-                            <div className="space-y-4">
+                        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="min-w-0 space-y-4">
                                 <div>
-                                    <h2 className="text-2xl font-bold tracking-tight text-foreground">{quotation.vendorName || "Unknown Vendor"}</h2>
+                                    <h2 className="break-words text-2xl font-bold tracking-tight text-foreground">
+                                        {quotation.vendorName || "Unknown Vendor"}
+                                    </h2>
                                     <p className="text-muted-foreground text-sm">Vendor Quotation</p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                                <div className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-[160px_minmax(0,1fr)]">
                                     <div className="text-muted-foreground">Quote Number:</div>
-                                    <div className="font-medium">{quotation.quoteNumber || "—"}</div>
+                                    <div className="font-medium break-words">{quotation.quoteNumber || "—"}</div>
                                     <div className="text-muted-foreground">Quote Date:</div>
                                     <div className="font-medium">{quotation.quoteDate || "—"}</div>
                                     <div className="text-muted-foreground">Imported At:</div>
@@ -95,9 +97,9 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                                 </div>
                             </div>
 
-                            <div className="flex flex-col items-end gap-3 no-print">
+                            <div className="flex flex-col gap-3 no-print xl:items-end">
                                 <VendorQuotationOcrBadge status={quotation.ocrStatus} />
-                                <div className="flex flex-wrap justify-end gap-2">
+                                <div className="flex flex-wrap gap-2 xl:justify-end">
                                     {isPreviewable && (
                                         <Button 
                                             variant="secondary" 
@@ -122,45 +124,56 @@ export function VendorQuotationDetailDialog({ quotation, open, onOpenChange, onE
                         <Separator />
 
                         <div className="space-y-4">
-                            <h3 className="font-semibold text-lg">Line Items</h3>
-                            <div className="max-h-[52vh] overflow-auto rounded-lg border">
-                                <Table className="min-w-[1100px]">
-                                    <TableHeader className="bg-muted/50">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <h3 className="font-semibold text-lg">Line Items</h3>
+                                <div className="text-sm text-muted-foreground">
+                                    {quotation.items.length} item
+                                </div>
+                            </div>
+                            <div className="overflow-hidden rounded-lg border">
+                                <div className="max-h-[48vh] overflow-auto">
+                                <Table className="table-fixed min-w-[760px]">
+                                    <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                                         <TableRow>
-                                            <TableHead className="min-w-[360px]">Description</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="min-w-[110px]">Unit</TableHead>
-                                            <TableHead className="text-right">Unit Price</TableHead>
-                                            <TableHead className="text-right">Total Price</TableHead>
+                                            <TableHead className="w-[42%] min-w-[280px]">Description</TableHead>
+                                            <TableHead className="w-[10%] text-right">Qty</TableHead>
+                                            <TableHead className="w-[12%] min-w-[90px]">Unit</TableHead>
+                                            <TableHead className="w-[18%] text-right">Unit Price</TableHead>
+                                            <TableHead className="w-[18%] text-right">Total Price</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {quotation.items.map((item) => (
                                             <TableRow key={item.id}>
-                                                <TableCell className="font-medium">
-                                                    <div>{item.itemName}</div>
-                                                    {item.remark && <p className="mt-1 text-xs text-muted-foreground">{item.remark}</p>}
+                                                <TableCell className="align-top font-medium">
+                                                    <div className="break-words whitespace-normal">{item.itemName}</div>
+                                                    {item.remark && (
+                                                        <p className="mt-1 break-words text-xs text-muted-foreground whitespace-normal">
+                                                            {item.remark}
+                                                        </p>
+                                                    )}
                                                 </TableCell>
-                                                <TableCell className="text-right">{item.qty}</TableCell>
-                                                <TableCell>{item.unit || "—"}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
-                                                <TableCell className="text-right font-medium">{formatCurrency(item.totalPrice)}</TableCell>
+                                                <TableCell className="text-right align-top whitespace-nowrap">{item.qty}</TableCell>
+                                                <TableCell className="align-top break-words">{item.unit || "—"}</TableCell>
+                                                <TableCell className="text-right align-top whitespace-nowrap">{formatCurrency(item.unitPrice)}</TableCell>
+                                                <TableCell className="text-right align-top font-medium whitespace-nowrap">{formatCurrency(item.totalPrice)}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
                                 </Table>
+                                </div>
                             </div>
                         </div>
 
                         {/* Footer Section */}
-                        <div className="flex flex-col md:flex-row justify-between gap-8 pt-4">
-                            <div className="md:w-1/2 space-y-3">
+                        <div className="grid gap-8 pt-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                            <div className="min-w-0 space-y-3">
                                 <h4 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">General Remarks</h4>
-                                <p className="text-sm border p-4 rounded-lg bg-muted/20 min-h-[80px]">
+                                <p className="min-h-[80px] rounded-lg border bg-muted/20 p-4 text-sm break-words whitespace-pre-wrap">
                                     {quotation.remark || "No additional remarks provided."}
                                 </p>
                             </div>
-                            <div className="md:w-1/3">
+                            <div className="xl:justify-self-end xl:w-full">
                                 <div className="bg-muted/30 p-6 rounded-xl space-y-3 border">
                                     <div className="flex justify-between text-sm text-muted-foreground">
                                         <span>Subtotal</span>

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { db } from "@/db"
 import { getNavbarTheme } from "@/lib/navbar-theme"
-import { getNavbarMenuSettingsAction } from "@/app/actions/navbar-menu"
+import { getNavbarMenuSettings } from "@/lib/server/navbar-menu"
 import { NavbarSettingsClient } from "./_components/navbar-settings-client"
 
 export const metadata = {
@@ -32,7 +32,7 @@ export default async function NavbarSettingsPage() {
 
     const [theme, menuConfig] = await Promise.all([
         getNavbarTheme(),
-        getNavbarMenuSettingsAction(),
+        getNavbarMenuSettings(),
     ])
 
     return (
