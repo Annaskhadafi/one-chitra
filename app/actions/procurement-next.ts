@@ -184,13 +184,19 @@ function formatPeriodLabel(date: Date, granularity: ForecastGranularity) {
 }
 
 function normalizeNumber(value: unknown) {
-    const num = Number(value ?? 0)
-    return Number.isFinite(num) ? num : 0
+    if (value === null || value === undefined) return 0
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0
+    if (typeof value === "string") {
+        const cleaned = value.replace(/,/g, "")
+        const num = parseFloat(cleaned)
+        return Number.isFinite(num) ? num : 0
+    }
+    return 0
 }
 
 function sanitizeSeries(values: number[]) {
-    return values.map((value) => {
-        if (!Number.isFinite(value) || Number.isNaN(value)) return 0
+    return (values || []).map((value) => {
+        if (value === null || value === undefined || !Number.isFinite(value) || Number.isNaN(value)) return 0
         return Math.max(Number(value.toFixed(1)), 0)
     })
 }

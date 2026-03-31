@@ -43,19 +43,47 @@ const priorityBadgeClass: Record<ProcurementNextItem["priority"], string> = {
     healthy: "bg-emerald-100 text-emerald-700 border-emerald-200",
 }
 
-function formatNumber(value: number, maximumFractionDigits = 0) {
-    if (!Number.isFinite(value) || Number.isNaN(value)) {
+function formatNumber(value: any, maximumFractionDigits = 0) {
+    if (value === null || value === undefined) return "0"
+    
+    // Handle objects/arrays by taking the first value or 0
+    let num = 0
+    if (typeof value === "number") {
+        num = value
+    } else if (typeof value === "string") {
+        num = parseFloat(value.replace(/,/g, ""))
+    } else if (Array.isArray(value) && value.length > 0) {
+        num = typeof value[0] === "number" ? value[0] : parseFloat(String(value[0]).replace(/,/g, ""))
+    }
+
+    if (!Number.isFinite(num) || Number.isNaN(num)) {
         return "0"
     }
-    const fixed = maximumFractionDigits > 0 ? value.toFixed(maximumFractionDigits) : Math.round(value).toString()
+
+    const fixed = maximumFractionDigits > 0 ? num.toFixed(maximumFractionDigits) : Math.round(num).toString()
     const [whole, fraction] = fixed.split(".")
     const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
     return fraction ? `${groupedWhole}.${fraction}` : groupedWhole
 }
 
-function formatCompactCurrency(value: number) {
-    const absolute = Math.abs(value)
-    const sign = value < 0 ? "-" : ""
+function formatCompactCurrency(value: any) {
+    if (value === null || value === undefined) return "Rp 0"
+    
+    let num = 0
+    if (typeof value === "number") {
+        num = value
+    } else if (typeof value === "string") {
+        num = parseFloat(value.replace(/,/g, ""))
+    } else if (Array.isArray(value) && value.length > 0) {
+        num = typeof value[0] === "number" ? value[0] : parseFloat(String(value[0]).replace(/,/g, ""))
+    }
+
+    if (!Number.isFinite(num) || Number.isNaN(num)) {
+        return "Rp 0"
+    }
+
+    const absolute = Math.abs(num)
+    const sign = num < 0 ? "-" : ""
 
     if (absolute >= 1_000_000_000) {
         return `${sign}Rp ${formatNumber(absolute / 1_000_000_000, 1)}B`
@@ -128,7 +156,8 @@ export function ProcurementNextClient() {
     }, [loadData])
 
     const categoryOptions = useMemo(() => {
-        return Array.from(new Set((data?.items ?? []).map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+        return Array.from(new Set((data?.items ?? []).map((item) => item.category).filter(Boolean)))
+            .sort((a, b) => String(a).localeCompare(String(b)))
     }, [data?.items])
 
     const filteredItems = useMemo(() => {
@@ -515,7 +544,7 @@ export function ProcurementNextClient() {
                                     <YAxis yAxisId="sales" tickLine={false} axisLine={false} width={56} />
                                     <YAxis yAxisId="stock" orientation="right" tickLine={false} axisLine={false} width={64} />
                                     <Tooltip
-                                        formatter={(value: number | null, name: string) => {
+                                        formatter={(value: any, name: string) => {
                                             if (value === null || value === undefined) return ["-", name]
                                             return [formatNumber(value, 1), name]
                                         }}
@@ -612,7 +641,7 @@ export function ProcurementNextClient() {
                                     width={320}
                                 />
                                 <Tooltip
-                                    formatter={(value: number, _name, payload) => [
+                                    formatter={(value: any, _name: string, payload: any) => [
                                         `${formatNumber(value)} qty`,
                                         `${payload?.payload?.name ?? "Product"}`,
                                     ]}
