@@ -25,6 +25,9 @@ const buildDeliveryItemQuantityMap = (
 ) => {
     const result = new Map<string, number>()
     for (const item of items) {
+        if (Number(item.deliveredQuantity) <= 0) {
+            continue
+        }
         const key = `${item.productId}:${item.salesOrderItemId ?? "null"}`
         result.set(key, (result.get(key) ?? 0) + item.deliveredQuantity)
     }
