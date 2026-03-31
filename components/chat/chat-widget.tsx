@@ -178,6 +178,7 @@ function RoomList({ rooms, currentUserId, filter, onFilterChange, onSelectRoom, 
 }
 
 function NewChatView({ users, loadingUsers, loadError, onRetryLoadUsers, onRoomCreated, onBack }: { users: { id: string; name: string; email: string; image: string | null }[]; loadingUsers: boolean; loadError: string | null; onRetryLoadUsers: () => void; onRoomCreated: (roomId: number) => void; onBack: () => void }) {
+    const [mode, setMode] = useState<"dm" | "group">("dm")
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [groupName, setGroupName] = useState("")
     const [search, setSearch] = useState("")
@@ -194,14 +195,36 @@ function NewChatView({ users, loadingUsers, loadError, onRetryLoadUsers, onRoomC
         setCreating(true)
         try {
             const memberIds = Array.from(selected)
-            const roomId = selected.size === 1 && !groupName ? (await getOrCreateDmRoom(memberIds[0])).roomId : (await createGroupRoom(groupName || "Group Chat", memberIds)).roomId
+            const roomId = mode === "group"
+                ? (await createGroupRoom(groupName || "Group Chat", memberIds)).roomId
+                : (await getOrCreateDmRoom(memberIds[0])).roomId
             onRoomCreated(roomId)
-        } catch { toast.error("Gagal membuat percakapan") } finally { setCreating(false) }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Gagal membuat percakapan")
+        } finally { setCreating(false) }
     }
     return (
         <div className="flex h-full min-h-0 flex-col">
             <div className="flex items-center gap-2 border-b p-3"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBack}><ChevronLeft className="h-4 w-4" /></Button><p className="text-sm font-semibold">Chat Baru</p></div>
-            {selected.size > 1 ? <div className="border-b p-3"><Input placeholder="Nama group" value={groupName} onChange={(event) => setGroupName(event.target.value)} className="text-sm" /></div> : null}
+            <div className="border-b p-3">
+                <div className="flex gap-2">
+                    <Button type="button" variant={mode === "dm" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => { setMode("dm"); setGroupName("") }}>
+                        Personal
+                    </Button>
+                    <Button type="button" variant={mode === "group" ? "default" : "outline"} size="sm" className="flex-1 gap-1" onClick={() => setMode("group")}>
+                        <Users className="h-3.5 w-3.5" />
+                        Group
+                    </Button>
+                </div>
+                {mode === "group" ? (
+                    <div className="mt-3">
+                        <Input placeholder="Nama group" value={groupName} onChange={(event) => setGroupName(event.target.value)} className="text-sm" />
+                        <p className="mt-2 text-xs text-muted-foreground">Pilih minimal 2 anggota untuk membuat group chat.</p>
+                    </div>
+                ) : (
+                    <p className="mt-3 text-xs text-muted-foreground">Pilih 1 user untuk memulai chat personal.</p>
+                )}
+            </div>
             <div className="px-3 pt-2 pb-1"><div className="relative"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input className="h-8 pl-7 text-sm" placeholder="Cari user" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
             <ScrollArea className="flex-1 min-h-0 px-3">
                 {loadingUsers ? <div className="flex h-32 items-center justify-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div> : null}
@@ -209,7 +232,17 @@ function NewChatView({ users, loadingUsers, loadError, onRetryLoadUsers, onRoomC
                 {!loadingUsers && !loadError && filtered.length === 0 ? <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-muted-foreground"><p className="text-sm">{users.length === 0 ? "Belum ada user lain yang bisa di-chat" : "User tidak ditemukan"}</p></div> : null}
                 {!loadingUsers && !loadError ? filtered.map((user) => <button key={user.id} type="button" className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-accent/50", selected.has(user.id) && "bg-primary/10")} onClick={() => toggle(user.id)}><Avatar className="h-8 w-8 shrink-0"><AvatarImage src={user.image ?? undefined} /><AvatarFallback className="text-xs">{user.name?.[0]?.toUpperCase()}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate text-sm font-medium">{user.name}</p><p className="truncate text-xs text-muted-foreground">{user.email}</p></div></button>) : null}
             </ScrollArea>
-            <div className="border-t p-3"><Button className="w-full" disabled={selected.size === 0 || creating} onClick={handleCreate}>{creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{selected.size > 1 ? "Buat Group" : "Mulai Chat"}{selected.size > 0 ? ` (${selected.size})` : ""}</Button></div>
+            <div className="border-t p-3">
+                <Button
+                    className="w-full"
+                    disabled={creating || (mode === "dm" ? selected.size !== 1 : selected.size < 2)}
+                    onClick={handleCreate}
+                >
+                    {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {mode === "group" ? "Buat Group" : "Mulai Chat"}
+                    {selected.size > 0 ? ` (${selected.size})` : ""}
+                </Button>
+            </div>
         </div>
     )
 }

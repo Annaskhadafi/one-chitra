@@ -277,6 +277,8 @@ async function getRoomSnapshotInternal(
 }
 
 export async function getChatUsers() {
+    await ensureChatSchema()
+
     return db
         .select({
             id: userTable.id,
@@ -289,6 +291,8 @@ export async function getChatUsers() {
 }
 
 export async function getOrCreateDmRoom(otherUserId: string): Promise<{ roomId: number }> {
+    await ensureChatSchema()
+
     const currentUserId = await getCurrentUserId()
     if (currentUserId === otherUserId) {
         throw new Error("Cannot create DM with yourself")
@@ -335,13 +339,41 @@ export async function getOrCreateDmRoom(otherUserId: string): Promise<{ roomId: 
 }
 
 export async function createGroupRoom(name: string, memberIds: string[]): Promise<{ roomId: number }> {
+    await ensureChatSchema()
+
     const currentUserId = await getCurrentUserId()
-    const allMembers = Array.from(new Set([currentUserId, ...memberIds]))
+    const trimmedName = name.trim()
+    const normalizedMemberIds = Array.from(
+        new Set(
+            memberIds
+                .map((memberId) => memberId.trim())
+                .filter((memberId) => memberId && memberId !== currentUserId && memberId !== HELP_DESK_CONFIG.botId)
+        )
+    )
+
+    if (!trimmedName) {
+        throw new Error("Nama group wajib diisi")
+    }
+
+    if (normalizedMemberIds.length < 2) {
+        throw new Error("Pilih minimal 2 anggota untuk membuat group")
+    }
+
+    const validMembers = await db
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(inArray(userTable.id, normalizedMemberIds))
+
+    if (validMembers.length !== normalizedMemberIds.length) {
+        throw new Error("Sebagian anggota group tidak ditemukan")
+    }
+
+    const allMembers = Array.from(new Set([currentUserId, ...normalizedMemberIds]))
 
     const [newRoom] = await db
         .insert(chatRooms)
         .values({
-            name,
+            name: trimmedName,
             type: "group",
             createdBy: currentUserId,
         })
@@ -360,6 +392,8 @@ export async function createGroupRoom(name: string, memberIds: string[]): Promis
 }
 
 export async function updateGroupRoom(roomId: number, payload: { name?: string; memberIdsToAdd?: string[] }) {
+    await ensureChatSchema()
+
     const currentUserId = await getCurrentUserId()
     const room = await db.query.chatRooms.findFirst({
         where: eq(chatRooms.id, roomId),
