@@ -16,6 +16,8 @@ type OllamaQuotationResult = {
     }[]
 }
 
+import { extractJsonFromText } from "./ocr-utils"
+
 export async function extractVendorQuotationViaOllama(params: {
     fileBuffer: Buffer
     filename: string
@@ -83,11 +85,14 @@ Kembalikan JSON dengan format:
     const content = data.message?.content || ""
     
     try {
-        const parsed = JSON.parse(content) as OllamaQuotationResult
-        return parsed
+        const extracted = extractJsonFromText(content)
+        if (!extracted) {
+            throw new Error("(Ollama JSON malformed)")
+        }
+        return extracted as OllamaQuotationResult
     } catch (e) {
-        console.error("Gagal parse JSON dari Ollama:", content)
-        throw new Error("Gagal mengekstrak data terstruktur dari Ollama")
+        console.error("Gagal parse JSON dari Ollama:", content, e)
+        throw new Error(`Gagal mengekstrak data terstruktur dari Vendor Quotation ${e instanceof Error ? e.message : "(Ollama JSON malformed)"}`)
     }
 }
 

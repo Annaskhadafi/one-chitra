@@ -47,17 +47,21 @@ type Props = {
 
 type RuntimeOcrStatus = "pending" | "processing" | "done" | "failed";
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: any) {
     if (!value) return "—";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
+    // If it's an object (happens with some GV fields), try to get the first value or string representation
+    const rawValue = typeof value === "object" ? (Array.isArray(value) ? value[0] : JSON.stringify(value)) : String(value);
+    
+    const date = new Date(rawValue);
+    if (Number.isNaN(date.getTime())) return String(value);
     return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
-function formatCurrency(value: string | null | undefined) {
-    if (!value) return "—";
-    const amount = Number(value);
-    if (!Number.isFinite(amount)) return value;
+function formatCurrency(value: any) {
+    if (value == null) return "—";
+    const rawValue = typeof value === "object" ? (Array.isArray(value) ? value[0] : value) : value;
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount)) return String(value);
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(amount);
 }
 

@@ -43,26 +43,44 @@ type GrManualRow = {
 };
 
 async function fetchJsonWithNestedString<T>(url: string): Promise<T> {
-    const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
-    if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-    }
+    try {
+        const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+        if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+        }
 
-    const text = await response.text();
-    const parsed = JSON.parse(text) as T | string;
-    return (typeof parsed === "string" ? JSON.parse(parsed) : parsed) as T;
+        const text = await response.text();
+        const parsed = JSON.parse(text) as T | string;
+        if (typeof parsed === "string") {
+            try {
+                return JSON.parse(parsed) as T;
+            } catch {
+                return parsed as unknown as T;
+            }
+        }
+        return parsed as T;
+    } catch (error) {
+        console.error(`Fetch error for ${url}:`, error);
+        throw error;
+    }
 }
 
-function isDateRequiredFrom2026(value: string | string[] | undefined) {
-    const rawValue = Array.isArray(value) ? value[0] : value;
+function isDateRequiredFrom2026(value: any) {
+    let rawValue: string | null = null;
+    if (typeof value === "string") rawValue = value;
+    else if (Array.isArray(value) && typeof value[0] === "string") rawValue = value[0];
+    
     if (!rawValue) return false;
     const date = new Date(rawValue);
     if (Number.isNaN(date.getTime())) return false;
     return date >= MIN_DATE_REQUIRED;
 }
 
-function getDateRequiredTimestamp(value: string | string[] | undefined) {
-    const rawValue = Array.isArray(value) ? value[0] : value;
+function getDateRequiredTimestamp(value: any) {
+    let rawValue: string | null = null;
+    if (typeof value === "string") rawValue = value;
+    else if (Array.isArray(value) && typeof value[0] === "string") rawValue = value[0];
+
     if (!rawValue) return 0;
     const date = new Date(rawValue);
     if (Number.isNaN(date.getTime())) return 0;
@@ -143,7 +161,8 @@ export default async function EprIntegrasiPage() {
         .filter((entry) => isDateRequiredFrom2026(entry["1"]))
         .sort((left, right) => getDateRequiredTimestamp(right["1"]) - getDateRequiredTimestamp(left["1"]))
         .map((entry, index) => {
-            const poNumber = typeof entry["38"] === "string" ? entry["38"].trim() : "";
+            const rawPo = entry["38"];
+            const poNumber = Array.isArray(rawPo) ? (rawPo[0] ?? "").trim() : (rawPo ?? "").trim();
             const grMatch = poNumber ? latestGrManualByPo.get(poNumber) : undefined;
 
             return {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { z } from "zod"
 import { readManagedUpload } from "@/lib/upload-storage"
-import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
+import { extractStructuredFromPoViaOllama } from "@/lib/ollama-so-ocr"
 
 export const runtime = "nodejs"
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: "File tidak ditemukan" }, { status: 404 })
         }
 
-        const ocr = await extractStructuredFromDocument({
+        const ocr = await extractStructuredFromPoViaOllama({
             fileBuffer: uploaded.buffer,
             filename: uploaded.filename,
             pages: body.data.pages ?? "all",
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
             customer_name: sanitizeText(ocr.structured.customer_company_name),
             po_number: sanitizeText(ocr.structured.po_number),
             date: sanitizeText(ocr.structured.document_date),
-            items: ocr.structured.products.map((item) => ({
+            items: ocr.structured.products.map((item: { name: string; qty: number; unit_price: number }) => ({
                 product: sanitizeText(item.name),
                 qty: Number.isFinite(item.qty) ? item.qty : 0,
                 price: Number.isFinite(item.unit_price) ? item.unit_price : 0,

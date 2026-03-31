@@ -313,33 +313,24 @@ function getMessageContent(payload: Record<string, unknown> | null) {
     return ""
 }
 
+import { extractJsonFromText, sanitizeOcrText } from "./ocr-utils"
+
 function extractRawText(messageContent: string) {
     if (!messageContent) {
         return ""
     }
 
-    try {
-        const parsed = JSON.parse(messageContent) as { raw_text?: unknown }
-        if (typeof parsed.raw_text === "string") {
-            return sanitizeText(parsed.raw_text)
-        }
-    } catch {}
-
-    const fenced = messageContent.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
-    if (fenced) {
-        try {
-            const parsed = JSON.parse(fenced) as { raw_text?: unknown }
-            if (typeof parsed.raw_text === "string") {
-                return sanitizeText(parsed.raw_text)
-            }
-        } catch {}
+    const extracted = extractJsonFromText(messageContent)
+    if (extracted && typeof extracted === "object" && "raw_text" in extracted) {
+        return sanitizeOcrText(String(extracted.raw_text))
     }
 
-    return sanitizeText(messageContent)
+    // Fallback if it's not a JSON but just plain text
+    return sanitizeOcrText(messageContent)
 }
 
 function extractDeliveryOrderFields(rawText: string): DeliveryOrderBoxFields {
-    const text = sanitizeText(rawText)
+    const text = sanitizeOcrText(rawText)
     const section = extractDeliveryOrderSection(text)
 
     return {
@@ -382,7 +373,7 @@ function extractDeliveryOrderSection(text: string) {
 function findField(text: string, patterns: RegExp[]) {
     for (const pattern of patterns) {
         const match = text.match(pattern)
-        const candidate = sanitizeText(match?.[1])
+        const candidate = sanitizeOcrText(match?.[1])
         if (candidate) {
             return candidate
         }
@@ -439,6 +430,4 @@ function forceDeliveryYear2026(dateToken: string) {
     return dateToken
 }
 
-function sanitizeText(value: string | null | undefined) {
-    return String(value ?? "").replace(/\u0000/g, " ").trim()
-}
+
