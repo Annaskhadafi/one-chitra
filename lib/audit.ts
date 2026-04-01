@@ -38,7 +38,7 @@ export async function getAuditLogs(tableName: string, recordId: string) {
             eq(auditLogs.recordId, recordId)
         ),
         with: {
-            userId: true, // This might not work if the relation is not set up correctly in schema
+            user: true,
         },
         orderBy: [desc(auditLogs.createdAt)],
     });

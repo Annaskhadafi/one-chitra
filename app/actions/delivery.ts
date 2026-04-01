@@ -404,14 +404,16 @@ export async function getReadyOutstandingSalesOrders(): Promise<ReadyOutstanding
         const readyItems = []
 
         for (const item of order.items) {
-            if (item.remainingQuantity > 0) {
+            if (item.remainingQuantity > 0 && item.productId) {
                 // Mengecek stok akurat di Origin Warehouse
-                const directAvailable = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
-                if (directAvailable > 0) {
-                    readyItems.push({
-                        ...item,
-                        availableStock: directAvailable
-                    })
+                if (order.warehouseId) {
+                    const directAvailable = await getOriginWarehouseStock(db, order.warehouseId, item.productId)
+                    if (directAvailable > 0) {
+                        readyItems.push({
+                            ...item,
+                            availableStock: directAvailable
+                        })
+                    }
                 }
             }
         }
@@ -938,6 +940,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             return {
                 success: true as const,
                 deliveredNotificationIds: originalDelivery.status !== "delivered" && data.status === "delivered" ? [id] : [],
+                loggedDeliveryNumber: data.deliveryNumber || originalDelivery.deliveryNumber || null,
             }
         })
 
@@ -949,7 +952,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             await notifyDeliveredDeliveries(result.deliveredNotificationIds)
         }
 
-        await recordActivity({ action: "UPDATE", tableName: "deliveries", recordId: id.toString(), description: `Memperbarui Delivery ${data.deliveryNumber || originalDelivery.deliveryNumber}` });
+        await recordActivity({ action: "UPDATE", tableName: "deliveries", recordId: id.toString(), description: `Memperbarui Delivery ${result.loggedDeliveryNumber || id}` });
 
         return { success: true }
     } catch (error) {
@@ -971,7 +974,7 @@ export async function deleteDelivery(id: number) {
         if (!delivery) return { success: false, error: "Delivery not found" }
 
         // Start transaction
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const session = await getAuthenticatedSession('deliveries', 'delete')
             const userId = session.user.id
 
@@ -1029,6 +1032,17 @@ export async function deleteDelivery(id: number) {
             } catch (_e) { }
             return { success: true }
         })
+
+        if (result.success) {
+            await recordActivity({
+                action: "DELETE",
+                tableName: "deliveries",
+                recordId: id.toString(),
+                description: `Menghapus Delivery ${delivery.deliveryNumber ?? id}`,
+            })
+        }
+
+        return result
     } catch (error) {
         console.error("Failed to delete delivery:", error)
         return { success: false, error: "Failed to delete delivery" }
@@ -1039,7 +1053,9 @@ export async function bulkDeleteDeliveries(ids: number[]) {
     try {
         await checkPermission('deliveries', 'delete')
 
-        return await db.transaction(async (tx) => {
+        const deletedDeliveries: Array<{ id: number; deliveryNumber: string | null }> = []
+
+        const result = await db.transaction(async (tx) => {
             const session = await getAuthenticatedSession('deliveries', 'delete')
             const userId = session.user.id
 
@@ -1093,6 +1109,7 @@ export async function bulkDeleteDeliveries(ids: number[]) {
                 await tx.delete(stockTransfers).where(eq(stockTransfers.deliveryId, id))
                 await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
                 await tx.delete(deliveries).where(eq(deliveries.id, id))
+                deletedDeliveries.push({ id, deliveryNumber: delivery.deliveryNumber ?? null })
             }
 
             try {
@@ -1101,6 +1118,19 @@ export async function bulkDeleteDeliveries(ids: number[]) {
             } catch (_e) { }
             return { success: true }
         })
+
+        if (result.success) {
+            for (const delivery of deletedDeliveries) {
+                await recordActivity({
+                    action: "DELETE",
+                    tableName: "deliveries",
+                    recordId: delivery.id.toString(),
+                    description: `Menghapus Delivery ${delivery.deliveryNumber ?? delivery.id}`,
+                })
+            }
+        }
+
+        return result
     } catch (error) {
         console.error("Bulk delete deliveries error:", error)
         return { success: false, error: "Failed to delete deliveries" }

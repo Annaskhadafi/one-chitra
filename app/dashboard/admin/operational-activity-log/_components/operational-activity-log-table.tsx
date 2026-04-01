@@ -48,6 +48,7 @@ function actionColor(action: string) {
 function tableLabel(tableName: string | null) {
     if (tableName === "sales_orders") return "Sales Order"
     if (tableName === "deliveries") return "Delivery / DO"
+    if (tableName === "quotations") return "Quotation"
     return tableName ?? "-"
 }
 

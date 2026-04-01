@@ -565,19 +565,24 @@ export async function getOperationalActivityLogs(params: {
         id: auditLogs.id,
         userId: auditLogs.userId,
         action: auditLogs.action,
-        tableName: sql<string | null>`null`,
-        recordId: sql<string | null>`null`,
+        tableName: auditLogs.tableName,
+        recordId: auditLogs.recordId,
         description: auditLogs.description,
         createdAt: auditLogs.createdAt,
         userName: user.name,
         userEmail: user.email,
     }
 
-    const fallbackWhereClause = and(
+    const operationalWhereClause = and(
         or(
+            eq(auditLogs.tableName, "sales_orders"),
+            eq(auditLogs.tableName, "deliveries"),
+            eq(auditLogs.tableName, "quotations"),
             ilike(auditLogs.description, "%sales order%"),
             ilike(auditLogs.description, "%delivery%"),
             ilike(auditLogs.description, "%do monitoring%"),
+            ilike(auditLogs.description, "%quotation%"),
+            ilike(auditLogs.description, "%penawaran%"),
             ilike(auditLogs.description, "% do %")
         )!,
         ...commonConditions
@@ -586,13 +591,13 @@ export async function getOperationalActivityLogs(params: {
     const [total] = await db
         .select({ count: count() })
         .from(auditLogs)
-        .where(fallbackWhereClause)
+        .where(operationalWhereClause)
 
     const logs = await db
         .select(selectShape)
         .from(auditLogs)
         .leftJoin(user, eq(auditLogs.userId, user.id))
-        .where(fallbackWhereClause)
+        .where(operationalWhereClause)
         .orderBy(desc(auditLogs.createdAt))
         .limit(pageSize)
         .offset((page - 1) * pageSize)
@@ -604,7 +609,9 @@ export async function getOperationalActivityLogs(params: {
                 log.tableName ??
                 (/sales order/i.test(log.description ?? "")
                     ? "sales_orders"
-                    : "deliveries"),
+                    : /quotation|penawaran/i.test(log.description ?? "")
+                        ? "quotations"
+                        : "deliveries"),
         })),
         total: total.count,
         page,

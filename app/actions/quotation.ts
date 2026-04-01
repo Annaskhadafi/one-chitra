@@ -24,6 +24,7 @@ import { readManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
 import { mapExtractedToMaster } from "@/lib/so-mapping"
 import { extractUploadFilename } from "@/lib/upload-url"
+import { recordActivity } from "@/lib/audit"
 
 type QuotationInput = z.infer<typeof quotationSchema>
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -964,7 +965,7 @@ export async function createQuotation(data: QuotationInput) {
         const quotationNumber = data.quotationNumber || await generateQuotationNumber()
         const now = new Date()
 
-        return db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const insertedQuotationRows = await tx.insert(quotations)
                 .values({
                     quotationNumber,
@@ -1017,6 +1018,17 @@ export async function createQuotation(data: QuotationInput) {
             revalidatePath("/dashboard/quotations")
             return { success: true as const, id: newQuotation.id }
         })
+
+        if (result.success) {
+            await recordActivity({
+                action: "CREATE",
+                tableName: "quotations",
+                recordId: result.id.toString(),
+                description: `Membuat Quotation baru ${quotationNumber}`,
+            })
+        }
+
+        return result
     } catch (error) {
         console.error("Failed to create quotation:", error)
         return { success: false as const, error: "Failed to create quotation" }
@@ -1027,7 +1039,7 @@ export async function updateQuotation(id: number, data: QuotationInput) {
     try {
         const userId = await getAuthenticatedUserId()
 
-        return db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             const originalQuotation = await tx.query.quotations.findFirst({
                 where: eq(quotations.id, id),
                 with: {
@@ -1101,6 +1113,17 @@ export async function updateQuotation(id: number, data: QuotationInput) {
             revalidatePath(`/dashboard/quotations/${id}`)
             return { success: true as const }
         })
+
+        if (result.success) {
+            await recordActivity({
+                action: "UPDATE",
+                tableName: "quotations",
+                recordId: id.toString(),
+                description: `Memperbarui Quotation ${data.quotationNumber || id}`,
+            })
+        }
+
+        return result
     } catch (error) {
         console.error("Failed to update quotation:", error)
         return { success: false as const, error: "Failed to update quotation" }
@@ -1130,6 +1153,7 @@ export async function deleteQuotation(id: number) {
             where: eq(quotations.id, safeId),
             columns: {
                 id: true,
+                quotationNumber: true,
                 createdBy: true,
                 customerPoDocument: true,
             },
@@ -1154,6 +1178,13 @@ export async function deleteQuotation(id: number) {
             eq(quotations.id, safeId),
             eq(quotations.createdBy, userId),
         ))
+
+        await recordActivity({
+            action: "DELETE",
+            tableName: "quotations",
+            recordId: safeId.toString(),
+            description: `Menghapus Quotation ${quotation.quotationNumber || safeId}`,
+        })
 
         await cleanupQuotationFiles([
             quotation.customerPoDocument,
@@ -1189,6 +1220,7 @@ export async function bulkDeleteQuotations(ids: number[]) {
             ),
             columns: {
                 id: true,
+                quotationNumber: true,
                 customerPoDocument: true,
             },
         })
@@ -1208,6 +1240,15 @@ export async function bulkDeleteQuotations(ids: number[]) {
             inArray(quotations.id, safeIds),
             eq(quotations.createdBy, userId),
         ))
+
+        for (const quotation of ownedQuotations) {
+            await recordActivity({
+                action: "DELETE",
+                tableName: "quotations",
+                recordId: quotation.id.toString(),
+                description: `Menghapus Quotation ${quotation.quotationNumber || quotation.id}`,
+            })
+        }
 
         await cleanupQuotationFiles([
             ...ownedQuotations.map((quotation) => quotation.customerPoDocument),
