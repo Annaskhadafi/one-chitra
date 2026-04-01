@@ -1,5 +1,30 @@
 # Quick Setup Guide - Dokploy
 
+## Deploy Dengan Ollama di VPS
+
+File yang bisa langsung dipakai:
+
+- `docker-compose.dokploy.yml`
+- `.env.dokploy.example`
+
+Langkah ringkas:
+
+1. Copy `.env.dokploy.example` menjadi env di Dokploy.
+2. Pastikan volume host ini tersedia:
+   - `/mnt/data/one-chitra/uploads`
+   - `/mnt/data/one-chitra/ollama`
+3. Deploy compose `docker-compose.dokploy.yml`.
+4. Tunggu service `ollama` hidup lalu `ollama-init` menarik model awal.
+5. Setelah model selesai di-pull, OCR app akan mengakses Ollama lewat `http://ollama:11434`.
+
+Catatan penting:
+
+- Model default saat ini `qwen2.5vl:7b` agar lebih realistis untuk VPS tanpa GPU besar.
+- Jika VPS kecil, model ini tetap bisa berat. Pilih model vision yang lebih ringan bila perlu.
+- `ollama-init` hanya untuk pull model awal. Setelah selesai, container ini akan berhenti sendiri.
+- Jika ingin full private OCR tanpa Mistral, kosongkan `MISTRAL_API_KEY`.
+- Jika ingin hybrid, biarkan `MISTRAL_API_KEY` tetap terisi agar app masih bisa fallback ke Mistral.
+
 ## Current Configuration
 
 ### Volume Mount (Already Configured)

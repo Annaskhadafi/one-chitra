@@ -1,0 +1,67 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: one-chitra-app
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      UPLOAD_DIR: /app/uploads
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5vl:7b}
+      OLLAMA_MODEL_VISION: ${OLLAMA_MODEL_VISION:-qwen2.5vl:7b}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_OCR_ENDPOINT: ${MISTRAL_OCR_ENDPOINT:-https://api.mistral.ai/v1/ocr}
+      MISTRAL_MAP_MODEL: ${MISTRAL_MAP_MODEL:-mistral-small-latest}
+      CRON_SECRET: ${CRON_SECRET:-}
+    volumes:
+      - /mnt/data/one-chitra/uploads:/app/uploads
+    networks:
+      - one-chitra-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: one-chitra-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+    volumes:
+      - /mnt/data/one-chitra/ollama:/root/.ollama
+    networks:
+      - one-chitra-net
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: one-chitra-ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 10
+        ollama pull ${OLLAMA_MODEL:-qwen2.5vl:7b}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    networks:
+      - one-chitra-net
+    restart: "no"
+
+networks:
+  one-chitra-net:
+    driver: bridge

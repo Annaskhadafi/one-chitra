@@ -1,12 +1,13 @@
 "use server"
 
 import { db } from "@/db"
-import { products, stockLevels, me2lPurchDocsSap, zvendorPoReportSap } from "@/db/schema"
-import { eq, and, gte, lte, isNotNull, ne, inArray } from "drizzle-orm"
+import { products, stockLevels, me2lPurchDocsSap, warehouses, zvendorPoReportSap } from "@/db/schema"
+import { eq, and, gte, lte, isNotNull, ne, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
+import { normalizeSloc } from "@/lib/sloc"
 
 
 
@@ -123,7 +124,7 @@ export async function fetchGoodReceiveFromSAP(startDate: string, endDate: string
     }
 }
 
-const goodReceiveItemSchema = z.object({
+const _goodReceiveItemSchema = z.object({
     materialNumber: z.string(),
     quantity: z.number().min(0.001),
     ponumb: z.string(),
@@ -131,7 +132,7 @@ const goodReceiveItemSchema = z.object({
 })
 
 export async function processGoodReceive(
-    items: z.infer<typeof goodReceiveItemSchema>[],
+    items: z.infer<typeof _goodReceiveItemSchema>[],
     warehouseId: number
 ) {
     try {
@@ -161,9 +162,21 @@ export async function processGoodReceive(
                 }
 
                 // 2. Find internal product
-                const product = await tx.query.products.findFirst({
-                    where: eq(products.materialNumber, materialNumber),
+                const warehouseRow = await tx.query.warehouses.findFirst({
+                    where: eq(warehouses.id, warehouseId),
+                    columns: {
+                        sloc: true,
+                    },
                 })
+
+                const product = warehouseRow
+                    ? await tx.query.products.findFirst({
+                        where: and(
+                            eq(products.materialNumber, materialNumber),
+                            eq(products.sloc, normalizeSloc(warehouseRow.sloc))
+                        ),
+                    })
+                    : null
 
                 if (!product) {
                     errors.push(`Product ${materialNumber} not found in inventory.`)
@@ -171,30 +184,21 @@ export async function processGoodReceive(
                 }
 
                 // 3. Update or Create Stock Level
-                const existingStock = await tx.query.stockLevels.findFirst({
-                    where: and(
-                        eq(stockLevels.productId, product.id),
-                        eq(stockLevels.warehouseId, warehouseId)
-                    ),
+                await tx.insert(stockLevels).values({
+                    warehouseId,
+                    productId: product.id,
+                    totalStock: item.quantity,
+                    bookedStock: 0,
+                    minStock: 0,
+                    valuationValue: '0',
                 })
-
-                if (existingStock) {
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: existingStock.totalStock + item.quantity,
+                    .onConflictDoUpdate({
+                        target: [stockLevels.productId, stockLevels.warehouseId],
+                        set: {
+                            totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
                             updatedAt: new Date(),
-                        })
-                        .where(eq(stockLevels.id, existingStock.id))
-                } else {
-                    await tx.insert(stockLevels).values({
-                        warehouseId,
-                        productId: product.id,
-                        totalStock: item.quantity,
-                        bookedStock: 0,
-                        minStock: 0,
-                        valuationValue: '0',
+                        },
                     })
-                }
 
                 // 4. Record Movement
                 await recordStockMovement(tx, {

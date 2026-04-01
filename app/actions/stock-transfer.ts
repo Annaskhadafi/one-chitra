@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { stockTransfers, stockTransferItems, stockLevels } from "@/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { recordStockMovement } from "./stock-movement"
@@ -114,29 +114,20 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
 
 
                 // Add to destination
-                const destStock = await tx.query.stockLevels.findFirst({
-                    where: and(
-                        eq(stockLevels.warehouseId, data.destinationWarehouseId),
-                        eq(stockLevels.productId, item.productId)
-                    )
+                await tx.insert(stockLevels).values({
+                    warehouseId: data.destinationWarehouseId,
+                    productId: item.productId,
+                    totalStock: item.quantity,
+                    minStock: 0,
+                    valuationValue: '0',
                 })
-
-                if (destStock) {
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: destStock.totalStock + item.quantity,
-                            updatedAt: new Date()
-                        })
-                        .where(eq(stockLevels.id, destStock.id))
-                } else {
-                    await tx.insert(stockLevels).values({
-                        warehouseId: data.destinationWarehouseId,
-                        productId: item.productId,
-                        totalStock: item.quantity,
-                        minStock: 0,
-                        valuationValue: '0',
+                    .onConflictDoUpdate({
+                        target: [stockLevels.productId, stockLevels.warehouseId],
+                        set: {
+                            totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
+                            updatedAt: new Date(),
+                        },
                     })
-                }
 
                 // Record Source Movement (Out)
                 await recordStockMovement(tx, {
@@ -252,29 +243,20 @@ export async function syncStockTransferReceipt(
             })
         }
 
-        const destStock = await tx.query.stockLevels.findFirst({
-            where: and(
-                eq(stockLevels.warehouseId, transfer.toWarehouseId),
-                eq(stockLevels.productId, item.productId)
-            )
+        await tx.insert(stockLevels).values({
+            warehouseId: transfer.toWarehouseId,
+            productId: item.productId,
+            totalStock: receivedQty,
+            minStock: 0,
+            valuationValue: '0',
         })
-
-        if (destStock) {
-            await tx.update(stockLevels)
-                .set({
-                    totalStock: destStock.totalStock + receivedQty,
-                    updatedAt: new Date()
-                })
-                .where(eq(stockLevels.id, destStock.id))
-        } else {
-            await tx.insert(stockLevels).values({
-                warehouseId: transfer.toWarehouseId,
-                productId: item.productId,
-                totalStock: receivedQty,
-                minStock: 0,
-                valuationValue: '0',
+            .onConflictDoUpdate({
+                target: [stockLevels.productId, stockLevels.warehouseId],
+                set: {
+                    totalStock: sql`${stockLevels.totalStock} + ${receivedQty}`,
+                    updatedAt: new Date(),
+                },
             })
-        }
 
         await recordStockMovement(tx, {
             productId: item.productId,
@@ -403,6 +385,13 @@ export async function updateStockTransferStatus(id: number, data: {
                             minStock: 0,
                             valuationValue: '0',
                         })
+                            .onConflictDoUpdate({
+                                target: [stockLevels.productId, stockLevels.warehouseId],
+                                set: {
+                                    totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
+                                    updatedAt: new Date(),
+                                },
+                            })
                     }
 
                     // Record ADJUSTMENT

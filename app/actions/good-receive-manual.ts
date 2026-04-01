@@ -3,7 +3,7 @@
 import { db } from "@/db"
 import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements, zvendorPoReportSap } from "@/db/schema"
 import { revalidatePath } from "next/cache"
-import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
+import { eq, and, or, desc, inArray, isNotNull, ne, isNull, sql } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { sendLoggedNotificationMessage, sendSystemTemplatedEmailByCode } from "@/lib/email"
@@ -784,33 +784,21 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 }
 
                 // 3. Update or Insert Stock Level
-                const existingStock = await tx.select()
-                    .from(stockLevels)
-                    .where(
-                        and(
-                            eq(stockLevels.productId, item.productId),
-                            eq(stockLevels.warehouseId, input.warehouseId)
-                        )
-                    )
-                    .limit(1)
-
-                if (existingStock.length > 0) {
-                    await tx.update(stockLevels)
-                        .set({
-                            totalStock: existingStock[0].totalStock + item.quantity,
-                            updatedAt: new Date()
-                        })
-                        .where(eq(stockLevels.id, existingStock[0].id))
-                } else {
-                    await tx.insert(stockLevels).values({
-                        productId: item.productId,
-                        warehouseId: input.warehouseId,
-                        totalStock: item.quantity, // Initial stock
-                        bookedStock: 0,
-                        minStock: 0,
-                        valuationValue: "0",
+                await tx.insert(stockLevels).values({
+                    productId: item.productId,
+                    warehouseId: input.warehouseId,
+                    totalStock: item.quantity, // Initial stock
+                    bookedStock: 0,
+                    minStock: 0,
+                    valuationValue: "0",
+                })
+                    .onConflictDoUpdate({
+                        target: [stockLevels.productId, stockLevels.warehouseId],
+                        set: {
+                            totalStock: sql`${stockLevels.totalStock} + ${item.quantity}`,
+                            updatedAt: new Date(),
+                        },
                     })
-                }
 
                 // 4. Record Movement
                 await recordStockMovement(tx, {
