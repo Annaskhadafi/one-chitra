@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, FileImage, FileText, Loader2, MessageCircle, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
-import { createGroupRoom, deleteChatRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
+import { createGroupRoom, deleteChatRoom, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
 import { ensureHelpDeskRoom, getHelpDeskStarterPrompts } from "@/app/actions/helpdesk-ai"
 import { uploadFile } from "@/app/actions/upload"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
@@ -322,7 +322,7 @@ function RoomList({ rooms, currentUserId, filter, selectedRoomId, onFilterChange
                             <div className="flex items-center gap-3">
                                 {room.type === "group" ? <div className={cn("relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full", isSelected ? "bg-white/20" : "bg-gradient-to-br from-fuchsia-100 to-cyan-100")}><Users className={cn("h-4 w-4", isSelected ? "text-white" : "text-fuchsia-600")} />{isUnread && !isSelected ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" /> : null}</div> : <Avatar className={cn("h-9 w-9 shrink-0 ring-2", isSelected ? "ring-white/30" : isUnread ? "ring-rose-200" : "ring-white")}><AvatarImage src={getChatAvatarSrc({ image: others[0]?.image, name: others[0]?.name, email: others[0]?.email, seed: others[0]?.userId })} /><AvatarFallback>{room.type === "ai-helpdesk" ? "CJ" : getAvatarInitials(others[0]?.name, others[0]?.email)}</AvatarFallback></Avatar>}
                                 <div className="min-w-0 flex-1">
-                                    <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-1"><p className={cn("truncate text-sm font-medium", isUnread && !isSelected && "text-slate-900", isSelected && "text-white")}>{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className={cn("h-4 px-1 text-[10px]", isSelected ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-700")}>MAGIC</Badge> : null}{room.isPinned ? <Pin className={cn("h-3 w-3", isSelected ? "text-white" : "text-fuchsia-500")} /> : null}{room.isMuted ? <BellOff className={cn("h-3 w-3", isSelected ? "text-white/80" : "text-muted-foreground")} /> : null}</div>{room.lastMessage ? <p className={cn("text-[10px]", isSelected ? "text-white/80" : isUnread ? "font-semibold text-rose-500" : "text-muted-foreground")}>{time(room.lastMessage.createdAt)}</p> : null}</div>
+                                    <div className="flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-1"><p className={cn("truncate text-sm font-medium", isUnread && !isSelected && "text-slate-900", isSelected && "text-white")}>{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className={cn("h-4 px-1 text-[10px]", isSelected ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-700")}>AI</Badge> : null}{room.isPinned ? <Pin className={cn("h-3 w-3", isSelected ? "text-white" : "text-fuchsia-500")} /> : null}{room.isMuted ? <BellOff className={cn("h-3 w-3", isSelected ? "text-white/80" : "text-muted-foreground")} /> : null}</div>{room.lastMessage ? <p className={cn("text-[10px]", isSelected ? "text-white/80" : isUnread ? "font-semibold text-rose-500" : "text-muted-foreground")}>{time(room.lastMessage.createdAt)}</p> : null}</div>
                                     <div className="flex items-center justify-between gap-2">{room.lastMessage ? <p className={cn("truncate text-xs", isSelected ? "text-white/90" : isUnread ? "font-medium text-slate-700" : "text-muted-foreground")}>{typing ? "Sedang mengetik..." : `${room.lastMessage.senderName}: ${room.lastMessage.content}`}</p> : <p className={cn("text-xs italic", isSelected ? "text-white/80" : "text-muted-foreground")}>{isHelpDeskRoom(room) ? "Tanya cara pakai sistem atau modul" : "Belum ada pesan"}</p>}{room.unreadCount > 0 ? <Badge className={cn("h-5 min-w-5 rounded-full px-1.5 text-[10px] shadow-sm", isSelected ? "bg-white text-rose-500" : "bg-gradient-to-r from-rose-500 to-orange-400 text-white")}>{room.unreadCount}</Badge> : null}</div>
                                 </div>
                             </div>
@@ -553,7 +553,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         })
     }, [])
     const status = isHelpDeskRoom(room)
-        ? assistantThinking ? "Sedang menyiapkan jawaban..." : "Siap membantu penggunaan sistem"
+        ? assistantThinking ? "Sedang menyiapkan jawaban..." : "Siap bantu pertanyaan umum dan One Chitra"
         : typingMembers.length ? `${typingMembers.map((member) => member.name).join(", ")} sedang mengetik...` : others.some((member) => member.isTyping) ? "Sedang mengetik..." : others.some((member) => member.lastSeenAt && lastSeenLabel(member.lastSeenAt) === "Aktif sekarang") ? "Aktif sekarang" : lastSeenLabel(memberPresence.find((member) => member.userId === others[0]?.userId)?.lastSeenAt ?? others[0]?.lastSeenAt ?? null)
     const onInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
         const value = event.target.value
@@ -654,34 +654,49 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     }
     const handleSend = async () => {
         const trimmed = input.trim(); if (!trimmed && !pendingMention && attachments.length === 0) return
+        const plainAttachments = attachments.map(({ previewUrl: _previewUrl, isUploading: _isUploading, ...attachment }) => attachment)
+        const questionForAi = trimmed
         setSending(true)
-        if (isHelpDeskRoom(room)) setAssistantThinking(true)
         try {
             const mentionedUserIds = selectedUserMentions
                 .filter((user) => input.includes(`@${user.name}`))
                 .map((user) => user.userId)
 
-            await sendMessage(
+            const result = await sendMessage(
                 room.id,
                 trimmed || `[Referensi: ${pendingMention?.label}]`,
                 pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined,
                 replyTarget?.id ?? null,
                 mentionedUserIds,
-                attachments.map(({ previewUrl: _previewUrl, isUploading: _isUploading, ...attachment }) => attachment)
+                plainAttachments
             )
             attachments.forEach((attachment) => { if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl) })
             setInput(""); setPendingMention(null); setSelectedUserMentions([]); setReplyTarget(null); setAttachments([]); setShowStickerPicker(false); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
             const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) })
             applySnapshot(snapshot, false)
             onRoomUpdated().catch(() => undefined)
+
+            if (isHelpDeskRoom(room) && questionForAi && result.shouldTriggerAiReply) {
+                setAssistantThinking(true)
+                void generateHelpDeskReplyForRoom(room.id, questionForAi)
+                    .then(async () => {
+                        const nextSnapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 2, 30) })
+                        applySnapshot(nextSnapshot, false)
+                        onRoomUpdated().catch(() => undefined)
+                    })
+                    .catch(() => {
+                        toast.error("Balasan AI gagal diproses")
+                        setAssistantThinking(false)
+                    })
+            } else {
+                setAssistantThinking(false)
+            }
         } catch {
             toast.error("Pesan gagal dikirim")
             setSending(false)
             setAssistantThinking(false)
         } finally {
-            if (!isHelpDeskRoom(room)) {
-                setSending(false)
-            }
+            setSending(false)
         }
     }
     const loadOlder = async () => {
@@ -703,7 +718,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 <div className="flex items-center gap-2 p-3">
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-white hover:bg-white/15 hover:text-white" onClick={onBack}><ChevronLeft className="h-4 w-4" /></Button>
                     <div className="flex -space-x-1.5">{others.slice(0, 2).map((member) => <Avatar key={member.userId} className="h-7 w-7 border-2 border-background"><AvatarImage src={getChatAvatarSrc({ image: member.image, name: member.name, email: member.email, seed: member.userId })} /><AvatarFallback className="text-xs">{getAvatarInitials(member.name, member.email)}</AvatarFallback></Avatar>)}</div>
-                    <div className="min-w-0"><div className="flex items-center gap-1"><p className="truncate text-sm font-semibold">{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className="h-4 bg-white/20 px-1 text-[10px] text-white">Help Desk MAGIC</Badge> : null}</div><p className="truncate text-xs text-white/80">{status}</p></div>
+                    <div className="min-w-0"><div className="flex items-center gap-1"><p className="truncate text-sm font-semibold">{room.name}</p>{room.type === "ai-helpdesk" ? <Badge variant="secondary" className="h-4 bg-white/20 px-1 text-[10px] text-white">AI Assistant</Badge> : null}</div><p className="truncate text-xs text-white/80">{status}</p></div>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => togglePreference("isPinned", !room.isPinned)}>{room.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}</Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => togglePreference("isMuted", !room.isMuted)}>{room.isMuted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}</Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => togglePreference("isArchived", !room.isArchived)}>{room.isArchived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}</Button>
@@ -723,7 +738,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }}>{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} onReply={setReplyTarget} /></div>
                     })}
                     {typingMembers.length > 0 ? <p className="mb-2 text-xs text-muted-foreground">{typingMembers.map((member) => member.name).join(", ")} sedang mengetik...</p> : null}
-                    {assistantThinking ? <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Chitra Jenius sedang menyusun jawaban MAGIC...</div> : null}
+                    {assistantThinking ? <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Chitra Jenius sedang menyusun jawaban...</div> : null}
                     <div ref={bottomRef} />
                 </>}
             </ScrollArea>
@@ -774,7 +789,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         <SmilePlus className="h-3.5 w-3.5" /> Stiker
                     </Button>
                 </div>
-                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? "Tanyakan cara memakai menu, modul, atau alur kerja di sistem ini" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
             </div>
         </div>
     )
@@ -793,6 +808,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     const previousRoomsRef = useRef<ChatRoomWithMeta[]>([])
     const lastSoundAtRef = useRef(0)
     const hasLoadedRoomsRef = useRef(false)
+    const activeRoomId = activeRoom?.id ?? null
     const totalUnread = rooms.filter((room) => !room.isArchived).reduce((sum, room) => sum + room.unreadCount, 0)
     const loadChatUsers = useCallback(async () => {
         setChatUsersLoading(true)
@@ -865,7 +881,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
             {isOpen ? <div className="flex h-[620px] w-[380px] flex-col overflow-hidden rounded-[28px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200">
                 <div className="shrink-0 bg-gradient-to-r from-fuchsia-500 via-rose-500 to-orange-400 px-4 py-3 text-white"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><div className="rounded-full bg-white/20 p-1.5"><MessageCircle className="h-4 w-4" /></div><span className="text-sm font-semibold">Chat Workspace</span></div><Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => { setIsOpen(false); setActiveRoom(null); setShowNewChat(false) }}><X className="h-4 w-4" /></Button></div></div>
                 <div className="flex-1 min-h-0 overflow-hidden">
-                    {showNewChat ? <NewChatView users={chatUsers} loadingUsers={chatUsersLoading} loadError={chatUsersError} onRetryLoadUsers={() => { loadChatUsers().catch(() => undefined) }} onRoomCreated={handleRoomCreated} onBack={() => setShowNewChat(false)} /> : activeRoom ? <ConversationView room={activeRoom} currentUserId={currentUserId} onBack={() => { setActiveRoom(null); loadRooms().catch(() => undefined) }} onDeleteRoom={deleteRoom} onRoomUpdated={loadRooms} /> : <RoomList rooms={rooms} currentUserId={currentUserId} filter={filter} selectedRoomId={activeRoom?.id ?? null} onFilterChange={setFilter} onSelectRoom={(room) => { setActiveRoom(room); setShowNewChat(false) }} onNewChat={() => { setShowNewChat(true); if (!chatUsers.length && !chatUsersLoading) loadChatUsers().catch(() => undefined) }} onOpenHelpDesk={handleOpenHelpDesk} onTogglePreference={togglePreference} totalUnread={totalUnread} />}
+                    {showNewChat ? <NewChatView users={chatUsers} loadingUsers={chatUsersLoading} loadError={chatUsersError} onRetryLoadUsers={() => { loadChatUsers().catch(() => undefined) }} onRoomCreated={handleRoomCreated} onBack={() => setShowNewChat(false)} /> : activeRoom ? <ConversationView room={activeRoom} currentUserId={currentUserId} onBack={() => { setActiveRoom(null); loadRooms().catch(() => undefined) }} onDeleteRoom={deleteRoom} onRoomUpdated={loadRooms} /> : <RoomList rooms={rooms} currentUserId={currentUserId} filter={filter} selectedRoomId={activeRoomId} onFilterChange={setFilter} onSelectRoom={(room) => { setActiveRoom(room); setShowNewChat(false) }} onNewChat={() => { setShowNewChat(true); if (!chatUsers.length && !chatUsersLoading) loadChatUsers().catch(() => undefined) }} onOpenHelpDesk={handleOpenHelpDesk} onTogglePreference={togglePreference} totalUnread={totalUnread} />}
                 </div>
             </div> : null}
             <button type="button" onClick={() => setIsOpen((value) => !value)} className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-orange-400 text-white shadow-[0_18px_40px_rgba(244,63,94,0.4)] transition-transform hover:scale-105 active:scale-95" disabled={openingHelpDesk}>

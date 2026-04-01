@@ -191,6 +191,37 @@ function normalizeVendorSourceLines(rows: VendorPoRow[], manualReceivedByPoItem:
     })
 }
 
+function mergeManualPoSourceLines(lines: ManualPoSourceLine[]) {
+    const mergedByPoItem = new Map<string, ManualPoSourceLine>()
+
+    for (const line of lines) {
+        const key = `${line.poNumber}-${line.poItem}`
+        const current = mergedByPoItem.get(key)
+        if (!current) {
+            mergedByPoItem.set(key, line)
+            continue
+        }
+
+        const shouldReplace =
+            line.openQty > current.openQty
+            || (
+                line.openQty === current.openQty
+                && current.source === "vendor"
+                && line.source === "me2l"
+            )
+
+        if (!shouldReplace) continue
+
+        mergedByPoItem.set(key, {
+            ...line,
+            grProcessedDate: current.grProcessedDate ?? line.grProcessedDate,
+            storageLoc: line.storageLoc || current.storageLoc,
+        })
+    }
+
+    return Array.from(mergedByPoItem.values())
+}
+
 const normalizeStringArray = (value: unknown): string[] => {
     if (!Array.isArray(value)) return []
     return value
@@ -410,12 +441,9 @@ export async function getManualGoodReceivePoOptions() {
         ])
 
         const me2lLines = normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem)
-        const existingPoItemKeys = new Set(me2lLines.map((line) => `${line.poNumber}-${line.poItem}`))
         const vendorLines = normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem)
-            .filter((line) => line.openQty > 0)
-            .filter((line) => !existingPoItemKeys.has(`${line.poNumber}-${line.poItem}`))
 
-        const combinedLines = [...me2lLines, ...vendorLines]
+        const combinedLines = mergeManualPoSourceLines([...me2lLines, ...vendorLines])
             .filter((line) => line.openQty > 0)
             .sort((a, b) => {
                 if (a.poNumber === b.poNumber) return a.poItem - b.poItem
@@ -661,13 +689,12 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 }),
             ])
 
+            const mergedSourceLines = mergeManualPoSourceLines([
+                ...normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem),
+                ...normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem),
+            ])
             const latestByPoItem = new Map<number, ManualPoSourceLine>()
-            for (const row of normalizeMe2lSourceLines(sapRows, new Map())) {
-                if (!latestByPoItem.has(row.poItem)) {
-                    latestByPoItem.set(row.poItem, row)
-                }
-            }
-            for (const row of normalizeVendorSourceLines(vendorRows, new Map())) {
+            for (const row of mergedSourceLines) {
                 if (!latestByPoItem.has(row.poItem)) {
                     latestByPoItem.set(row.poItem, row)
                 }
@@ -706,7 +733,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
                 }
 
-                const remainingOpenQty = Math.max(0, sourceLine.openQty - (manualReceivedByPoItem.get(item.poItem) ?? 0))
+                const remainingOpenQty = Math.max(0, sourceLine.openQty)
                 if (item.quantity < 0) {
                     throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
                 }
@@ -815,7 +842,8 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
                 const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
 
-                if (remainingQtyAfterSubmit <= 0 && sourceLine?.source === "me2l") {
+                const hasMe2lRow = sapRows.some((row) => row.item === item.poItem)
+                if (remainingQtyAfterSubmit <= 0 && hasMe2lRow) {
                     await tx.update(me2lPurchDocsSap)
                         .set({
                             grProcessedDate: new Date(),

@@ -20,6 +20,7 @@ import {
     buildHelpDeskFallbackAnswer,
     buildHelpDeskSystemPrompt,
     HELP_DESK_STARTER_PROMPTS,
+    sanitizeHelpDeskReplyText,
     searchHelpDeskKnowledge,
 } from "@/lib/helpdesk-assistant"
 import { extractJsonFromText } from "@/lib/ocr-utils"
@@ -90,8 +91,8 @@ async function ensureBotUser() {
             email: HELP_DESK_BOT_EMAIL,
             role: "system",
             emailVerified: true,
-            department: "MAGIC Help Desk",
-            jobTitle: "Virtual Assistant",
+            department: "AI Assistant",
+            jobTitle: "AI Assistant",
             image: null,
         })
         .returning()
@@ -180,7 +181,7 @@ export async function ensureHelpDeskRoom(): Promise<{ roomId: number }> {
         roomId: newRoom.id,
         senderId: HELP_DESK_BOT_ID,
         content:
-            "Halo, saya Chitra Jenius. Saya siap bantu sebagai MAGIC help desk One Chitra. Silakan tanya fitur apa pun yang ada di aplikasi ini.",
+            "Halo, saya Chitra Jenius. Saya siap bantu pertanyaan umum dan juga penggunaan One Chitra. Silakan tanya apa saja.",
         isSystemMessage: true,
     })
 
@@ -570,12 +571,12 @@ export async function generateHelpDeskReply(question: string) {
             contextChunks: chunks,
         })
 
-        if (answer) return answer
+        if (answer) return sanitizeHelpDeskReplyText(answer)
     } catch (error) {
         console.error("Help desk Ollama error", error)
     }
 
-    return buildHelpDeskFallbackAnswer(question, sources, chunks).text
+    return sanitizeHelpDeskReplyText(buildHelpDeskFallbackAnswer(question, sources, chunks).text)
 }
 
 export async function extractHelpDeskKnowledgeFromDocument(params: {

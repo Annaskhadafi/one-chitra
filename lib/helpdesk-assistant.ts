@@ -27,7 +27,17 @@ export const HELP_DESK_STARTER_PROMPTS = [
     "Bagaimana alur dari quotation sampai delivery?",
     "Di mana saya bisa cek stok dan mutasi barang?",
     "Fitur apa saja yang ada di modul sales?",
+    "Bisa bantu pertanyaan umum juga?",
 ] as const
+
+export function sanitizeHelpDeskReplyText(text: string) {
+    return text
+        .replace(/\*\*/g, "")
+        .replace(/\*/g, "")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
+}
 
 const normalize = (value: string) => value.trim().toLowerCase()
 
@@ -142,13 +152,15 @@ export async function searchHelpDeskKnowledge(question: string, limit = 6) {
 
 export function buildHelpDeskSystemPrompt(contextText: string) {
     return [
-        "Kamu adalah Chitra Jenius, help desk aplikasi One Chitra.",
-        "Tugasmu membantu user memahami cara memakai sistem, modul, alur kerja, dan lokasi menu.",
-        "Utamakan instruksi yang praktis, singkat, dan mudah diikuti oleh user non-teknis.",
-        "Jika tahu halaman atau modul terkait, sebutkan dengan jelas.",
-        "Jika konteks belum cukup, jujur, lalu arahkan user untuk menjelaskan modul atau halaman yang sedang dibuka.",
-        "Jangan mengarang fitur yang tidak ada di konteks.",
-        `KONTEKS ONE CHITRA:\n${contextText || "Belum ada data training."}`,
+        "Kamu adalah Chitra Jenius, asisten AI untuk pengguna One Chitra.",
+        "Kamu bisa menjawab pertanyaan umum sehari-hari dan juga membantu penggunaan sistem One Chitra.",
+        "Jika pertanyaan berkaitan dengan One Chitra, utamakan konteks yang tersedia dan jangan mengarang fitur yang tidak ada.",
+        "Jika pertanyaan bersifat umum, jawab secara natural, jelas, dan langsung ke inti.",
+        "Gunakan bahasa Indonesia yang ramah, praktis, dan mudah dipahami user non-teknis.",
+        "Jangan gunakan markdown dekoratif seperti tanda bintang untuk bold atau bullet berbintang.",
+        "Kalau tahu halaman atau modul terkait di One Chitra, sebutkan dengan jelas.",
+        "Jika konteks One Chitra belum cukup, jujur lalu minta detail modul atau halaman yang sedang dibuka.",
+        `KONTEKS ONE CHITRA:\n${contextText || "Belum ada data training khusus One Chitra."}`,
     ].join("\n\n")
 }
 
@@ -159,7 +171,7 @@ export function buildHelpDeskFallbackAnswer(question: string, sources: HelpDeskK
     }
 
     return {
-        text: "Maaf, saya belum menemukan materi yang cukup untuk menjawab pertanyaan itu. Coba sebutkan modul, halaman, atau proses bisnis yang sedang kamu pakai, misalnya dashboard, sales order, delivery, atau stok gudang.",
+        text: "Maaf, saya belum menemukan materi One Chitra yang cukup untuk menjawab itu dengan akurat. Kalau pertanyaannya tentang One Chitra, coba sebutkan modul, halaman, atau proses bisnis yang sedang kamu pakai, misalnya dashboard, sales order, delivery, atau stok gudang.",
         citations: [],
         confidence: "low",
     }

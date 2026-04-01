@@ -630,23 +630,6 @@ export async function sendMessage(
         })
     }
 
-    if (room.type === "ai-helpdesk" && cleanContent) {
-        let aiReply = "Maaf, Chitra Jenius sedang belum bisa merespons. Silakan coba lagi sebentar lagi."
-
-        try {
-            aiReply = await generateHelpDeskReply(cleanContent)
-        } catch (error) {
-            console.error("generateHelpDeskReply failed", error)
-        }
-
-        await db.insert(chatMessages).values({
-            roomId,
-            senderId: HELP_DESK_CONFIG.botId,
-            content: aiReply,
-            isSystemMessage: true,
-        })
-    }
-
     await db
         .update(chatRoomMembers)
         .set({
@@ -659,7 +642,55 @@ export async function sendMessage(
         .where(and(eq(chatRoomMembers.roomId, roomId), eq(chatRoomMembers.userId, currentUserId)))
 
     revalidatePath("/dashboard")
-    return { success: true }
+    return {
+        success: true,
+        shouldTriggerAiReply: room.type === "ai-helpdesk" && cleanContent.length > 0,
+    }
+}
+
+export async function generateHelpDeskReplyForRoom(roomId: number, question: string) {
+    const currentUserId = await getCurrentUserId()
+    await assertMembership(roomId, currentUserId)
+
+    const room = await db.query.chatRooms.findFirst({
+        where: eq(chatRooms.id, roomId),
+    })
+
+    if (!room) {
+        throw new Error("Room not found")
+    }
+
+    if (room.type !== "ai-helpdesk") {
+        throw new Error("Room is not AI help desk")
+    }
+
+    const cleanQuestion = question.trim()
+    if (!cleanQuestion) {
+        return { success: true, replied: false }
+    }
+
+    let aiReply = "Maaf, Chitra Jenius belum bisa merespons sekarang. Silakan coba lagi sebentar lagi."
+
+    try {
+        aiReply = await generateHelpDeskReply(cleanQuestion)
+    } catch (error) {
+        console.error("generateHelpDeskReply failed", error)
+    }
+
+    await db.insert(chatMessages).values({
+        roomId,
+        senderId: HELP_DESK_CONFIG.botId,
+        content: aiReply,
+        isSystemMessage: true,
+    })
+
+    await db
+        .update(chatRooms)
+        .set({ updatedAt: new Date() })
+        .where(eq(chatRooms.id, roomId))
+
+    revalidatePath("/dashboard")
+    return { success: true, replied: true }
 }
 
 export async function deleteChatRoom(roomId: number) {
