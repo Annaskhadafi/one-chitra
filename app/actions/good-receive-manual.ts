@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements } from "@/db/schema"
+import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements, zvendorPoReportSap } from "@/db/schema"
 import { revalidatePath } from "next/cache"
 import { eq, and, or, desc, inArray, isNotNull, ne, isNull } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
@@ -31,6 +31,21 @@ export type ManualGoodReceivePoLineOption = {
 }
 
 type Me2lRow = Awaited<ReturnType<typeof db.query.me2lPurchDocsSap.findMany>>[number]
+type VendorPoRow = Awaited<ReturnType<typeof db.query.zvendorPoReportSap.findMany>>[number]
+type ManualPoSourceLine = {
+    poNumber: string
+    vendorName: string
+    poItem: number
+    materialNumber: string
+    materialDescription: string
+    poQty: number
+    deliveredQty: number
+    openQty: number
+    poDate: string | null
+    storageLoc: string
+    grProcessedDate: Date | null
+    source: "me2l" | "vendor"
+}
 
 const EPR_INTEGRATION_ENTRIES_URL = "https://proc-share.com/wp-json/gravityview/v1/views/2354/entries.json?limit=0"
 
@@ -101,6 +116,79 @@ function buildLatestPoItemMap(rows: Me2lRow[]) {
 function sanitizeOpenQty(orderQty: number | null, deliveredQty: number | null) {
     const openQty = Number(orderQty || 0) - Number(deliveredQty || 0)
     return openQty > 0 ? openQty : 0
+}
+
+function buildVendorFallbackMap(rows: VendorPoRow[]) {
+    const latestByPoItem = new Map<string, VendorPoRow>()
+
+    for (const row of rows) {
+        const poNumber = row.poNo?.trim()
+        const poItem = row.item
+        const materialNumber = row.material?.trim()
+        if (!poNumber || !poItem || !materialNumber || materialNumber === "-") continue
+
+        const key = `${poNumber}-${poItem}`
+        if (!latestByPoItem.has(key)) {
+            latestByPoItem.set(key, row)
+        }
+    }
+
+    return latestByPoItem
+}
+
+function normalizeMe2lSourceLines(rows: Me2lRow[], manualReceivedByPoItem: Map<string, number>) {
+    return Array.from(buildLatestPoItemMap(rows).values()).map<ManualPoSourceLine>((row) => {
+        const poNumber = row.purchasingDoc?.trim() || ""
+        const poItem = row.item || 0
+        const materialNumber = row.material?.trim() || ""
+        const poQty = Number(row.orderQty || 0)
+        const deliveredQty = Number(row.deliveredQty || 0)
+        const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
+        const openQty = Math.max(0, sanitizeOpenQty(row.orderQty, row.deliveredQty) - manualReceivedQty)
+
+        return {
+            poNumber,
+            vendorName: row.vendorName?.trim() || "Unknown Vendor",
+            poItem,
+            materialNumber,
+            materialDescription: row.shortText?.trim() || "-",
+            poQty,
+            deliveredQty,
+            openQty,
+            poDate: row.docDate ? String(row.docDate) : null,
+            storageLoc: row.storageLoc?.trim() || "",
+            grProcessedDate: row.grProcessedDate ?? null,
+            source: "me2l",
+        }
+    })
+}
+
+function normalizeVendorSourceLines(rows: VendorPoRow[], manualReceivedByPoItem: Map<string, number>) {
+    return Array.from(buildVendorFallbackMap(rows).values()).map<ManualPoSourceLine>((row) => {
+        const poNumber = row.poNo?.trim() || ""
+        const poItem = row.item || 0
+        const materialNumber = row.material?.trim() || ""
+        const poQty = Number(row.poQuantity || 0)
+        const deliveredQty = Math.max(0, poQty - Number(row.outstandingQuantity ?? 0))
+        const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
+        const vendorOpenQty = row.outstandingQuantity ?? sanitizeOpenQty(row.poQuantity, row.grQuantity)
+        const openQty = Math.max(0, Number(vendorOpenQty || 0) - manualReceivedQty)
+
+        return {
+            poNumber,
+            vendorName: row.vendorName?.trim() || "Unknown Vendor",
+            poItem,
+            materialNumber,
+            materialDescription: row.shortText?.trim() || "-",
+            poQty,
+            deliveredQty,
+            openQty,
+            poDate: row.poDate ? String(row.poDate) : null,
+            storageLoc: "",
+            grProcessedDate: null,
+            source: "vendor",
+        }
+    })
 }
 
 const normalizeStringArray = (value: unknown): string[] => {
@@ -296,26 +384,48 @@ function buildGoodReceiveManualNotificationContent(params: {
 
 export async function getManualGoodReceivePoOptions() {
     try {
-        const sapRows = await db.query.me2lPurchDocsSap.findMany({
-            where: and(
-                isNull(me2lPurchDocsSap.grProcessedDate),
-                isNotNull(me2lPurchDocsSap.purchasingDoc),
-                isNotNull(me2lPurchDocsSap.item),
-                isNotNull(me2lPurchDocsSap.material),
-                ne(me2lPurchDocsSap.material, ""),
-                ne(me2lPurchDocsSap.material, "-")
-            ),
-            orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
-        })
+        const [sapRows, vendorRows, manualReceivedByPoItem] = await Promise.all([
+            db.query.me2lPurchDocsSap.findMany({
+                where: and(
+                    isNull(me2lPurchDocsSap.grProcessedDate),
+                    isNotNull(me2lPurchDocsSap.purchasingDoc),
+                    isNotNull(me2lPurchDocsSap.item),
+                    isNotNull(me2lPurchDocsSap.material),
+                    ne(me2lPurchDocsSap.material, ""),
+                    ne(me2lPurchDocsSap.material, "-")
+                ),
+                orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
+            }),
+            db.query.zvendorPoReportSap.findMany({
+                where: and(
+                    isNotNull(zvendorPoReportSap.poNo),
+                    isNotNull(zvendorPoReportSap.item),
+                    isNotNull(zvendorPoReportSap.material),
+                    ne(zvendorPoReportSap.material, ""),
+                    ne(zvendorPoReportSap.material, "-")
+                ),
+                orderBy: [desc(zvendorPoReportSap.extractedAt), desc(zvendorPoReportSap.poDate), desc(zvendorPoReportSap.poReportId)],
+            }),
+            getManualReceivedQtyByPoItem(),
+        ])
 
-        const manualReceivedByPoItem = await getManualReceivedQtyByPoItem()
-        const latestByPoItem = buildLatestPoItemMap(sapRows)
-        const latestRows = Array.from(latestByPoItem.values())
+        const me2lLines = normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem)
+        const existingPoItemKeys = new Set(me2lLines.map((line) => `${line.poNumber}-${line.poItem}`))
+        const vendorLines = normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem)
+            .filter((line) => line.openQty > 0)
+            .filter((line) => !existingPoItemKeys.has(`${line.poNumber}-${line.poItem}`))
+
+        const combinedLines = [...me2lLines, ...vendorLines]
+            .filter((line) => line.openQty > 0)
+            .sort((a, b) => {
+                if (a.poNumber === b.poNumber) return a.poItem - b.poItem
+                return a.poNumber.localeCompare(b.poNumber)
+            })
 
         const materialNumbers = Array.from(new Set(
-            latestRows
-                .map((row) => row.material?.trim())
-                .filter((material): material is string => Boolean(material))
+            combinedLines
+                .map((row) => row.materialNumber.trim())
+                .filter(Boolean)
         ))
 
         const internalProducts = materialNumbers.length > 0
@@ -362,30 +472,21 @@ export async function getManualGoodReceivePoOptions() {
             }
         }
 
-        const lineOptions: ManualGoodReceivePoLineOption[] = latestRows.map((row) => {
-            const poNumber = row.purchasingDoc?.trim() || ""
-            const poItem = row.item || 0
-            const materialNumber = row.material?.trim() || ""
-            const storageLoc = row.storageLoc?.trim() || ""
-            const vendorName = row.vendorName?.trim() || "Unknown Vendor"
-            const poQty = Number(row.orderQty || 0)
-            const sapOpenQty = sanitizeOpenQty(row.orderQty, row.deliveredQty)
-            const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
-            const openQty = Math.max(0, sapOpenQty - manualReceivedQty)
-            const productId = productByMaterialSloc.get(`${materialNumber}::${storageLoc}`)
-                ?? fallbackProductByMaterial.get(materialNumber)
-                ?? productByOldMaterialNo.get(materialNumber)
-                ?? productByMaterialNumberCk.get(materialNumber)
+        const lineOptions: ManualGoodReceivePoLineOption[] = combinedLines.map((row) => {
+            const productId = productByMaterialSloc.get(`${row.materialNumber}::${row.storageLoc}`)
+                ?? fallbackProductByMaterial.get(row.materialNumber)
+                ?? productByOldMaterialNo.get(row.materialNumber)
+                ?? productByMaterialNumberCk.get(row.materialNumber)
                 ?? null
 
             return {
-                poNumber,
-                vendorName,
-                poItem,
-                materialNumber,
-                materialDescription: row.shortText?.trim() || "-",
-                poQty,
-                openQty,
+                poNumber: row.poNumber,
+                vendorName: row.vendorName,
+                poItem: row.poItem,
+                materialNumber: row.materialNumber,
+                materialDescription: row.materialDescription,
+                poQty: row.poQty,
+                openQty: row.openQty,
                 productId,
             }
         }).sort((a, b) => {
@@ -394,13 +495,13 @@ export async function getManualGoodReceivePoOptions() {
         })
 
         const poMap = new Map<string, ManualGoodReceivePoOption>()
-        latestRows.forEach((row) => {
-            const poNumber = row.purchasingDoc?.trim() || ""
+        combinedLines.forEach((row) => {
+            const poNumber = row.poNumber
             if (!poNumber) return
 
-            const vendorName = row.vendorName?.trim() || "Unknown Vendor"
-            const poQty = Number(row.orderQty || 0)
-            const poDate = row.docDate ? String(row.docDate) : null
+            const vendorName = row.vendorName
+            const poQty = row.poQty
+            const poDate = row.poDate
 
             const current = poMap.get(poNumber)
             if (!current) {
@@ -537,22 +638,38 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 throw new Error(`PO Item ${duplicatePoItem} selected more than once`)
             }
 
-            const sapRows = await tx.query.me2lPurchDocsSap.findMany({
-                where: and(
-                    eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                    inArray(me2lPurchDocsSap.item, poItems),
-                    isNotNull(me2lPurchDocsSap.material),
-                    ne(me2lPurchDocsSap.material, ""),
-                    ne(me2lPurchDocsSap.material, "-")
-                ),
-                orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
-            })
+            const [sapRows, vendorRows] = await Promise.all([
+                tx.query.me2lPurchDocsSap.findMany({
+                    where: and(
+                        eq(me2lPurchDocsSap.purchasingDoc, poNumber),
+                        inArray(me2lPurchDocsSap.item, poItems),
+                        isNotNull(me2lPurchDocsSap.material),
+                        ne(me2lPurchDocsSap.material, ""),
+                        ne(me2lPurchDocsSap.material, "-")
+                    ),
+                    orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
+                }),
+                tx.query.zvendorPoReportSap.findMany({
+                    where: and(
+                        eq(zvendorPoReportSap.poNo, poNumber),
+                        inArray(zvendorPoReportSap.item, poItems),
+                        isNotNull(zvendorPoReportSap.material),
+                        ne(zvendorPoReportSap.material, ""),
+                        ne(zvendorPoReportSap.material, "-")
+                    ),
+                    orderBy: [desc(zvendorPoReportSap.extractedAt), desc(zvendorPoReportSap.poDate), desc(zvendorPoReportSap.poReportId)],
+                }),
+            ])
 
-            const latestByPoItem = new Map<number, Me2lRow>()
-            for (const row of sapRows) {
-                if (!row.item) continue
-                if (!latestByPoItem.has(row.item)) {
-                    latestByPoItem.set(row.item, row)
+            const latestByPoItem = new Map<number, ManualPoSourceLine>()
+            for (const row of normalizeMe2lSourceLines(sapRows, new Map())) {
+                if (!latestByPoItem.has(row.poItem)) {
+                    latestByPoItem.set(row.poItem, row)
+                }
+            }
+            for (const row of normalizeVendorSourceLines(vendorRows, new Map())) {
+                if (!latestByPoItem.has(row.poItem)) {
+                    latestByPoItem.set(row.poItem, row)
                 }
             }
 
@@ -581,20 +698,20 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
             const productById = new Map(existingProducts.map((p) => [p.id, p]))
 
             const resolvedItems = input.items.map((item) => {
-                const sapLine = latestByPoItem.get(item.poItem)
-                if (!sapLine) {
+                const sourceLine = latestByPoItem.get(item.poItem)
+                if (!sourceLine) {
                     throw new Error(`PO Item ${item.poItem} tidak ditemukan di SAP untuk PO ${poNumber}`)
                 }
-                if (sapLine.grProcessedDate) {
+                if (sourceLine.grProcessedDate) {
                     throw new Error(`PO Item ${item.poItem} sudah pernah di-GR`)
                 }
 
-                const poQty = Number(sapLine.orderQty || 0)
+                const remainingOpenQty = Math.max(0, sourceLine.openQty - (manualReceivedByPoItem.get(item.poItem) ?? 0))
                 if (item.quantity < 0) {
                     throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
                 }
-                if (item.quantity > poQty) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi PO Qty (${poQty})`)
+                if (item.quantity > remainingOpenQty) {
+                    throw new Error(`Qty untuk PO Item ${item.poItem} melebihi open qty (${remainingOpenQty})`)
                 }
 
                 const product = productById.get(item.productId)
@@ -607,8 +724,10 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 return {
                     ...item,
                     poItem: item.poItem,
-                    vendorName: sapLine.vendorName?.trim() || "Unknown Vendor",
-                    materialDescription: sapLine.shortText?.trim() || "-",
+                    vendorName: sourceLine.vendorName || "Unknown Vendor",
+                    materialDescription: sourceLine.materialDescription || "-",
+                    source: sourceLine.source,
+                    originalOpenQty: sourceLine.openQty,
                 }
             })
 
@@ -703,11 +822,12 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     recordedBy: userId,
                 })
 
-                const sapOpenQty = sanitizeOpenQty(latestByPoItem.get(item.poItem)?.orderQty ?? 0, latestByPoItem.get(item.poItem)?.deliveredQty ?? 0)
+                const sourceLine = latestByPoItem.get(item.poItem)
+                const sapOpenQty = Number(sourceLine?.openQty ?? 0)
                 const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
                 const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
 
-                if (remainingQtyAfterSubmit <= 0) {
+                if (remainingQtyAfterSubmit <= 0 && sourceLine?.source === "me2l") {
                     await tx.update(me2lPurchDocsSap)
                         .set({
                             grProcessedDate: new Date(),
