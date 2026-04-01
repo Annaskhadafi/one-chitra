@@ -30,8 +30,21 @@ export function buildValidationBlockedDetails(title: string, reasons: string[]):
 }
 
 export function buildActionErrorDetails(actionLabel: string, moduleLabel: string, message?: string | null): ActionBlockedDetails {
-    const cleanMessage = message?.trim() || `Aksi ${actionLabel.toLowerCase()} gagal diproses.`
+    const fallbackMessage = `Aksi ${actionLabel.toLowerCase()} gagal diproses.`
+    const cleanMessage = message?.trim() || fallbackMessage
     const normalized = cleanMessage.toLowerCase()
+
+    const looksLikeTechnicalError =
+        normalized.includes("failed query") ||
+        normalized.includes("insert into") ||
+        normalized.includes("update ") ||
+        normalized.includes("delete from") ||
+        normalized.includes("returning \"") ||
+        normalized.includes("params:") ||
+        normalized.includes("stack") ||
+        normalized.includes("sql")
+
+    const safeMessage = looksLikeTechnicalError ? fallbackMessage : cleanMessage
 
     if (
         normalized.includes("permission denied") ||
@@ -46,7 +59,7 @@ export function buildActionErrorDetails(actionLabel: string, moduleLabel: string
         return {
             title: `${actionLabel} belum bisa dilakukan`,
             description: `Proses ${moduleLabel} tertahan karena kondisi stok.`,
-            reasons: uniqueReasons([cleanMessage]),
+            reasons: uniqueReasons([safeMessage]),
         }
     }
 
@@ -54,13 +67,13 @@ export function buildActionErrorDetails(actionLabel: string, moduleLabel: string
         return {
             title: "Data tidak ditemukan",
             description: `Data ${moduleLabel} yang ingin diproses sudah tidak tersedia atau sudah berubah.`,
-            reasons: uniqueReasons([cleanMessage]),
+            reasons: uniqueReasons([safeMessage]),
         }
     }
 
     return {
         title: `${actionLabel} gagal`,
         description: `Sistem tidak bisa menyelesaikan proses pada modul ${moduleLabel}.`,
-        reasons: uniqueReasons([cleanMessage]),
+        reasons: uniqueReasons([safeMessage]),
     }
 }
