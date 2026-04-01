@@ -1,5 +1,5 @@
 import { getLogisticsCosts } from "@/app/actions/delivery"
-import { getLatestSettlementByDeliveryIds } from "@/app/actions/cost-settlement"
+import { getLatestSettlementByDeliveryIds, getLatestSettlementByFleetTripIds } from "@/app/actions/cost-settlement"
 import { LogisticsCostTable } from "./_components/logistics-cost-table"
 import { Truck } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
@@ -7,9 +7,17 @@ import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 
 export default async function LogisticsCostsPage() {
     const data = await getLogisticsCosts()
-    const settlementLookup = await getLatestSettlementByDeliveryIds(data.map((item) => item.id))
+    const deliverySettlementLookup = await getLatestSettlementByDeliveryIds(data.flatMap((item) => item.deliveryIds ?? []))
+    const tripSettlementLookup = await getLatestSettlementByFleetTripIds(
+        data.filter((item) => item.entryType === "trip").map((item) => item.id),
+    )
     const enrichedData = data.map((item) => {
-        const settlement = settlementLookup[item.id]
+        const settlement = item.entryType === "trip"
+            ? tripSettlementLookup[item.id]
+            : item.deliveryIds
+                .map((deliveryId) => deliverySettlementLookup[deliveryId])
+                .find(Boolean)
+
         return {
             ...item,
             settlementId: settlement?.settlementId ?? null,

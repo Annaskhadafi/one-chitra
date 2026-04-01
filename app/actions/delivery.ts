@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses } from "@/db/schema"
+import { deliveries, deliveryItems, salesOrders, stockLevels, products, stockTransfers, stockTransferItems, warehouses, fleetTrips } from "@/db/schema"
 import { eq, desc, and, sql, isNotNull } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { z } from "zod"
@@ -1555,30 +1555,185 @@ export async function getLogisticsCosts() {
     try {
         await checkPermission('deliveries', 'view')
 
-        const costs = await db.select({
-            id: deliveries.id,
-            deliveryNumber: deliveries.deliveryNumber,
-            deliveryDate: deliveries.deliveryDate,
-            scheduledDate: deliveries.scheduledDate,
-            driverName: deliveries.driverName,
-            vehicleNumber: deliveries.vehicleNumber,
-            vendorName: deliveries.vendorName,
-            isExternal: deliveries.isExternal,
-            shippingCost: deliveries.shippingCost,
-            costGasolineDexlite: deliveries.costGasolineDexlite,
-            costGasolineBio: deliveries.costGasolineBio,
-            costToll: deliveries.costToll,
-            costParking: deliveries.costParking,
-            costMeals: deliveries.costMeals,
-            costMaintenance: deliveries.costMaintenance,
-            costOthers: deliveries.costOthers,
-            invoiceNumber: deliveries.invoiceNumber,
+        const rows = await db.query.deliveries.findMany({
+            where: isNotNull(deliveries.deliveryNumber),
+            with: {
+                salesOrder: {
+                    with: {
+                        customer: true,
+                    },
+                },
+                items: true,
+                fleetTrip: {
+                    with: {
+                        driver: true,
+                        vehicle: true,
+                    },
+                },
+            },
+            orderBy: [desc(deliveries.createdAt)],
         })
-            .from(deliveries)
-            .where(isNotNull(deliveries.deliveryNumber))
-            .orderBy(desc(deliveries.createdAt))
 
-        return costs
+        type LogisticsCostDetail = {
+            deliveryId: number
+            deliveryNumber: string | null
+            invoiceNumber: string | null
+            destination: string
+            qty: number
+        }
+
+        type LogisticsCostEntry = {
+            id: number
+            entryType: "trip" | "delivery"
+            referenceNumber: string | null
+            tripNumber: string | null
+            deliveryNumber: string | null
+            deliveryIds: number[]
+            deliveryDate: Date | null
+            scheduledDate: Date | null
+            driverName: string | null
+            vehicleNumber: string | null
+            vendorName: string | null
+            isExternal: boolean | null
+            shippingCost: string | null
+            costGasolineDexlite: string | null
+            costGasolineBio: string | null
+            costToll: string | null
+            costParking: string | null
+            costMeals: string | null
+            costMaintenance: string | null
+            costOthers: string | null
+            costRapidTest: string | null
+            costFerry: string | null
+            costPortal: string | null
+            costWashing: string | null
+            costEscort: string | null
+            invoiceNumber: string | null
+            detailItems: LogisticsCostDetail[]
+            totalQty: number
+            sortDate: Date
+        }
+
+        const grouped = new Map<string, LogisticsCostEntry>()
+
+        for (const delivery of rows) {
+            const detailItem: LogisticsCostDetail = {
+                deliveryId: delivery.id,
+                deliveryNumber: delivery.deliveryNumber,
+                invoiceNumber: delivery.invoiceNumber || delivery.salesOrder?.invoiceNumber || null,
+                destination:
+                    delivery.tripDestination ||
+                    delivery.shippingAddress ||
+                    delivery.salesOrder?.customer?.name ||
+                    "-",
+                qty: delivery.items.reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0),
+            }
+
+            if (!delivery.isExternal && delivery.fleetTripId && delivery.fleetTrip) {
+                const trip = delivery.fleetTrip
+                const key = `trip-${trip.id}`
+                const existing = grouped.get(key)
+
+                if (existing) {
+                    existing.deliveryIds.push(delivery.id)
+                    existing.detailItems.push(detailItem)
+                    existing.totalQty += detailItem.qty
+                    if (!existing.deliveryDate && delivery.deliveryDate) {
+                        existing.deliveryDate = delivery.deliveryDate
+                    }
+                    if (
+                        delivery.deliveryDate &&
+                        delivery.deliveryDate > existing.sortDate
+                    ) {
+                        existing.sortDate = delivery.deliveryDate
+                    }
+                    continue
+                }
+
+                grouped.set(key, {
+                    id: trip.id,
+                    entryType: "trip",
+                    referenceNumber: trip.tripNumber,
+                    tripNumber: trip.tripNumber,
+                    deliveryNumber: delivery.deliveryNumber,
+                    deliveryIds: [delivery.id],
+                    deliveryDate: delivery.deliveryDate,
+                    scheduledDate: trip.date,
+                    driverName: trip.driver?.name || delivery.driverName,
+                    vehicleNumber: trip.vehicle?.policeNumber || delivery.vehicleNumber,
+                    vendorName: null,
+                    isExternal: false,
+                    shippingCost: "0",
+                    costGasolineDexlite: trip.costGasolineDexlite,
+                    costGasolineBio: trip.costGasolineBio,
+                    costToll: trip.costToll,
+                    costParking: trip.costParking,
+                    costMeals: trip.costMeals,
+                    costMaintenance: trip.costMaintenance,
+                    costOthers: trip.costOthers,
+                    costRapidTest: trip.costRapidTest,
+                    costFerry: trip.costFerry,
+                    costPortal: trip.costPortal,
+                    costWashing: trip.costWashing,
+                    costEscort: trip.costEscort,
+                    invoiceNumber: null,
+                    detailItems: [detailItem],
+                    totalQty: detailItem.qty,
+                    sortDate: delivery.deliveryDate || trip.date,
+                })
+                continue
+            }
+
+            grouped.set(`delivery-${delivery.id}`, {
+                id: delivery.id,
+                entryType: "delivery",
+                referenceNumber: delivery.deliveryNumber,
+                tripNumber: null,
+                deliveryNumber: delivery.deliveryNumber,
+                deliveryIds: [delivery.id],
+                deliveryDate: delivery.deliveryDate,
+                scheduledDate: delivery.scheduledDate,
+                driverName: delivery.driverName,
+                vehicleNumber: delivery.vehicleNumber,
+                vendorName: delivery.vendorName,
+                isExternal: delivery.isExternal,
+                shippingCost: delivery.shippingCost,
+                costGasolineDexlite: delivery.costGasolineDexlite,
+                costGasolineBio: delivery.costGasolineBio,
+                costToll: delivery.costToll,
+                costParking: delivery.costParking,
+                costMeals: delivery.costMeals,
+                costMaintenance: delivery.costMaintenance,
+                costOthers: delivery.costOthers,
+                costRapidTest: delivery.costRapidTest,
+                costFerry: delivery.costFerry,
+                costPortal: delivery.costPortal,
+                costWashing: delivery.costWashing,
+                costEscort: delivery.costEscort,
+                invoiceNumber: delivery.invoiceNumber,
+                detailItems: [detailItem],
+                totalQty: detailItem.qty,
+                sortDate: delivery.deliveryDate || delivery.scheduledDate,
+            })
+        }
+
+        return Array.from(grouped.values())
+            .map((entry) => ({
+                ...entry,
+                deliveryIds: Array.from(new Set(entry.deliveryIds)),
+                detailItems: entry.detailItems.sort((a, b) => (a.deliveryNumber || "").localeCompare(b.deliveryNumber || "")),
+                invoiceNumber:
+                    entry.invoiceNumber ||
+                    Array.from(
+                        new Set(
+                            entry.detailItems
+                                .map((item) => item.invoiceNumber)
+                                .filter((value): value is string => Boolean(value)),
+                        ),
+                    ).join(", ") ||
+                    null,
+            }))
+            .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime())
     } catch (_error) {
         const error = _error as Error;
         console.error("Failed to fetch logistics costs:", error)
@@ -1609,6 +1764,22 @@ export async function clearLogisticsCosts() {
                 costOthers: "0",
             })
             .where(isNotNull(deliveries.deliveryNumber))
+
+        await db.update(fleetTrips)
+            .set({
+                costGasolineDexlite: "0",
+                costGasolineBio: "0",
+                costToll: "0",
+                costParking: "0",
+                costMeals: "0",
+                costMaintenance: "0",
+                costOthers: "0",
+                costRapidTest: "0",
+                costFerry: "0",
+                costPortal: "0",
+                costWashing: "0",
+                costEscort: "0",
+            })
 
         revalidatePath("/dashboard/logistics-costs")
         return { success: true }

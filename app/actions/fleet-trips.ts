@@ -81,12 +81,19 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
                     status: data.status,
                     date: new Date(data.date),
                     notes: data.notes || null,
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
-                    costToll: data.costToll ? String(data.costToll) : "0",
-                    costParking: data.costParking ? String(data.costParking) : "0",
-                    costMeals: data.costMeals ? String(data.costMeals) : "0",
-                    costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
-                    costOthers: data.costOthers ? String(data.costOthers) : "0",
+                    tripDestination: data.tripDestination || null,
+                    costGasolineDexlite: String(data.costGasolineDexlite ?? 0),
+                    costGasolineBio: String(data.costGasolineBio ?? 0),
+                    costToll: String(data.costToll ?? 0),
+                    costParking: String(data.costParking ?? 0),
+                    costMeals: String(data.costMeals ?? 0),
+                    costMaintenance: String(data.costMaintenance ?? 0),
+                    costOthers: String(data.costOthers ?? 0),
+                    costRapidTest: String(data.costRapidTest ?? 0),
+                    costFerry: String(data.costFerry ?? 0),
+                    costPortal: String(data.costPortal ?? 0),
+                    costWashing: String(data.costWashing ?? 0),
+                    costEscort: String(data.costEscort ?? 0),
                 })
                 .returning()
 
@@ -163,12 +170,20 @@ export async function createFleetTrip(data: z.infer<typeof fleetTripSchema>) {
                         isExternal: false,
                         shippingCost: "0", // Cost is on Trip
                         // Cost breakdown 0 on delivery
+                        tripDestination: data.tripDestination || null,
                         costGasoline: "0",
+                        costGasolineDexlite: "0",
+                        costGasolineBio: "0",
                         costToll: "0",
                         costParking: "0",
                         costMeals: "0",
                         costMaintenance: "0",
                         costOthers: "0",
+                        costRapidTest: "0",
+                        costFerry: "0",
+                        costPortal: "0",
+                        costWashing: "0",
+                        costEscort: "0",
 
                         warehouseId: so?.warehouseId,
                     })
@@ -215,12 +230,19 @@ export async function updateFleetTrip(id: number, data: z.infer<typeof fleetTrip
                     status: data.status,
                     date: new Date(data.date),
                     notes: data.notes || null,
-                    costGasoline: data.costGasoline ? String(data.costGasoline) : "0",
-                    costToll: data.costToll ? String(data.costToll) : "0",
-                    costParking: data.costParking ? String(data.costParking) : "0",
-                    costMeals: data.costMeals ? String(data.costMeals) : "0",
-                    costMaintenance: data.costMaintenance ? String(data.costMaintenance) : "0",
-                    costOthers: data.costOthers ? String(data.costOthers) : "0",
+                    tripDestination: data.tripDestination || null,
+                    costGasolineDexlite: String(data.costGasolineDexlite ?? 0),
+                    costGasolineBio: String(data.costGasolineBio ?? 0),
+                    costToll: String(data.costToll ?? 0),
+                    costParking: String(data.costParking ?? 0),
+                    costMeals: String(data.costMeals ?? 0),
+                    costMaintenance: String(data.costMaintenance ?? 0),
+                    costOthers: String(data.costOthers ?? 0),
+                    costRapidTest: String(data.costRapidTest ?? 0),
+                    costFerry: String(data.costFerry ?? 0),
+                    costPortal: String(data.costPortal ?? 0),
+                    costWashing: String(data.costWashing ?? 0),
+                    costEscort: String(data.costEscort ?? 0),
                     updatedAt: new Date(),
                 })
                 .where(eq(fleetTrips.id, id))
@@ -237,6 +259,7 @@ export async function updateFleetTrip(id: number, data: z.infer<typeof fleetTrip
                     vehicleNumber: vehicle?.policeNumber,
                     vehicleType: vehicle?.type,
                     scheduledDate: new Date(data.date), // Sync date?
+                    tripDestination: data.tripDestination || null,
                 })
                 .where(eq(deliveries.fleetTripId, id))
         })

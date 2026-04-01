@@ -652,6 +652,53 @@ export async function getLatestSettlementByDeliveryIds(deliveryIds: number[]) {
     return lookup
 }
 
+export async function getLatestSettlementByFleetTripIds(fleetTripIds: number[]) {
+    const ids = Array.from(new Set(fleetTripIds.filter((id) => Number.isFinite(id) && id > 0)))
+    if (ids.length === 0) {
+        return {} as Record<number, { settlementId: number; settlementNumber: string; status: "draft" | "submitted" | "approved" | "rejected" | "posted" }>
+    }
+
+    let rows: Array<{
+        id: number
+        settlementNumber: string
+        status: "draft" | "submitted" | "approved" | "rejected" | "posted"
+        fleetTripId: number | null
+    }> = []
+
+    try {
+        rows = await db.query.costSettlements.findMany({
+            where: and(
+                inArray(costSettlements.fleetTripId, ids),
+                isNull(costSettlements.deletedAt),
+            ),
+            columns: {
+                id: true,
+                settlementNumber: true,
+                status: true,
+                fleetTripId: true,
+            },
+            orderBy: [desc(costSettlements.createdAt)],
+        })
+    } catch (error) {
+        void error
+        return {}
+    }
+
+    const lookup: Record<number, { settlementId: number; settlementNumber: string; status: "draft" | "submitted" | "approved" | "rejected" | "posted" }> = {}
+    for (const row of rows) {
+        if (!row.fleetTripId) continue
+        if (!lookup[row.fleetTripId]) {
+            lookup[row.fleetTripId] = {
+                settlementId: row.id,
+                settlementNumber: row.settlementNumber,
+                status: row.status,
+            }
+        }
+    }
+
+    return lookup
+}
+
 export async function uploadSettlementReceipt(formData: FormData) {
     const session = await getSettlementSession("edit")
     const settlementItemIdRaw = formData.get("settlementItemId")

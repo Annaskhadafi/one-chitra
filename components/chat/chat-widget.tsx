@@ -659,6 +659,11 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         image: member.image,
     }))
     const applySnapshot = useCallback((snapshot: ChatRoomSnapshot, prepend = false) => { setHasMore(snapshot.hasMore); setTypingMembers(snapshot.typingMembers); setMemberPresence(snapshot.memberPresence); setMessages((prev) => prepend ? mergeUnique(snapshot.messages, prev) : mergeUnique(prev, snapshot.messages)) }, [])
+    const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+        window.setTimeout(() => {
+            bottomRef.current?.scrollIntoView({ behavior, block: "end" })
+        }, 60)
+    }, [])
     const loadSnapshot = useCallback(async (options?: { before?: string; prepend?: boolean; limit?: number }) => {
         const snapshot = await getRoomMessages(room.id, { before: options?.before, limit: options?.limit ?? 30 }); applySnapshot(snapshot, options?.prepend ?? false); return snapshot
     }, [applySnapshot, room.id])
@@ -668,11 +673,11 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0); setEditingMessageId(null)
         loadSnapshot()
             .catch(() => { if (active) toast.error("Gagal memuat percakapan") })
-            .finally(() => { if (active) setLoading(false) })
+            .finally(() => { if (active) { setLoading(false); scrollToBottom("auto") } })
         return () => {
             active = false
         }
-    }, [draftKey, loadSnapshot, room.id])
+    }, [draftKey, loadSnapshot, room.id, scrollToBottom])
     useEffect(() => {
         const latestIncoming = [...messages].reverse().find((message) => message.senderId !== currentUserId)
         lastIncomingMessageIdRef.current = latestIncoming?.id ?? null
@@ -1015,6 +1020,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             }
 
             setMessages((current) => mergeUnique(current, [optimisticMessage]))
+            scrollToBottom("smooth")
             setInput("")
             setPendingMention(null)
             setSelectedUserMentions([])
@@ -1034,6 +1040,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             )
             attachments.forEach((attachment) => { if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl) })
             await refreshMessages(Math.max(messages.length + 1, 30))
+            scrollToBottom("smooth")
 
             if (isHelpDeskRoom(room) && questionForAi && result.shouldTriggerAiReply) {
                 setAssistantThinking(true)
@@ -1042,6 +1049,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         const nextSnapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 2, 30) })
                         applySnapshot(nextSnapshot, false)
                         onRoomUpdated().catch(() => undefined)
+                        scrollToBottom("smooth")
                     })
                     .catch(() => {
                         toast.error("Balasan AI gagal diproses")
@@ -1057,6 +1065,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             setSelectedUserMentions(selectedUserMentions)
             setReplyTarget(replyTarget)
             setAttachments(attachments)
+            scrollToBottom("smooth")
             toast.error("Pesan gagal dikirim")
             setSending(false)
             setAssistantThinking(false)
