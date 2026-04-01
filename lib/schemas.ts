@@ -20,7 +20,7 @@ export const productSchema = z.object({
     brand: z.string().optional(),
     costSap: z.string().optional(), // Input as string, converted later if needed
     plant: z.string().optional(),
-    sloc: z.string().optional(),
+    sloc: z.string().min(1, "Sloc is required"),
     slocDescription: z.string().optional(),
     typeWarehouse: z.string().optional(),
     imageUrl: z.string().optional(),

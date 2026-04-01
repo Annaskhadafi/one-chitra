@@ -6,6 +6,7 @@ import { Plus, ShoppingCart, FileText, Zap } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
+import { RestrictedActionButton } from "@/components/restricted-action-button"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,38 @@ export default async function SalesOrdersPage() {
                         icon={ShoppingCart}
                     />
                 </div>
-                <PermissionGuard resource="sales-orders" action="create">
+                <PermissionGuard
+                    resource="sales-orders"
+                    action="create"
+                    fallback={
+                        <div className="flex w-full flex-col sm:flex-row gap-2">
+                            <RestrictedActionButton
+                                className="w-full sm:w-auto sm:min-w-[190px] justify-center"
+                                title="Create Sales Order tidak diizinkan"
+                                description="Anda belum memiliki akses untuk membuat Sales Order baru."
+                                reasons={[
+                                    "Role Anda tidak memiliki permission create pada modul Sales Order.",
+                                    "Hubungi admin jika tombol ini memang perlu diaktifkan untuk user tersebut.",
+                                ]}
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create Sales Order
+                            </RestrictedActionButton>
+                            <RestrictedActionButton
+                                className="w-full sm:w-auto sm:min-w-[190px] justify-center bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-700 hover:via-violet-700 hover:to-purple-700 border-none shadow-lg shadow-indigo-200/50 transition-all duration-300 hover:scale-[1.03] active:scale-[0.98]"
+                                title="Sales Order OCR tidak diizinkan"
+                                description="Anda belum memiliki akses untuk membuat Sales Order melalui OCR."
+                                reasons={[
+                                    "Role Anda tidak memiliki permission create pada modul Sales Order.",
+                                    "Hubungi admin jika akses OCR Sales Order memang dibutuhkan.",
+                                ]}
+                            >
+                                <Zap className="mr-2 h-4 w-4 fill-white flex-shrink-0" />
+                                <span className="relative">Sales Order OCR</span>
+                            </RestrictedActionButton>
+                        </div>
+                    }
+                >
                     <div className="flex w-full flex-col sm:flex-row gap-2">
                         <Link href="/dashboard/sales-orders/create" className="w-full sm:w-auto">
                             <Button className="w-full sm:w-auto sm:min-w-[190px] justify-center">

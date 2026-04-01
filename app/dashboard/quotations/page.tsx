@@ -6,6 +6,8 @@ import { Plus, FileText } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Suspense } from "react"
 import { Providers } from "@/components/providers"
+import { PermissionGuard } from "@/components/permission-guard"
+import { RestrictedActionButton } from "@/components/restricted-action-button"
 
 export const dynamic = 'force-dynamic'
 
@@ -22,12 +24,30 @@ export default async function QuotationsPage() {
                         icon={FileText}
                     />
                 </div>
-                <Link href="/dashboard/quotations/create">
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Quotation
-                    </Button>
-                </Link>
+                <PermissionGuard
+                    resource="quotations"
+                    action="create"
+                    fallback={
+                        <RestrictedActionButton
+                            title="Create Quotation tidak diizinkan"
+                            description="Anda belum memiliki akses untuk membuat quotation baru."
+                            reasons={[
+                                "Role Anda tidak memiliki permission create pada modul Quotation.",
+                                "Hubungi admin jika akses ini memang diperlukan.",
+                            ]}
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Quotation
+                        </RestrictedActionButton>
+                    }
+                >
+                    <Link href="/dashboard/quotations/create">
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Quotation
+                        </Button>
+                    </Link>
+                </PermissionGuard>
             </div>
 
             <div className="flex-1">

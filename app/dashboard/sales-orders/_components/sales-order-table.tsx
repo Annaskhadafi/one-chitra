@@ -61,6 +61,8 @@ import type { SalesOrderListItem, ProformaInvoiceOrder } from "./types"
 import { usePermissions } from "@/hooks/use-permissions"
 import { PoPreviewDialog } from "@/components/po-preview-dialog"
 import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     useReactTable,
@@ -197,6 +199,7 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
     const [isPoPreviewOpen, setIsPoPreviewOpen] = useState(false)
     const [proformaOrder, setProformaOrder] = useState<ProformaInvoiceOrder | null>(null)
     const [isProformaOpen, setIsProformaOpen] = useState(false)
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     const clearRefreshParams = useCallback(() => {
         if (typeof window === "undefined") {
@@ -398,7 +401,11 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                     return
                 }
 
-                toast.error(('error' in result ? String(result.error) : "Failed to delete sales order"))
+                setBlockedDialog(buildActionErrorDetails(
+                    "Delete Sales Order",
+                    "Sales Order",
+                    'error' in result ? String(result.error) : "Failed to delete sales order"
+                ))
             }
         })
     }, [deleteMutation])
@@ -539,15 +546,27 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                         </DropdownMenuItem>
                                     </Link>
                                 )}
-                                {(canEdit && (order.status === "draft" || order.status === "confirmed")) && (
-                                    <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
-                                        <DropdownMenuItem>
+                                {(order.status === "draft" || order.status === "confirmed") && (
+                                    canEdit ? (
+                                        <Link href={`/dashboard/sales-orders/${order.id}/edit`}>
+                                            <DropdownMenuItem>
+                                                <Pencil className="mr-2 h-4 w-4" />
+                                                Edit
+                                            </DropdownMenuItem>
+                                        </Link>
+                                    ) : (
+                                        <DropdownMenuItem
+                                            onSelect={(event) => {
+                                                event.preventDefault()
+                                                setBlockedDialog(buildPermissionBlockedDetails("Edit Sales Order", "Sales Order"))
+                                            }}
+                                        >
                                             <Pencil className="mr-2 h-4 w-4" />
                                             Edit
                                         </DropdownMenuItem>
-                                    </Link>
+                                    )
                                 )}
-                                {canDelete && (
+                                {canDelete ? (
                                     <>
                                         <DropdownMenuSeparator />
                                         <AlertDialog>
@@ -575,6 +594,20 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
                                         </AlertDialog>
+                                    </>
+                                ) : (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            className="text-red-600"
+                                            onSelect={(event) => {
+                                                event.preventDefault()
+                                                setBlockedDialog(buildPermissionBlockedDetails("Delete Sales Order", "Sales Order"))
+                                            }}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete
+                                        </DropdownMenuItem>
                                     </>
                                 )}
                             </DropdownMenuContent>
@@ -974,6 +1007,15 @@ export function SalesOrderTable({ data: initialData }: SalesOrderTableProps) {
 
     return (
         <div className="space-y-6">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             <div className="flex items-center justify-between gap-2">
                 <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "table" | "kanban")}>
                     <TabsList>

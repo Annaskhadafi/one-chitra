@@ -64,6 +64,9 @@ import { cn } from "@/lib/utils"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { formatWarehouseLabel } from "@/lib/sloc"
 import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { usePermissions } from "@/hooks/use-permissions"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails, buildValidationBlockedDetails } from "@/lib/action-blocked"
 
 interface SOItemWithRemaining {
     id: number
@@ -231,6 +234,8 @@ function isStaleServerActionError(error: unknown) {
 export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSalesOrderId }: DeliveryFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
+    const { hasResourcePermission } = usePermissions()
+    const canSubmit = hasResourcePermission("deliveries", isEdit ? "edit" : "create")
 
     // Fleet Data State
     const [drivers, setDrivers] = useState<{ id: number, name: string }[]>([])
@@ -238,6 +243,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
     const [, setLoadingFleet] = useState(false)
     const [driverSearch, setDriverSearch] = useState("")
     const [vehicleSearch, setVehicleSearch] = useState("")
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     // Delivery Number
     const [generatedDeliveryNumber, setGeneratedDeliveryNumber] = useState(initialData?.deliveryNumber || "")
@@ -820,16 +826,8 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         }
     }, [])
 
-    const showSaveBlockedToast = useCallback((errors: string[]) => {
-        toast.error("Delivery belum bisa disimpan", {
-            description: (
-                <ul className="list-disc pl-4">
-                    {errors.map((error, index) => (
-                        <li key={`${error}-${index}`}>{error}</li>
-                    ))}
-                </ul>
-            ),
-        })
+    const showBlockedDialog = useCallback((details: ActionBlockedDetails) => {
+        setBlockedDialog(details)
     }, [])
 
     // Submit
@@ -839,6 +837,14 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         console.log("warehouseId:", warehouseId)
         console.log("items:", items)
         console.log("selectedSO:", selectedSO)
+
+        if (!canSubmit) {
+            showBlockedDialog(buildPermissionBlockedDetails(
+                isEdit ? "Edit Delivery" : "Create Delivery",
+                "Delivery"
+            ))
+            return
+        }
 
         const validationErrors: string[] = []
         if (typeof salesOrderId !== "number") {
@@ -886,7 +892,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
 
         if (validationErrors.length > 0) {
             console.log("❌ Validation failed:", validationErrors)
-            showSaveBlockedToast(Array.from(new Set(validationErrors)))
+            showBlockedDialog(buildValidationBlockedDetails("Delivery belum bisa disimpan", Array.from(new Set(validationErrors))))
             return
         }
 
@@ -992,17 +998,17 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
 
                 console.error("❌ Delivery Error:", errorMsg, result)
                 if (serverDetailErrors.length > 0) {
-                    toast.error(errorMsg, {
-                        description: (
-                            <ul className="list-disc pl-4">
-                                {Array.from(new Set(serverDetailErrors)).map((message, index) => (
-                                    <li key={`${message}-${index}`}>{message}</li>
-                                ))}
-                            </ul>
-                        ),
-                    })
+                    showBlockedDialog(buildActionErrorDetails(
+                        isEdit ? "Edit Delivery" : "Create Delivery",
+                        "Delivery",
+                        serverDetailErrors[0] || errorMsg
+                    ))
                 } else {
-                    toast.error(errorMsg)
+                    showBlockedDialog(buildActionErrorDetails(
+                        isEdit ? "Edit Delivery" : "Create Delivery",
+                        "Delivery",
+                        errorMsg
+                    ))
                 }
             }
         } catch (error) {
@@ -1015,11 +1021,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                 return
             }
 
-            toast.error("Error: " + (error instanceof Error ? error.message : "Unknown error occurred"))
+            showBlockedDialog(buildActionErrorDetails(
+                isEdit ? "Edit Delivery" : "Create Delivery",
+                "Delivery",
+                error instanceof Error ? error.message : "Unknown error occurred"
+            ))
         } finally {
             setSaving(false)
         }
-    }, [salesOrderId, scheduledDate, deliveryDate, status, deliveryType, driverName, vehicleNumber, vehicleType, warehouseId, warehouseToId, shippingAddress, notes, items, isEdit, initialData, router, isExternal, vendorName, awbNumber, shippingCost, costGasolineDexlite, costGasolineBio, costToll, costParking, costMeals, costMaintenance, costOthers, costRapidTest, costFerry, costPortal, costWashing, costEscort, tripDestination, selectedSO, generatedDeliveryNumber, doSap, totalInternalCost, showSaveBlockedToast])
+    }, [awbNumber, canSubmit, costEscort, costFerry, costGasolineBio, costGasolineDexlite, costMaintenance, costMeals, costOthers, costParking, costPortal, costRapidTest, costToll, costWashing, deliveryDate, deliveryType, doSap, driverName, generatedDeliveryNumber, initialData, isEdit, isExternal, items, notes, router, salesOrderId, scheduledDate, selectedSO, shippingAddress, shippingCost, showBlockedDialog, status, totalInternalCost, tripDestination, vehicleNumber, vehicleType, vendorName, warehouseId, warehouseToId])
 
     const handleCreateDriver = async (name: string) => {
         if (!name) return
@@ -1053,6 +1063,15 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">

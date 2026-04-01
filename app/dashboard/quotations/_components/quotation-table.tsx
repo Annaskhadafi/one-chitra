@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useMounted } from "@/hooks/use-mounted"
 import { SuccessAlertDialog } from "@/components/success-alert-dialog"
@@ -79,6 +79,8 @@ import {
 } from "@tanstack/react-table"
 import * as XLSX from "xlsx"
 import { QuotationPdfPreview } from "./quotation-pdf-preview"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
 
 interface QuotationWithRelations {
     id: number
@@ -443,6 +445,7 @@ export function QuotationTable(props: QuotationTableProps) {
 }
 
 function QuotationTableInner({ data: initialData }: QuotationTableProps) {
+    const router = useRouter()
     const queryClient = useQueryClient()
     const searchParams = useSearchParams()
     const { data: session } = useSession()
@@ -566,6 +569,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
     const [expandedQuotationIds, setExpandedQuotationIds] = useState<number[]>([])
     const [customerPoFileUrl, setCustomerPoFileUrl] = useState<string | null>(null)
     const [isCustomerPoPreviewOpen, setIsCustomerPoPreviewOpen] = useState(false)
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     // Extract unique users for filter
     const uniqueUsers = useMemo(() => {
@@ -1095,6 +1099,7 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
 
             const result = await uploadQuotationCustomerPo({
                 quotationId: poDialogQuotation.id,
+                poNumber: poDialogQuotation.customerPoNumber,
                 fileUrl: uploadResult.url,
                 fileName: poFile.name,
                 mimeType: poFile.type || null,
@@ -1183,11 +1188,23 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                         <Eye className={iconClassName} />
                     </Button>
                 </Link>
-                <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
-                    <Button variant="ghost" size="icon" className={buttonClassName} title="Edit quotation">
+                {canEdit ? (
+                    <Link href={`/dashboard/quotations/${quotation.id}/edit`}>
+                        <Button variant="ghost" size="icon" className={buttonClassName} title="Edit quotation">
+                            <Pencil className={iconClassName} />
+                        </Button>
+                    </Link>
+                ) : (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={buttonClassName}
+                        title="Edit quotation"
+                        onClick={() => setBlockedDialog(buildPermissionBlockedDetails("Edit Quotation", "Quotation"))}
+                    >
                         <Pencil className={iconClassName} />
                     </Button>
-                </Link>
+                )}
                 <Button
                     variant="ghost"
                     size="icon"
@@ -1301,7 +1318,11 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                                     toast.success("Quotation deleted")
                                                     refetch()
                                                 } else {
-                                                    toast.error(result.error || "Failed to delete")
+                                                    setBlockedDialog(buildActionErrorDetails(
+                                                        "Delete Quotation",
+                                                        "Quotation",
+                                                        result.error || "Failed to delete"
+                                                    ))
                                                 }
                                             }}
                                         >
@@ -1311,7 +1332,13 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
                                 </AlertDialogContent>
                             </AlertDialog>
                         ) : (
-                            <DropdownMenuItem disabled title={deleteDisabledReason}>
+                            <DropdownMenuItem
+                                title={deleteDisabledReason}
+                                onSelect={(event) => {
+                                    event.preventDefault()
+                                    setBlockedDialog(buildPermissionBlockedDetails("Delete Quotation", "Quotation"))
+                                }}
+                            >
                                 <Trash2 className={iconClassName} />
                                 Delete quotation
                             </DropdownMenuItem>
@@ -1597,6 +1624,15 @@ function QuotationTableInner({ data: initialData }: QuotationTableProps) {
 
     return (
         <div className="space-y-6">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             <Dialog open={Boolean(poDialogQuotation)} onOpenChange={(open) => !open && closePoDialog()}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>

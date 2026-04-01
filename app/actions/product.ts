@@ -9,7 +9,80 @@ import { z } from "zod"
 import { productSchema } from "@/lib/schemas"
 import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
-export async function getProducts() {
+type ProductListRow = typeof products.$inferSelect & {
+    totalStock: number
+    stockLevelCount: number
+    movementCount: number
+    salesOrderCount: number
+    deliveryCount: number
+    quotationCount: number
+}
+
+type ProductDisplayRow = Omit<
+    ProductListRow,
+    "stockLevelCount" | "movementCount" | "salesOrderCount" | "deliveryCount" | "quotationCount"
+>
+
+function dedupeProductsForDisplay(rows: ProductListRow[]): ProductDisplayRow[] {
+    const bestByKey = new Map<string, ProductListRow>()
+
+    const scoreRow = (row: ProductListRow) => {
+        const referenceCount =
+            row.stockLevelCount +
+            row.movementCount +
+            row.salesOrderCount +
+            row.deliveryCount +
+            row.quotationCount
+
+        return {
+            hasReferences: referenceCount > 0 ? 1 : 0,
+            referenceCount,
+            stockMagnitude: Math.abs(row.totalStock),
+            updatedAt: row.updatedAt?.getTime() ?? 0,
+            id: row.id,
+        }
+    }
+
+    for (const row of rows) {
+        const key = `${(row.materialNumber || "").trim().toUpperCase()}|${normalizeSloc(row.sloc)}`
+        const current = bestByKey.get(key)
+
+        if (!current) {
+            bestByKey.set(key, row)
+            continue
+        }
+
+        const candidateScore = scoreRow(row)
+        const currentScore = scoreRow(current)
+
+        const shouldReplace =
+            candidateScore.hasReferences > currentScore.hasReferences ||
+            (candidateScore.hasReferences === currentScore.hasReferences &&
+                candidateScore.referenceCount > currentScore.referenceCount) ||
+            (candidateScore.hasReferences === currentScore.hasReferences &&
+                candidateScore.referenceCount === currentScore.referenceCount &&
+                candidateScore.stockMagnitude > currentScore.stockMagnitude) ||
+            (candidateScore.hasReferences === currentScore.hasReferences &&
+                candidateScore.referenceCount === currentScore.referenceCount &&
+                candidateScore.stockMagnitude === currentScore.stockMagnitude &&
+                candidateScore.updatedAt > currentScore.updatedAt) ||
+            (candidateScore.hasReferences === currentScore.hasReferences &&
+                candidateScore.referenceCount === currentScore.referenceCount &&
+                candidateScore.stockMagnitude === currentScore.stockMagnitude &&
+                candidateScore.updatedAt === currentScore.updatedAt &&
+                candidateScore.id > currentScore.id)
+
+        if (shouldReplace) {
+            bestByKey.set(key, row)
+        }
+    }
+
+    return Array.from(bestByKey.values())
+        .map(({ stockLevelCount, movementCount, salesOrderCount, deliveryCount, quotationCount, ...row }) => row)
+        .sort((a, b) => a.materialNumber.localeCompare(b.materialNumber))
+}
+
+export async function getProducts(): Promise<ProductDisplayRow[]> {
     const aggregatedStock = db.select({
         productId: stockLevels.productId,
         totalStockSum: sql<number>`sum(${stockLevels.totalStock})`.as('total_stock_sum')
@@ -37,12 +110,37 @@ export async function getProducts() {
         isBundle: products.isBundle,
         isConsignment: products.isConsignment,
         totalStock: sql<number>`coalesce(${aggregatedStock.totalStockSum}, 0)`.mapWith(Number),
+        stockLevelCount: sql<number>`(
+            select count(*)
+            from stock_levels sl
+            where sl.product_id = ${products.id}
+        )`.mapWith(Number),
+        movementCount: sql<number>`(
+            select count(*)
+            from stock_movements sm
+            where sm.product_id = ${products.id}
+        )`.mapWith(Number),
+        salesOrderCount: sql<number>`(
+            select count(*)
+            from sales_order_items soi
+            where soi.product_id = ${products.id}
+        )`.mapWith(Number),
+        deliveryCount: sql<number>`(
+            select count(*)
+            from delivery_items di
+            where di.product_id = ${products.id}
+        )`.mapWith(Number),
+        quotationCount: sql<number>`(
+            select count(*)
+            from quotation_items qi
+            where qi.product_id = ${products.id}
+        )`.mapWith(Number),
     })
         .from(products)
         .leftJoin(aggregatedStock, eq(products.id, aggregatedStock.productId))
         .orderBy(products.materialNumber)
 
-    return normalizeSlocFields(results)
+    return dedupeProductsForDisplay(normalizeSlocFields(results))
 }
 
 export async function createProduct(data: z.infer<typeof productSchema>) {
@@ -65,6 +163,10 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
             sloc: normalizeSloc(data.sloc),
             slocDescription: data.slocDescription?.trim() || null,
             imageUrl: data.imageUrl?.trim() || null,
+        }
+
+        if (!normalizedData.sloc) {
+            return { success: false, error: "Sloc is required" }
         }
 
         if (id) {
@@ -140,11 +242,16 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
         // De-duplicate data in the batch to prevent "duplicate key" error within the same INSERT statement
         const seen = new Set<string>()
         const uniqueData: (typeof products.$inferInsert)[] = []
+        let skippedInvalidRows = 0
 
         for (const item of data) {
             // Normalize data: Trim and UpperCase to match database consistency rules
             const matNum = (item.materialNumber || "").trim().toUpperCase()
             const sloc = normalizeSloc(item.sloc)
+            if (!matNum || !sloc) {
+                skippedInvalidRows++
+                continue
+            }
             const key = `${matNum}|${sloc}`
 
             if (!seen.has(key)) {
@@ -162,6 +269,9 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
 
         if (uniqueData.length !== data.length) {
             console.log(`[importProducts] Removed ${data.length - uniqueData.length} duplicates from the batch`)
+        }
+        if (skippedInvalidRows > 0) {
+            console.log(`[importProducts] Skipped ${skippedInvalidRows} rows without material number or sloc`)
         }
 
         console.log(`[importProducts] Starting import of ${uniqueData.length} unique products`)
@@ -192,7 +302,10 @@ export async function importProducts(data: (typeof products.$inferInsert)[]) {
 
         console.log(`[importProducts] Import complete!`)
         revalidatePath("/dashboard/products")
-        return { success: true }
+        return {
+            success: true,
+            skippedInvalidRows,
+        }
     } catch (_error) {
         console.error("Import error:", _error)
         const msg = (_error as { message?: string })?.message || "Unknown error"

@@ -59,6 +59,9 @@ import { user } from "@/db/schema"
 import { ProductDialog } from "@/app/dashboard/products/_components/product-dialog"
 import { ProductHistoryPopover } from "./product-history-popover"
 import { StockCheckPopover } from "./stock-check-popover"
+import { usePermissions } from "@/hooks/use-permissions"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails, buildValidationBlockedDetails } from "@/lib/action-blocked"
 
 type User = typeof user.$inferSelect
 
@@ -155,6 +158,8 @@ function calculateSellingPrice(costIdr: number, margin: number) {
 export function QuotationForm({ customers, products, users, currentUserId, initialData }: QuotationFormProps) {
     const router = useRouter()
     const isEdit = !!initialData
+    const { hasResourcePermission } = usePermissions()
+    const canSubmit = hasResourcePermission("quotations", isEdit ? "edit" : "create")
     const [isVendorQuotationOpen, setIsVendorQuotationOpen] = useState(false)
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false)
     const [isDeliveryPriceOpen, setIsDeliveryPriceOpen] = useState(false)
@@ -231,6 +236,7 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     const [customerOpen, setCustomerOpen] = useState(false)
     const [productOpen, setProductOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     const selectedCustomer = useMemo(
         () => customers.find(c => c.id === customerId),
@@ -455,12 +461,19 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
     }, [])
 
     const handleSubmit = async () => {
+        if (!canSubmit) {
+            setBlockedDialog(buildPermissionBlockedDetails(
+                isEdit ? "Edit Quotation" : "Create Quotation",
+                "Quotation"
+            ))
+            return
+        }
         if (!customerId) {
-            toast.error("Please select a customer")
+            setBlockedDialog(buildValidationBlockedDetails("Quotation belum bisa disimpan", ["Customer belum dipilih"]))
             return
         }
         if (items.length === 0) {
-            toast.error("Please add at least one product")
+            setBlockedDialog(buildValidationBlockedDetails("Quotation belum bisa disimpan", ["Belum ada produk. Tambahkan minimal 1 produk"]))
             return
         }
 
@@ -520,22 +533,37 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 }
                 router.push(listUrl)
             } else {
-                toast.error("error" in result ? result.error : "Something went wrong")
+                setBlockedDialog(buildActionErrorDetails(
+                    isEdit ? "Edit Quotation" : "Create Quotation",
+                    "Quotation",
+                    "error" in result ? result.error : "Something went wrong"
+                ))
             }
-        } catch {
-            toast.error("Failed to save quotation")
+        } catch (error) {
+            setBlockedDialog(buildActionErrorDetails(
+                isEdit ? "Edit Quotation" : "Create Quotation",
+                "Quotation",
+                error instanceof Error ? error.message : "Failed to save quotation"
+            ))
         } finally {
             setIsSubmitting(false)
         }
     }
 
     const handleSaveAndPreviewPdf = async () => {
+        if (!canSubmit) {
+            setBlockedDialog(buildPermissionBlockedDetails(
+                isEdit ? "Edit Quotation" : "Create Quotation",
+                "Quotation"
+            ))
+            return
+        }
         if (!customerId) {
-            toast.error("Please select a customer")
+            setBlockedDialog(buildValidationBlockedDetails("Quotation belum bisa disimpan", ["Customer belum dipilih"]))
             return
         }
         if (items.length === 0) {
-            toast.error("Please add at least one product")
+            setBlockedDialog(buildValidationBlockedDetails("Quotation belum bisa disimpan", ["Belum ada produk. Tambahkan minimal 1 produk"]))
             return
         }
 
@@ -588,10 +616,18 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
                 router.refresh()
                 router.push(`/dashboard/quotations/${qId}?pdf=true`)
             } else {
-                toast.error("error" in result ? result.error : "Something went wrong")
+                setBlockedDialog(buildActionErrorDetails(
+                    isEdit ? "Edit Quotation" : "Create Quotation",
+                    "Quotation",
+                    "error" in result ? result.error : "Something went wrong"
+                ))
             }
-        } catch {
-            toast.error("Failed to save quotation")
+        } catch (error) {
+            setBlockedDialog(buildActionErrorDetails(
+                isEdit ? "Edit Quotation" : "Create Quotation",
+                "Quotation",
+                error instanceof Error ? error.message : "Failed to save quotation"
+            ))
         } finally {
             setIsSubmitting(false)
         }
@@ -599,6 +635,15 @@ export function QuotationForm({ customers, products, users, currentUserId, initi
 
     return (
         <div className="flex flex-col gap-6 p-4 md:p-8 lg:p-10 mx-auto w-full">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div className="flex items-center gap-4">

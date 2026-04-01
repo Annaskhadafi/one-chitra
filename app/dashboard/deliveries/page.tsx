@@ -7,6 +7,7 @@ import { Plus, Truck } from "lucide-react"
 import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
+import { RestrictedActionButton } from "@/components/restricted-action-button"
 
 export const dynamic = "force-dynamic"
 
@@ -28,7 +29,24 @@ export default async function DeliveriesPage() {
                         icon={Truck}
                     />
                 </div>
-                <PermissionGuard resource="deliveries" action="create">
+                <PermissionGuard
+                    resource="deliveries"
+                    action="create"
+                    fallback={
+                        <RestrictedActionButton
+                            className="w-full sm:w-auto sm:min-w-[170px] justify-center"
+                            title="Create Delivery tidak diizinkan"
+                            description="Anda belum memiliki akses untuk membuat Delivery baru."
+                            reasons={[
+                                "Role Anda tidak memiliki permission create pada modul Delivery.",
+                                "Hubungi admin jika akses ini memang diperlukan.",
+                            ]}
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Delivery
+                        </RestrictedActionButton>
+                    }
+                >
                     <Link href="/dashboard/deliveries/create" className="w-full sm:w-auto">
                         <Button className="w-full sm:w-auto sm:min-w-[170px] justify-center">
                             <Plus className="mr-2 h-4 w-4" />

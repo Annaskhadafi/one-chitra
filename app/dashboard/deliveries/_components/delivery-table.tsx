@@ -67,6 +67,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { ReportPieChart, ReportBarChart } from "@/components/reports/report-charts"
 import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { BarChart3 } from "lucide-react"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
 
 import {
     useReactTable,
@@ -258,6 +260,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const mounted = useMounted()
     const [showSuccessDialog, setShowSuccessDialog] = useState(false)
     const [successMessage, setSuccessMessage] = useState("")
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     const queryClient = useQueryClient()
     const { data = initialData, isLoading, refetch } = useQuery({
@@ -521,8 +524,18 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
     const handleDelete = useCallback(async (id: number) => {
         setDeleting(id)
         deleteMutation.mutate([id], {
-            onSuccess: () => {
-                toast.success("Delivery deleted successfully")
+            onSuccess: (result) => {
+                if (result.success) {
+                    toast.success("Delivery deleted successfully")
+                    setDeleting(null)
+                    return
+                }
+
+                setBlockedDialog(buildActionErrorDetails(
+                    "Delete Delivery",
+                    "Delivery",
+                    "error" in result ? result.error : "Failed to delete delivery"
+                ))
                 setDeleting(null)
             },
             onError: () => setDeleting(null)
@@ -594,15 +607,25 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                     <FileDown className="mr-2 h-4 w-4" />
                                     Cetak PDF
                                 </DropdownMenuItem>
-                                {canEdit && (
+                                {canEdit ? (
                                     <Link href={`/dashboard/deliveries/${delivery.id}`}>
                                         <DropdownMenuItem>
                                             <Pencil className="mr-2 h-4 w-4" />
                                             Edit
                                         </DropdownMenuItem>
                                     </Link>
+                                ) : (
+                                    <DropdownMenuItem
+                                        onSelect={(event) => {
+                                            event.preventDefault()
+                                            setBlockedDialog(buildPermissionBlockedDetails("Edit Delivery", "Delivery"))
+                                        }}
+                                    >
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Edit
+                                    </DropdownMenuItem>
                                 )}
-                                {canDelete && (
+                                {canDelete ? (
                                     <>
                                         <DropdownMenuSeparator />
                                         <AlertDialog>
@@ -633,6 +656,20 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
                                         </AlertDialog>
+                                    </>
+                                ) : (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            className="text-red-600"
+                                            onSelect={(event) => {
+                                                event.preventDefault()
+                                                setBlockedDialog(buildPermissionBlockedDetails("Delete Delivery", "Delivery"))
+                                            }}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete
+                                        </DropdownMenuItem>
                                     </>
                                 )}
                             </DropdownMenuContent>
@@ -1432,6 +1469,15 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
 
     return (
         <div className="space-y-6">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="analytics" className="border-none">
                     <AccordionTrigger className="flex items-center gap-2 hover:no-underline py-3 px-6 bg-card border rounded-xl shadow-sm hover:bg-accent/50 transition-all [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">

@@ -49,6 +49,9 @@ import { cn } from "@/lib/utils"
 import type { Customer, Product, Warehouse, User } from "@/lib/types"
 import { QuickAddProductDialog } from "./quick-add-product-dialog"
 import { resolveUploadDocumentUrl } from "@/lib/upload-url"
+import { usePermissions } from "@/hooks/use-permissions"
+import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
+import { buildActionErrorDetails, buildPermissionBlockedDetails, buildValidationBlockedDetails } from "@/lib/action-blocked"
 
 interface OrderItem {
     id?: number
@@ -129,6 +132,8 @@ export function SalesOrderForm({
 }: SalesOrderFormProps) {
     const router = useRouter()
     const isEdit = !!initialData && initialData.id > 0
+    const { hasResourcePermission } = usePermissions()
+    const canSubmit = hasResourcePermission("sales-orders", isEdit ? "edit" : "create")
 
     // Form State
     const [invoiceNumber, setInvoiceNumber] = useState(initialData?.invoiceNumber || "")
@@ -192,6 +197,7 @@ export function SalesOrderForm({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submitAlert, setSubmitAlert] = useState<string | null>(null)
     const [customerPoError, setCustomerPoError] = useState<string | null>(null)
+    const [blockedDialog, setBlockedDialog] = useState<ActionBlockedDetails | null>(null)
 
     const uniqueProducts = useMemo(() => {
         const seen = new Set()
@@ -447,17 +453,8 @@ export function SalesOrderForm({
         return subTotal - discount + shipping
     }, [subTotal, discount, shipping])
 
-    const showSaveBlockedToast = useCallback((title: string, errors: string[]) => {
-        const uniqueErrors = Array.from(new Set(errors))
-        toast.error(title, {
-            description: (
-                <ul className="list-disc pl-4">
-                    {uniqueErrors.map((error, index) => (
-                        <li key={`${error}-${index}`}>{error}</li>
-                    ))}
-                </ul>
-            )
-        })
+    const showBlockedDialog = useCallback((details: ActionBlockedDetails) => {
+        setBlockedDialog(details)
     }, [])
 
     const handleSubmit = async () => {
@@ -466,6 +463,14 @@ export function SalesOrderForm({
         console.log("items:", items)
         setSubmitAlert(null)
         setCustomerPoError(null)
+
+        if (!canSubmit) {
+            showBlockedDialog(buildPermissionBlockedDetails(
+                isEdit ? "Edit Sales Order" : "Create Sales Order",
+                "Sales Order"
+            ))
+            return
+        }
 
         // Validation
         const errors: string[] = []
@@ -498,7 +503,7 @@ export function SalesOrderForm({
 
         if (errors.length > 0) {
             console.log("❌ Validation failed", errors)
-            showSaveBlockedToast("Sales Order belum bisa disimpan", errors)
+            showBlockedDialog(buildValidationBlockedDetails("Sales Order belum bisa disimpan", errors))
             return
         }
 
@@ -627,21 +632,37 @@ export function SalesOrderForm({
                 // Check if result has error property (type guard)
                 if ('error' in result && result.error) {
                     if (serverDetailErrors.length > 0) {
-                        showSaveBlockedToast(result.error, serverDetailErrors)
+                        showBlockedDialog(buildActionErrorDetails(
+                            isEdit ? "Edit Sales Order" : "Create Sales Order",
+                            "Sales Order",
+                            serverDetailErrors[0] || result.error
+                        ))
                     } else {
-                        toast.error(result.error)
+                        showBlockedDialog(buildActionErrorDetails(
+                            isEdit ? "Edit Sales Order" : "Create Sales Order",
+                            "Sales Order",
+                            result.error
+                        ))
                     }
                 } else {
                     if (serverDetailErrors.length > 0) {
-                        showSaveBlockedToast("Sales Order belum bisa disimpan", serverDetailErrors)
+                        showBlockedDialog(buildValidationBlockedDetails("Sales Order belum bisa disimpan", serverDetailErrors))
                     } else {
-                        toast.error("Terjadi kesalahan yang tidak diketahui")
+                        showBlockedDialog(buildActionErrorDetails(
+                            isEdit ? "Edit Sales Order" : "Create Sales Order",
+                            "Sales Order",
+                            "Terjadi kesalahan yang tidak diketahui"
+                        ))
                     }
                 }
             }
         } catch (err) {
             console.error("Submit exception:", err)
-            toast.error("Gagal menyimpan sales order. Periksa koneksi internet anda.")
+            showBlockedDialog(buildActionErrorDetails(
+                isEdit ? "Edit Sales Order" : "Create Sales Order",
+                "Sales Order",
+                err instanceof Error ? err.message : "Gagal menyimpan sales order. Periksa koneksi internet anda."
+            ))
         } finally {
             setIsSubmitting(false)
         }
@@ -649,6 +670,15 @@ export function SalesOrderForm({
 
     return (
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-0 sm:gap-5 sm:p-4 md:gap-6 md:p-8 lg:p-10">
+            <ActionBlockedDialog
+                open={blockedDialog !== null}
+                onOpenChange={(open) => {
+                    if (!open) setBlockedDialog(null)
+                }}
+                title={blockedDialog?.title || "Aksi tidak bisa dilakukan"}
+                description={blockedDialog?.description || ""}
+                reasons={blockedDialog?.reasons || []}
+            />
             {/* Header */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3 sm:gap-4">
