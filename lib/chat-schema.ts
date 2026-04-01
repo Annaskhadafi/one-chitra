@@ -54,6 +54,36 @@ async function syncChatSchema() {
         ALTER TABLE IF EXISTS chat_messages
         ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
     `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS reactions JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS mentioned_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP;
+    `)
+
+    await db.execute(sql`
+        ALTER TABLE IF EXISTS chat_messages
+        ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP;
+    `)
 }
 
 export async function ensureChatSchema() {

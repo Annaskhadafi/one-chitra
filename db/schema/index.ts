@@ -177,6 +177,8 @@ export {
     chatRoomsRelations,
     chatRoomMembersRelations,
     chatMessagesRelations,
+    type ChatAttachmentRecord,
+    type ChatReactionRecord,
 } from "./chat";
 export {
     helpdeskKnowledgeSources,

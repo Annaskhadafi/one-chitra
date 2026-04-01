@@ -3,10 +3,10 @@
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
-import { createGroupRoom, deleteChatRoom, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
+import { createGroupRoom, deleteChatRoom, deleteMessage, editMessage, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, toggleMessageReaction, togglePinMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
 import { ensureHelpDeskRoom, getHelpDeskStarterPrompts } from "@/app/actions/helpdesk-ai"
 import { uploadFile } from "@/app/actions/upload"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
@@ -43,6 +43,8 @@ const HELP_DESK_TYPING_MESSAGES = [
     "Sedang merapikan langkah yang paling gampang diikuti...",
     "Lagi lihat modul One Chitra yang nyambung...",
 ] as const
+const MESSAGE_REACTION_PRESETS = ["👍", "🔥", "😂", "🙏", "✅", "❤️"] as const
+const QUICK_REPLY_PRESETS = ["Siap", "On progress", "Sudah dicek", "Terima kasih", "Mohon tunggu", "Selesai"] as const
 const isHelpDeskRoom = (room: Pick<ChatRoomWithMeta, "type">) => room.type === "ai-helpdesk"
 const time = (value: string) => new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
 const day = (value: string) => new Date(value).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })
@@ -228,6 +230,21 @@ function AttachmentGrid({ attachments, isOwn }: { attachments: Array<ChatAttachm
                     )
                 }
 
+                if (attachment.kind === "voice" && attachmentUrl) {
+                    return (
+                        <div key={`${attachment.name}-${index}`} className={cn("rounded-xl border px-3 py-3", isOwn ? "bg-primary-foreground/10" : "bg-background/70")}>
+                            <div className="mb-2 flex items-center gap-2 text-xs font-medium">
+                                <Mic className="h-3.5 w-3.5" />
+                                <span className="truncate">{attachment.name}</span>
+                                {attachment.durationSeconds ? <span className="ml-auto opacity-70">{Math.round(attachment.durationSeconds)} dtk</span> : null}
+                            </div>
+                            <audio controls className="h-10 w-full">
+                                <source src={attachmentUrl} type={attachment.contentType ?? "audio/webm"} />
+                            </audio>
+                        </div>
+                    )
+                }
+
                 return (
                     <a key={`${attachment.name}-${index}`} href={attachmentUrl ?? "#"} target="_blank" rel="noopener noreferrer" className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 text-xs", isOwn ? "bg-primary-foreground/10" : "bg-background/70")}>
                         <Paperclip className="h-3.5 w-3.5 shrink-0" />
@@ -272,7 +289,31 @@ function DocumentMentionPicker({ query, onSelect, onClose }: { query: string; on
     )
 }
 
-function MessageBubble({ msg, isOwn, highlighted, onReply }: { msg: ChatMessage; isOwn: boolean; highlighted: boolean; onReply: (msg: ChatMessage) => void }) {
+function MessageBubble({
+    msg,
+    isOwn,
+    highlighted,
+    isMentioned,
+    currentUserId,
+    onReply,
+    onJumpToMessage,
+    onToggleReaction,
+    onEdit,
+    onDelete,
+    onTogglePin,
+}: {
+    msg: ChatMessage
+    isOwn: boolean
+    highlighted: boolean
+    isMentioned: boolean
+    currentUserId: string
+    onReply: (msg: ChatMessage) => void
+    onJumpToMessage: (messageId: number) => void
+    onToggleReaction: (messageId: number, emoji: string) => void
+    onEdit: (msg: ChatMessage) => void
+    onDelete: (msg: ChatMessage) => void
+    onTogglePin: (msg: ChatMessage) => void
+}) {
     const Icon = msg.mentionType ? MENTION_ICONS[msg.mentionType as keyof typeof MENTION_ICONS] : null
     const color = msg.mentionType ? MENTION_COLORS[msg.mentionType as keyof typeof MENTION_COLORS] : ""
     const url = msg.mentionType === "quotation" ? `/dashboard/quotations/${msg.mentionId}` : msg.mentionType === "sales-order" ? `/dashboard/sales-orders?id=${msg.mentionId}` : msg.mentionType === "delivery" ? `/dashboard/deliveries?id=${msg.mentionId}` : null
@@ -284,18 +325,43 @@ function MessageBubble({ msg, isOwn, highlighted, onReply }: { msg: ChatMessage;
     return (
         <div className={cn("group mb-3 flex w-full min-w-0 gap-2 items-end", isOwn ? "flex-row-reverse" : "flex-row")}>
             <Avatar className="h-6 w-6 shrink-0"><AvatarImage src={avatarSrc} /><AvatarFallback className="text-xs">{getAvatarInitials(msg.senderName)}</AvatarFallback></Avatar>
-            <div className={cn("flex min-w-0 max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
+            <div className={cn("flex min-w-0 max-w-[88%] sm:max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
                 {!isOwn ? <p className="ml-1 text-xs text-muted-foreground">{msg.senderName}</p> : null}
-                <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm", isOwn ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted", highlighted && "ring-2 ring-primary/40")}>
-                    {msg.replyTo ? <div className={cn("mb-2 rounded-lg border px-2 py-1 text-xs", isOwn ? "border-primary-foreground/20 bg-primary-foreground/10" : "border-border bg-background/60")}><p className="font-medium">{msg.replyTo.senderName}</p><p className="truncate opacity-80">{msg.replyTo.content}</p></div> : null}
+                {msg.pinnedAt ? <div className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"><Pin className="h-3 w-3" />Pesan dipin</div> : null}
+                <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm transition-all duration-500", isOwn ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted", highlighted && (isOwn ? "ring-2 ring-cyan-300/90 bg-cyan-500 text-white shadow-[0_0_0_4px_rgba(34,211,238,0.18)]" : "ring-2 ring-cyan-400/90 bg-cyan-50 shadow-[0_0_0_4px_rgba(34,211,238,0.18)]"), isMentioned && !isOwn && "ring-2 ring-amber-300/70")}>
+                    {msg.replyTo ? <button type="button" onClick={() => onJumpToMessage(msg.replyTo!.id)} className={cn("mb-2 block w-full min-w-0 rounded-lg border px-2 py-1 text-left text-xs", isOwn ? "border-primary-foreground/20 bg-primary-foreground/10" : "border-border bg-background/60")}><p className="break-words font-medium">{msg.replyTo.senderName}</p><p className="line-clamp-3 whitespace-pre-wrap break-words opacity-80">{msg.replyTo.content}</p></button> : null}
                     {msg.mentionType && msg.mentionId && Icon && url ? <a href={url} target="_blank" rel="noopener noreferrer" className={cn("mb-1.5 inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", color)}><Icon className="h-3 w-3" />{msg.mentionLabel}</a> : null}
-                    {msg.content && !msg.content.startsWith("[Stiker:") && !msg.content.startsWith("[Lampiran:") && !/^\[\d+ lampiran\]$/.test(msg.content) ? <p className="whitespace-pre-wrap break-words">{msg.content}</p> : null}
+                    {msg.content && !msg.content.startsWith("[Stiker:") && !msg.content.startsWith("[Lampiran:") && !/^\[\d+ lampiran\]$/.test(msg.content) ? <p className={cn("whitespace-pre-wrap break-words", msg.isDeleted && "italic opacity-70")}>{msg.content}</p> : null}
                     <AttachmentGrid attachments={msg.attachments} isOwn={isOwn} />
                 </div>
+                {msg.reactions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                        {msg.reactions.map((reaction) => {
+                            const active = reaction.userIds.includes(currentUserId)
+                            return (
+                                <button
+                                    key={`${msg.id}-${reaction.emoji}`}
+                                    type="button"
+                                    onClick={() => onToggleReaction(msg.id, reaction.emoji)}
+                                    className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]", active ? "border-rose-300 bg-rose-50 text-rose-700" : "bg-background/80")}
+                                >
+                                    <span>{reaction.emoji}</span>
+                                    <span>{reaction.userIds.length}</span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                ) : null}
                 <div className="mx-1 flex items-center gap-2 text-[10px] text-muted-foreground">
                     <span>{time(msg.createdAt)}</span>
-                    {isOwn && msg.readBy.length > 1 ? <span>Dibaca {msg.readBy.length - 1}</span> : null}
+                    {msg.editedAt ? <span>Diedit</span> : null}
+                    {isOwn && msg.readBy.length > 1 ? <span title={msg.readBy.filter((entry) => entry.userId !== currentUserId).map((entry) => entry.name).join(", ")}>Dibaca {msg.readBy.length - 1}</span> : null}
+                    {isMentioned && !isOwn ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Mention</span> : null}
                     <button type="button" onClick={() => onReply(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Reply className="h-3 w-3" /></button>
+                    <button type="button" onClick={() => onTogglePin(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Pin className="h-3 w-3" /></button>
+                    {MESSAGE_REACTION_PRESETS.slice(0, 3).map((emoji) => <button key={`${msg.id}-quick-${emoji}`} type="button" onClick={() => onToggleReaction(msg.id, emoji)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground">{emoji}</button>)}
+                    {isOwn && !msg.isDeleted ? <button type="button" onClick={() => onEdit(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Pencil className="h-3 w-3" /></button> : null}
+                    {isOwn && !msg.isDeleted ? <button type="button" onClick={() => onDelete(msg)} className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"><Trash2 className="h-3 w-3" /></button> : null}
                 </div>
             </div>
         </div>
@@ -571,6 +637,8 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const [assistantThinking, setAssistantThinking] = useState(false)
     const [assistantThinkingIndex, setAssistantThinkingIndex] = useState(0)
     const [starterPrompts, setStarterPrompts] = useState<string[]>([])
+    const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false)
     const bottomRef = useRef<HTMLDivElement>(null)
     const messageRefs = useRef<Record<number, HTMLDivElement | null>>({})
     const typingTimeoutRef = useRef<number | null>(null)
@@ -580,11 +648,15 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const fileInputRef = useRef<HTMLInputElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const recordingChunksRef = useRef<Blob[]>([])
+    const recordingStartedAtRef = useRef<number | null>(null)
     const draftKey = `chat-draft-${room.id}`
     const others = room.members.filter((member) => member.userId !== currentUserId)
     const pageContext = getHelpDeskPageContext(pathname)
     const contextQuickActions = buildContextQuickActions(pathname)
     const followupQuickActions = buildFollowupQuickActions(room, pathname)
+    const pinnedMessages = messages.filter((message) => Boolean(message.pinnedAt)).slice(-3).reverse()
     const mentionableUsers: MentionableUser[] = others.map((member) => ({
         userId: member.userId,
         name: member.name,
@@ -598,7 +670,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     useEffect(() => {
         let active = true
         const saved = window.localStorage.getItem(draftKey); if (saved) setInput(saved)
-        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0)
+        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0); setEditingMessageId(null); setIsRecordingVoice(false)
         loadSnapshot()
             .catch(() => { if (active) toast.error("Gagal memuat percakapan") })
             .finally(() => { if (active) setLoading(false) })
@@ -691,6 +763,15 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         attachmentsRef.current = attachments
     }, [attachments])
     useEffect(() => {
+        if (highlightedMessageId === null) return
+
+        const timeout = window.setTimeout(() => {
+            setHighlightedMessageId((current) => current === highlightedMessageId ? null : current)
+        }, 2600)
+
+        return () => window.clearTimeout(timeout)
+    }, [highlightedMessageId])
+    useEffect(() => {
         if (!assistantThinking) {
             setAssistantThinkingIndex(0)
             return
@@ -703,6 +784,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         return () => window.clearInterval(interval)
     }, [assistantThinking])
     useEffect(() => () => {
+        mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop())
         attachmentsRef.current.forEach((attachment) => {
             if (attachment.previewUrl) {
                 URL.revokeObjectURL(attachment.previewUrl)
@@ -766,6 +848,8 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         ? file.type === "image/gif"
                             ? "gif"
                             : "image"
+                        : file.type.startsWith("audio/")
+                            ? "voice"
                         : file.type === "image/gif"
                             ? "gif"
                             : isUploadImageFile(file.name)
@@ -781,6 +865,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         contentType: file.type || null,
                         size: file.size,
                         previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+                        durationSeconds: null,
                     },
                 ])
             }
@@ -817,15 +902,173 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         ])
         setShowStickerPicker(false)
     }
+    const refreshMessages = useCallback(async (limit = Math.max(messages.length + 5, 30)) => {
+        const snapshot = await getRoomMessages(room.id, { limit })
+        applySnapshot(snapshot, false)
+        await onRoomUpdated().catch(() => undefined)
+    }, [applySnapshot, messages.length, onRoomUpdated, room.id])
+    const handleToggleReaction = async (messageId: number, emoji: string) => {
+        try {
+            await toggleMessageReaction(room.id, messageId, emoji)
+            await refreshMessages()
+        } catch {
+            toast.error("Reaction gagal disimpan")
+        }
+    }
+    const handleEditMessage = (message: ChatMessage) => {
+        setEditingMessageId(message.id)
+        setInput(message.isDeleted ? "" : message.content)
+        setReplyTarget(null)
+        window.setTimeout(() => {
+            textareaRef.current?.focus()
+            const length = message.content.length
+            textareaRef.current?.setSelectionRange(length, length)
+        }, 0)
+    }
+    const handleDeleteMessage = async (message: ChatMessage) => {
+        if (!window.confirm("Hapus pesan ini?")) return
+        try {
+            await deleteMessage(room.id, message.id)
+            if (editingMessageId === message.id) {
+                setEditingMessageId(null)
+                setInput("")
+            }
+            await refreshMessages()
+        } catch {
+            toast.error("Pesan gagal dihapus")
+        }
+    }
+    const handleTogglePinMessage = async (message: ChatMessage) => {
+        try {
+            await togglePinMessage(room.id, message.id)
+            await refreshMessages()
+        } catch {
+            toast.error("Pin pesan gagal diubah")
+        }
+    }
+    const startVoiceRecording = async () => {
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+            toast.error("Browser belum mendukung rekaman suara")
+            return
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            const recorder = new MediaRecorder(stream)
+            recordingChunksRef.current = []
+            recordingStartedAtRef.current = Date.now()
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordingChunksRef.current.push(event.data)
+                }
+            }
+            recorder.onstop = async () => {
+                const durationSeconds = recordingStartedAtRef.current ? (Date.now() - recordingStartedAtRef.current) / 1000 : null
+                const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" })
+                recorder.stream.getTracks().forEach((track) => track.stop())
+                mediaRecorderRef.current = null
+                recordingChunksRef.current = []
+                recordingStartedAtRef.current = null
+                if (blob.size === 0) return
+
+                setSending(true)
+                try {
+                    const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
+                    const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type || "audio/webm" })
+                    const formData = new FormData()
+                    formData.append("file", file)
+                    const uploaded = await uploadFile(formData)
+                    if (!uploaded.success || !uploaded.url) {
+                        throw new Error(uploaded.error || "Upload voice note gagal")
+                    }
+                    setAttachments((current) => [...current, {
+                        kind: "voice",
+                        name: file.name,
+                        url: uploaded.url,
+                        contentType: file.type,
+                        size: file.size,
+                        durationSeconds,
+                    }])
+                } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Voice note gagal dibuat")
+                } finally {
+                    setSending(false)
+                }
+            }
+            mediaRecorderRef.current = recorder
+            recorder.start()
+            setIsRecordingVoice(true)
+        } catch {
+            toast.error("Izin mikrofon ditolak atau tidak tersedia")
+        }
+    }
+    const stopVoiceRecording = () => {
+        if (!mediaRecorderRef.current) return
+        mediaRecorderRef.current.stop()
+        setIsRecordingVoice(false)
+    }
     const handleSend = async () => {
         const trimmed = input.trim(); if (!trimmed && !pendingMention && attachments.length === 0) return
         const plainAttachments = attachments.map(({ previewUrl: _previewUrl, isUploading: _isUploading, ...attachment }) => attachment)
         const questionForAi = trimmed
         setSending(true)
         try {
+            if (editingMessageId) {
+                await editMessage(room.id, editingMessageId, trimmed)
+                setEditingMessageId(null)
+                setInput("")
+                await refreshMessages()
+                return
+            }
             const mentionedUserIds = selectedUserMentions
                 .filter((user) => input.includes(`@${user.name}`))
                 .map((user) => user.userId)
+
+            const optimisticId = -Date.now()
+            const fallbackContent =
+                trimmed ||
+                (plainAttachments.length > 0
+                    ? plainAttachments[0]?.kind === "sticker"
+                        ? `[Stiker: ${plainAttachments[0]?.name}]`
+                        : plainAttachments.length === 1
+                            ? `[Lampiran: ${plainAttachments[0]?.name}]`
+                            : `[${plainAttachments.length} lampiran]`
+                    : `[Referensi: ${pendingMention?.label ?? "Dokumen"}]`)
+            const optimisticMessage: ChatMessage = {
+                id: optimisticId,
+                roomId: room.id,
+                senderId: currentUserId,
+                senderName: room.type === "dm" ? "Anda" : "Anda",
+                senderImage: null,
+                content: fallbackContent,
+                attachments: plainAttachments,
+                reactions: [],
+                mentionType: pendingMention?.type ?? null,
+                mentionId: pendingMention?.id ?? null,
+                mentionLabel: pendingMention?.label ?? null,
+                mentionedUserIds,
+                createdAt: new Date().toISOString(),
+                editedAt: null,
+                deletedAt: null,
+                isDeleted: false,
+                pinnedAt: null,
+                replyTo: replyTarget ? {
+                    id: replyTarget.id,
+                    content: replyTarget.content,
+                    senderName: replyTarget.senderName,
+                } : null,
+                readBy: [{ userId: currentUserId, name: "Anda" }],
+            }
+
+            setMessages((current) => mergeUnique(current, [optimisticMessage]))
+            setInput("")
+            setPendingMention(null)
+            setSelectedUserMentions([])
+            setReplyTarget(null)
+            setAttachments([])
+            setShowStickerPicker(false)
+            window.localStorage.removeItem(draftKey)
+            await updateTypingStatus(room.id, false)
 
             const result = await sendMessage(
                 room.id,
@@ -836,10 +1079,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 plainAttachments
             )
             attachments.forEach((attachment) => { if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl) })
-            setInput(""); setPendingMention(null); setSelectedUserMentions([]); setReplyTarget(null); setAttachments([]); setShowStickerPicker(false); window.localStorage.removeItem(draftKey); await updateTypingStatus(room.id, false)
-            const snapshot = await getRoomMessages(room.id, { limit: Math.max(messages.length + 1, 30) })
-            applySnapshot(snapshot, false)
-            onRoomUpdated().catch(() => undefined)
+            await refreshMessages(Math.max(messages.length + 1, 30))
 
             if (isHelpDeskRoom(room) && questionForAi && result.shouldTriggerAiReply) {
                 setAssistantThinking(true)
@@ -857,6 +1097,12 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 setAssistantThinking(false)
             }
         } catch {
+            setMessages((current) => current.filter((message) => message.id >= 0))
+            setInput(trimmed)
+            setPendingMention(pendingMention)
+            setSelectedUserMentions(selectedUserMentions)
+            setReplyTarget(replyTarget)
+            setAttachments(attachments)
             toast.error("Pesan gagal dikirim")
             setSending(false)
             setAssistantThinking(false)
@@ -871,8 +1117,19 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     }
     const jumpToMessage = async (messageId: number) => {
         setHighlightedMessageId(messageId)
-        if (messageRefs.current[messageId]) { messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" }); return }
-        try { const snapshot = await getRoomMessages(room.id, { limit: 100 }); applySnapshot(snapshot, false); window.setTimeout(() => { messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" }) }, 50) } catch { toast.error("Pesan belum bisa ditampilkan") }
+        if (messageRefs.current[messageId]) {
+            messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" })
+            return
+        }
+        try {
+            const snapshot = await getRoomMessages(room.id, { limit: 100 })
+            applySnapshot(snapshot, false)
+            window.setTimeout(() => {
+                messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" })
+            }, 120)
+        } catch {
+            toast.error("Pesan belum bisa ditampilkan")
+        }
     }
     const togglePreference = async (key: "isMuted" | "isPinned" | "isArchived", value: boolean) => {
         try { await updateRoomPreferences(room.id, { [key]: value }); await onRoomUpdated(); if (key === "isArchived" && value) onBack() } catch { toast.error("Pengaturan room gagal disimpan") }
@@ -891,6 +1148,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 </div>
                 <div className="px-3 pb-3">
                     <div className="relative"><Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/60" /><Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={isHelpDeskRoom(room) ? "Cari riwayat bantuan" : "Cari pesan dalam room"} className="h-9 rounded-xl border-white/20 bg-white/15 pl-7 text-sm text-white placeholder:text-white/70" /></div>
+                    {pinnedMessages.length > 0 ? <div className="mt-2 flex flex-wrap gap-2">{pinnedMessages.map((message) => <button key={`pin-${message.id}`} type="button" onClick={() => jumpToMessage(message.id)} className="inline-flex max-w-full items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] text-white/90 hover:bg-white/20"><Pin className="h-3 w-3 shrink-0" /><span className="truncate">{message.content}</span></button>)}</div> : null}
                     {searchResults.length > 0 ? <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-white/30 bg-white/90 text-slate-800">{searchResults.slice(0, 5).map((result) => <button key={result.id} type="button" onClick={() => jumpToMessage(result.id)} className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-rose-50"><p className="truncate text-xs font-medium">{result.senderName}</p><p className="truncate text-xs text-muted-foreground">{result.content}</p></button>)}</div> : null}
                 </div>
             </div>
@@ -903,7 +1161,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         {hasMore ? <div className="mb-3 flex justify-center"><Button variant="outline" size="sm" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}Muat Pesan Lama</Button></div> : null}
                         {messages.map((message, index) => {
                             const showDate = !messages[index - 1] || day(messages[index - 1].createdAt) !== day(message.createdAt)
-                            return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }}>{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} onReply={setReplyTarget} /></div>
+                            return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }} className="scroll-mt-24">{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} isMentioned={message.mentionedUserIds.includes(currentUserId)} currentUserId={currentUserId} onReply={setReplyTarget} onJumpToMessage={jumpToMessage} onToggleReaction={handleToggleReaction} onEdit={handleEditMessage} onDelete={handleDeleteMessage} onTogglePin={handleTogglePinMessage} /></div>
                         })}
                         {typingMembers.length > 0 ? <p className="mb-2 text-xs text-muted-foreground">{typingMembers.map((member) => member.name).join(", ")} sedang mengetik...</p> : null}
                         {assistantThinking ? <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />{HELP_DESK_TYPING_MESSAGES[assistantThinkingIndex]}</div> : null}
@@ -930,7 +1188,9 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         </div>
                     </div>
                 ) : null}
-                {replyTarget ? <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 px-2 py-2"><Reply className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">{replyTarget.senderName}</p><p className="truncate text-xs text-muted-foreground">{replyTarget.content}</p></div><button type="button" onClick={() => setReplyTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
+                {!isHelpDeskRoom(room) ? <div className="mb-2 flex flex-wrap gap-2">{QUICK_REPLY_PRESETS.map((preset) => <button key={preset} type="button" onClick={() => applyPromptToComposer(preset)} className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-slate-600 hover:border-rose-200 hover:text-rose-600">{preset}</button>)}</div> : null}
+                {editingMessageId ? <div className="mb-2 flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-2"><Pencil className="mt-0.5 h-3.5 w-3.5 text-cyan-700" /><div className="min-w-0 flex-1"><p className="text-xs font-medium text-cyan-800">Mode edit pesan</p><p className="text-xs text-cyan-700">Tekan kirim untuk menyimpan perubahan.</p></div><button type="button" onClick={() => { setEditingMessageId(null); setInput("") }} className="text-cyan-700 hover:text-cyan-900"><X className="h-3.5 w-3.5" /></button></div> : null}
+                {replyTarget ? <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 px-2 py-2"><Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="break-words text-xs font-medium">{replyTarget.senderName}</p><p className="line-clamp-3 whitespace-pre-wrap break-words text-xs text-muted-foreground">{replyTarget.content}</p></div><button type="button" onClick={() => setReplyTarget(null)} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
                 {pendingMention ? <div className="mb-2 flex items-center gap-2"><a href={pendingMention.url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", MENTION_COLORS[pendingMention.type])}>{React.createElement(MENTION_ICONS[pendingMention.type], { className: "h-3 w-3" })}{pendingMention.label}</a><button type="button" onClick={() => setPendingMention(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
                 {attachments.length > 0 ? (
                     <div className="mb-2 rounded-xl border bg-muted/30 p-2">
@@ -957,9 +1217,12 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setShowStickerPicker((value) => !value)} disabled={sending || attachments.length >= 8}>
                         <SmilePlus className="h-3.5 w-3.5" /> Stiker
                     </Button>
+                    <Button type="button" variant="outline" size="sm" className={cn("h-8 gap-1.5", isRecordingVoice && "border-rose-300 bg-rose-50 text-rose-700")} onClick={() => isRecordingVoice ? stopVoiceRecording() : startVoiceRecording().catch(() => undefined)} disabled={sending || attachments.length >= 8}>
+                        {isRecordingVoice ? <Check className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {isRecordingVoice ? "Selesai Rekam" : "Voice"}
+                    </Button>
                     {isHelpDeskRoom(room) ? <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-medium text-cyan-700"><Compass className="h-3 w-3" />{pageContext ? `Konteks: ${pageContext.title}` : "Mode bantuan cepat"}</div> : null}
                 </div>
-                <div className="flex min-w-0 items-end gap-2"><Textarea ref={textareaRef} value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? pageContext ? `Tanya tentang ${pageContext.title} atau pertanyaan umum lain...` : "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] max-h-36 min-w-0 resize-none overflow-y-auto text-sm" /><Button size="icon" className="h-11 w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+                <div className="flex min-w-0 items-end gap-2"><Textarea ref={textareaRef} value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={editingMessageId ? "Perbarui pesan..." : isHelpDeskRoom(room) ? pageContext ? `Tanya tentang ${pageContext.title} atau pertanyaan umum lain...` : "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] max-h-36 min-w-0 resize-none overflow-y-auto text-sm" /><Button size="icon" className="h-11 w-11 shrink-0" onClick={handleSend} disabled={sending || (!editingMessageId && !input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
             </div>
         </div>
     )
@@ -1047,8 +1310,8 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     }, [])
     const deleteRoom = useCallback(async (roomId: number) => { try { await deleteChatRoom(roomId); toast.success("Chat dihapus dari daftar Anda"); setActiveRoom(null); setShowNewChat(false); await loadRooms() } catch { toast.error("Gagal menghapus chat") } }, [loadRooms])
     return (
-        <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-            {isOpen ? <div className="flex h-[min(620px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[28px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed inset-x-3 bottom-3 z-50 flex flex-col items-end gap-3 sm:inset-x-auto sm:bottom-5 sm:right-5">
+            {isOpen ? <div className="flex h-[min(620px,calc(100dvh-6.5rem))] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-[24px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200 sm:h-[min(620px,calc(100dvh-7rem))] sm:w-[380px] sm:max-w-[380px] sm:rounded-[28px]">
                 <div className="shrink-0 bg-gradient-to-r from-fuchsia-500 via-rose-500 to-orange-400 px-4 py-3 text-white"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><div className="rounded-full bg-white/20 p-1.5"><MessageCircle className="h-4 w-4" /></div><span className="text-sm font-semibold">Chat Workspace</span></div><Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => { setIsOpen(false); setActiveRoom(null); setShowNewChat(false) }}><X className="h-4 w-4" /></Button></div></div>
                 <div className="flex-1 min-h-0 overflow-hidden">
                     {showNewChat ? <NewChatView users={chatUsers} loadingUsers={chatUsersLoading} loadError={chatUsersError} onRetryLoadUsers={() => { loadChatUsers().catch(() => undefined) }} onRoomCreated={handleRoomCreated} onBack={() => setShowNewChat(false)} /> : activeRoom ? <ConversationView room={activeRoom} currentUserId={currentUserId} onBack={() => { setActiveRoom(null); loadRooms().catch(() => undefined) }} onDeleteRoom={deleteRoom} onRoomUpdated={loadRooms} /> : <RoomList rooms={rooms} currentUserId={currentUserId} filter={filter} selectedRoomId={activeRoomId} onFilterChange={setFilter} onSelectRoom={(room) => { setActiveRoom(room); setShowNewChat(false) }} onNewChat={() => { setShowNewChat(true); if (!chatUsers.length && !chatUsersLoading) loadChatUsers().catch(() => undefined) }} onOpenHelpDesk={handleOpenHelpDesk} onTogglePreference={togglePreference} totalUnread={totalUnread} />}

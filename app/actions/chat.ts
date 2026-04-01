@@ -11,7 +11,7 @@ import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { ensureChatSchema } from "@/lib/chat-schema"
 import { sendLoggedNotificationMessage } from "@/lib/email"
 import { sendPushNotificationToUsers } from "@/lib/push-notifications"
-import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord } from "@/db/schema"
+import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord, type ChatReactionRecord } from "@/db/schema"
 
 type MentionPayload = {
     type: string
@@ -20,6 +20,7 @@ type MentionPayload = {
 }
 
 export type ChatAttachment = ChatAttachmentRecord
+export type ChatReaction = ChatReactionRecord
 
 export type ChatRoomMemberMeta = {
     userId: string
@@ -52,10 +53,16 @@ export type ChatMessage = {
     senderImage: string | null
     content: string
     attachments: ChatAttachment[]
+    reactions: ChatReaction[]
     mentionType: string | null
     mentionId: string | null
     mentionLabel: string | null
+    mentionedUserIds: string[]
     createdAt: string
+    editedAt: string | null
+    deletedAt: string | null
+    isDeleted: boolean
+    pinnedAt: string | null
     replyTo: {
         id: number
         content: string
@@ -167,27 +174,57 @@ function normalizeAttachments(value: unknown): ChatAttachment[] {
     if (!Array.isArray(value)) return []
 
     return value
-        .map((entry) => {
+        .map((entry): ChatAttachment | null => {
             if (!entry || typeof entry !== "object") return null
             const attachment = entry as Record<string, unknown>
             const kind = typeof attachment.kind === "string" ? attachment.kind : null
             const name = typeof attachment.name === "string" ? attachment.name.trim() : ""
 
-            if (!kind || !["image", "gif", "file", "sticker"].includes(kind) || !name) {
+            if (!kind || !["image", "gif", "file", "sticker", "voice"].includes(kind) || !name) {
                 return null
             }
 
-            return {
+            const normalized: ChatAttachment = {
                 kind: kind as ChatAttachment["kind"],
                 name,
                 url: typeof attachment.url === "string" ? attachment.url : null,
                 contentType: typeof attachment.contentType === "string" ? attachment.contentType : null,
                 size: typeof attachment.size === "number" && Number.isFinite(attachment.size) ? attachment.size : null,
                 sticker: typeof attachment.sticker === "string" ? attachment.sticker : null,
-            } satisfies ChatAttachment
+                durationSeconds: typeof attachment.durationSeconds === "number" && Number.isFinite(attachment.durationSeconds) ? attachment.durationSeconds : null,
+            }
+
+            return normalized
         })
         .filter((attachment): attachment is ChatAttachment => Boolean(attachment))
         .slice(0, 8)
+}
+
+function normalizeReactions(value: unknown): ChatReaction[] {
+    if (!Array.isArray(value)) return []
+
+    return value
+        .map((entry) => {
+            if (!entry || typeof entry !== "object") return null
+            const reaction = entry as Record<string, unknown>
+            const emoji = typeof reaction.emoji === "string" ? reaction.emoji.trim() : ""
+            const userIds = Array.isArray(reaction.userIds)
+                ? reaction.userIds.filter((userId): userId is string => typeof userId === "string" && userId.trim().length > 0)
+                : []
+
+            if (!emoji || userIds.length === 0) return null
+
+            return {
+                emoji,
+                userIds: Array.from(new Set(userIds)),
+            } satisfies ChatReaction
+        })
+        .filter((reaction): reaction is ChatReaction => Boolean(reaction))
+}
+
+function normalizeMentionedUserIds(value: unknown) {
+    if (!Array.isArray(value)) return []
+    return Array.from(new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)))
 }
 
 async function enrichMessages(
@@ -200,10 +237,16 @@ async function enrichMessages(
         senderImage: string | null
         content: string
         attachments: unknown
+        reactions: unknown
         mentionType: string | null
         mentionId: string | null
         mentionLabel: string | null
+        mentionedUserIds: unknown
         createdAt: Date
+        editedAt: Date | null
+        deletedAt: Date | null
+        isDeleted: boolean
+        pinnedAt: Date | null
         replyToMessageId: number | null
     }[]
 ): Promise<ChatMessage[]> {
@@ -217,13 +260,18 @@ async function enrichMessages(
                 id: chatMessages.id,
                 content: chatMessages.content,
                 senderName: userTable.name,
+                isDeleted: chatMessages.isDeleted,
             })
             .from(chatMessages)
             .innerJoin(userTable, eq(chatMessages.senderId, userTable.id))
             .where(inArray(chatMessages.id, replyIds))
 
         for (const reply of replies) {
-            replyMap.set(reply.id, reply)
+            replyMap.set(reply.id, {
+                id: reply.id,
+                content: reply.isDeleted ? "Pesan ini sudah dihapus" : reply.content,
+                senderName: reply.senderName,
+            })
         }
     }
 
@@ -235,10 +283,16 @@ async function enrichMessages(
         senderImage: message.senderImage,
         content: message.content,
         attachments: normalizeAttachments(message.attachments),
+        reactions: normalizeReactions(message.reactions),
         mentionType: message.mentionType,
         mentionId: message.mentionId,
         mentionLabel: message.mentionLabel,
+        mentionedUserIds: normalizeMentionedUserIds(message.mentionedUserIds),
         createdAt: message.createdAt.toISOString(),
+        editedAt: message.editedAt ? message.editedAt.toISOString() : null,
+        deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
+        isDeleted: message.isDeleted,
+        pinnedAt: message.pinnedAt ? message.pinnedAt.toISOString() : null,
         replyTo: message.replyToMessageId ? replyMap.get(message.replyToMessageId) ?? null : null,
         readBy: memberRows
             .filter((member) => member.lastReadAt && member.lastReadAt >= message.createdAt)
@@ -275,10 +329,16 @@ async function getRoomSnapshotInternal(
             senderImage: userTable.image,
             content: chatMessages.content,
             attachments: chatMessages.attachments,
+            reactions: chatMessages.reactions,
             mentionType: chatMessages.mentionType,
             mentionId: chatMessages.mentionId,
             mentionLabel: chatMessages.mentionLabel,
+            mentionedUserIds: chatMessages.mentionedUserIds,
             createdAt: chatMessages.createdAt,
+            editedAt: chatMessages.editedAt,
+            deletedAt: chatMessages.deletedAt,
+            isDeleted: chatMessages.isDeleted,
+            pinnedAt: chatMessages.pinnedAt,
             replyToMessageId: chatMessages.replyToMessageId,
         })
         .from(chatMessages)
@@ -572,9 +632,11 @@ export async function sendMessage(
                         : `[${normalizedAttachments.length} lampiran]`
                 : `[Referensi: ${mention?.label ?? "Dokumen"}]`),
         attachments: normalizedAttachments,
+        reactions: [],
         mentionType: mention?.type ?? null,
         mentionId: mention?.id ?? null,
         mentionLabel: mention?.label ?? null,
+        mentionedUserIds: normalizedMentionedUserIds,
         replyToMessageId: replyToMessageId ?? null,
     })
 
@@ -646,6 +708,133 @@ export async function sendMessage(
         success: true,
         shouldTriggerAiReply: room.type === "ai-helpdesk" && cleanContent.length > 0,
     }
+}
+
+export async function toggleMessageReaction(roomId: number, messageId: number, emoji: string) {
+    const currentUserId = await getCurrentUserId()
+    await assertMembership(roomId, currentUserId)
+
+    const message = await db.query.chatMessages.findFirst({
+        where: and(eq(chatMessages.id, messageId), eq(chatMessages.roomId, roomId)),
+    })
+
+    if (!message || message.isDeleted) {
+        throw new Error("Pesan tidak ditemukan")
+    }
+
+    const normalizedEmoji = emoji.trim()
+    if (!normalizedEmoji) {
+        throw new Error("Emoji wajib diisi")
+    }
+
+    const nextReactions = normalizeReactions(message.reactions)
+    const existingReaction = nextReactions.find((reaction) => reaction.emoji === normalizedEmoji)
+
+    if (existingReaction) {
+        if (existingReaction.userIds.includes(currentUserId)) {
+            existingReaction.userIds = existingReaction.userIds.filter((userId) => userId !== currentUserId)
+        } else {
+            existingReaction.userIds.push(currentUserId)
+        }
+    } else {
+        nextReactions.push({ emoji: normalizedEmoji, userIds: [currentUserId] })
+    }
+
+    await db
+        .update(chatMessages)
+        .set({
+            reactions: nextReactions.filter((reaction) => reaction.userIds.length > 0),
+        })
+        .where(eq(chatMessages.id, messageId))
+
+    return { success: true }
+}
+
+export async function editMessage(roomId: number, messageId: number, content: string) {
+    const currentUserId = await getCurrentUserId()
+    await assertMembership(roomId, currentUserId)
+
+    const message = await db.query.chatMessages.findFirst({
+        where: and(eq(chatMessages.id, messageId), eq(chatMessages.roomId, roomId)),
+    })
+
+    if (!message || message.senderId !== currentUserId) {
+        throw new Error("Pesan tidak dapat diubah")
+    }
+
+    if (message.isDeleted) {
+        throw new Error("Pesan sudah dihapus")
+    }
+
+    const cleanContent = content.trim()
+    if (!cleanContent && normalizeAttachments(message.attachments).length === 0) {
+        throw new Error("Isi pesan tidak boleh kosong")
+    }
+
+    await db
+        .update(chatMessages)
+        .set({
+            content: cleanContent || message.content,
+            editedAt: new Date(),
+        })
+        .where(eq(chatMessages.id, messageId))
+
+    await db.update(chatRooms).set({ updatedAt: new Date() }).where(eq(chatRooms.id, roomId))
+
+    return { success: true }
+}
+
+export async function deleteMessage(roomId: number, messageId: number) {
+    const currentUserId = await getCurrentUserId()
+    await assertMembership(roomId, currentUserId)
+
+    const message = await db.query.chatMessages.findFirst({
+        where: and(eq(chatMessages.id, messageId), eq(chatMessages.roomId, roomId)),
+    })
+
+    if (!message || message.senderId !== currentUserId) {
+        throw new Error("Pesan tidak dapat dihapus")
+    }
+
+    await db
+        .update(chatMessages)
+        .set({
+            content: "Pesan ini sudah dihapus",
+            attachments: [],
+            reactions: [],
+            mentionType: null,
+            mentionId: null,
+            mentionLabel: null,
+            mentionedUserIds: [],
+            isDeleted: true,
+            deletedAt: new Date(),
+            editedAt: null,
+        })
+        .where(eq(chatMessages.id, messageId))
+
+    return { success: true }
+}
+
+export async function togglePinMessage(roomId: number, messageId: number) {
+    const currentUserId = await getCurrentUserId()
+    await assertMembership(roomId, currentUserId)
+
+    const message = await db.query.chatMessages.findFirst({
+        where: and(eq(chatMessages.id, messageId), eq(chatMessages.roomId, roomId)),
+    })
+
+    if (!message || message.isDeleted) {
+        throw new Error("Pesan tidak ditemukan")
+    }
+
+    await db
+        .update(chatMessages)
+        .set({
+            pinnedAt: message.pinnedAt ? null : new Date(),
+        })
+        .where(eq(chatMessages.id, messageId))
+
+    return { success: true }
 }
 
 export async function generateHelpDeskReplyForRoom(roomId: number, question: string) {
@@ -748,6 +937,7 @@ export async function searchRoomMessages(roomId: number, query: string, limit = 
         .where(
             and(
                 eq(chatMessages.roomId, roomId),
+                eq(chatMessages.isDeleted, false),
                 or(
                     ilike(chatMessages.content, `%${normalizedQuery}%`),
                     ilike(chatMessages.mentionLabel, `%${normalizedQuery}%`)

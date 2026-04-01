@@ -4,12 +4,18 @@ import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
 export type ChatAttachmentRecord = {
-    kind: "image" | "gif" | "file" | "sticker"
+    kind: "image" | "gif" | "file" | "sticker" | "voice"
     name: string
     url?: string | null
     contentType?: string | null
     size?: number | null
     sticker?: string | null
+    durationSeconds?: number | null
+}
+
+export type ChatReactionRecord = {
+    emoji: string
+    userIds: string[]
 }
 
 // Chat Rooms (supports both DM and Group)
@@ -45,12 +51,18 @@ export const chatMessages = pgTable("chat_messages", {
     senderId: varchar("sender_id").references(() => user.id).notNull(),
     content: text("content").notNull(),
     attachments: jsonb("attachments").$type<ChatAttachmentRecord[]>().default(sql`'[]'::jsonb`).notNull(),
+    reactions: jsonb("reactions").$type<ChatReactionRecord[]>().default(sql`'[]'::jsonb`).notNull(),
+    mentionedUserIds: jsonb("mentioned_user_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
     replyToMessageId: integer("reply_to_message_id"),
     // Document mention support
     mentionType: varchar("mention_type", { length: 20 }), // 'quotation' | 'sales-order' | 'delivery' | null
     mentionId: varchar("mention_id", { length: 100 }), // ID atau nomor dokumen
     mentionLabel: varchar("mention_label", { length: 255 }), // Label yang ditampilkan
     isSystemMessage: boolean("is_system_message").default(false),
+    isDeleted: boolean("is_deleted").default(false).notNull(),
+    deletedAt: timestamp("deleted_at"),
+    editedAt: timestamp("edited_at"),
+    pinnedAt: timestamp("pinned_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
