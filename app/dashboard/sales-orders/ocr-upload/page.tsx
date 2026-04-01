@@ -22,6 +22,22 @@ function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function createProgressTicker(setProgress: React.Dispatch<React.SetStateAction<number>>, ceiling: number) {
+    const timer = setInterval(() => {
+        setProgress((current) => {
+            if (current >= ceiling) {
+                return current
+            }
+
+            const remaining = ceiling - current
+            const increment = remaining > 20 ? 3 : remaining > 10 ? 2 : 1
+            return Math.min(ceiling, current + increment)
+        })
+    }, 450)
+
+    return () => clearInterval(timer)
+}
+
 function hasMeaningfulBasicResult(result: {
     customer_name: string
     po_number: string
@@ -141,9 +157,10 @@ export default function OcrUploadPage() {
             const formData = new FormData()
             formData.append("file", file)
 
-            const ocrRes = await triggerSalesOrderBasicOcrFast(formData)
+            setStatusMessage("Menjalankan OCR cepat...")
+            const stopTicker = createProgressTicker(setProgress, 76)
+            const ocrRes = await triggerSalesOrderBasicOcrFast(formData).finally(() => stopTicker())
 
-            setProgress(58)
             setStatusMessage("Menganalisis hasil ekstraksi...")
             await easeProgress(84, 50)
 
