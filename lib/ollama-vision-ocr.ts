@@ -153,8 +153,7 @@ export async function renderPdfToImages(fileBuffer: Buffer, selectedPages?: numb
 
         const pdfDataUrl = `data:application/pdf;base64,${fileBuffer.toString("base64")}`
         await page.goto(pdfDataUrl, { waitUntil: "networkidle0", timeout: 60000 })
-        await page.waitForSelector("embed, iframe, pdf-viewer, body", { timeout: 15000 })
-        await sleep(1200)
+        await waitForPdfViewerPaint(page)
 
         const totalPages = await detectPdfPageCount(page)
         const pageNumbers = pickRequestedPages(totalPages, selectedPages)
@@ -229,28 +228,32 @@ async function capturePdfDocumentViewport(page: Page) {
 }
 
 async function detectPdfPageCount(page: Page) {
-    const total = await page.evaluate(() => {
-        const bodyText = document.body?.innerText || ""
-        const matches = [
-            bodyText.match(/(\d+)\s*\/\s*(\d+)/),
-            bodyText.match(/of\s+(\d+)/i),
-        ]
+    try {
+        const total = await page.evaluate(() => {
+            const bodyText = document.body?.innerText || ""
+            const matches = [
+                bodyText.match(/(\d+)\s*\/\s*(\d+)/),
+                bodyText.match(/of\s+(\d+)/i),
+            ]
 
-        for (const match of matches) {
-            if (!match) continue
-            const candidate = Number(match[2] || match[1])
-            if (Number.isInteger(candidate) && candidate > 0) {
-                return candidate
+            for (const match of matches) {
+                if (!match) continue
+                const candidate = Number(match[2] || match[1])
+                if (Number.isInteger(candidate) && candidate > 0) {
+                    return candidate
+                }
             }
-        }
 
-        const pageCountFromViewer = Number(
-            (document.querySelector('[aria-label*="page" i]') as HTMLElement | null)?.getAttribute("data-page-count") || 0,
-        )
-        return Number.isInteger(pageCountFromViewer) && pageCountFromViewer > 0 ? pageCountFromViewer : 1
-    })
+            const pageCountFromViewer = Number(
+                (document.querySelector('[aria-label*="page" i]') as HTMLElement | null)?.getAttribute("data-page-count") || 0,
+            )
+            return Number.isInteger(pageCountFromViewer) && pageCountFromViewer > 0 ? pageCountFromViewer : 1
+        })
 
-    return Number.isInteger(total) && total > 0 ? total : 1
+        return Number.isInteger(total) && total > 0 ? total : 1
+    } catch {
+        return 1
+    }
 }
 
 async function jumpToPdfPage(page: Page, pageNumber: number) {
@@ -261,6 +264,22 @@ async function jumpToPdfPage(page: Page, pageNumber: number) {
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForPdfViewerPaint(page: Page) {
+    try {
+        await page.waitForFunction(() => document.readyState === "complete", { timeout: 5000 })
+    } catch {
+        // Native Chromium PDF viewer can skip the normal DOM ready cycle in headless mode.
+    }
+
+    try {
+        await page.waitForSelector("embed, iframe, pdf-viewer, body", { timeout: 5000 })
+    } catch {
+        // Best-effort only. On some hosts the PDF surface is not exposed as a normal DOM node.
+    }
+
+    await sleep(1800)
 }
 
 function pickRequestedPages(totalPages: number, selectedPages?: number[]) {
@@ -429,5 +448,4 @@ function forceDeliveryYear2026(dateToken: string) {
     }
     return dateToken
 }
-
 

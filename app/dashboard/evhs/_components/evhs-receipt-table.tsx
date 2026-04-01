@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
     Table,
     TableBody,
@@ -12,9 +12,19 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { CheckCircle2, Clock } from "lucide-react"
+import { CheckCircle2, Clock, Eye } from "lucide-react"
 import { format } from "date-fns"
 import { EvhsReceiptConfirmDialog } from "./evhs-receipt-confirm-dialog"
+import { formatWarehouseLabel } from "@/lib/sloc"
+import { DeliveryPdfPreview } from "@/app/dashboard/deliveries/_components/delivery-pdf-preview"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface ReceiptItem {
     id: number
@@ -47,13 +57,76 @@ interface PendingTransfer {
     id: number
     referenceNumber: string | null
     transferDate: string
-    fromWarehouse: { sloc: string }
-    toWarehouse: { sloc: string }
+    fromWarehouse: { sloc: string; description?: string | null }
+    toWarehouse: { sloc: string; description?: string | null }
     delivery?: {
+        id?: number
         deliveryNumber?: string | null
+        doSap?: string | null
+        scanDoDocument?: string | null
+        scheduledDate?: Date | string
+        deliveryDate?: Date | string | null
+        status?: string
+        deliveryType?: string
+        driverName?: string | null
+        vehicleNumber?: string | null
+        vehicleType?: string | null
+        shippingAddress?: string | null
+        isExternal?: boolean
+        awbNumber?: string | null
+        vendorName?: string | null
+        notes?: string | null
+        warehouse?: {
+            id: number
+            sloc: string
+            description: string | null
+        } | null
+        salesOrder?: {
+            id: number
+            invoiceNumber: string | null
+            customerPo: string | null
+            poReceive?: Date | string | null
+            customer: {
+                id: number
+                name: string
+                customerCode?: string | null
+                address1?: string | null
+                address2?: string | null
+                address3?: string | null
+                address4?: string | null
+                address5?: string | null
+            }
+        } | null
+        createdByUser?: {
+            id: string
+            name: string | null
+            email: string | null
+        } | null
         items?: {
+            id?: number
             productId: number
+            orderedQuantity?: number
+            deliveredQuantity?: number
             serialNumbers?: string[] | null
+            product?: {
+                id?: number
+                materialNumber: string
+                materialDescription: string | null
+                category?: string | null
+                oldMaterialNo?: string | null
+                brand?: string | null
+                costSap?: string | null
+                plant?: string | null
+                sloc?: string | null
+                slocDescription?: string | null
+                typeWarehouse?: string | null
+                imageUrl?: string | null
+                materialNumberCk?: string | null
+                isConsignment?: boolean
+                isBundle?: boolean
+                createdAt?: Date | string
+                updatedAt?: Date | string
+            } | null
         }[]
     } | null
     items: {
@@ -75,6 +148,27 @@ export function EvhsReceiptTable({
 }) {
     const [selectedTransfer, setSelectedTransfer] = useState<PendingTransfer | null>(null)
     const [confirmOpen, setConfirmOpen] = useState(false)
+    const pendingWarehouseSections = useMemo(() => {
+        const grouped = new Map<string, { label: string; transfers: PendingTransfer[] }>()
+
+        for (const transfer of pendingTransfers) {
+            const label = formatWarehouseLabel(transfer.toWarehouse, "Warehouse VHS")
+            const key = label.toLowerCase()
+            const current = grouped.get(key)
+
+            if (current) {
+                current.transfers.push(transfer)
+                continue
+            }
+
+            grouped.set(key, {
+                label,
+                transfers: [transfer],
+            })
+        }
+
+        return Array.from(grouped.values()).sort((left, right) => left.label.localeCompare(right.label))
+    }, [pendingTransfers])
 
     return (
         <div className="space-y-6">
@@ -93,42 +187,73 @@ export function EvhsReceiptTable({
                 {pendingTransfers.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">Tidak ada transfer tertunda untuk dikonfirmasi.</p>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {pendingTransfers.map((transfer) => (
-                            <Card key={transfer.id} className="border-amber-200 bg-amber-50/50">
-                                <CardContent className="pt-6">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">Reference</p>
-                                            <p className="text-sm font-mono font-bold">{transfer.referenceNumber}</p>
-                                        </div>
-                                        <Badge variant="outline" className="bg-white border-amber-300" suppressHydrationWarning>
-                                            {format(new Date(transfer.transferDate), "dd MMM yyyy")}
-                                        </Badge>
+                    <div className="space-y-4">
+                        {pendingWarehouseSections.map((section) => (
+                            <div key={section.label} className="rounded-xl border bg-card overflow-hidden">
+                                <div className="mb-4 flex items-center justify-between gap-3 border-b pb-3">
+                                    <div className="px-4 pt-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Warehouse VHS</p>
+                                        <h4 className="text-base font-bold text-slate-900">{section.label}</h4>
                                     </div>
-
-                                    <div className="space-y-2 mb-4 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Dari:</span>
-                                            <span className="font-semibold">{transfer.fromWarehouse.sloc}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Item:</span>
-                                            <span className="font-semibold">{transfer.items.length} SKUs</span>
-                                        </div>
+                                    <div className="px-4 pt-4">
+                                        <Badge variant="secondary">{section.transfers.length} Transfer</Badge>
                                     </div>
+                                </div>
 
-                                    <Button
-                                        className="w-full bg-amber-600 hover:bg-amber-700"
-                                        onClick={() => {
-                                            setSelectedTransfer(transfer)
-                                            setConfirmOpen(true)
-                                        }}
-                                    >
-                                        Konfirmasi Penerimaan
-                                    </Button>
-                                </CardContent>
-                            </Card>
+                                <div className="overflow-x-auto">
+                                    <Table className="min-w-[900px]">
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Tanggal</TableHead>
+                                                <TableHead>Reference ST</TableHead>
+                                                <TableHead>No DO</TableHead>
+                                                <TableHead>Dari Warehouse</TableHead>
+                                                <TableHead>Ke Warehouse VHS</TableHead>
+                                                <TableHead>Items</TableHead>
+                                                <TableHead className="text-right">Aksi</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {section.transfers.map((transfer) => (
+                                                <TableRow key={transfer.id}>
+                                                    <TableCell suppressHydrationWarning>
+                                                        {format(new Date(transfer.transferDate), "dd MMM yyyy")}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono text-xs font-bold">
+                                                        {transfer.referenceNumber || "-"}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono text-xs">
+                                                        {transfer.delivery?.deliveryNumber || "-"}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {formatWarehouseLabel(transfer.fromWarehouse)}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-semibold">
+                                                        {formatWarehouseLabel(transfer.toWarehouse)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary">{transfer.items.length} SKUs</Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <PendingTransferDetailDialog transfer={transfer} />
+                                                            <Button
+                                                                className="bg-amber-600 hover:bg-amber-700"
+                                                                onClick={() => {
+                                                                    setSelectedTransfer(transfer)
+                                                                    setConfirmOpen(true)
+                                                                }}
+                                                            >
+                                                                Konfirmasi Penerimaan
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
                         ))}
                     </div>
                 )}
@@ -196,14 +321,97 @@ export function EvhsReceiptTable({
     )
 }
 
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
+function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }) {
+    const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false)
+
+    return (
+        <>
+            {transfer.delivery ? (
+                <DeliveryPdfPreview
+                    delivery={{
+                        id: transfer.delivery.id || 0,
+                        deliveryNumber: transfer.delivery.deliveryNumber || null,
+                        doSap: transfer.delivery.doSap || null,
+                        scheduledDate: transfer.delivery.scheduledDate ? new Date(transfer.delivery.scheduledDate) : new Date(),
+                        deliveryDate: transfer.delivery.deliveryDate ? new Date(transfer.delivery.deliveryDate) : null,
+                        status: transfer.delivery.status || "scheduled",
+                        deliveryType: transfer.delivery.deliveryType || "full",
+                        driverName: transfer.delivery.driverName || null,
+                        vehicleNumber: transfer.delivery.vehicleNumber || null,
+                        vehicleType: transfer.delivery.vehicleType || null,
+                        shippingAddress: transfer.delivery.shippingAddress || null,
+                        isExternal: transfer.delivery.isExternal,
+                        awbNumber: transfer.delivery.awbNumber || null,
+                        vendorName: transfer.delivery.vendorName || null,
+                        notes: transfer.delivery.notes || null,
+                        salesOrder: {
+                            id: transfer.delivery.salesOrder?.id || 0,
+                            invoiceNumber: transfer.delivery.salesOrder?.invoiceNumber || null,
+                            customerPo: transfer.delivery.salesOrder?.customerPo || null,
+                            poReceive: transfer.delivery.salesOrder?.poReceive ? new Date(transfer.delivery.salesOrder.poReceive) : null,
+                            customer: transfer.delivery.salesOrder?.customer || {
+                                id: 0,
+                                name: "-",
+                                customerCode: null,
+                                address1: null,
+                                address2: null,
+                                address3: null,
+                                address4: null,
+                                address5: null,
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                            },
+                        },
+                        warehouse: transfer.delivery.warehouse || null,
+                        createdByUser: transfer.delivery.createdByUser
+                            ? {
+                                id: transfer.delivery.createdByUser.id,
+                                name: transfer.delivery.createdByUser.name || "",
+                                email: transfer.delivery.createdByUser.email || "",
+                            }
+                            : null,
+                        items: (transfer.delivery.items || []).map((item, index) => ({
+                            id: item.id || index,
+                            productId: item.productId,
+                            orderedQuantity: item.orderedQuantity || item.deliveredQuantity || 0,
+                            deliveredQuantity: item.deliveredQuantity || 0,
+                            serialNumbers: item.serialNumbers || null,
+                            product: item.product || {
+                                id: item.productId,
+                                materialNumber: "-",
+                                materialDescription: null,
+                                category: null,
+                                oldMaterialNo: null,
+                                brand: null,
+                                costSap: null,
+                                plant: null,
+                                sloc: null,
+                                slocDescription: null,
+                                typeWarehouse: null,
+                                imageUrl: null,
+                                materialNumberCk: null,
+                                isConsignment: false,
+                                isBundle: false,
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                            },
+                        })),
+                    }}
+                    open={pdfPreviewOpen}
+                    onClose={() => setPdfPreviewOpen(false)}
+                />
+            ) : null}
+            <Button
+                variant="outline"
+                size="icon"
+                title="Detail DO"
+                onClick={() => setPdfPreviewOpen(true)}
+            >
+                <Eye className="h-4 w-4" />
+            </Button>
+        </>
+    )
+}
 
 function DetailDialog({ receipt }: { receipt: Receipt }) {
     return (

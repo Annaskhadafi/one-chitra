@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useRouter } from "next/navigation"
+import { triggerSalesOrderBasicOcrFast } from "@/app/actions/ocr-fast"
 import { 
     FileText, 
     Upload, 
@@ -123,37 +124,12 @@ export default function OcrUploadPage() {
         e.preventDefault()
     }
 
-    async function uploadViaApi(file: File) {
-        const formData = new FormData()
-        formData.append("file", file)
-
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 30000)
-
-        try {
-            const response = await fetch("/api/uploads", {
-                method: "POST",
-                body: formData,
-                signal: controller.signal,
-            })
-            const body = await response.json().catch(() => ({}))
-
-            if (!response.ok || !body?.url) {
-                return { success: false as const, error: body?.error || "Gagal mengunggah file" }
-            }
-
-            return { success: true as const, url: body.url as string }
-        } finally {
-            clearTimeout(timeout)
-        }
-    }
-
     async function startProcess() {
         if (files.length === 0) return
         
         setIsProcessing(true)
         setProgress(10)
-        setStatusMessage("Mengunggah dokumen...")
+        setStatusMessage("Upload & OCR dokumen...")
         setError(null)
         setBasicResult(null)
         setUploadedMeta(null)
@@ -161,62 +137,22 @@ export default function OcrUploadPage() {
         const file = files[0]
         await easeProgress(18, 80)
 
-        // Stage 1: Upload (0-30%)
-        const res = await uploadViaApi(file)
-        if (!res?.url) {
-            setError(res.error || "Gagal mengunggah file")
-            setIsProcessing(false)
-            setProgress(0)
-            toast.error("Upload Gagal", { description: res.error || "Terjadi kesalahan saat mengunggah file ke server." })
-            return
-        }
-        
-        setProgress(30)
-        setStatusMessage("Mengekstrak data dari dokumen...")
-        await easeProgress(42, 70)
-        
-        // Stage 2: OCR Extraction (30-80%)
         try {
-            const ocrController = new AbortController()
-            const ocrTimeout = setTimeout(() => ocrController.abort(), 90000)
-            const ocrResponse = await fetch("/api/ocr-extract-basic", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fileUrl: res.url }),
-                signal: ocrController.signal,
-            }).finally(() => clearTimeout(ocrTimeout))
-            
-            setProgress(60)
+            const formData = new FormData()
+            formData.append("file", file)
+
+            const ocrRes = await triggerSalesOrderBasicOcrFast(formData)
+
+            setProgress(58)
             setStatusMessage("Menganalisis hasil ekstraksi...")
-            await easeProgress(82, 60)
-            
-            const ocrBodyText = await ocrResponse.text()
-            let ocrRes: {
-                error?: string
-                basic?: { customer_name: string; po_number: string; items: Array<{ product: string; qty: number; price: number }> }
-                rawText?: string
-            } = {}
-            
-            if (ocrBodyText.trim().length > 0) {
-                try {
-                    ocrRes = JSON.parse(ocrBodyText)
-                } catch {
-                    setError("Respons OCR tidak valid")
-                    setIsProcessing(false)
-                    return
-                }
-            } else {
-                setError("Respons OCR kosong")
-                setIsProcessing(false)
-                return
-            }
-            
-            if (!ocrResponse.ok || ocrRes.error) {
+            await easeProgress(84, 50)
+
+            if (!ocrRes.success) {
                 setError(ocrRes.error || "OCR gagal diproses")
                 setIsProcessing(false)
                 return
             }
-            
+
             if (!ocrRes.basic) {
                 setError("Hasil ekstraksi OCR tidak ditemukan")
                 setIsProcessing(false)
@@ -229,22 +165,24 @@ export default function OcrUploadPage() {
                 return
             }
             
-            // Stage 3: Complete (100%)
             setProgress(100)
             setStatusMessage("Ekstraksi Berhasil!")
             setBasicResult(ocrRes.basic)
             setUploadedMeta({
-                fileUrl: res.url,
-                fileName: file.name,
-                fileType: file.type,
+                fileUrl: ocrRes.fileUrl,
+                fileName: ocrRes.fileName,
+                fileType: ocrRes.fileType,
                 rawText: ocrRes.rawText || "",
             })
+            if (ocrRes.providerWarning) {
+                toast.info("OCR memakai fallback cepat", { description: ocrRes.providerWarning })
+            }
             toast.success("Dokumen Berhasil Diekstrak", { 
                 description: "Data dasar PO telah teridentifikasi. Silakan lanjutkan ke Mapping MAGIC." 
             })
         } catch {
-            setError("OCR timeout / server terlalu lama. Coba ulangi atau gunakan file PDF lebih kecil.")
-            toast.error("Kesalahan Sistem", { description: "Gagal menghubungi layanan OCR dalam batas waktu." })
+            setError("OCR gagal diproses. Coba ulangi atau gunakan file PDF lebih kecil.")
+            toast.error("Kesalahan Sistem", { description: "Gagal menjalankan OCR cepat." })
         } finally {
             setIsProcessing(false)
         }

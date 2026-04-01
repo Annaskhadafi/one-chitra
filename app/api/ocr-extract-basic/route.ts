@@ -3,6 +3,8 @@ import { z } from "zod"
 import { readManagedUpload } from "@/lib/upload-storage"
 import { extractStructuredFromPoViaOllama } from "@/lib/ollama-so-ocr"
 import { extractStructuredFromDocument } from "@/lib/mistral-ocr"
+import type { OcrResult as OllamaOcrResult } from "@/lib/ollama-so-ocr"
+import type { OcrResult as MistralOcrResult } from "@/lib/mistral-ocr"
 
 export const runtime = "nodejs"
 
@@ -29,25 +31,40 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: "File tidak ditemukan" }, { status: 404 })
         }
 
-        let ocr = await extractStructuredFromPoViaOllama({
-            fileBuffer: uploaded.buffer,
-            filename: uploaded.filename,
-            pages: body.data.pages ?? "all",
-        })
+        const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
+        const pages = body.data.pages ?? "all"
+        let ocr: OllamaOcrResult | MistralOcrResult
+        let ollamaError: string | null = null
+
+        try {
+            ocr = await extractStructuredFromPoViaOllama({
+                fileBuffer: uploaded.buffer,
+                filename: uploaded.filename,
+                pages,
+            })
+        } catch (error) {
+            ollamaError = error instanceof Error ? error.message : String(error)
+            if (!hasMistralKey) {
+                throw error
+            }
+
+            ocr = await extractStructuredFromDocument({
+                fileBuffer: uploaded.buffer,
+                filename: uploaded.filename,
+                pages,
+            })
+        }
 
         let basic = toBasicPayload(ocr)
 
-        if (!hasMeaningfulBasicResult(basic)) {
-            const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
-            if (hasMistralKey) {
+        if (!hasMeaningfulBasicResult(basic) && hasMistralKey && !ollamaError) {
                 const fallbackOcr = await extractStructuredFromDocument({
                     fileBuffer: uploaded.buffer,
                     filename: uploaded.filename,
-                    pages: body.data.pages ?? "all",
+                    pages,
                 })
                 ocr = fallbackOcr
                 basic = toBasicPayload(fallbackOcr)
-            }
         }
 
         if (!hasMeaningfulBasicResult(basic)) {
@@ -68,6 +85,7 @@ export async function POST(req: NextRequest) {
             model: ocr.model,
             pagesProcessed: ocr.pagesProcessed,
             rawText: sanitizeText(ocr.rawText),
+            providerWarning: ollamaError ? `OCR utama gagal, dialihkan ke fallback: ${ollamaError}` : undefined,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR basic extraction gagal"

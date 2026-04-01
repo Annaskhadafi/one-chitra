@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getDeliveries, updateDoMonitoringFields } from "@/app/actions/delivery"
+import { triggerDoScanOcrFast } from "@/app/actions/ocr-fast"
 import { ScanDoPreview } from "./scan-do-preview"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -143,31 +144,6 @@ export function BulkDoOcrUploadDialog() {
         setManualSelections({})
     }
 
-    async function uploadViaApi(file: File) {
-        const formData = new FormData()
-        formData.append("file", file)
-
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 30000)
-
-        try {
-            const response = await fetch("/api/uploads", {
-                method: "POST",
-                body: formData,
-                signal: controller.signal,
-            })
-            const body = await response.json().catch(() => ({}))
-
-            if (!response.ok || !body?.url) {
-                return { success: false as const, error: body?.error || "Upload gagal" }
-            }
-
-            return { success: true as const, url: body.url as string }
-        } finally {
-            clearTimeout(timeout)
-        }
-    }
-
     async function matchManual(item: UploadItem) {
         const selectedDeliveryId = Number(manualSelections[item.id])
         if (!selectedDeliveryId || !item.fileUrl) {
@@ -212,46 +188,26 @@ export function BulkDoOcrUploadDialog() {
         try {
             for (let index = 0; index < nextFiles.length; index++) {
                 const current = nextFiles[index]
-                nextFiles[index] = { ...current, status: "uploading", message: "Uploading file..." }
+                nextFiles[index] = { ...current, status: "uploading", message: "Upload & OCR cepat..." }
                 setFiles([...nextFiles])
                 setProgress(Math.round((index / nextFiles.length) * 40))
 
-                const uploadResult = await uploadViaApi(current.file)
+                const formData = new FormData()
+                formData.append("file", current.file)
 
-                if (!uploadResult.success || !uploadResult.url) {
-                    nextFiles[index] = { ...current, status: "failed", message: uploadResult.error || "Upload gagal" }
-                    setFiles([...nextFiles])
-                    continue
-                }
-
-                nextFiles[index] = {
-                    ...nextFiles[index],
-                    fileUrl: uploadResult.url,
-                    status: "ocr",
-                    message: "Membaca Internal No via OCR...",
-                }
-                setFiles([...nextFiles])
-                setProgress(Math.round(((index + 0.5) / nextFiles.length) * 70))
-
-                const ocrController = new AbortController()
-                const ocrTimeout = setTimeout(() => ocrController.abort(), 90000)
-                const response = await fetch("/api/do-scan-ocr", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ fileUrl: uploadResult.url }),
-                    signal: ocrController.signal,
-                }).finally(() => clearTimeout(ocrTimeout))
-                const body = await response.json().catch(() => null) as {
+                const body = await triggerDoScanOcrFast(formData) as {
+                    success?: boolean
                     error?: string
+                    fileUrl?: string
                     internalNo?: string | null
                     detectionSource?: DetectionSource
                     rawText?: string
                     fields?: DeliveryOrderBoxFields
                     model?: string
                     pagesProcessed?: number
-                } | null
+                }
 
-                if (!response.ok || body?.error) {
+                if (!body.success || body?.error || !body.fileUrl) {
                     nextFiles[index] = {
                         ...nextFiles[index],
                         status: "failed",
@@ -262,6 +218,7 @@ export function BulkDoOcrUploadDialog() {
                         pagesProcessed: body?.pagesProcessed,
                     }
                     setFiles([...nextFiles])
+                    setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
                     continue
                 }
 
@@ -272,6 +229,7 @@ export function BulkDoOcrUploadDialog() {
                 if (!body?.internalNo) {
                     nextFiles[index] = {
                         ...nextFiles[index],
+                        fileUrl: body.fileUrl,
                         status: "unmatched",
                         message: "Internal No tidak ditemukan di dokumen",
                         rawText: body?.rawText,
@@ -281,11 +239,13 @@ export function BulkDoOcrUploadDialog() {
                         pagesProcessed: body?.pagesProcessed,
                     }
                     setFiles([...nextFiles])
+                    setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
                     continue
                 }
 
                 nextFiles[index] = {
                     ...nextFiles[index],
+                    fileUrl: body.fileUrl,
                     internalNo: body.internalNo,
                     status: "matched",
                     message: mappedDelivery
@@ -304,6 +264,7 @@ export function BulkDoOcrUploadDialog() {
                     setManualSelections((prev) => ({ ...prev, [current.id]: String(mappedDelivery.id) }))
                 }
                 setFiles([...nextFiles])
+                setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
             }
 
             setProgress(100)

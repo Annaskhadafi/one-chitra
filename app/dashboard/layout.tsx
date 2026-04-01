@@ -22,6 +22,7 @@ import { toRuntimeNavigationConfig, type RuntimeNavSection } from "@/lib/navigat
 import { getDashboardRouteResource } from "@/lib/route-permissions"
 import { ChatWidget } from "@/components/chat/chat-widget"
 import { navigationConfig } from "@/lib/navigation"
+import { Providers } from "@/components/providers"
 
 type RuntimeNavSubItem = NonNullable<RuntimeNavSection["items"][number]["items"]>[number]
 
@@ -412,34 +413,36 @@ export default async function DashboardLayout({
 
   return (
     <PermissionsProvider permissions={permissions}>
-      <SidebarProvider
-        defaultOpen={defaultOpen}
-        style={
-          {
-            "--sidebar-width": "calc(var(--spacing) * 72)",
-            "--sidebar": navbarTheme.navbarBg,
-            "--sidebar-foreground": navbarTheme.fontColor,
-            "--sidebar-accent": navbarTheme.activeBg,
-            "--sidebar-accent-foreground": "#ffffff",
-            "--app-navbar-active-bg": navbarTheme.activeBg,
-            "--app-navbar-section-color": navbarTheme.sectionColor,
-          } as React.CSSProperties
-        }
-      >
-        <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithStockSapNew} user={
-          user ? {
-            name: user.name,
-            email: user.email,
-            avatar: user.image || "",
-          } : undefined
-        } />
-        <DashboardShortcutsCommand navigationSections={navigationSectionsWithStockSapNew} />
-        <SidebarInset suppressHydrationWarning>
-          <SiteHeader />
-          <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
-          <ChatWidget currentUserId={session.user.id} />
-        </SidebarInset>
-      </SidebarProvider>
+      <Providers>
+        <SidebarProvider
+          defaultOpen={defaultOpen}
+          style={
+            {
+              "--sidebar-width": "calc(var(--spacing) * 72)",
+              "--sidebar": navbarTheme.navbarBg,
+              "--sidebar-foreground": navbarTheme.fontColor,
+              "--sidebar-accent": navbarTheme.activeBg,
+              "--sidebar-accent-foreground": "#ffffff",
+              "--app-navbar-active-bg": navbarTheme.activeBg,
+              "--app-navbar-section-color": navbarTheme.sectionColor,
+            } as React.CSSProperties
+          }
+        >
+          <AppSidebar variant="inset" permissions={permissions} navigationSections={navigationSectionsWithStockSapNew} user={
+            user ? {
+              name: user.name,
+              email: user.email,
+              avatar: user.image || "",
+            } : undefined
+          } />
+          <DashboardShortcutsCommand navigationSections={navigationSectionsWithStockSapNew} />
+          <SidebarInset suppressHydrationWarning>
+            <SiteHeader />
+            <div className="flex flex-1 flex-col" suppressHydrationWarning>{children}</div>
+            <ChatWidget currentUserId={session.user.id} />
+          </SidebarInset>
+        </SidebarProvider>
+      </Providers>
     </PermissionsProvider>
   )
 }

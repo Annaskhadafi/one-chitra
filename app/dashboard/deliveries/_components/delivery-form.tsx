@@ -226,6 +226,11 @@ interface DeliveryFormDraft {
     items: DeliveryFormItem[]
 }
 
+function isVhsConsignmentCategory(categoryPo?: string | null) {
+    const normalized = (categoryPo ?? "").trim().toLowerCase()
+    return normalized === "vhs/consignment" || normalized.includes("vhs") || normalized.includes("consignment")
+}
+
 function isStaleServerActionError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return message.includes("UnrecognizedActionError") || message.includes("was not found on the server")
@@ -566,6 +571,28 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         () => formatWarehouseLabel(selectedWarehouse, "Warehouse asal"),
         [selectedWarehouse]
     )
+    const linkedCustomerWarehouse = useMemo(() => {
+        if (!selectedSO?.customerId) {
+            return null
+        }
+
+        return warehouses.find((warehouse) => warehouse.customerId === selectedSO.customerId) ?? null
+    }, [selectedSO?.customerId, warehouses])
+    const destinationWarehouseOptions = useMemo(() => {
+        if (!isVhsConsignmentCategory(selectedSO?.categoryPo)) {
+            return warehouses
+        }
+
+        const customerLinkedWarehouses = selectedSO?.customerId
+            ? warehouses.filter((warehouse) => warehouse.customerId === selectedSO.customerId)
+            : []
+
+        if (customerLinkedWarehouses.length > 0) {
+            return customerLinkedWarehouses
+        }
+
+        return warehouses
+    }, [selectedSO?.categoryPo, selectedSO?.customerId, warehouses])
     const selectedSoDocumentUrl = useMemo(
         () => resolveUploadDocumentUrl(selectedSO?.poDocument || null),
         [selectedSO?.poDocument]
@@ -615,6 +642,13 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                 setWarehouseId(so.warehouseId)
             }
 
+            if (isVhsConsignmentCategory(so.categoryPo)) {
+                const customerWarehouse = warehouses.find((warehouse) => warehouse.customerId === so.customerId)
+                setWarehouseToId(customerWarehouse?.id)
+            } else {
+                setWarehouseToId(undefined)
+            }
+
             // Auto-fill customer address
             const addr = [so.customer.address1, so.customer.address2, so.customer.address3, so.customer.address4, so.customer.address5]
                 .filter(Boolean).join(", ")
@@ -627,7 +661,20 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             const hasPartialItems = so.items.some(item => item.alreadyDelivered > 0)
             setDeliveryType(hasPartialItems ? "partial" : "full")
         }
-    }, [salesOrders])
+    }, [salesOrders, warehouses])
+
+    useEffect(() => {
+        if (!isVhsConsignmentCategory(selectedSO?.categoryPo)) {
+            if (!isEdit) {
+                setWarehouseToId(undefined)
+            }
+            return
+        }
+
+        if (linkedCustomerWarehouse && warehouseToId !== linkedCustomerWarehouse.id) {
+            setWarehouseToId(linkedCustomerWarehouse.id)
+        }
+    }, [isEdit, linkedCustomerWarehouse, selectedSO?.categoryPo, warehouseToId])
 
     useEffect(() => {
         if (isEdit || !draftHydrated || !defaultSalesOrderId || !defaultSO) {
@@ -856,7 +903,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
         if (items.length === 0) {
             validationErrors.push("Belum ada item untuk dikirim")
         }
-        if (selectedSO?.categoryPo === "VHS/Consignment" && (!warehouseToId || warehouseToId === 0)) {
+        if (isVhsConsignmentCategory(selectedSO?.categoryPo) && (!warehouseToId || warehouseToId === 0)) {
             validationErrors.push("Destination Warehouse wajib dipilih untuk PO kategori VHS/Consignment")
         }
         if (isExternal && !vendorName.trim()) {
@@ -936,7 +983,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
             costEscort: !isExternal ? Number(costEscort) : 0,
 
             warehouseId,
-            warehouseToId: selectedSO?.categoryPo === "VHS/Consignment" ? warehouseToId : null,
+            warehouseToId: isVhsConsignmentCategory(selectedSO?.categoryPo) ? warehouseToId : null,
             shippingAddress: shippingAddress || undefined,
             notes: notes || undefined,
             items: items.filter(item => item.deliveredQuantity > 0).map(item => ({
@@ -1675,12 +1722,18 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                             </div>
 
                             {/* Only show Destination Warehouse for VHS/Consignment */}
-                            {selectedSO?.categoryPo === "VHS/Consignment" && (
+                            {isVhsConsignmentCategory(selectedSO?.categoryPo) && (
                                 <div className="space-y-2">
                                     <Label className="flex justify-between">
                                         <span>Destination Warehouse (To)</span>
                                         <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">Required</Badge>
                                     </Label>
+                                    {linkedCustomerWarehouse ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Otomatis diarahkan ke warehouse customer: {linkedCustomerWarehouse.sloc}
+                                            {linkedCustomerWarehouse.description ? ` - ${linkedCustomerWarehouse.description}` : ""}
+                                        </p>
+                                    ) : null}
                                     <Popover open={whToOpen} onOpenChange={setWhToOpen}>
                                         <PopoverTrigger asChild>
                                             <Button
@@ -1706,7 +1759,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                 <CommandList>
                                                     <CommandEmpty>No warehouses found.</CommandEmpty>
                                                     <CommandGroup>
-                                                        {warehouses.map(wh => (
+                                                        {destinationWarehouseOptions.map(wh => (
                                                             <CommandItem
                                                                 key={wh.id}
                                                                 value={`${wh.sloc} ${wh.description || ""}`}

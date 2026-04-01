@@ -241,8 +241,9 @@ export async function getEvhsReceipts() {
 }
 
 /**
- * Get Stock Transfers that are not yet confirmed in E-VHS
- * Specifically only those with destination warehouse that has a customerId (VHS Site)
+ * Get Stock Transfers that are not yet confirmed in E-VHS.
+ * Fitur EVHS saat ini khusus CK / PT Cipta Kridatama. Karena beberapa
+ * warehouse lama belum memiliki customerId, kita kenali warehouse CK dari metadata.
  */
 export async function getPendingEvhsTransfers() {
     try {
@@ -253,17 +254,10 @@ export async function getPendingEvhsTransfers() {
             return []
         }
 
-        // Only show transfers into customer-linked warehouses that have not been confirmed yet.
+        // Load transfers that have not been confirmed yet, then keep only CK EVHS
+        // destination warehouses. Some historical VHS warehouses are missing customerId.
         const transfers = await db.query.stockTransfers.findMany({
-            where: (transfers, { exists, isNotNull, and, eq, not }) => and(
-                exists(
-                    db.select()
-                        .from(warehouses)
-                        .where(and(
-                            eq(warehouses.id, transfers.toWarehouseId),
-                            isNotNull(warehouses.customerId)
-                        ))
-                ),
+            where: (transfers, { exists, and, eq, not }) => and(
                 not(
                     exists(
                         db.select()
@@ -281,15 +275,59 @@ export async function getPendingEvhsTransfers() {
                     }
                 },
                 delivery: {
+                    columns: {
+                        id: true,
+                        deliveryNumber: true,
+                        doSap: true,
+                        scanDoDocument: true,
+                        scheduledDate: true,
+                        deliveryDate: true,
+                        status: true,
+                        deliveryType: true,
+                        driverName: true,
+                        vehicleNumber: true,
+                        vehicleType: true,
+                        shippingAddress: true,
+                        isExternal: true,
+                        awbNumber: true,
+                        vendorName: true,
+                        notes: true,
+                    },
                     with: {
-                        items: true
+                        salesOrder: {
+                            columns: {
+                                id: true,
+                                invoiceNumber: true,
+                                customerPo: true,
+                                poReceive: true,
+                            },
+                            with: {
+                                customer: true,
+                            },
+                        },
+                        warehouse: true,
+                        createdByUser: {
+                            columns: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                        items: {
+                            with: {
+                                product: true,
+                            },
+                        }
                     }
                 }
             },
             orderBy: [desc(stockTransfers.createdAt)],
         })
 
-        return normalizeSlocFields(transfers.filter((transfer) => hasEvhsWarehouseAccess(allowedWarehouseIds, transfer.toWarehouseId)))
+        return normalizeSlocFields(transfers.filter((transfer) =>
+            hasEvhsWarehouseAccess(allowedWarehouseIds, transfer.toWarehouseId) &&
+            isEvhsDestinationWarehouse(transfer.toWarehouse)
+        ))
     } catch (error) {
         console.error("Error fetching pending E-VHS transfers:", error)
         return []
@@ -1485,6 +1523,19 @@ function isCkVhsWarehouse(warehouse?: { sloc?: string | null; description?: stri
     const warehouseLabel = `${normalizeSloc(warehouse.sloc) || ""} ${warehouse.description || ""}`.toUpperCase()
 
     return warehouseType === "WAREHOUSE VHS" && warehouseLabel.includes("CK")
+}
+
+function isEvhsDestinationWarehouse(
+    warehouse?: {
+        sloc?: string | null
+        description?: string | null
+        type?: string | null
+        customerId?: number | null
+    } | null
+) {
+    if (!warehouse) return false
+
+    return isCkVhsWarehouse(warehouse)
 }
 
 export async function getEvhsAllVhsStockData(): Promise<EvhsAllVhsStockRow[]> {
