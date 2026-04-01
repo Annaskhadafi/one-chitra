@@ -692,7 +692,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         }
     }, [room])
     useEffect(() => { window.localStorage.setItem(draftKey, input) }, [draftKey, input])
-    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }) }, [messages.length, typingMembers.length, replyTarget, pendingMention, attachments.length, showStickerPicker])
     useEffect(() => {
         let active = true
         const interval = window.setInterval(async () => {
