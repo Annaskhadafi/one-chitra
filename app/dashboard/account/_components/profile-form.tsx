@@ -23,7 +23,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { updateProfile } from "@/app/actions/users"
-import { uploadFile } from "@/app/actions/upload"
 import { getAvatarInitials, getGeneratedAvatarDataUri } from "@/lib/avatar"
 
 const profileFormSchema = z.object({
@@ -99,7 +98,20 @@ export function ProfileForm({ user }: { user: { id: string; name: string; email:
                 const formData = new FormData()
                 formData.append("file", selectedFile)
 
-                const uploadResult = await uploadFile(formData)
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 30000)
+                const uploadResponse = await fetch("/api/uploads", {
+                    method: "POST",
+                    body: formData,
+                    signal: controller.signal,
+                }).finally(() => clearTimeout(timeoutId))
+
+                const uploadResult = await uploadResponse.json()
+                if (!uploadResponse.ok) {
+                    toast.error(uploadResult.error || "Upload foto profil gagal")
+                    setIsLoading(false)
+                    return
+                }
                 if (!uploadResult.success || !uploadResult.url) {
                     toast.error(uploadResult.error || "Upload foto profil gagal")
                     setIsLoading(false)
@@ -123,7 +135,7 @@ export function ProfileForm({ user }: { user: { id: string; name: string; email:
                 toast.error(result.error || "Failed to update profile")
             }
         } catch (_error) {
-            toast.error("An unexpected error occurred")
+            toast.error("Upload foto/profile gagal diproses. Coba ulangi dengan ukuran lebih kecil.")
         } finally {
             setIsLoading(false)
         }

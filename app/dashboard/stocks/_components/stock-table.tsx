@@ -5,11 +5,12 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import { deleteStock, bulkDeleteStocks, bulkUpdateStockMinStock, getStocks } from "@/app/actions/stock"
 import { StockDialog } from "./stock-dialog"
 import { StockCSVUpload } from "./stock-csv-upload"
-import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp, RefreshCcw, ChevronUp, ChevronDown, Check, ListFilter, X, Loader2, Copy } from "lucide-react"
+import { Search, MoreHorizontal, Trash2, Pencil, Box, AlertTriangle, TrendingUp, RefreshCcw, ChevronUp, ChevronDown, Loader2, Copy, Download } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScoreCard } from "@/components/score-card"
 import { BulkActions } from "@/components/bulk-actions"
 import { toast } from "sonner"
+import * as XLSX from "xlsx"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -453,6 +454,39 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
         }
     }
 
+    const handleExportExcel = () => {
+        const exportRows = filteredRows.map((row) => {
+            const item = row.original
+            const valuation = calculateValuation(item.totalStock, item.product?.costSap ?? null)
+
+            return {
+                Plant: item.product?.plant ?? "",
+                Category: item.product?.category ?? "",
+                Brand: item.product?.brand ?? "",
+                "Material #": item.product?.materialNumber ?? "",
+                "Old Material No": item.product?.oldMaterialNo ?? "",
+                Description: item.product?.materialDescription ?? "",
+                SLoc: item.warehouse?.sloc ?? "",
+                "Sloc Desc": item.warehouse?.description ?? "",
+                "Actual Stock": item.totalStock,
+                "Min Stock": item.minStock ?? 0,
+                "Type Warehouse": item.warehouse?.type ?? "",
+                Valuation: Math.round(valuation),
+            }
+        })
+
+        if (!exportRows.length) {
+            toast.error("Tidak ada data untuk diexport")
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Stock")
+        XLSX.writeFile(workbook, `stock-management-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        toast.success("Export Excel berhasil")
+    }
+
     if (!mounted) {
         return (
             <div className="h-[400px] flex flex-col items-center justify-center gap-4 border rounded-lg bg-card/50">
@@ -663,6 +697,10 @@ export function StockTable({ data: initialData, products, warehouses, defaultRat
                             />
                         </div>
                         <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5">
+                                <Download className="h-3.5 w-3.5" />
+                                Export Excel
+                            </Button>
                             <Button
                                 variant={showDuplicatesOnly ? "default" : "outline"}
                                 size="sm"
