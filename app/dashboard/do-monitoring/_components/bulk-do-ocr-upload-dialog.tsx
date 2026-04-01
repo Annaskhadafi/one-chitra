@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { uploadFile } from "@/app/actions/upload"
 import { getDeliveries, updateDoMonitoringFields } from "@/app/actions/delivery"
 import { ScanDoPreview } from "./scan-do-preview"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -144,6 +143,31 @@ export function BulkDoOcrUploadDialog() {
         setManualSelections({})
     }
 
+    async function uploadViaApi(file: File) {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
+
+        try {
+            const response = await fetch("/api/uploads", {
+                method: "POST",
+                body: formData,
+                signal: controller.signal,
+            })
+            const body = await response.json().catch(() => ({}))
+
+            if (!response.ok || !body?.url) {
+                return { success: false as const, error: body?.error || "Upload gagal" }
+            }
+
+            return { success: true as const, url: body.url as string }
+        } finally {
+            clearTimeout(timeout)
+        }
+    }
+
     async function matchManual(item: UploadItem) {
         const selectedDeliveryId = Number(manualSelections[item.id])
         if (!selectedDeliveryId || !item.fileUrl) {
@@ -192,9 +216,7 @@ export function BulkDoOcrUploadDialog() {
                 setFiles([...nextFiles])
                 setProgress(Math.round((index / nextFiles.length) * 40))
 
-                const formData = new FormData()
-                formData.append("file", current.file)
-                const uploadResult = await uploadFile(formData)
+                const uploadResult = await uploadViaApi(current.file)
 
                 if (!uploadResult.success || !uploadResult.url) {
                     nextFiles[index] = { ...current, status: "failed", message: uploadResult.error || "Upload gagal" }
@@ -211,11 +233,14 @@ export function BulkDoOcrUploadDialog() {
                 setFiles([...nextFiles])
                 setProgress(Math.round(((index + 0.5) / nextFiles.length) * 70))
 
+                const ocrController = new AbortController()
+                const ocrTimeout = setTimeout(() => ocrController.abort(), 90000)
                 const response = await fetch("/api/do-scan-ocr", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ fileUrl: uploadResult.url }),
-                })
+                    signal: ocrController.signal,
+                }).finally(() => clearTimeout(ocrTimeout))
                 const body = await response.json().catch(() => null) as {
                     error?: string
                     internalNo?: string | null
@@ -230,7 +255,7 @@ export function BulkDoOcrUploadDialog() {
                     nextFiles[index] = {
                         ...nextFiles[index],
                         status: "failed",
-                        message: body?.error || "OCR gagal diproses",
+                        message: body?.error || "OCR gagal diproses / timeout",
                         rawText: body?.rawText,
                         fields: body?.fields,
                         ocrModel: body?.model,

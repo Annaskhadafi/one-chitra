@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useMemo, useRef } from "react"
-import { Search, RefreshCcw, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
+import { Search, RefreshCcw, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown, Loader2, Download } from "lucide-react"
 import { ProgressLoading } from "@/components/ui/progress-loading"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { syncIndividualStock } from "@/app/actions/stock-sap"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import {
     useReactTable,
     getCoreRowModel,
@@ -29,6 +29,7 @@ import {
 } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { normalizeSloc } from "@/lib/sloc"
+import * as XLSX from "xlsx"
 
 interface SAPStockItem {
     idInv: string
@@ -111,6 +112,35 @@ export function StockSAPTable() {
             setSyncingId(null);
         }
     };
+
+    const handleExportExcel = () => {
+        const exportRows = table.getFilteredRowModel().rows.map((row) => {
+            const item = row.original
+            return {
+                "ID Inv": item.idInv,
+                Plant: item.plant,
+                "Plant Name": item.plantName,
+                Material: item.material,
+                "Old Material": item.oldMaterial,
+                Description: item.description,
+                Sloc: item.sloc,
+                "Sloc Desc": item.slocDesc,
+                Qty: item.qtyStock,
+                Value: item.valueStock,
+            }
+        })
+
+        if (!exportRows.length) {
+            toast.error("Tidak ada data SAP untuk diexport")
+            return
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Stock SAP")
+        XLSX.writeFile(workbook, `stock-sap-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        toast.success("Export Excel SAP berhasil")
+    }
 
     const columns = useMemo<ColumnDef<SAPStockItem>[]>(() => [
         {
@@ -256,10 +286,16 @@ export function StockSAPTable() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Button variant="outline" size="sm" onClick={() => refetch()}>
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Refresh SAP Data
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleExportExcel}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export Excel
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => refetch()}>
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        Refresh SAP Data
+                    </Button>
+                </div>
             </div>
 
             <div className="rounded-md border bg-card">

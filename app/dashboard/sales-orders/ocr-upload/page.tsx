@@ -3,7 +3,6 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { uploadFile } from "@/app/actions/upload"
 import { useRouter } from "next/navigation"
 import { 
     FileText, 
@@ -73,6 +72,31 @@ export default function OcrUploadPage() {
         e.preventDefault()
     }
 
+    async function uploadViaApi(file: File) {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
+
+        try {
+            const response = await fetch("/api/uploads", {
+                method: "POST",
+                body: formData,
+                signal: controller.signal,
+            })
+            const body = await response.json().catch(() => ({}))
+
+            if (!response.ok || !body?.url) {
+                return { success: false as const, error: body?.error || "Gagal mengunggah file" }
+            }
+
+            return { success: true as const, url: body.url as string }
+        } finally {
+            clearTimeout(timeout)
+        }
+    }
+
     async function startProcess() {
         if (files.length === 0) return
         
@@ -84,17 +108,13 @@ export default function OcrUploadPage() {
         setUploadedMeta(null)
         
         const file = files[0]
-        const form = new FormData()
-        form.append("file", file)
-        form.append("filename", file.name)
-        
         // Stage 1: Upload (0-30%)
-        const res = await uploadFile(form)
+        const res = await uploadViaApi(file)
         if (!res?.url) {
-            setError("Gagal mengunggah file")
+            setError(res.error || "Gagal mengunggah file")
             setIsProcessing(false)
             setProgress(0)
-            toast.error("Upload Gagal", { description: "Terjadi kesalahan saat mengunggah file ke server." })
+            toast.error("Upload Gagal", { description: res.error || "Terjadi kesalahan saat mengunggah file ke server." })
             return
         }
         
@@ -103,11 +123,14 @@ export default function OcrUploadPage() {
         
         // Stage 2: OCR Extraction (30-80%)
         try {
+            const ocrController = new AbortController()
+            const ocrTimeout = setTimeout(() => ocrController.abort(), 90000)
             const ocrResponse = await fetch("/api/ocr-extract-basic", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ fileUrl: res.url }),
-            })
+                signal: ocrController.signal,
+            }).finally(() => clearTimeout(ocrTimeout))
             
             setProgress(60)
             setStatusMessage("Menganalisis hasil ekstraksi...")
@@ -159,8 +182,8 @@ export default function OcrUploadPage() {
                 description: "Data dasar PO telah teridentifikasi. Silakan lanjutkan ke Mapping MAGIC." 
             })
         } catch {
-            setError("Terjadi kesalahan jaringan atau server")
-            toast.error("Kesalahan Sistem", { description: "Gagal menghubungi layanan OCR." })
+            setError("OCR timeout / server terlalu lama. Coba ulangi atau gunakan file PDF lebih kecil.")
+            toast.error("Kesalahan Sistem", { description: "Gagal menghubungi layanan OCR dalam batas waktu." })
         } finally {
             setIsProcessing(false)
         }
@@ -172,6 +195,8 @@ export default function OcrUploadPage() {
         setIsMapping(true)
         setError(null)
         try {
+            const mapController = new AbortController()
+            const mapTimeout = setTimeout(() => mapController.abort(), 60000)
             const response = await fetch("/api/ocr-map-ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -182,7 +207,8 @@ export default function OcrUploadPage() {
                     rawText: uploadedMeta.rawText,
                     basic: basicResult,
                 }),
-            })
+                signal: mapController.signal,
+            }).finally(() => clearTimeout(mapTimeout))
             const body = await response.json().catch(() => null)
             if (!response.ok) {
                 setError(body?.error || "Gagal proses mapping MAGIC")
@@ -196,7 +222,7 @@ export default function OcrUploadPage() {
             toast.success("Mapping MAGIC Selesai", { description: "Mengalihkan ke halaman validasi..." })
             router.push(`/dashboard/sales-orders/ocr-validate?session=${body.sessionId}`)
         } catch {
-            setError("Gagal menghubungi MAGIC mapping service")
+            setError("Mapping MAGIC timeout / service lambat. Silakan coba lagi.")
         } finally {
             setIsMapping(false)
         }
