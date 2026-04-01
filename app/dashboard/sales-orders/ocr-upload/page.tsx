@@ -23,7 +23,15 @@ function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function createProgressTicker(setProgress: React.Dispatch<React.SetStateAction<number>>, ceiling: number) {
+function createProgressTicker(
+    setProgress: React.Dispatch<React.SetStateAction<number>>,
+    ceiling: number,
+    options?: { intervalMs?: number; slowAfterMs?: number }
+) {
+    const intervalMs = options?.intervalMs ?? 450
+    const slowAfterMs = options?.slowAfterMs ?? 15000
+    const startedAt = Date.now()
+
     const timer = setInterval(() => {
         setProgress((current) => {
             if (current >= ceiling) {
@@ -31,10 +39,13 @@ function createProgressTicker(setProgress: React.Dispatch<React.SetStateAction<n
             }
 
             const remaining = ceiling - current
-            const increment = remaining > 20 ? 3 : remaining > 10 ? 2 : 1
+            const elapsedMs = Date.now() - startedAt
+            const increment = elapsedMs > slowAfterMs
+                ? 1
+                : (remaining > 20 ? 3 : remaining > 10 ? 2 : 1)
             return Math.min(ceiling, current + increment)
         })
-    }, 450)
+    }, intervalMs)
 
     return () => clearInterval(timer)
 }
@@ -55,7 +66,7 @@ function hasMeaningfulBasicResult(result: {
         return !blockedValues.has(name) || item.qty > 0 || item.price > 0
     })
 
-    return hasCustomer || hasPoNumber || hasDate || hasItems
+    return hasItems && (hasCustomer || hasPoNumber || hasDate)
 }
 
 export default function OcrUploadPage() {
@@ -159,7 +170,7 @@ export default function OcrUploadPage() {
             formData.append("file", file)
 
             setStatusMessage("Menjalankan OCR cepat...")
-            const stopTicker = createProgressTicker(setProgress, 76)
+            const stopTicker = createProgressTicker(setProgress, 94, { slowAfterMs: 12000 })
             const ocrRes = await triggerSalesOrderBasicOcrFast(formData).finally(() => stopTicker())
 
             setStatusMessage("Menganalisis hasil ekstraksi...")

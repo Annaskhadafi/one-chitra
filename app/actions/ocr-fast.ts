@@ -53,20 +53,59 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
         let providerWarning: string | undefined
         let ocr
 
-        // Sales Order PO needs better table extraction, so prefer structured OCR first.
         if (hasMistralKey) {
-            ocr = await extractStructuredFromDocument({
+            const fastMistral = await tryExtractStructured({
                 fileBuffer: buffer,
                 filename: file.name,
-                pages: "all",
-            }).catch(async (error) => {
-                providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(error)}`
-                return extractStructuredFromPoViaOllama({
+                pages: [1],
+            })
+
+            if (fastMistral.success) {
+                ocr = fastMistral.result
+                const fastBasic = toBasicPayload(ocr)
+
+                if (hasMeaningfulBasicResult(fastBasic)) {
+                    return {
+                        success: true as const,
+                        fileUrl: savedUpload.url,
+                        fileName: file.name,
+                        fileType: file.type,
+                        basic: fastBasic,
+                        rawText: sanitizeText(ocr.rawText),
+                        model: ocr.model,
+                        pagesProcessed: ocr.pagesProcessed,
+                    }
+                }
+
+                const fullMistral = await tryExtractStructured({
+                    fileBuffer: buffer,
+                    filename: file.name,
+                    pages: "all",
+                })
+
+                if (fullMistral.success) {
+                    ocr = fullMistral.result
+                    providerWarning = "OCR memakai eskalasi semua halaman karena hasil halaman pertama belum cukup jelas."
+                } else {
+                    providerWarning = [
+                        "OCR halaman pertama belum cukup jelas.",
+                        `OCR semua halaman gagal: ${getErrorMessage(fullMistral.error)}`,
+                        "Dialihkan ke fallback cepat.",
+                    ].join(" ")
+                    ocr = await extractStructuredFromPoViaOllama({
+                        fileBuffer: buffer,
+                        filename: file.name,
+                        pages: [1],
+                    })
+                }
+            } else {
+                providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(fastMistral.error)}`
+                ocr = await extractStructuredFromPoViaOllama({
                     fileBuffer: buffer,
                     filename: file.name,
                     pages: [1],
                 })
-            })
+            }
         } else {
             ocr = await extractStructuredFromPoViaOllama({
                 fileBuffer: buffer,
@@ -75,16 +114,7 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             })
         }
 
-        let basic = toBasicPayload(ocr)
-        if (!hasMeaningfulBasicResult(basic) && hasMistralKey && providerWarning) {
-            const fallbackOcr = await extractStructuredFromDocument({
-                fileBuffer: buffer,
-                filename: file.name,
-                pages: "all",
-            })
-            ocr = fallbackOcr
-            basic = toBasicPayload(fallbackOcr)
-        }
+        const basic = toBasicPayload(ocr)
 
         if (!hasMeaningfulBasicResult(basic)) {
             return {
@@ -111,6 +141,19 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
             success: false as const,
             error: getErrorMessage(error),
         }
+    }
+}
+
+async function tryExtractStructured(params: {
+    fileBuffer: Buffer
+    filename: string
+    pages?: string | number[] | null
+}) {
+    try {
+        const result = await extractStructuredFromDocument(params)
+        return { success: true as const, result }
+    } catch (error) {
+        return { success: false as const, error }
     }
 }
 
@@ -200,7 +243,7 @@ function hasMeaningfulBasicResult(result: BasicOcrResult) {
         return !blockedValues.has(name) || item.qty > 0 || item.price > 0
     })
 
-    return hasCustomer || hasPoNumber || hasDate || hasItems
+    return hasItems && (hasCustomer || hasPoNumber || hasDate)
 }
 
 function extractInternalNo(rawText: string): { internalNo: string | null; source: DetectionSource } {
