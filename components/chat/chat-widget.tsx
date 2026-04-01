@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { createGroupRoom, deleteChatRoom, deleteMessage, editMessage, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, toggleMessageReaction, togglePinMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
@@ -44,7 +44,6 @@ const HELP_DESK_TYPING_MESSAGES = [
     "Lagi lihat modul One Chitra yang nyambung...",
 ] as const
 const MESSAGE_REACTION_PRESETS = ["👍", "🔥", "😂", "🙏", "✅", "❤️"] as const
-const QUICK_REPLY_PRESETS = ["Siap", "On progress", "Sudah dicek", "Terima kasih", "Mohon tunggu", "Selesai"] as const
 const isHelpDeskRoom = (room: Pick<ChatRoomWithMeta, "type">) => room.type === "ai-helpdesk"
 const time = (value: string) => new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
 const day = (value: string) => new Date(value).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })
@@ -638,7 +637,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const [assistantThinkingIndex, setAssistantThinkingIndex] = useState(0)
     const [starterPrompts, setStarterPrompts] = useState<string[]>([])
     const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
-    const [isRecordingVoice, setIsRecordingVoice] = useState(false)
     const bottomRef = useRef<HTMLDivElement>(null)
     const messageRefs = useRef<Record<number, HTMLDivElement | null>>({})
     const typingTimeoutRef = useRef<number | null>(null)
@@ -648,9 +646,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const fileInputRef = useRef<HTMLInputElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-    const recordingChunksRef = useRef<Blob[]>([])
-    const recordingStartedAtRef = useRef<number | null>(null)
     const draftKey = `chat-draft-${room.id}`
     const others = room.members.filter((member) => member.userId !== currentUserId)
     const pageContext = getHelpDeskPageContext(pathname)
@@ -670,7 +665,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     useEffect(() => {
         let active = true
         const saved = window.localStorage.getItem(draftKey); if (saved) setInput(saved)
-        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0); setEditingMessageId(null); setIsRecordingVoice(false)
+        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0); setEditingMessageId(null)
         loadSnapshot()
             .catch(() => { if (active) toast.error("Gagal memuat percakapan") })
             .finally(() => { if (active) setLoading(false) })
@@ -784,7 +779,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         return () => window.clearInterval(interval)
     }, [assistantThinking])
     useEffect(() => () => {
-        mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop())
         attachmentsRef.current.forEach((attachment) => {
             if (attachment.previewUrl) {
                 URL.revokeObjectURL(attachment.previewUrl)
@@ -925,6 +919,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     }
     const refreshMessages = useCallback(async (limit = Math.max(messages.length + 5, 30)) => {
         const snapshot = await getRoomMessages(room.id, { limit })
+        setMessages((current) => current.filter((message) => message.id >= 0))
         applySnapshot(snapshot, false)
         await onRoomUpdated().catch(() => undefined)
     }, [applySnapshot, messages.length, onRoomUpdated, room.id])
@@ -966,67 +961,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         } catch {
             toast.error("Pin pesan gagal diubah")
         }
-    }
-    const startVoiceRecording = async () => {
-        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-            toast.error("Browser belum mendukung rekaman suara")
-            return
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            const recorder = new MediaRecorder(stream)
-            recordingChunksRef.current = []
-            recordingStartedAtRef.current = Date.now()
-            recorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    recordingChunksRef.current.push(event.data)
-                }
-            }
-            recorder.onstop = async () => {
-                const durationSeconds = recordingStartedAtRef.current ? (Date.now() - recordingStartedAtRef.current) / 1000 : null
-                const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" })
-                recorder.stream.getTracks().forEach((track) => track.stop())
-                mediaRecorderRef.current = null
-                recordingChunksRef.current = []
-                recordingStartedAtRef.current = null
-                if (blob.size === 0) return
-
-                setSending(true)
-                try {
-                    const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
-                    const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type || "audio/webm" })
-                    const formData = new FormData()
-                    formData.append("file", file)
-                    const uploaded = await uploadFile(formData)
-                    if (!uploaded.success || !uploaded.url) {
-                        throw new Error(uploaded.error || "Upload voice note gagal")
-                    }
-                    setAttachments((current) => [...current, {
-                        kind: "voice",
-                        name: file.name,
-                        url: uploaded.url,
-                        contentType: file.type,
-                        size: file.size,
-                        durationSeconds,
-                    }])
-                } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Voice note gagal dibuat")
-                } finally {
-                    setSending(false)
-                }
-            }
-            mediaRecorderRef.current = recorder
-            recorder.start()
-            setIsRecordingVoice(true)
-        } catch {
-            toast.error("Izin mikrofon ditolak atau tidak tersedia")
-        }
-    }
-    const stopVoiceRecording = () => {
-        if (!mediaRecorderRef.current) return
-        mediaRecorderRef.current.stop()
-        setIsRecordingVoice(false)
     }
     const handleSend = async () => {
         const trimmed = input.trim(); if (!trimmed && !pendingMention && attachments.length === 0) return
@@ -1209,7 +1143,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                         </div>
                     </div>
                 ) : null}
-                {!isHelpDeskRoom(room) ? <div className="mb-2 flex flex-wrap gap-2">{QUICK_REPLY_PRESETS.map((preset) => <button key={preset} type="button" onClick={() => applyPromptToComposer(preset)} className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-slate-600 hover:border-rose-200 hover:text-rose-600">{preset}</button>)}</div> : null}
                 {editingMessageId ? <div className="mb-2 flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-2"><Pencil className="mt-0.5 h-3.5 w-3.5 text-cyan-700" /><div className="min-w-0 flex-1"><p className="text-xs font-medium text-cyan-800">Mode edit pesan</p><p className="text-xs text-cyan-700">Tekan kirim untuk menyimpan perubahan.</p></div><button type="button" onClick={() => { setEditingMessageId(null); setInput("") }} className="text-cyan-700 hover:text-cyan-900"><X className="h-3.5 w-3.5" /></button></div> : null}
                 {replyTarget ? <div className="mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 px-2 py-2"><Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="break-words text-xs font-medium">{replyTarget.senderName}</p><p className="line-clamp-3 whitespace-pre-wrap break-words text-xs text-muted-foreground">{replyTarget.content}</p></div><button type="button" onClick={() => setReplyTarget(null)} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
                 {pendingMention ? <div className="mb-2 flex items-center gap-2"><a href={pendingMention.url} target="_blank" rel="noopener noreferrer" className={cn("inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium", MENTION_COLORS[pendingMention.type])}>{React.createElement(MENTION_ICONS[pendingMention.type], { className: "h-3 w-3" })}{pendingMention.label}</a><button type="button" onClick={() => setPendingMention(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div> : null}
@@ -1228,7 +1161,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 ) : null}
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => { uploadSelectedFiles(event.target.files, "file").catch(() => undefined); event.target.value = "" }} />
                 <input ref={imageInputRef} type="file" accept="image/*,.gif" multiple className="hidden" onChange={(event) => { uploadSelectedFiles(event.target.files, "image").catch(() => undefined); event.target.value = "" }} />
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={sending || attachments.length >= 8}>
                         <Paperclip className="h-3.5 w-3.5" /> File
                     </Button>
@@ -1237,9 +1170,6 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     </Button>
                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setShowStickerPicker((value) => !value)} disabled={sending || attachments.length >= 8}>
                         <SmilePlus className="h-3.5 w-3.5" /> Stiker
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className={cn("h-8 gap-1.5", isRecordingVoice && "border-rose-300 bg-rose-50 text-rose-700")} onClick={() => isRecordingVoice ? stopVoiceRecording() : startVoiceRecording().catch(() => undefined)} disabled={sending || attachments.length >= 8}>
-                        {isRecordingVoice ? <Check className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {isRecordingVoice ? "Selesai Rekam" : "Voice"}
                     </Button>
                     {isHelpDeskRoom(room) ? <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-medium text-cyan-700"><Compass className="h-3 w-3" />{pageContext ? `Konteks: ${pageContext.title}` : "Mode bantuan cepat"}</div> : null}
                 </div>
