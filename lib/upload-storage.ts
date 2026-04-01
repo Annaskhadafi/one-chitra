@@ -1,6 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { existsSync } from "fs"
-import { readFile, unlink } from "fs/promises"
+import { mkdir, readFile, unlink, writeFile } from "fs/promises"
 import { join, resolve } from "path"
 import { v7 as uuidv7 } from "uuid"
 
@@ -282,6 +282,24 @@ export function getUploadWriteDir() {
     return resolve(process.cwd(), "public", "uploads")
 }
 
+async function saveUploadToLocalDisk(params: {
+    filename: string
+    buffer: Buffer
+}) {
+    const directory = getUploadWriteDir()
+    const filePath = join(directory, params.filename)
+
+    await mkdir(directory, { recursive: true })
+    await writeFile(filePath, params.buffer)
+
+    return {
+        filename: params.filename,
+        url: getManagedUploadUrl(params.filename),
+        source: "local" as const,
+        filePath,
+    }
+}
+
 export function getUploadReadDirs() {
     return uniquePaths([
         getUploadWriteDir(),
@@ -327,29 +345,38 @@ export async function saveManagedUpload(params: {
     const contentType = getUploadContentType(filename, params.contentType)
 
     if (!isObjectStorageEnabled()) {
-        throw new Error(
-            "Upload wajib ke object storage. Set UPLOAD_DRIVER=s3 dan isi OBJECT_STORAGE_*."
-        )
+        return await saveUploadToLocalDisk({
+            filename,
+            buffer: params.buffer,
+        })
     }
 
-    const config = requireObjectStorageConfig()
-    const client = getObjectStorageClient(config)
-    const key = buildObjectStorageKey(filename)
+    try {
+        const config = requireObjectStorageConfig()
+        const client = getObjectStorageClient(config)
+        const key = buildObjectStorageKey(filename)
 
-    await client.send(
-        new PutObjectCommand({
-            Bucket: config.bucket,
-            Key: key,
-            Body: params.buffer,
-            ContentType: contentType,
+        await client.send(
+            new PutObjectCommand({
+                Bucket: config.bucket,
+                Key: key,
+                Body: params.buffer,
+                ContentType: contentType,
+            })
+        )
+
+        return {
+            filename,
+            url: getManagedUploadUrl(filename),
+            source: "object-storage" as const,
+            key,
+        }
+    } catch (error) {
+        console.warn("[UploadStorage] Object storage upload failed, falling back to local disk:", error)
+        return await saveUploadToLocalDisk({
+            filename,
+            buffer: params.buffer,
         })
-    )
-
-    return {
-        filename,
-        url: getManagedUploadUrl(filename),
-        source: "object-storage" as const,
-        key,
     }
 }
 

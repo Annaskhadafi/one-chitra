@@ -17,6 +17,10 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export default function OcrUploadPage() {
     const router = useRouter()
     const [files, setFiles] = useState<File[]>([])
@@ -38,6 +42,34 @@ export default function OcrUploadPage() {
     } | null>(null)
     const [isMapping, setIsMapping] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
+
+    async function easeProgress(target: number, stepDelay = 90) {
+        setProgress((current) => {
+            if (current >= target) {
+                return current
+            }
+            return current
+        })
+
+        while (true) {
+            let shouldContinue = false
+            setProgress((current) => {
+                if (current >= target) {
+                    return current
+                }
+                shouldContinue = true
+                const remaining = target - current
+                const increment = remaining > 20 ? 4 : remaining > 10 ? 3 : remaining > 4 ? 2 : 1
+                return Math.min(target, current + increment)
+            })
+
+            if (!shouldContinue) {
+                break
+            }
+
+            await delay(stepDelay)
+        }
+    }
 
     function applySelectedFiles(f: File[]) {
         const valid = f.filter(file => {
@@ -101,13 +133,15 @@ export default function OcrUploadPage() {
         if (files.length === 0) return
         
         setIsProcessing(true)
-        setProgress(5)
+        setProgress(10)
         setStatusMessage("Mengunggah dokumen...")
         setError(null)
         setBasicResult(null)
         setUploadedMeta(null)
         
         const file = files[0]
+        await easeProgress(18, 80)
+
         // Stage 1: Upload (0-30%)
         const res = await uploadViaApi(file)
         if (!res?.url) {
@@ -120,6 +154,7 @@ export default function OcrUploadPage() {
         
         setProgress(30)
         setStatusMessage("Mengekstrak data dari dokumen...")
+        await easeProgress(42, 70)
         
         // Stage 2: OCR Extraction (30-80%)
         try {
@@ -134,6 +169,7 @@ export default function OcrUploadPage() {
             
             setProgress(60)
             setStatusMessage("Menganalisis hasil ekstraksi...")
+            await easeProgress(82, 60)
             
             const ocrBodyText = await ocrResponse.text()
             let ocrRes: {

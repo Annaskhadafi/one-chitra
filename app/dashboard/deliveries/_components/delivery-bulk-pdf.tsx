@@ -1,15 +1,14 @@
 "use client"
 
-import React, { useRef, useState, useEffect } from "react"
+import React, { useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, X, ImageIcon, Loader2, FileStack } from "lucide-react"
+import { Download, X, ImageIcon, Loader2, FileStack } from "lucide-react"
 import type { Product, Warehouse, Customer } from "@/lib/types"
 import { toPng } from "html-to-image"
 import jsPDF from "jspdf"
@@ -166,13 +165,11 @@ export function DeliveryBulkPdf({ deliveries, open, onClose }: DeliveryBulkPdfPr
 
                 <div className="bg-zinc-100 p-4 dark:bg-zinc-800 space-y-8 flex flex-col items-center overflow-x-auto min-h-[500px]">
                     <div ref={containerRef} className="space-y-8 flex flex-col items-center w-full">
-                        {deliveries.map((delivery, index) => (
+                        {deliveries.map((delivery) => (
                             <DeliverySingleView 
                                 key={delivery.id} 
                                 delivery={delivery} 
-                                withBackground={withBackground} 
-                                pageNumber={index + 1}
-                                totalPages={deliveries.length}
+                                withBackground={withBackground}
                             />
                         ))}
                     </div>
@@ -182,7 +179,7 @@ export function DeliveryBulkPdf({ deliveries, open, onClose }: DeliveryBulkPdfPr
     )
 }
 
-function DeliverySingleView({ delivery, withBackground, pageNumber, totalPages }: { delivery: DeliveryPdfData, withBackground: boolean, pageNumber: number, totalPages: number }) {
+function DeliverySingleView({ delivery, withBackground }: { delivery: DeliveryPdfData, withBackground: boolean }) {
     const customer = delivery.salesOrder?.customer
     const customerAddress = [customer?.address1, customer?.address2, customer?.address3, customer?.address4, customer?.address5]
         .filter(Boolean)
@@ -237,11 +234,17 @@ function DeliverySingleView({ delivery, withBackground, pageNumber, totalPages }
                 .pdf-page .serial-grid { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; border: 1px solid #000; }
                 .pdf-page .serial-grid th { background-color: #f3f4f6; border: 1px solid #000; padding: 4px; font-size: 8pt; text-align: center; }
                 .pdf-page .footer-section { margin-top: auto; padding-top: 20px; }
+                .pdf-page .note-section { margin-top: 20px; font-size: 9pt; }
+                .pdf-page .note-label { font-weight: bold; margin-bottom: 5px; }
+                .pdf-page .received-condition { font-size: 9pt; line-height: 1.5; margin-bottom: 10px; }
                 .pdf-page .divider-line { border-top: 1px solid #000; margin-bottom: 15px; }
                 
                 .pdf-page .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9pt; gap: 0; border-collapse: collapse; }
                 .pdf-page .sig-box { display: flex; flex-direction: column; height: 180px; text-align: center; padding: 5px; }
+                .pdf-page .sig-label { margin-bottom: 5px; font-weight: normal; }
+                .pdf-page .sig-name { font-weight: normal; margin-bottom: 0px; }
                 .pdf-page .sig-placeholder { margin-top: auto; font-size: 8pt; }
+                .pdf-page .sig-bottom-name { margin-top: 5px; }
                 `
             }} />
 
@@ -261,13 +264,20 @@ function DeliverySingleView({ delivery, withBackground, pageNumber, totalPages }
                             <div className="do-row">
                                 <div className="do-label">Page</div>
                                 <div className="do-separator">:</div>
-                                <div className="do-value">{pageNumber} / {totalPages}</div>
+                                <div className="do-value">1/1</div>
                             </div>
                             <div className="do-row">
                                 <div className="do-label">Delivery No</div>
                                 <div className="do-separator">:</div>
                                 <div className="do-value">{delivery.doSap || delivery.deliveryNumber}</div>
                             </div>
+                            {delivery.doSap && (
+                                <div className="do-row">
+                                    <div className="do-label">Internal No</div>
+                                    <div className="do-separator">:</div>
+                                    <div className="do-value">{delivery.deliveryNumber}</div>
+                                </div>
+                            )}
                             <div className="do-row">
                                 <div className="do-label">Delivery Date</div>
                                 <div className="do-separator">:</div>
@@ -277,6 +287,11 @@ function DeliverySingleView({ delivery, withBackground, pageNumber, totalPages }
                                 <div className="do-label">Customer PO No</div>
                                 <div className="do-separator">:</div>
                                 <div className="do-value">{delivery.salesOrder?.customerPo || "-"}</div>
+                            </div>
+                            <div className="do-row">
+                                <div className="do-label">Customer PO Date</div>
+                                <div className="do-separator">:</div>
+                                <div className="do-value">{formatDate(delivery.salesOrder?.poReceive)}</div>
                             </div>
                         </div>
                     </div>
@@ -324,24 +339,55 @@ function DeliverySingleView({ delivery, withBackground, pageNumber, totalPages }
                     </tbody>
                 </table>
 
+                <div className="note-section">
+                    <div className="note-label">NOTE:</div>
+                    {delivery.notes ? (
+                        <div style={{ whiteSpace: "pre-line" }}>{delivery.notes}</div>
+                    ) : (
+                        <div>-</div>
+                    )}
+                </div>
+
                 <div className="footer-section">
+                    <div className="received-condition">
+                        <div>Received in good Condition ( Materials in 100%New Condition )</div>
+                        <div>Return requests must be submitted within 14 days of the delivery date.we are unable to process any returns beyond this period</div>
+                    </div>
+
                     <div className="divider-line" />
                     <div className="signature-grid">
                         <div className="sig-box">
-                            <div>Delivery by,</div>
-                            <div style={{ fontWeight: 'bold' }}>PT.Chitra Paratama</div>
-                            <div className="sig-placeholder">( {delivery.createdByUser?.name || "          "} )</div>
-                        </div>
-                        <div className="sig-box">
-                            <div>Forwarder By,</div>
+                            <div className="sig-label">Delivery by,</div>
+                            <div className="sig-name">PT.Chitra Paratama</div>
                             <div className="sig-placeholder">
-                                ( {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"})
+                                <div className="sig-bottom-name">( {delivery.createdByUser?.name || "          "} )</div>
                             </div>
                         </div>
                         <div className="sig-box">
-                            <div>Received by,</div>
-                            <div style={{ fontWeight: 'bold' }}>{customer?.name}</div>
-                            <div className="sig-placeholder">( Name ,Sign & stamp )</div>
+                            <div className="sig-label">
+                                Forwarder By,
+                                {delivery.isExternal && delivery.vendorName && (
+                                    <div style={{ fontWeight: "bold", marginTop: "2px" }}>{delivery.vendorName}</div>
+                                )}
+                            </div>
+                            <div className="sig-placeholder">
+                                {delivery.isExternal ? (
+                                    <div style={{ fontSize: "24pt", fontWeight: "black", marginBottom: "10px" }}>
+                                        {delivery.awbNumber || "-"}
+                                    </div>
+                                ) : (
+                                    <div className="sig-name">
+                                        ( {delivery.driverName || "-"} | {delivery.vehicleNumber || "-"})
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="sig-box">
+                            <div className="sig-label">Received by,</div>
+                            <div className="sig-name">{customer?.name}</div>
+                            <div className="sig-placeholder">
+                                <div className="sig-bottom-name">( Name ,Sign & stamp )</div>
+                            </div>
                         </div>
                     </div>
                 </div>
