@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { upsertProduct } from "@/app/actions/product"
+import { getProductCategories, upsertProduct } from "@/app/actions/product"
 import { getWarehouses } from "@/app/actions/warehouse"
 import { Plus, X } from "lucide-react"
 import { productSchema } from "@/lib/schemas"
@@ -47,6 +47,7 @@ interface ProductDialogProps {
 }
 
 const CATEGORIES = ["ACC", "FLAP", "IMT PART", "Material Consumable", "SPM", "TUBE", "TYRE", "WHEEL & RIM"]
+const CUSTOM_CATEGORY_VALUE = "__custom_category__"
 const DEFAULT_PLANT_CODE = "2001"
 const DEFAULT_SLOC = "TRD BPN"
 
@@ -54,15 +55,21 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [warehouses, setWarehouses] = useState<{ sloc: string, description: string | null }[]>([])
+    const [categories, setCategories] = useState<string[]>(CATEGORIES)
+    const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false)
     const isEdit = !!product
 
     useEffect(() => {
         if (isOpen) {
-            const fetchWarehouses = async () => {
-                const data = await getWarehouses()
-                setWarehouses(data)
+            const fetchDialogOptions = async () => {
+                const [warehouseData, categoryData] = await Promise.all([
+                    getWarehouses(),
+                    getProductCategories(),
+                ])
+                setWarehouses(warehouseData)
+                setCategories(categoryData.length > 0 ? categoryData : CATEGORIES)
             }
-            fetchWarehouses()
+            fetchDialogOptions()
         }
     }, [isOpen])
 
@@ -86,8 +93,11 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
     useEffect(() => {
         if (!isOpen) return
 
+        const nextCategory = product?.category ?? initialValues?.category ?? "TYRE"
+        const normalizedCategory = nextCategory.trim()
+
         form.reset({
-            category: product?.category ?? initialValues?.category ?? "TYRE",
+            category: nextCategory,
             materialNumber: product?.materialNumber ?? initialValues?.materialNumber ?? "",
             oldMaterialNo: product?.oldMaterialNo ?? initialValues?.oldMaterialNo ?? "",
             materialDescription: product?.materialDescription ?? initialValues?.materialDescription ?? "",
@@ -99,17 +109,24 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
             typeWarehouse: product?.typeWarehouse ?? initialValues?.typeWarehouse ?? "",
             imageUrl: product?.imageUrl ?? initialValues?.imageUrl ?? "",
         })
-    }, [form, initialValues, isOpen, product])
+        setShowCustomCategoryInput(Boolean(normalizedCategory) && !categories.includes(normalizedCategory))
+    }, [categories, form, initialValues, isOpen, product])
 
     const handleSubmit = async (data: ProductFormValues) => {
         setIsLoading(true)
         try {
-            const result = await upsertProduct(data, product?.id)
+            const result = await upsertProduct({
+                ...data,
+                category: data.category.trim(),
+            }, product?.id)
 
             if (result.success) {
                 toast.success(`Product ${isEdit ? "updated" : "created"} successfully`)
                 setIsOpen(false)
-                if (!isEdit) form.reset()
+                if (!isEdit) {
+                    form.reset()
+                    setShowCustomCategoryInput(false)
+                }
                 onSuccess?.()
             } else {
                 toast.error(result.error)
@@ -149,8 +166,19 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
                                 <FormItem>
                                     <FormLabel>Category</FormLabel>
                                     <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
+                                        value={showCustomCategoryInput ? CUSTOM_CATEGORY_VALUE : field.value}
+                                        onValueChange={(value) => {
+                                            if (value === CUSTOM_CATEGORY_VALUE) {
+                                                setShowCustomCategoryInput(true)
+                                                if (!field.value.trim()) {
+                                                    field.onChange("")
+                                                }
+                                                return
+                                            }
+
+                                            setShowCustomCategoryInput(false)
+                                            field.onChange(value)
+                                        }}
                                         disabled={isLoading}
                                     >
                                         <FormControl>
@@ -159,11 +187,20 @@ export function ProductDialog({ product, initialValues, trigger, onSuccess }: Pr
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            {CATEGORIES.map(cat => (
+                                            {categories.map(cat => (
                                                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                                             ))}
+                                            <SelectItem value={CUSTOM_CATEGORY_VALUE}>Custom category...</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                    {showCustomCategoryInput ? (
+                                        <Input
+                                            value={field.value}
+                                            onChange={(e) => field.onChange(e.target.value)}
+                                            placeholder="Enter custom category"
+                                            disabled={isLoading}
+                                        />
+                                    ) : null}
                                     <FormMessage />
                                 </FormItem>
                             )}

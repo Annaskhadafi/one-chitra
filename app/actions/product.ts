@@ -9,6 +9,17 @@ import { z } from "zod"
 import { productSchema } from "@/lib/schemas"
 import { normalizeSloc, normalizeSlocFields } from "@/lib/sloc"
 
+const DEFAULT_PRODUCT_CATEGORIES = [
+    "ACC",
+    "FLAP",
+    "IMT PART",
+    "Material Consumable",
+    "SPM",
+    "TUBE",
+    "TYRE",
+    "WHEEL & RIM",
+]
+
 type ProductListRow = typeof products.$inferSelect & {
     totalStock: number
     stockLevelCount: number
@@ -143,6 +154,25 @@ export async function getProducts(): Promise<ProductDisplayRow[]> {
     return dedupeProductsForDisplay(normalizeSlocFields(results))
 }
 
+export async function getProductCategories(): Promise<string[]> {
+    const rows = await db
+        .selectDistinct({
+            category: products.category,
+        })
+        .from(products)
+
+    const categories = new Set<string>(DEFAULT_PRODUCT_CATEGORIES)
+
+    for (const row of rows) {
+        const value = row.category?.trim()
+        if (value) {
+            categories.add(value)
+        }
+    }
+
+    return Array.from(categories).sort((a, b) => a.localeCompare(b))
+}
+
 export async function createProduct(data: z.infer<typeof productSchema>) {
     return await upsertProduct(data)
 }
@@ -155,6 +185,7 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
     try {
         const normalizedData = {
             ...data,
+            category: data.category.trim(),
             materialNumber: data.materialNumber.trim().toUpperCase(),
             oldMaterialNo: data.oldMaterialNo?.trim() || null,
             materialDescription: data.materialDescription?.trim() || null,
@@ -167,6 +198,10 @@ export async function upsertProduct(data: z.infer<typeof productSchema>, id?: nu
 
         if (!normalizedData.sloc) {
             return { success: false, error: "Sloc is required" }
+        }
+
+        if (!normalizedData.category) {
+            return { success: false, error: "Category is required" }
         }
 
         if (id) {
