@@ -823,10 +823,10 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         setSelectedUserMentions((current) => current.some((item) => item.userId === user.userId) ? current : [...current, user])
         setUserMentionSearch(null)
     }
-    const uploadSelectedFiles = async (files: FileList | null, mode: "file" | "image") => {
-        if (!files || files.length === 0) return
+    const uploadPreparedFiles = async (files: File[], mode: "file" | "image") => {
+        if (files.length === 0) return
 
-        const selectedFiles = Array.from(files).slice(0, 8 - attachments.length)
+        const selectedFiles = files.slice(0, 8 - attachments.length)
         if (selectedFiles.length === 0) {
             toast.error("Maksimal 8 lampiran per pesan")
             return
@@ -874,6 +874,27 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         } finally {
             setSending(false)
         }
+    }
+    const uploadSelectedFiles = async (files: FileList | null, mode: "file" | "image") => {
+        if (!files || files.length === 0) return
+        await uploadPreparedFiles(Array.from(files), mode)
+    }
+    const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const clipboardItems = Array.from(event.clipboardData?.items ?? [])
+        const imageFiles = clipboardItems
+            .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+            .map((item, index) => {
+                const file = item.getAsFile()
+                if (!file) return null
+                const extension = file.type.split("/")[1] || "png"
+                return new File([file], file.name || `clipboard-image-${Date.now()}-${index}.${extension}`, { type: file.type })
+            })
+            .filter((file): file is File => Boolean(file))
+
+        if (imageFiles.length === 0) return
+
+        event.preventDefault()
+        await uploadPreparedFiles(imageFiles, "image")
     }
     const removeAttachment = (index: number) => {
         setAttachments((current) => {
@@ -1222,7 +1243,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     </Button>
                     {isHelpDeskRoom(room) ? <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-medium text-cyan-700"><Compass className="h-3 w-3" />{pageContext ? `Konteks: ${pageContext.title}` : "Mode bantuan cepat"}</div> : null}
                 </div>
-                <div className="flex min-w-0 items-end gap-2"><Textarea ref={textareaRef} value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={editingMessageId ? "Perbarui pesan..." : isHelpDeskRoom(room) ? pageContext ? `Tanya tentang ${pageContext.title} atau pertanyaan umum lain...` : "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] max-h-36 min-w-0 resize-none overflow-y-auto text-sm" /><Button size="icon" className="h-11 w-11 shrink-0" onClick={handleSend} disabled={sending || (!editingMessageId && !input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+                <div className="flex min-w-0 items-end gap-2"><Textarea ref={textareaRef} value={input} onChange={onInputChange} onPaste={(event) => { handlePaste(event).catch(() => undefined) }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={editingMessageId ? "Perbarui pesan..." : isHelpDeskRoom(room) ? pageContext ? `Tanya tentang ${pageContext.title} atau pertanyaan umum lain...` : "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] max-h-36 min-w-0 resize-none overflow-y-auto text-sm" /><Button size="icon" className="h-11 w-11 shrink-0" onClick={handleSend} disabled={sending || (!editingMessageId && !input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
             </div>
         </div>
     )
