@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import {
     getCoverLetterBillingData, saveCoverLetter, updateCoverLetter, deleteCoverLetter,
-    getSigners, saveSigner, deleteSigner, generateNextRefNumber,
+    saveSigner, deleteSigner, generateNextRefNumber,
     type CoverLetterCustomer, type CoverLetterBillingItem, type SavedCoverLetter, type CoverLetterSigner,
 } from "@/app/actions/cover-letter";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { CoverLetterDialog } from "./cover-letter-dialog";
 import type { PreviewInvoiceItem } from "./cover-letter-preview";
 import { toast } from "sonner";
 import { normalizeCodeValue } from "@/lib/formatters";
+import { buildCoverLetterItemKey } from "@/lib/cover-letter";
 
 interface Props {
     customers: CoverLetterCustomer[];
@@ -214,7 +215,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     // Form state
     const [selectedCustomer, setSelectedCustomer] = useState<CoverLetterCustomer | null>(null);
     const [customerOpen, setCustomerOpen] = useState(false);
-    const [selectedPoNos, setSelectedPoNos] = useState<Set<string>>(new Set());
+    const [selectedInvoiceKeys, setSelectedInvoiceKeys] = useState<Set<string>>(new Set());
     const [refNumber, setRefNumber] = useState("");
     const [letterDate, setLetterDate] = useState(""); // Initialize empty for hydration stability
     const [signerName, setSignerName] = useState("");
@@ -229,27 +230,27 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     }, []);
 
     useEffect(() => {
-        if (!selectedCustomer) { setBillingData([]); setSelectedPoNos(new Set()); return; }
+        if (!selectedCustomer) { setBillingData([]); setSelectedInvoiceKeys(new Set()); return; }
         startFetching(async () => {
             const result = await getCoverLetterBillingData(selectedCustomer.customerCode, editingId ?? undefined);
             setBillingData(result);
-            setSelectedPoNos(new Set());
+            setSelectedInvoiceKeys(new Set());
         });
     }, [selectedCustomer, editingId]);
 
-    const toggleInvoice = (poNo: string) => {
-        setSelectedPoNos(prev => {
+    const toggleInvoice = (selectionKey: string) => {
+        setSelectedInvoiceKeys(prev => {
             const next = new Set(prev);
-            if (next.has(poNo)) next.delete(poNo); else next.add(poNo);
+            if (next.has(selectionKey)) next.delete(selectionKey); else next.add(selectionKey);
             return next;
         });
     };
     const toggleAll = () => {
-        setSelectedPoNos(selectedPoNos.size === billingData.length && billingData.length > 0
-            ? new Set() : new Set(billingData.map(d => d.poNo)));
+        setSelectedInvoiceKeys(selectedInvoiceKeys.size === billingData.length && billingData.length > 0
+            ? new Set() : new Set(billingData.map(d => d.selectionKey)));
     };
 
-    const selectedInvoiceData = billingData.filter(d => selectedPoNos.has(d.poNo));
+    const selectedInvoiceData = billingData.filter(d => selectedInvoiceKeys.has(d.selectionKey));
     const previewItems: PreviewInvoiceItem[] = selectedInvoiceData.map(inv => ({
         poNo: inv.poNo, noInvSap: normalizeCodeValue(inv.noInvSap) ?? "", dateInvoice: inv.dateInvoice, datePo: inv.datePo,
         amountBeforeTax: calcBeforeAmount(inv.totalLocCurr),
@@ -268,7 +269,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
     }, [sendLocation, showForm]);
 
     const resetForm = () => {
-        setSelectedCustomer(null); setSelectedPoNos(new Set());
+        setSelectedCustomer(null); setSelectedInvoiceKeys(new Set());
         setRefNumber(""); setLetterDate(getTodayStr());
         setSignerName(""); setSignerTitle(""); setSendLocation("balikpapan"); setEditingId(null);
     };
@@ -288,7 +289,9 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
         startFetching(async () => {
             const result = await getCoverLetterBillingData(letter.custId ?? undefined, letter.id);
             setBillingData(result);
-            setSelectedPoNos(new Set(letter.items.map(i => i.poNo).filter(Boolean) as string[]));
+            setSelectedInvoiceKeys(new Set(
+                letter.items.map(i => buildCoverLetterItemKey(i.poNo, i.noInvSap))
+            ));
         });
     };
 
@@ -480,8 +483,8 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                                     Pilih Invoice
                                     <span className="text-xs font-normal text-muted-foreground">(hanya invoice yang belum dipakai)</span>
                                 </CardTitle>
-                                {selectedPoNos.size > 0 && (
-                                    <Badge variant="secondary">{selectedPoNos.size} dipilih · Total Rp {grandTotal.toLocaleString("id-ID")}</Badge>
+                                {selectedInvoiceKeys.size > 0 && (
+                                    <Badge variant="secondary">{selectedInvoiceKeys.size} dipilih · Total Rp {grandTotal.toLocaleString("id-ID")}</Badge>
                                 )}
                             </div>
                         </CardHeader>
@@ -499,7 +502,7 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                                             <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
                                                 <TableRow>
                                                     <TableHead className="w-10">
-                                                        <Checkbox checked={selectedPoNos.size === billingData.length && billingData.length > 0} onCheckedChange={toggleAll} />
+                                                        <Checkbox checked={selectedInvoiceKeys.size === billingData.length && billingData.length > 0} onCheckedChange={toggleAll} />
                                                     </TableHead>
                                                     <TableHead>No INV SAP</TableHead>
                                                     <TableHead>Tgl Invoice</TableHead>
@@ -512,8 +515,8 @@ export function CoverLetterClient({ customers, savedLetters: initialSavedLetters
                                                 {billingData.map(inv => {
                                                     const amount = calcAccAmount(inv.totalLocCurr);
                                                     return (
-                                                        <TableRow key={inv.poNo} className={cn("cursor-pointer", selectedPoNos.has(inv.poNo) && "bg-primary/5")} onClick={() => toggleInvoice(inv.poNo)}>
-                                                            <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedPoNos.has(inv.poNo)} onCheckedChange={() => toggleInvoice(inv.poNo)} /></TableCell>
+                                                        <TableRow key={inv.selectionKey} className={cn("cursor-pointer", selectedInvoiceKeys.has(inv.selectionKey) && "bg-primary/5")} onClick={() => toggleInvoice(inv.selectionKey)}>
+                                                            <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedInvoiceKeys.has(inv.selectionKey)} onCheckedChange={() => toggleInvoice(inv.selectionKey)} /></TableCell>
                                                             <TableCell className="font-medium">{normalizeCodeValue(inv.noInvSap) || "-"}</TableCell>
                                                             <TableCell>{formatDate(inv.dateInvoice)}</TableCell>
                                                             <TableCell>{inv.poNo}</TableCell>

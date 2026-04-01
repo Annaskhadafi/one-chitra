@@ -45,6 +45,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import type { Warehouse } from "@/lib/types"
 import { exportInventoryComparisonToExcel } from "@/app/actions/stock"
 import { toast } from "sonner"
+import { InventoryImportDialog } from "./inventory-import-dialog"
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ComparisonRow {
@@ -719,6 +720,7 @@ export function StockComparison({ warehouses }: StockComparisonProps) {
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Refresh
                     </Button>
+                    <InventoryImportDialog onSuccess={() => refetchComparison()} />
                     <Button
                         variant="default"
                         size="sm"

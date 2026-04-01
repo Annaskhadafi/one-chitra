@@ -5,6 +5,7 @@ import { billingRecords, salesRevenueSap as historyOrders, customers, coverLette
 import { eq, isNotNull, ne, and, sql, desc, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizeCodeValue } from "@/lib/formatters";
+import { buildCoverLetterItemKey } from "@/lib/cover-letter";
 
 /**
  * Generate nomor referensi surat otomatis.
@@ -30,6 +31,7 @@ export async function generateNextRefNumber(location: string, date?: Date): Prom
 }
 
 export type CoverLetterBillingItem = {
+    selectionKey: string;
     poNo: string;
     noInvSap: string;
     dateInvoice: Date | null;
@@ -96,18 +98,22 @@ export async function getCoverLetterBillingData(
     editingCoverLetterId?: number
 ): Promise<CoverLetterBillingItem[]> {
     // Cari poNo yang sudah ada di cover_letter_items (kecuali yang sedang diedit)
-    let usedPoNos: string[] = [];
+    let usedItemKeys: string[] = [];
     if (editingCoverLetterId) {
-        const used = await db.select({ poNo: coverLetterItems.poNo })
+        const used = await db.select({ poNo: coverLetterItems.poNo, noInvSap: coverLetterItems.noInvSap })
             .from(coverLetterItems)
             .leftJoin(coverLetters, eq(coverLetterItems.coverLetterId, coverLetters.id))
             .where(
                 sql`${coverLetterItems.coverLetterId} != ${editingCoverLetterId}`
             );
-        usedPoNos = used.map(u => u.poNo).filter(Boolean) as string[];
+        usedItemKeys = used
+            .map(u => buildCoverLetterItemKey(u.poNo, u.noInvSap))
+            .filter(Boolean);
     } else {
-        const used = await db.select({ poNo: coverLetterItems.poNo }).from(coverLetterItems);
-        usedPoNos = used.map(u => u.poNo).filter(Boolean) as string[];
+        const used = await db.select({ poNo: coverLetterItems.poNo, noInvSap: coverLetterItems.noInvSap }).from(coverLetterItems);
+        usedItemKeys = used
+            .map(u => buildCoverLetterItemKey(u.poNo, u.noInvSap))
+            .filter(Boolean);
     }
 
     // Filter: billing_date >= 1 November 2025
@@ -115,9 +121,9 @@ export async function getCoverLetterBillingData(
 
     const groupedHistorySubquery = db.select({
         poNo: historyOrders.poNo,
+        noInvSap: sql<string>`MAX(${historyOrders.billingNo})`.as("noInvSap"),
         datePo: sql<Date>`MAX(${historyOrders.poDate})`.as("datePo"),
         dateInvoice: sql<Date>`MAX(${historyOrders.billingDate})`.as("dateInvoice"),
-        noInvSap: sql<string>`MAX(${historyOrders.billingNo})`.as("noInvSap"),
         custId: sql<string>`MAX(${historyOrders.customer})`.as("custId"),
         // Gunakan revenueInDocCurr (Doc Currency) sebagai basis amount + pajak 11%
         totalLocCurr: sql<string>`CAST(SUM(${historyOrders.revenueInDocCurr}) AS TEXT)`.as("totalLocCurr"),
@@ -131,7 +137,7 @@ export async function getCoverLetterBillingData(
             minDateFilter,
             custId ? eq(historyOrders.customer, custId) : undefined
         )
-    ).groupBy(historyOrders.poNo).as("groupedHistory");
+    ).groupBy(historyOrders.poNo, historyOrders.billingNo).as("groupedHistory");
 
     const records = await db.select({
         poNo: groupedHistorySubquery.poNo,
@@ -150,13 +156,14 @@ export async function getCoverLetterBillingData(
         .orderBy(desc(sql`COALESCE(${billingRecords.dateInvoice}, "groupedHistory"."dateInvoice"::timestamptz)`));
 
     // Filter out yang sudah dipakai di cover letter lain
-    const filtered = usedPoNos.length > 0
-        ? records.filter(r => r.poNo && !usedPoNos.includes(r.poNo))
+    const filtered = usedItemKeys.length > 0
+        ? records.filter(r => !usedItemKeys.includes(buildCoverLetterItemKey(r.poNo, r.noInvSap)))
         : records;
 
     const normalized = filtered.map((row) => ({
         ...row,
         noInvSap: normalizeCodeValue(row.noInvSap) ?? "",
+        selectionKey: buildCoverLetterItemKey(row.poNo, row.noInvSap),
     }));
 
     return normalized as CoverLetterBillingItem[];
