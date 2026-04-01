@@ -3,6 +3,7 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useRouter } from "next/navigation"
 import { triggerSalesOrderBasicOcrFast } from "@/app/actions/ocr-fast"
 import { 
@@ -441,9 +442,51 @@ export default function OcrUploadPage() {
                         </div>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6">
-                        <pre className="max-h-[320px] overflow-auto rounded-xl border border-green-100 bg-white/50 p-3 font-mono text-[11px] leading-relaxed text-slate-700 sm:max-h-[400px] sm:p-4 sm:text-xs">
-                            {JSON.stringify(basicResult, null, 2)}
-                        </pre>
+                        <div className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="rounded-xl border border-green-100 bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Customer</p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-800">{basicResult.customer_name || "-"}</p>
+                                </div>
+                                <div className="rounded-xl border border-green-100 bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">No PO</p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-800">{basicResult.po_number || "-"}</p>
+                                </div>
+                                <div className="rounded-xl border border-green-100 bg-white/70 p-4">
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tanggal</p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-800">{basicResult.date || "-"}</p>
+                                </div>
+                            </div>
+
+                            <div className="overflow-hidden rounded-xl border border-green-100 bg-white/70">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-14">No</TableHead>
+                                            <TableHead>Hasil OCR Item</TableHead>
+                                            <TableHead className="text-right">Qty</TableHead>
+                                            <TableHead className="text-right">Harga</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {basicResult.items.length > 0 ? basicResult.items.map((item, index) => (
+                                            <TableRow key={`${item.product}-${index}`}>
+                                                <TableCell>{index + 1}</TableCell>
+                                                <TableCell className="font-medium">{item.product || "-"}</TableCell>
+                                                <TableCell className="text-right">{item.qty}</TableCell>
+                                                <TableCell className="text-right">{item.price.toLocaleString("id-ID")}</TableCell>
+                                            </TableRow>
+                                        )) : (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center text-sm text-slate-500">
+                                                    Belum ada item yang berhasil dibaca.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             )}

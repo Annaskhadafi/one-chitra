@@ -51,29 +51,36 @@ export async function triggerSalesOrderBasicOcrFast(formData: FormData) {
 
         const hasMistralKey = Boolean(process.env.MISTRAL_API_KEY?.trim())
         let providerWarning: string | undefined
-        let ocr = await extractStructuredFromPoViaOllama({
-            fileBuffer: buffer,
-            filename: file.name,
-            pages: [1],
-        }).catch(async (error) => {
-            if (!hasMistralKey) {
-                throw error
-            }
+        let ocr
 
-            providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(error)}`
-            return extractStructuredFromDocument({
+        // Sales Order PO needs better table extraction, so prefer structured OCR first.
+        if (hasMistralKey) {
+            ocr = await extractStructuredFromDocument({
+                fileBuffer: buffer,
+                filename: file.name,
+                pages: "all",
+            }).catch(async (error) => {
+                providerWarning = `OCR utama gagal, dialihkan ke fallback: ${getErrorMessage(error)}`
+                return extractStructuredFromPoViaOllama({
+                    fileBuffer: buffer,
+                    filename: file.name,
+                    pages: [1],
+                })
+            })
+        } else {
+            ocr = await extractStructuredFromPoViaOllama({
                 fileBuffer: buffer,
                 filename: file.name,
                 pages: [1],
             })
-        })
+        }
 
         let basic = toBasicPayload(ocr)
-        if (!hasMeaningfulBasicResult(basic) && hasMistralKey && !providerWarning) {
+        if (!hasMeaningfulBasicResult(basic) && hasMistralKey && providerWarning) {
             const fallbackOcr = await extractStructuredFromDocument({
                 fileBuffer: buffer,
                 filename: file.name,
-                pages: [1],
+                pages: "all",
             })
             ocr = fallbackOcr
             basic = toBasicPayload(fallbackOcr)
