@@ -1,6 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { existsSync } from "fs"
-import { mkdir, readFile, unlink, writeFile } from "fs/promises"
+import { readFile, unlink } from "fs/promises"
 import { join, resolve } from "path"
 import { v7 as uuidv7 } from "uuid"
 
@@ -326,39 +326,30 @@ export async function saveManagedUpload(params: {
 
     const contentType = getUploadContentType(filename, params.contentType)
 
-    if (isObjectStorageEnabled()) {
-        const config = requireObjectStorageConfig()
-        const client = getObjectStorageClient(config)
-        const key = buildObjectStorageKey(filename)
-
-        await client.send(
-            new PutObjectCommand({
-                Bucket: config.bucket,
-                Key: key,
-                Body: params.buffer,
-                ContentType: contentType,
-            })
+    if (!isObjectStorageEnabled()) {
+        throw new Error(
+            "Upload wajib ke object storage. Set UPLOAD_DRIVER=s3 dan isi OBJECT_STORAGE_*."
         )
-
-        return {
-            filename,
-            url: getManagedUploadUrl(filename),
-            source: "object-storage" as const,
-            key,
-        }
     }
 
-    const uploadDir = getUploadWriteDir()
-    await mkdir(uploadDir, { recursive: true })
+    const config = requireObjectStorageConfig()
+    const client = getObjectStorageClient(config)
+    const key = buildObjectStorageKey(filename)
 
-    const filepath = join(uploadDir, filename)
-    await writeFile(filepath, params.buffer)
+    await client.send(
+        new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: key,
+            Body: params.buffer,
+            ContentType: contentType,
+        })
+    )
 
     return {
         filename,
         url: getManagedUploadUrl(filename),
-        source: "local" as const,
-        filePath: filepath,
+        source: "object-storage" as const,
+        key,
     }
 }
 
