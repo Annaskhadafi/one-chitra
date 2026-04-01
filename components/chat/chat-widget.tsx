@@ -1,14 +1,16 @@
 "use client"
 
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, FileImage, FileText, Loader2, MessageCircle, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { createGroupRoom, deleteChatRoom, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
 import { ensureHelpDeskRoom, getHelpDeskStarterPrompts } from "@/app/actions/helpdesk-ai"
 import { uploadFile } from "@/app/actions/upload"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
+import { navigationConfig } from "@/lib/navigation"
 import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +25,7 @@ type MentionResult = { type: "quotation" | "sales-order" | "delivery"; id: strin
 type SearchResult = { id: number; content: string; createdAt: string; senderName: string }
 type MentionableUser = { userId: string; name: string; email: string; image: string | null }
 type ComposerAttachment = ChatAttachment & { previewUrl?: string | null; isUploading?: boolean }
+type HelpDeskQuickAction = { label: string; prompt: string; tone?: "context" | "explore" | "followup" }
 
 const MENTION_ICONS = { quotation: FileText, "sales-order": ShoppingCart, delivery: Truck }
 const MENTION_COLORS = { quotation: "bg-blue-100 text-blue-700", "sales-order": "bg-green-100 text-green-700", delivery: "bg-orange-100 text-orange-700" }
@@ -34,6 +37,12 @@ const STICKER_PRESETS = [
     { name: "Siap", sticker: "✅" },
     { name: "Santai", sticker: "😄" },
 ] satisfies Array<{ name: string; sticker: string }>
+const HELP_DESK_TYPING_MESSAGES = [
+    "Chitra Jenius lagi bongkar knowledge yang relevan...",
+    "Lagi cari jawaban paling pas buat pertanyaan ini...",
+    "Sedang merapikan langkah yang paling gampang diikuti...",
+    "Lagi lihat modul One Chitra yang nyambung...",
+] as const
 const isHelpDeskRoom = (room: Pick<ChatRoomWithMeta, "type">) => room.type === "ai-helpdesk"
 const time = (value: string) => new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
 const day = (value: string) => new Date(value).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })
@@ -99,6 +108,92 @@ const playIncomingMessageSound = async () => {
     } catch {
         return
     }
+}
+
+const flattenNavigationItems = () =>
+    navigationConfig.flatMap((section) =>
+        section.items.flatMap((item) =>
+            item.items?.length
+                ? item.items.map((child) => ({ title: child.title, url: child.url }))
+                : item.url !== "#"
+                    ? [{ title: item.title, url: item.url }]
+                    : [],
+        ),
+    )
+
+const HELP_DESK_ROUTE_ENTRIES = flattenNavigationItems()
+
+function getHelpDeskPageContext(pathname: string | null) {
+    if (!pathname || !pathname.startsWith("/dashboard")) {
+        return null
+    }
+
+    const match = HELP_DESK_ROUTE_ENTRIES
+        .filter((entry) => pathname === entry.url || pathname.startsWith(`${entry.url}/`) || pathname.startsWith(`${entry.url}?`))
+        .sort((left, right) => right.url.length - left.url.length)[0]
+
+    if (!match) {
+        return {
+            title: "halaman ini",
+            url: pathname,
+        }
+    }
+
+    return match
+}
+
+function buildContextQuickActions(pathname: string | null): HelpDeskQuickAction[] {
+    const context = getHelpDeskPageContext(pathname)
+    if (!context) return []
+
+    return [
+        {
+            label: "Jelaskan halaman ini",
+            prompt: `Jelaskan fungsi halaman ${context.title} di One Chitra dengan bahasa sederhana.`,
+            tone: "context",
+        },
+        {
+            label: "Langkah cepat",
+            prompt: `Jelaskan langkah cepat menggunakan halaman ${context.title} di One Chitra.`,
+            tone: "context",
+        },
+        {
+            label: "Masalah umum",
+            prompt: `Apa kendala atau kesalahan umum yang sering terjadi di halaman ${context.title} dan cara mengatasinya?`,
+            tone: "followup",
+        },
+    ]
+}
+
+function buildFollowupQuickActions(room: ChatRoomWithMeta, pathname: string | null): HelpDeskQuickAction[] {
+    const pageContext = getHelpDeskPageContext(pathname)
+    const actions: HelpDeskQuickAction[] = [
+        {
+            label: "Cari modul terkait",
+            prompt: "Halaman atau modul apa saja yang terkait dengan topik ini di One Chitra?",
+            tone: "explore",
+        },
+        {
+            label: "Versi singkat",
+            prompt: "Ringkas jawaban sebelumnya jadi versi singkat dan mudah dipraktikkan.",
+            tone: "followup",
+        },
+        {
+            label: "Panduan detail",
+            prompt: "Jelaskan langkahnya lebih detail dan berurutan.",
+            tone: "followup",
+        },
+    ]
+
+    if (pageContext) {
+        actions.unshift({
+            label: "Bantu sesuai layar ini",
+            prompt: `Saya sedang membuka ${pageContext.title}. Bantu saya sesuai konteks halaman ini.`,
+            tone: "context",
+        })
+    }
+
+    return actions.slice(0, 4)
 }
 
 function AttachmentGrid({ attachments, isOwn }: { attachments: Array<ChatAttachment | ComposerAttachment>; isOwn: boolean }) {
@@ -187,9 +282,9 @@ function MessageBubble({ msg, isOwn, highlighted, onReply }: { msg: ChatMessage;
         seed: msg.senderId,
     })
     return (
-        <div className={cn("group mb-3 flex gap-2 items-end", isOwn ? "flex-row-reverse" : "flex-row")}>
+        <div className={cn("group mb-3 flex w-full min-w-0 gap-2 items-end", isOwn ? "flex-row-reverse" : "flex-row")}>
             <Avatar className="h-6 w-6 shrink-0"><AvatarImage src={avatarSrc} /><AvatarFallback className="text-xs">{getAvatarInitials(msg.senderName)}</AvatarFallback></Avatar>
-            <div className={cn("flex max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
+            <div className={cn("flex min-w-0 max-w-[78%] flex-col gap-1", isOwn ? "items-end" : "items-start")}>
                 {!isOwn ? <p className="ml-1 text-xs text-muted-foreground">{msg.senderName}</p> : null}
                 <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm", isOwn ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted", highlighted && "ring-2 ring-primary/40")}>
                     {msg.replyTo ? <div className={cn("mb-2 rounded-lg border px-2 py-1 text-xs", isOwn ? "border-primary-foreground/20 bg-primary-foreground/10" : "border-border bg-background/60")}><p className="font-medium">{msg.replyTo.senderName}</p><p className="truncate opacity-80">{msg.replyTo.content}</p></div> : null}
@@ -258,6 +353,50 @@ function UserMentionPicker({ query, users, onSelect, onClose }: { query: string;
                     </div>
                 </button>
             ))}
+        </div>
+    )
+}
+
+function HelpDeskQuickActions({
+    title,
+    subtitle,
+    actions,
+    disabled,
+    onSelect,
+}: {
+    title: string
+    subtitle: string
+    actions: HelpDeskQuickAction[]
+    disabled: boolean
+    onSelect: (prompt: string) => void
+}) {
+    if (actions.length === 0) return null
+
+    return (
+        <div className="mb-3 rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-50 via-white to-rose-50 p-3 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <span>{title}</span>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">{subtitle}</p>
+            <div className="flex flex-wrap gap-2">
+                {actions.map((action) => (
+                    <button
+                        key={action.label}
+                        type="button"
+                        disabled={disabled}
+                        className={cn(
+                            "rounded-full border px-3 py-1.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-60",
+                            action.tone === "context" && "border-cyan-200 bg-cyan-50 text-cyan-700 hover:border-cyan-300 hover:bg-cyan-100",
+                            action.tone === "explore" && "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 hover:border-fuchsia-300 hover:bg-fuchsia-100",
+                            action.tone === "followup" && "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100",
+                        )}
+                        onClick={() => onSelect(action.prompt)}
+                    >
+                        {action.label}
+                    </button>
+                ))}
+            </div>
         </div>
     )
 }
@@ -410,6 +549,7 @@ function NewChatView({ users, loadingUsers, loadError, onRetryLoadUsers, onRoomC
 }
 
 function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpdated }: { room: ChatRoomWithMeta; currentUserId: string; onBack: () => void; onDeleteRoom: (roomId: number) => Promise<void>; onRoomUpdated: () => Promise<void> }) {
+    const pathname = usePathname()
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [hasMore, setHasMore] = useState(false)
     const [typingMembers, setTypingMembers] = useState<{ userId: string; name: string }[]>([])
@@ -429,6 +569,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const [searchResults, setSearchResults] = useState<SearchResult[]>([])
     const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null)
     const [assistantThinking, setAssistantThinking] = useState(false)
+    const [assistantThinkingIndex, setAssistantThinkingIndex] = useState(0)
     const [starterPrompts, setStarterPrompts] = useState<string[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
     const messageRefs = useRef<Record<number, HTMLDivElement | null>>({})
@@ -438,8 +579,12 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const attachmentsRef = useRef<ComposerAttachment[]>([])
     const fileInputRef = useRef<HTMLInputElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null)
     const draftKey = `chat-draft-${room.id}`
     const others = room.members.filter((member) => member.userId !== currentUserId)
+    const pageContext = getHelpDeskPageContext(pathname)
+    const contextQuickActions = buildContextQuickActions(pathname)
+    const followupQuickActions = buildFollowupQuickActions(room, pathname)
     const mentionableUsers: MentionableUser[] = others.map((member) => ({
         userId: member.userId,
         name: member.name,
@@ -453,7 +598,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     useEffect(() => {
         let active = true
         const saved = window.localStorage.getItem(draftKey); if (saved) setInput(saved)
-        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false)
+        setLoading(true); setMessages([]); setReplyTarget(null); setPendingMention(null); setSelectedUserMentions([]); setAttachments([]); setShowStickerPicker(false); setMentionSearch(null); setUserMentionSearch(null); setSearchQuery(""); setSearchResults([]); setHighlightedMessageId(null); setAssistantThinking(false); setAssistantThinkingIndex(0)
         loadSnapshot()
             .catch(() => { if (active) toast.error("Gagal memuat percakapan") })
             .finally(() => { if (active) setLoading(false) })
@@ -480,7 +625,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         }
     }, [room])
     useEffect(() => { window.localStorage.setItem(draftKey, input) }, [draftKey, input])
-    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages.length, typingMembers.length])
+    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }) }, [messages.length, typingMembers.length, replyTarget, pendingMention, attachments.length, showStickerPicker])
     useEffect(() => {
         let active = true
         const interval = window.setInterval(async () => {
@@ -545,6 +690,18 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     useEffect(() => {
         attachmentsRef.current = attachments
     }, [attachments])
+    useEffect(() => {
+        if (!assistantThinking) {
+            setAssistantThinkingIndex(0)
+            return
+        }
+
+        const interval = window.setInterval(() => {
+            setAssistantThinkingIndex((current) => (current + 1) % HELP_DESK_TYPING_MESSAGES.length)
+        }, 1800)
+
+        return () => window.clearInterval(interval)
+    }, [assistantThinking])
     useEffect(() => () => {
         attachmentsRef.current.forEach((attachment) => {
             if (attachment.previewUrl) {
@@ -553,8 +710,16 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
         })
     }, [])
     const status = isHelpDeskRoom(room)
-        ? assistantThinking ? "Sedang menyiapkan jawaban..." : "Siap bantu pertanyaan umum dan One Chitra"
+        ? assistantThinking ? HELP_DESK_TYPING_MESSAGES[assistantThinkingIndex] : pageContext ? `Siap bantu sesuai halaman ${pageContext.title}` : "Siap bantu pertanyaan umum dan One Chitra"
         : typingMembers.length ? `${typingMembers.map((member) => member.name).join(", ")} sedang mengetik...` : others.some((member) => member.isTyping) ? "Sedang mengetik..." : others.some((member) => member.lastSeenAt && lastSeenLabel(member.lastSeenAt) === "Aktif sekarang") ? "Aktif sekarang" : lastSeenLabel(memberPresence.find((member) => member.userId === others[0]?.userId)?.lastSeenAt ?? others[0]?.lastSeenAt ?? null)
+    const applyPromptToComposer = (prompt: string) => {
+        setInput(prompt)
+        window.setTimeout(() => {
+            textareaRef.current?.focus()
+            const length = prompt.length
+            textareaRef.current?.setSelectionRange(length, length)
+        }, 0)
+    }
     const onInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
         const value = event.target.value
         const cursorText = value.slice(0, event.target.selectionStart ?? value.length)
@@ -729,20 +894,24 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     {searchResults.length > 0 ? <div className="mt-2 max-h-28 overflow-y-auto rounded-lg border border-white/30 bg-white/90 text-slate-800">{searchResults.slice(0, 5).map((result) => <button key={result.id} type="button" onClick={() => jumpToMessage(result.id)} className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-rose-50"><p className="truncate text-xs font-medium">{result.senderName}</p><p className="truncate text-xs text-muted-foreground">{result.content}</p></button>)}</div> : null}
                 </div>
             </div>
-            <ScrollArea className="flex-1 min-h-0 bg-gradient-to-b from-rose-50/60 via-background to-cyan-50/40 p-3">
+            <ScrollArea className="flex-1 min-h-0 bg-gradient-to-b from-rose-50/60 via-background to-cyan-50/40">
                 {loading ? <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div> : <>
-                    {isHelpDeskRoom(room) ? <HelpDeskPromptChips prompts={starterPrompts} disabled={sending} onSelect={setInput} /> : null}
-                    {hasMore ? <div className="mb-3 flex justify-center"><Button variant="outline" size="sm" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}Muat Pesan Lama</Button></div> : null}
-                    {messages.map((message, index) => {
-                        const showDate = !messages[index - 1] || day(messages[index - 1].createdAt) !== day(message.createdAt)
-                        return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }}>{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} onReply={setReplyTarget} /></div>
-                    })}
-                    {typingMembers.length > 0 ? <p className="mb-2 text-xs text-muted-foreground">{typingMembers.map((member) => member.name).join(", ")} sedang mengetik...</p> : null}
-                    {assistantThinking ? <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Chitra Jenius sedang menyusun jawaban...</div> : null}
-                    <div ref={bottomRef} />
+                    <div className="min-w-0 p-3 pr-4">
+                        {isHelpDeskRoom(room) ? <HelpDeskQuickActions title="Mode Interaktif" subtitle={pageContext ? `Saya lihat Anda sedang berada di ${pageContext.title}. Mau mulai dari mana?` : "Pilih cara tercepat untuk ngobrol dengan Chitra Jenius."} actions={contextQuickActions} disabled={sending} onSelect={applyPromptToComposer} /> : null}
+                        {isHelpDeskRoom(room) ? <HelpDeskPromptChips prompts={starterPrompts} disabled={sending} onSelect={applyPromptToComposer} /> : null}
+                        {isHelpDeskRoom(room) ? <HelpDeskQuickActions title="Aksi Lanjutan" subtitle="Kalau mau lebih cepat, tinggal klik salah satu arah percakapannya." actions={followupQuickActions} disabled={sending} onSelect={applyPromptToComposer} /> : null}
+                        {hasMore ? <div className="mb-3 flex justify-center"><Button variant="outline" size="sm" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}Muat Pesan Lama</Button></div> : null}
+                        {messages.map((message, index) => {
+                            const showDate = !messages[index - 1] || day(messages[index - 1].createdAt) !== day(message.createdAt)
+                            return <div key={message.id} ref={(node) => { messageRefs.current[message.id] = node }}>{showDate ? <div className="my-4 flex items-center gap-2"><div className="h-px flex-1 bg-border" /><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{day(message.createdAt)}</span><div className="h-px flex-1 bg-border" /></div> : null}<MessageBubble msg={message} isOwn={message.senderId === currentUserId} highlighted={highlightedMessageId === message.id} onReply={setReplyTarget} /></div>
+                        })}
+                        {typingMembers.length > 0 ? <p className="mb-2 text-xs text-muted-foreground">{typingMembers.map((member) => member.name).join(", ")} sedang mengetik...</p> : null}
+                        {assistantThinking ? <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />{HELP_DESK_TYPING_MESSAGES[assistantThinkingIndex]}</div> : null}
+                        <div ref={bottomRef} />
+                    </div>
                 </>}
             </ScrollArea>
-            <div className="relative border-t p-3">
+            <div className="relative shrink-0 border-t p-3">
                 {mentionSearch !== null ? <DocumentMentionPicker query={mentionSearch} onSelect={onMentionSelect} onClose={() => setMentionSearch(null)} /> : null}
                 {userMentionSearch !== null && room.type === "group" ? <UserMentionPicker query={userMentionSearch} users={mentionableUsers} onSelect={onUserMentionSelect} onClose={() => setUserMentionSearch(null)} /> : null}
                 {showStickerPicker ? (
@@ -788,8 +957,9 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setShowStickerPicker((value) => !value)} disabled={sending || attachments.length >= 8}>
                         <SmilePlus className="h-3.5 w-3.5" /> Stiker
                     </Button>
+                    {isHelpDeskRoom(room) ? <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-medium text-cyan-700"><Compass className="h-3 w-3" />{pageContext ? `Konteks: ${pageContext.title}` : "Mode bantuan cepat"}</div> : null}
                 </div>
-                <div className="flex gap-2"><Textarea value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] resize-none text-sm" /><Button size="icon" className="h-auto min-h-[72px] w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
+                <div className="flex min-w-0 items-end gap-2"><Textarea ref={textareaRef} value={input} onChange={onInputChange} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !sending) { event.preventDefault(); handleSend() } }} placeholder={isHelpDeskRoom(room) ? pageContext ? `Tanya tentang ${pageContext.title} atau pertanyaan umum lain...` : "Tanyakan apa saja. Saya bisa bantu pertanyaan umum dan penggunaan One Chitra" : room.type === "group" ? "Ketik pesan... gunakan `@` untuk tag member, `/` untuk mention dokumen, atau kirim lampiran" : "Ketik pesan... Shift+Enter untuk baris baru, `/` untuk mention dokumen, atau kirim lampiran"} className="min-h-[72px] max-h-36 min-w-0 resize-none overflow-y-auto text-sm" /><Button size="icon" className="h-11 w-11 shrink-0" onClick={handleSend} disabled={sending || (!input.trim() && !pendingMention && attachments.length === 0)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></div>
             </div>
         </div>
     )
@@ -878,7 +1048,7 @@ export function ChatWidget({ currentUserId }: { currentUserId: string }) {
     const deleteRoom = useCallback(async (roomId: number) => { try { await deleteChatRoom(roomId); toast.success("Chat dihapus dari daftar Anda"); setActiveRoom(null); setShowNewChat(false); await loadRooms() } catch { toast.error("Gagal menghapus chat") } }, [loadRooms])
     return (
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-            {isOpen ? <div className="flex h-[620px] w-[380px] flex-col overflow-hidden rounded-[28px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200">
+            {isOpen ? <div className="flex h-[min(620px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[28px] border border-white/60 bg-background/95 shadow-[0_24px_80px_rgba(236,72,153,0.28)] backdrop-blur animate-in slide-in-from-bottom-4 fade-in duration-200">
                 <div className="shrink-0 bg-gradient-to-r from-fuchsia-500 via-rose-500 to-orange-400 px-4 py-3 text-white"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><div className="rounded-full bg-white/20 p-1.5"><MessageCircle className="h-4 w-4" /></div><span className="text-sm font-semibold">Chat Workspace</span></div><Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/15 hover:text-white" onClick={() => { setIsOpen(false); setActiveRoom(null); setShowNewChat(false) }}><X className="h-4 w-4" /></Button></div></div>
                 <div className="flex-1 min-h-0 overflow-hidden">
                     {showNewChat ? <NewChatView users={chatUsers} loadingUsers={chatUsersLoading} loadError={chatUsersError} onRetryLoadUsers={() => { loadChatUsers().catch(() => undefined) }} onRoomCreated={handleRoomCreated} onBack={() => setShowNewChat(false)} /> : activeRoom ? <ConversationView room={activeRoom} currentUserId={currentUserId} onBack={() => { setActiveRoom(null); loadRooms().catch(() => undefined) }} onDeleteRoom={deleteRoom} onRoomUpdated={loadRooms} /> : <RoomList rooms={rooms} currentUserId={currentUserId} filter={filter} selectedRoomId={activeRoomId} onFilterChange={setFilter} onSelectRoom={(room) => { setActiveRoom(room); setShowNewChat(false) }} onNewChat={() => { setShowNewChat(true); if (!chatUsers.length && !chatUsersLoading) loadChatUsers().catch(() => undefined) }} onOpenHelpDesk={handleOpenHelpDesk} onTogglePreference={togglePreference} totalUnread={totalUnread} />}
