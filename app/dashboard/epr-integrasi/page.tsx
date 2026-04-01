@@ -179,5 +179,5 @@ export default async function EprIntegrasiPage() {
             };
         });
 
-    return <EprIntegrasiClient columns={columns} entries={entries} entriesUrl={ENTRIES_URL} viewId={VIEW_ID} ocrStatusMap={ocrStatusMap} />;
+    return <EprIntegrasiClient columns={columns} entries={entries} viewId={VIEW_ID} ocrStatusMap={ocrStatusMap} />;
 }

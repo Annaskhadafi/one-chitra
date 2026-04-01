@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertCircle, CheckCircle2, Database, FileText, Loader2, RefreshCcw, Search, ScanText, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Database, FileText, Loader2, Search, ScanText, XCircle } from "lucide-react";
 import { VendorQuotationOcrDialog } from "../vendor-quotations/_components/vendor-quotation-ocr-dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -40,7 +40,6 @@ type DisplayEntry = {
 type Props = {
     columns: ColumnConfig[];
     entries: DisplayEntry[];
-    entriesUrl: string;
     viewId: string;
     ocrStatusMap?: Record<string, string>;
 };
@@ -172,7 +171,7 @@ function getQuotationUrls(entry: DisplayEntry) {
 
 const OCR_BATCH_CONCURRENCY = 3;
 
-export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrStatusMap }: Props) {
+export function EprIntegrasiClient({ columns, entries, viewId, ocrStatusMap }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const initialSearch = searchParams.get("search") ?? "";
@@ -458,10 +457,6 @@ export function EprIntegrasiClient({ columns, entries, entriesUrl, viewId, ocrSt
                         <ScanText className="h-4 w-4" />
                         Add via OCR
                     </Button>
-                    <a href={entriesUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted">
-                        <RefreshCcw className="h-4 w-4" />
-                        Buka Source API
-                    </a>
                 </div>
             </div>
 

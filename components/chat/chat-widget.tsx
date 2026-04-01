@@ -276,9 +276,17 @@ function RoomList({ rooms, currentUserId, filter, selectedRoomId, onFilterChange
             <div className="space-y-3 border-b border-white/60 bg-white/70 p-3 backdrop-blur">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2"><div className="rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400 p-1.5 text-white shadow-sm"><MessageCircle className="h-3.5 w-3.5" /></div><span className="text-sm font-semibold text-slate-800">Pesan</span>{totalUnread > 0 ? <Badge className="h-5 min-w-5 rounded-full bg-gradient-to-r from-rose-500 to-orange-400 px-1.5 text-[10px] text-white shadow-sm">{totalUnread > 99 ? "99+" : totalUnread}</Badge> : null}</div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" className="h-8 border-cyan-200 bg-cyan-50 px-2 text-[11px] text-cyan-700 hover:bg-cyan-100" onClick={onOpenHelpDesk}>{HELP_DESK_CONFIG.botName}</Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-white/80 text-rose-500 hover:bg-rose-50 hover:text-rose-600" onClick={onNewChat}><Plus className="h-4 w-4" /></Button>
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="h-9 rounded-full bg-gradient-to-r from-rose-500 to-orange-400 px-3 text-xs font-semibold text-white shadow-sm hover:from-rose-600 hover:to-orange-500"
+                            onClick={onNewChat}
+                        >
+                            <Plus className="mr-1.5 h-4 w-4" />
+                            Chat Baru
+                        </Button>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2"><Button variant={filter === "active" ? "default" : "outline"} size="sm" className={cn("h-8 border-0 shadow-sm", filter === "active" ? "bg-gradient-to-r from-fuchsia-500 to-rose-500 text-white" : "bg-white/80 text-slate-700")} onClick={() => onFilterChange("active")}>Aktif</Button><Button variant={filter === "archived" ? "default" : "outline"} size="sm" className={cn("h-8 border-0 shadow-sm", filter === "archived" ? "bg-gradient-to-r from-cyan-500 to-sky-500 text-white" : "bg-white/80 text-slate-700")} onClick={() => onFilterChange("archived")}>Arsip</Button></div>

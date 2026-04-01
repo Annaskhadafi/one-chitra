@@ -22,7 +22,10 @@ import {
     HELP_DESK_STARTER_PROMPTS,
     searchHelpDeskKnowledge,
 } from "@/lib/helpdesk-assistant"
+import { extractJsonFromText } from "@/lib/ocr-utils"
 import { ensureHelpDeskSchema } from "@/lib/helpdesk-schema"
+import { extractRawTextFromDocumentViaOllama } from "@/lib/ollama-vision-ocr"
+import { readManagedUpload } from "@/lib/upload-storage"
 
 const HELP_DESK_BOT_ID = HELP_DESK_CONFIG.botId
 const HELP_DESK_BOT_NAME = HELP_DESK_CONFIG.botName
@@ -201,7 +204,94 @@ export async function getHelpDeskTrainingData() {
     }))
 }
 
+export async function getHelpDeskKnowledgeDashboard() {
+    await getCurrentUserId()
+    await ensureHelpDeskKnowledgeSeed()
+
+    const [sources, logs] = await Promise.all([
+        db.query.helpdeskKnowledgeSources.findMany({
+            orderBy: [desc(helpdeskKnowledgeSources.updatedAt)],
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                chunks: {
+                    columns: {
+                        id: true,
+                    },
+                },
+                trainingLogs: {
+                    columns: {
+                        id: true,
+                        trainedAt: true,
+                    },
+                    orderBy: [desc(helpdeskTrainingLogs.trainedAt)],
+                },
+            },
+        }),
+        db.query.helpdeskTrainingLogs.findMany({
+            orderBy: [desc(helpdeskTrainingLogs.trainedAt)],
+            limit: 20,
+            with: {
+                source: {
+                    columns: {
+                        id: true,
+                        title: true,
+                        slug: true,
+                    },
+                },
+                trainer: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+            },
+        }),
+    ])
+
+    return {
+        summary: {
+            totalSources: sources.length,
+            activeSources: sources.filter((source) => source.isActive).length,
+            inactiveSources: sources.filter((source) => !source.isActive).length,
+            totalChunks: sources.reduce((total, source) => total + source.chunks.length, 0),
+        },
+        sources: sources.map((source) => ({
+            id: source.id,
+            slug: source.slug,
+            title: source.title,
+            pagePath: source.pagePath,
+            summary: source.summary,
+            content: source.content,
+            tags: source.tags,
+            isActive: source.isActive,
+            createdAt: source.createdAt.toISOString(),
+            updatedAt: source.updatedAt.toISOString(),
+            chunkCount: source.chunks.length,
+            trainingCount: source.trainingLogs.length,
+            lastTrainedAt: source.trainingLogs[0]?.trainedAt?.toISOString() ?? null,
+            creatorName: source.creator?.name || source.creator?.email || "Unknown",
+        })),
+        logs: logs.map((log) => ({
+            id: log.id,
+            sourceId: log.sourceId,
+            notes: log.notes,
+            trainedAt: log.trainedAt.toISOString(),
+            sourceTitle: log.source?.title || "Knowledge terhapus",
+            sourceSlug: log.source?.slug || "-",
+            trainerName: log.trainer?.name || log.trainer?.email || "Unknown",
+        })),
+    }
+}
+
 export async function trainHelpDeskFromPage(form: {
+    sourceId?: number | null
     slug: string
     title: string
     pagePath?: string
@@ -223,7 +313,9 @@ export async function trainHelpDeskFromPage(form: {
         .map((item) => item.trim())
         .filter(Boolean)
 
-    const existing = await db.query.helpdeskKnowledgeSources.findFirst({ where: eq(helpdeskKnowledgeSources.slug, slug) })
+    const existing = form.sourceId
+        ? await db.query.helpdeskKnowledgeSources.findFirst({ where: eq(helpdeskKnowledgeSources.id, form.sourceId) })
+        : await db.query.helpdeskKnowledgeSources.findFirst({ where: eq(helpdeskKnowledgeSources.slug, slug) })
 
     let sourceId: number
     if (existing) {
@@ -231,6 +323,7 @@ export async function trainHelpDeskFromPage(form: {
         await db
             .update(helpdeskKnowledgeSources)
             .set({
+                slug,
                 title,
                 pagePath: form.pagePath || null,
                 summary: form.summary || null,
@@ -276,7 +369,46 @@ export async function trainHelpDeskFromPage(form: {
     })
 
     revalidatePath("/dashboard/helpdesk-ai-training")
+    revalidatePath("/dashboard/chitra-knowledge")
     return { success: true, sourceId }
+}
+
+export async function setHelpDeskKnowledgeActive(sourceId: number, isActive: boolean) {
+    await getCurrentUserId()
+
+    const existing = await db.query.helpdeskKnowledgeSources.findFirst({
+        where: eq(helpdeskKnowledgeSources.id, sourceId),
+    })
+
+    if (!existing) throw new Error("Knowledge tidak ditemukan")
+
+    await db
+        .update(helpdeskKnowledgeSources)
+        .set({
+            isActive,
+            updatedAt: new Date(),
+        })
+        .where(eq(helpdeskKnowledgeSources.id, sourceId))
+
+    revalidatePath("/dashboard/helpdesk-ai-training")
+    revalidatePath("/dashboard/chitra-knowledge")
+    return { success: true }
+}
+
+export async function deleteHelpDeskKnowledgeSource(sourceId: number) {
+    await getCurrentUserId()
+
+    const existing = await db.query.helpdeskKnowledgeSources.findFirst({
+        where: eq(helpdeskKnowledgeSources.id, sourceId),
+    })
+
+    if (!existing) throw new Error("Knowledge tidak ditemukan")
+
+    await db.delete(helpdeskKnowledgeSources).where(eq(helpdeskKnowledgeSources.id, sourceId))
+
+    revalidatePath("/dashboard/helpdesk-ai-training")
+    revalidatePath("/dashboard/chitra-knowledge")
+    return { success: true }
 }
 
 async function askHelpDeskOllama(params: {
@@ -325,6 +457,98 @@ async function askHelpDeskOllama(params: {
     return String(data?.message?.content || "").trim()
 }
 
+async function buildKnowledgeDraftFromDocument(params: {
+    filename: string
+    rawText: string
+}) {
+    const rawUrl = process.env.OLLAMA_URL || "http://localhost:11434"
+    const baseUrl = rawUrl.replace(/\/$/, "")
+    const endpoint = baseUrl.endsWith("/api/chat") ? baseUrl : `${baseUrl}/api/chat`
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:14b"
+    const apiKey = process.env.OLLAMA_API_KEY || ""
+
+    const prompt = [
+        "Anda adalah knowledge curator untuk AI helpdesk internal bernama Chitra Jenius.",
+        "Tugas Anda: ubah dokumen OCR mentah menjadi materi training yang jelas, ringkas, dan mudah dipahami AI helpdesk.",
+        "Gunakan bahasa Indonesia yang natural dan operasional.",
+        "Pertahankan istilah bisnis, nama modul, kode dokumen, dan aturan penting dari dokumen asli.",
+        "Jika ada bagian tidak jelas karena hasil OCR, jangan berhalusinasi. Isi seperlunya saja.",
+        "Kembalikan JSON valid dengan bentuk persis berikut:",
+        '{"title":"","summary":"","tags":[],"knowledgeDraft":"","workflow":"","rules":"","faq":"","examples":"","suggestedSlug":""}',
+    ].join(" ")
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+            model,
+            stream: false,
+            format: "json",
+            messages: [
+                {
+                    role: "system",
+                    content: prompt,
+                },
+                {
+                    role: "user",
+                    content: [
+                        `Nama file: ${params.filename}`,
+                        "Susun knowledge dari dokumen berikut.",
+                        "",
+                        params.rawText.slice(0, 24000),
+                    ].join("\n"),
+                },
+            ],
+        }),
+    })
+
+    const text = await response.text()
+    let payload: Record<string, unknown> | null = null
+
+    try {
+        payload = text ? JSON.parse(text) as Record<string, unknown> : null
+    } catch {
+        throw new Error(`Respons Ollama tidak valid: ${text.slice(0, 200)}`)
+    }
+
+    if (!response.ok) {
+        const message = String(payload?.error || payload?.message || `HTTP ${response.status}`).trim()
+        throw new Error(`Ollama gagal: ${response.status} ${message}`)
+    }
+
+    const message = payload?.message
+    const content = message && typeof message === "object"
+        ? typeof (message as { content?: unknown }).content === "string"
+            ? String((message as { content: string }).content)
+            : ""
+        : ""
+
+    const parsed = extractJsonFromText(content)
+    if (!parsed || typeof parsed !== "object") {
+        throw new Error("Ollama tidak mengembalikan format knowledge yang valid")
+    }
+
+    const toText = (value: unknown) => String(value ?? "").trim()
+    const tags = Array.isArray((parsed as { tags?: unknown }).tags)
+        ? (parsed as { tags: unknown[] }).tags.map((item) => String(item ?? "").trim()).filter(Boolean)
+        : []
+
+    return {
+        title: toText((parsed as { title?: unknown }).title),
+        summary: toText((parsed as { summary?: unknown }).summary),
+        tags,
+        knowledgeDraft: toText((parsed as { knowledgeDraft?: unknown }).knowledgeDraft),
+        workflow: toText((parsed as { workflow?: unknown }).workflow),
+        rules: toText((parsed as { rules?: unknown }).rules),
+        faq: toText((parsed as { faq?: unknown }).faq),
+        examples: toText((parsed as { examples?: unknown }).examples),
+        suggestedSlug: toText((parsed as { suggestedSlug?: unknown }).suggestedSlug),
+    }
+}
+
 export async function getHelpDeskStarterPrompts() {
     await getCurrentUserId()
     return [...HELP_DESK_STARTER_PROMPTS]
@@ -352,5 +576,47 @@ export async function generateHelpDeskReply(question: string) {
     }
 
     return buildHelpDeskFallbackAnswer(question, sources, chunks).text
+}
+
+export async function extractHelpDeskKnowledgeFromDocument(params: {
+    fileUrl: string
+    preferredPath?: string
+}) {
+    await getCurrentUserId()
+
+    const uploaded = await readManagedUpload(params.fileUrl)
+    if (!uploaded) {
+        throw new Error("File knowledge tidak ditemukan")
+    }
+
+    const ocr = await extractRawTextFromDocumentViaOllama({
+        fileBuffer: uploaded.buffer,
+        filename: uploaded.filename,
+        pages: "all",
+    })
+
+    const draft = await buildKnowledgeDraftFromDocument({
+        filename: uploaded.filename,
+        rawText: ocr.rawText || ocr.focusedText,
+    })
+
+    return {
+        success: true as const,
+        filename: uploaded.filename,
+        rawText: ocr.rawText,
+        focusedText: ocr.focusedText,
+        suggestedForm: {
+            slug: draft.suggestedSlug,
+            title: draft.title || uploaded.filename.replace(/\.[^.]+$/, ""),
+            pagePath: params.preferredPath?.trim() || "",
+            tags: draft.tags.join(", "),
+            summary: draft.summary,
+            knowledgeDraft: draft.knowledgeDraft || ocr.rawText,
+            workflow: draft.workflow,
+            rules: draft.rules,
+            faq: draft.faq,
+            examples: draft.examples,
+        },
+    }
 }
 

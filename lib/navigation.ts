@@ -466,6 +466,11 @@ export const navigationConfig: NavSection[] = [
                         resource: "admin",
                     },
                     {
+                        title: "Knowledge Chitra Jenius",
+                        url: "/dashboard/chitra-knowledge",
+                        resource: "admin",
+                    },
+                    {
                         title: "Operational Activity Log",
                         url: "/dashboard/admin/operational-activity-log",
                         resource: "admin",
