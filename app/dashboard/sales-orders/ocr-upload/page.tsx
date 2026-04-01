@@ -21,6 +21,25 @@ function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function hasMeaningfulBasicResult(result: {
+    customer_name: string
+    po_number: string
+    date?: string
+    items: Array<{ product: string; qty: number; price: number }>
+}) {
+    const blockedValues = new Set(["", "unknown customer", "unknown po", "unknown product", "-", "n/a"])
+
+    const hasCustomer = !blockedValues.has(result.customer_name.trim().toLowerCase())
+    const hasPoNumber = !blockedValues.has(result.po_number.trim().toLowerCase())
+    const hasDate = !blockedValues.has((result.date || "").trim().toLowerCase())
+    const hasItems = result.items.some((item) => {
+        const name = item.product.trim().toLowerCase()
+        return !blockedValues.has(name) || item.qty > 0 || item.price > 0
+    })
+
+    return hasCustomer || hasPoNumber || hasDate || hasItems
+}
+
 export default function OcrUploadPage() {
     const router = useRouter()
     const [files, setFiles] = useState<File[]>([])
@@ -200,6 +219,12 @@ export default function OcrUploadPage() {
             
             if (!ocrRes.basic) {
                 setError("Hasil ekstraksi OCR tidak ditemukan")
+                setIsProcessing(false)
+                return
+            }
+
+            if (!hasMeaningfulBasicResult(ocrRes.basic)) {
+                setError("OCR belum berhasil membaca data PO. Coba file yang lebih jelas atau ulangi proses.")
                 setIsProcessing(false)
                 return
             }
