@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createSalesDocument } from "@/app/actions/sales-document"
+import { uploadFile } from "@/app/actions/upload"
 import { toast } from "sonner"
 
 interface UploadDialogProps {
@@ -112,12 +113,7 @@ export function UploadDialog({ onSuccess }: UploadDialogProps = {}) {
                 const formData = new FormData()
                 formData.append("file", item.file)
 
-                const uploadResponse = await fetch("/api/sales-documents/upload", {
-                    method: "POST",
-                    body: formData,
-                })
-
-                const uploadResult = await uploadResponse.json() as {
+                const uploadResult = await uploadFile(formData) as {
                     success: boolean
                     url?: string
                     error?: string

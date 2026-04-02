@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { attachSalesDocumentsToQuotation, createQuotationAttachment, deleteQuotationAttachment, uploadQuotationCustomerPo } from "@/app/actions/quotation"
 import { createSalesDocument, getSalesDocuments } from "@/app/actions/sales-document"
+import { uploadFile } from "@/app/actions/upload"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -343,6 +344,7 @@ export function QuotationFileCenter({
 
             const result = await uploadQuotationCustomerPo({
                 quotationId,
+                poNumber: null,
                 fileUrl: uploadResult.url,
                 fileName: poFile.name,
                 mimeType: poFile.type || null,

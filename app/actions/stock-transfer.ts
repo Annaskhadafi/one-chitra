@@ -16,6 +16,34 @@ type TransferReceiptSyncItem = {
     quantity: number
 }
 
+type TransferItemLike = {
+    id?: number
+    transferId?: number
+    productId: number
+    quantity: number
+    product?: unknown
+}
+
+function mergeTransferItemsByProduct<T extends TransferItemLike>(items: T[]): T[] {
+    const mergedItems = new Map<number, T>()
+
+    for (const item of items) {
+        const existing = mergedItems.get(item.productId)
+
+        if (!existing) {
+            mergedItems.set(item.productId, { ...item })
+            continue
+        }
+
+        mergedItems.set(item.productId, {
+            ...existing,
+            quantity: Number(existing.quantity) + Number(item.quantity),
+        })
+    }
+
+    return Array.from(mergedItems.values())
+}
+
 const stockTransferItemSchema = z.object({
     productId: z.number(),
     quantity: z.number().min(1),
@@ -52,12 +80,16 @@ export async function getStockTransfers() {
         orderBy: [desc(stockTransfers.createdAt)],
     })
 
-    return normalizeSlocFields(rows)
+    return normalizeSlocFields(rows.map((row) => ({
+        ...row,
+        items: mergeTransferItemsByProduct(row.items),
+    })))
 }
 
 export async function createStockTransfer(data: z.infer<typeof stockTransferSchema>) {
     try {
         const parsedData = stockTransferSchema.parse(data)
+        const mergedItems = mergeTransferItemsByProduct(parsedData.items)
 
         if (parsedData.sourceWarehouseId === parsedData.destinationWarehouseId) {
             return { success: false, error: "Source and destination warehouses must be different" }
@@ -69,7 +101,7 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
 
         return await db.transaction(async (tx) => {
             // 1. Validate all items and their stock
-            for (const item of parsedData.items) {
+            for (const item of mergedItems) {
                 const sourceStock = await tx.query.stockLevels.findFirst({
                     where: and(
                         eq(stockLevels.warehouseId, parsedData.sourceWarehouseId),
@@ -94,7 +126,7 @@ export async function createStockTransfer(data: z.infer<typeof stockTransferSche
             }).returning()
 
             // 3. Process Items and Stock Movements
-            for (const item of parsedData.items) {
+            for (const item of mergedItems) {
                 // Deduct from source
                 const sourceStock = await tx.query.stockLevels.findFirst({
                     where: and(
@@ -192,6 +224,7 @@ export async function syncStockTransferReceipt(
         return { success: true, alreadyReceived: true, transfer }
     }
 
+    const mergedTransferItems = mergeTransferItemsByProduct(transfer.items)
     const isAutomated = transfer.deliveryId !== null
     const referenceNumber = transfer.referenceNumber as string
     const receivedQtyByProduct = new Map<number, number>()
@@ -203,7 +236,7 @@ export async function syncStockTransferReceipt(
         )
     }
 
-    for (const item of transfer.items) {
+    for (const item of mergedTransferItems) {
         const receivedQty = receivedQtyByProduct.has(item.productId)
             ? (receivedQtyByProduct.get(item.productId) || 0)
             : item.quantity

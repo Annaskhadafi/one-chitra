@@ -9,6 +9,7 @@ import { extractUploadFilename } from "@/lib/upload-url"
 const DEFAULT_PRODUCTION_UPLOAD_DIR = "/app/uploads"
 const DEFAULT_OBJECT_STORAGE_REGION = "us-east-1"
 const DEFAULT_OBJECT_STORAGE_PREFIX = "upload"
+const DEFAULT_OBJECT_STORAGE_TIMEOUT_MS = 30_000
 const UPLOAD_URL_BASE = "/api/uploads"
 
 type UploadDriver = "local" | "s3"
@@ -71,6 +72,13 @@ function normalizeBoolean(value: string | null | undefined, fallback: boolean) {
     if (["0", "false", "no", "off"].includes(normalized)) return false
 
     return fallback
+}
+
+function normalizeNumber(value: string | null | undefined, fallback: number) {
+    if (!value) return fallback
+
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
 function normalizeObjectStorageEndpoint(value: string) {
@@ -247,6 +255,20 @@ function getObjectStorageClient(config: ObjectStorageConfig) {
     return client
 }
 
+function getObjectStorageTimeoutMs() {
+    return normalizeNumber(process.env.OBJECT_STORAGE_TIMEOUT_MS?.trim(), DEFAULT_OBJECT_STORAGE_TIMEOUT_MS)
+}
+
+function shouldAllowLocalUploadFallback() {
+    return normalizeBoolean(process.env.OBJECT_STORAGE_ALLOW_LOCAL_FALLBACK?.trim(), false)
+}
+
+async function sendObjectStorageCommand<T>(client: S3Client, command: unknown): Promise<T> {
+    return client.send(command as never, {
+        abortSignal: AbortSignal.timeout(getObjectStorageTimeoutMs()),
+    }) as Promise<T>
+}
+
 export function getUploadContentType(filename: string, fallback?: string | null) {
     return fallback?.trim() || getContentTypeByExtension(filename)
 }
@@ -356,7 +378,8 @@ export async function saveManagedUpload(params: {
         const client = getObjectStorageClient(config)
         const key = buildObjectStorageKey(filename)
 
-        await client.send(
+        await sendObjectStorageCommand(
+            client,
             new PutObjectCommand({
                 Bucket: config.bucket,
                 Key: key,
@@ -372,6 +395,15 @@ export async function saveManagedUpload(params: {
             key,
         }
     } catch (error) {
+        if (!shouldAllowLocalUploadFallback()) {
+            console.error("[UploadStorage] Object storage upload failed:", error)
+            throw new Error(
+                error instanceof Error
+                    ? `Object storage upload failed: ${error.message}`
+                    : "Object storage upload failed"
+            )
+        }
+
         console.warn("[UploadStorage] Object storage upload failed, falling back to local disk:", error)
         return await saveUploadToLocalDisk({
             filename,
@@ -394,7 +426,11 @@ export async function readManagedUpload(value: string | null | undefined): Promi
             const key = config.prefix ? `${config.prefix}/${filename}` : filename
 
             try {
-                const response = await client.send(
+                const response = await sendObjectStorageCommand<{
+                    Body?: unknown
+                    ContentType?: string
+                }>(
+                    client,
                     new GetObjectCommand({
                         Bucket: config.bucket,
                         Key: key,
@@ -442,7 +478,8 @@ export async function deleteManagedUpload(value: string | null | undefined) {
         } else {
             const client = getObjectStorageClient(config)
             const key = config.prefix ? `${config.prefix}/${filename}` : filename
-            await client.send(
+            await sendObjectStorageCommand(
+                client,
                 new DeleteObjectCommand({
                     Bucket: config.bucket,
                     Key: key,
@@ -488,7 +525,8 @@ export async function uploadLocalFileToObjectStorage(
 
     if (!options?.overwrite) {
         try {
-            await client.send(
+            await sendObjectStorageCommand(
+                client,
                 new HeadObjectCommand({
                     Bucket: config.bucket,
                     Key: key,
@@ -508,7 +546,8 @@ export async function uploadLocalFileToObjectStorage(
     }
 
     const buffer = await readFile(filePath)
-    await client.send(
+    await sendObjectStorageCommand(
+        client,
         new PutObjectCommand({
             Bucket: config.bucket,
             Key: key,

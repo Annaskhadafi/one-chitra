@@ -60,6 +60,66 @@ function normalizeDeliveryOutput<T>(value: T): T {
 
 type StockQueryable = Pick<typeof db, "query" | "select">
 
+type DeliveryItemLike = {
+    id?: number
+    deliveryId?: number
+    salesOrderItemId?: number | null
+    productId: number
+    orderedQuantity: number
+    deliveredQuantity: number
+    serialNumbers?: string[] | null
+    product?: unknown
+    salesOrderItem?: unknown
+}
+
+function normalizeDeliverySerialNumbers(serialNumbers: string[] | null | undefined) {
+    if (!serialNumbers?.length) {
+        return null
+    }
+
+    const normalized = serialNumbers
+        .map((serialNumber) => serialNumber?.trim())
+        .filter((serialNumber): serialNumber is string => Boolean(serialNumber))
+
+    return normalized.length > 0 ? normalized : null
+}
+
+function mergeDeliveryItemsByProduct<T extends DeliveryItemLike>(items: T[]): T[] {
+    const mergedItems = new Map<string, T>()
+
+    for (const item of items) {
+        const key = `${item.productId}:${item.salesOrderItemId ?? "null"}`
+        const existing = mergedItems.get(key)
+
+        if (!existing) {
+            mergedItems.set(key, {
+                ...item,
+                serialNumbers: normalizeDeliverySerialNumbers(item.serialNumbers),
+            })
+            continue
+        }
+
+        mergedItems.set(key, {
+            ...existing,
+            orderedQuantity: Number(existing.orderedQuantity) + Number(item.orderedQuantity),
+            deliveredQuantity: Number(existing.deliveredQuantity) + Number(item.deliveredQuantity),
+            serialNumbers: normalizeDeliverySerialNumbers([
+                ...(existing.serialNumbers ?? []),
+                ...(item.serialNumbers ?? []),
+            ]),
+        })
+    }
+
+    return Array.from(mergedItems.values())
+}
+
+function mergeDeliveryRows<T extends { items: DeliveryItemLike[] }>(rows: T[]): T[] {
+    return rows.map((row) => ({
+        ...row,
+        items: mergeDeliveryItemsByProduct(row.items),
+    }))
+}
+
 type DeliveryStockCheckInput = {
     productId: number
     quantity: number
@@ -253,7 +313,7 @@ export async function getDeliveries() {
         orderBy: [desc(deliveries.createdAt)],
     })
 
-    return normalizeDeliveryOutput(rows)
+    return normalizeDeliveryOutput(mergeDeliveryRows(rows))
 }
 
 export async function getDeliveryItemsFlat() {
@@ -276,7 +336,9 @@ export async function getDeliveryItemsFlat() {
     })
 
     // Flatten: satu baris per item produk
-    return normalizeDeliveryOutput(allDeliveries.flatMap(delivery =>
+    const mergedDeliveries = mergeDeliveryRows(allDeliveries)
+
+    return normalizeDeliveryOutput(mergedDeliveries.flatMap(delivery =>
         delivery.items.map(item => ({
             itemId: item.id,
             productId: item.productId,
@@ -336,7 +398,7 @@ export async function getDelivery(id: number) {
         },
     })
 
-    return normalizeDeliveryOutput(delivery)
+    return normalizeDeliveryOutput(delivery ? mergeDeliveryRows([delivery])[0] : delivery)
 }
 
 export async function getSalesOrdersForDelivery() {
@@ -490,6 +552,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
         const deliveryNumber = data.deliveryNumber || await generateDeliveryNumber()
         console.log("[CREATE DELIVERY] Delivery Number:", deliveryNumber)
+        const mergedItems = mergeDeliveryItemsByProduct(data.items)
 
         const result = await db.transaction(async (tx) => {
             console.log("[CREATE DELIVERY] Starting transaction...")
@@ -548,12 +611,12 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                 }
             }
 
-            if (data.items.length > 0) {
+            if (mergedItems.length > 0) {
                 const hasDestination = data.warehouseToId && data.warehouseToId !== 0
                 const isCancelled = data.status === "cancelled"
 
                 if (!isCancelled && data.warehouseId) {
-                    await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                    await assertOriginWarehouseStock(tx, data.warehouseId, mergedItems.map((item) => ({
                         productId: item.productId,
                         deliveredQuantity: item.deliveredQuantity,
                     })))
@@ -561,7 +624,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
 
                 console.log("[CREATE DELIVERY] Inserting items...")
                 await tx.insert(deliveryItems)
-                    .values(data.items.map(item => ({
+                    .values(mergedItems.map(item => ({
                         deliveryId: newDelivery.id,
                         salesOrderItemId: item.salesOrderItemId || null,
                         productId: item.productId,
@@ -593,7 +656,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     }).returning()
 
                     await tx.insert(stockTransferItems).values(
-                        data.items.map(item => ({
+                        mergedItems.map(item => ({
                             transferId: transfer.id,
                             productId: item.productId,
                             quantity: item.deliveredQuantity,
@@ -613,7 +676,7 @@ export async function createDelivery(data: z.infer<typeof deliverySchema>) {
                     console.log("[CREATE DELIVERY] Deducting stock...")
                     const movementType = hasDestination ? "TRANSFER_OUT" : "DELIVERY"
 
-                    for (const item of data.items) {
+                    for (const item of mergedItems) {
                         // Deduct total stock AND booked stock
                         await tx.update(stockLevels)
                             .set({
@@ -686,6 +749,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
     try {
         const session = await getAuthenticatedSession('deliveries', 'edit')
         const userId = session.user.id
+        const mergedNewItems = mergeDeliveryItemsByProduct(data.items)
 
         const result = await db.transaction(async (tx) => {
             const originalDelivery = await tx.query.deliveries.findFirst({
@@ -715,7 +779,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     deliveredQuantity: item.deliveredQuantity,
                     salesOrderItemId: item.salesOrderItemId,
                 })),
-                data.items.map((item) => ({
+                mergedNewItems.map((item) => ({
                     productId: item.productId,
                     deliveredQuantity: item.deliveredQuantity,
                     salesOrderItemId: item.salesOrderItemId,
@@ -759,7 +823,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             }
 
             if (shouldReconcileStock && newIsCommitted && data.warehouseId) {
-                await assertOriginWarehouseStock(tx, data.warehouseId, data.items.map((item) => ({
+                await assertOriginWarehouseStock(tx, data.warehouseId, mergedNewItems.map((item) => ({
                     productId: item.productId,
                     deliveredQuantity: item.deliveredQuantity,
                 })))
@@ -841,7 +905,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     // Update items
                     await tx.delete(stockTransferItems).where(eq(stockTransferItems.transferId, existingTransfer.id))
                     await tx.insert(stockTransferItems).values(
-                        data.items.map(item => ({
+                        mergedNewItems.map(item => ({
                             transferId: existingTransfer.id,
                             productId: item.productId,
                             quantity: item.deliveredQuantity,
@@ -861,7 +925,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
                     }).returning()
 
                     await tx.insert(stockTransferItems).values(
-                        data.items.map(item => ({
+                        mergedNewItems.map(item => ({
                             transferId: transfer.id,
                             productId: item.productId,
                             quantity: item.deliveredQuantity,
@@ -876,9 +940,9 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
             // Replace items
             await tx.delete(deliveryItems).where(eq(deliveryItems.deliveryId, id))
 
-            if (data.items.length > 0) {
+            if (mergedNewItems.length > 0) {
                 await tx.insert(deliveryItems)
-                    .values(data.items.map(item => ({
+                    .values(mergedNewItems.map(item => ({
                         deliveryId: id,
                         salesOrderItemId: item.salesOrderItemId || null,
                         productId: item.productId,
@@ -897,7 +961,7 @@ export async function updateDelivery(id: number, data: z.infer<typeof deliverySc
 
                 if (shouldReconcileStock && newIsCommitted) {
                     const movementType = isVHSConsignment ? "TRANSFER_OUT" : "DELIVERY"
-                    for (const item of data.items) {
+                    for (const item of mergedNewItems) {
                         await tx.update(stockLevels)
                             .set({
                                 totalStock: sql`${stockLevels.totalStock} - ${item.deliveredQuantity}`,
