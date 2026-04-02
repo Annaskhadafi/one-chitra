@@ -299,7 +299,7 @@ describe('Comparison Data Aggregation', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 85,
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       billingNo: `TEST-${Date.now()}`,
     }).returning()
     testSalesIds.push(sales.salesRevId)

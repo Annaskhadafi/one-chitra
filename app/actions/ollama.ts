@@ -166,9 +166,9 @@ Strictly avoid:
     html = html.replace(/```html/g, "").replace(/```/g, "").trim()
 
     return { success: true, html }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Ollama Error:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error instanceof Error ? error.message : "Failed to generate email HTML" }
   }
 }
 
@@ -191,10 +191,6 @@ function normalizeMarketingText(value: string) {
 function safeNumber(value: unknown) {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
-}
-
-async function buildMarketingMagicContext(segmentNames?: string[]) {
-  return buildMarketingMagicContextWithFocus({ segmentNames })
 }
 
 async function buildMarketingMagicContextWithFocus(input: {
@@ -273,8 +269,17 @@ async function buildMarketingMagicContextWithFocus(input: {
     includeScore: true,
   })
 
-  const fleetData = fleetResult.success && Array.isArray(fleetResult.data) ? fleetResult.data : []
-  const fleetSearchSource = fleetData.map((item: any) => ({
+  type FleetListItem = {
+    customer?: string | null
+    site?: string | null
+    location?: string | null
+    tire_size?: string | null
+    forecast?: number | string | null
+    status?: string | null
+  }
+
+  const fleetData: FleetListItem[] = fleetResult.success && Array.isArray(fleetResult.data) ? fleetResult.data : []
+  const fleetSearchSource = fleetData.map((item) => ({
     raw: item,
     customerNormalized: normalizeMarketingText(item.customer || ""),
   }))
@@ -531,8 +536,8 @@ Rules:
         suggestedScheduleAt: getSuggestedScheduleIso(),
       },
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Marketing Magic Analysis Error:", error)
-    return { success: false as const, error: error.message || "Failed to generate marketing analysis" }
+    return { success: false as const, error: error instanceof Error ? error.message : "Failed to generate marketing analysis" }
   }
 }

@@ -1,33 +1,23 @@
 "use server"
 
 import { db } from "@/db"
-import { quotations, quotationItems, products, customers } from "@/db/schema"
-import { eq, and, or, inArray, desc, sql, gte, lte } from "drizzle-orm"
+import { quotations, products } from "@/db/schema"
+import { and, desc, gte, lte } from "drizzle-orm"
 import Fuse from "fuse.js"
+
+type RecommendationProduct = {
+    id: number
+    materialNumber: string
+    materialDescription: string | null
+    brand: string | null
+    category: string | null
+}
 
 export async function getQuotationAnalysis(filters?: {
     startDate?: Date;
     endDate?: Date;
 }) {
     try {
-        // 1. Fetch all quotations within date range
-        let query = db.select({
-            id: quotations.id,
-            status: quotations.status,
-            quotationDate: quotations.quotationDate,
-            total: sql<number>`SUM(${quotationItems.quantity} * ${quotationItems.unitPrice})`.as('total_value'),
-        })
-            .from(quotations)
-            .leftJoin(quotationItems, eq(quotations.id, quotationItems.id))
-            .groupBy(quotations.id)
-
-        if (filters?.startDate && filters?.endDate) {
-            query = query.where(and(
-                gte(quotations.quotationDate, filters.startDate),
-                lte(quotations.quotationDate, filters.endDate)
-            )) as any
-        }
-
         const allQuotes = await db.query.quotations.findMany({
             with: {
                 items: {
@@ -102,7 +92,7 @@ export async function getQuotationAnalysis(filters?: {
 
                 const desc = item.product.materialDescription || ""
                 const isTire = item.product.category?.toUpperCase().includes('TYRE')
-                let recommendations: any[] = []
+                let recommendations: RecommendationProduct[] = []
 
                 if (isTire) {
                     const size = extractTireSize(desc)

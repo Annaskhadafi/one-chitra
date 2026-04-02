@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { db } from '@/db'
-import { aiInventoryPredictions, user, zmc9StockSap, salesRevenueSap } from '@/db/schema'
+import { aiInventoryPredictions, user } from '@/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 
 // Mock the RBAC module to bypass authentication in tests
@@ -26,6 +26,29 @@ vi.mock('node-fetch', () => ({
 // Test data setup
 let testUserId: string
 const createdPredictionIds: number[] = []
+
+type SuccessfulBulkPredictionResult = {
+  success: true
+  batchId: string
+  summary: {
+    total: number
+    successful: number
+    failed: number
+    cached: number
+  }
+  results: Array<{
+    materialNo: string
+    status: 'success' | 'failed' | 'cached'
+    error?: string
+    predictionId?: number
+  }>
+}
+
+function expectBulkSuccess<T extends { success: boolean }>(
+  result: T
+): asserts result is T & SuccessfulBulkPredictionResult {
+  expect(result.success).toBe(true)
+}
 
 beforeAll(async () => {
   // Create a test user
@@ -93,13 +116,15 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
 
     const result = await processBulkPredictions(materialNumbers, 'REPLENISHMENT')
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
     expect(result).toHaveProperty('batchId')
     expect(result).toHaveProperty('summary')
     expect(result).toHaveProperty('results')
 
-    if (result.success) {
+    {
       // Verify summary structure
+      expect(result.summary).toBeDefined()
+      expect(result.results).toBeDefined()
       expect(result.summary).toHaveProperty('total')
       expect(result.summary).toHaveProperty('successful')
       expect(result.summary).toHaveProperty('failed')
@@ -138,10 +163,12 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
 
     const result = await processBulkPredictions([materialNo], 'REPLENISHMENT')
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
 
-    if (result.success) {
+    {
       // Should have 1 cached result
+      expect(result.summary).toBeDefined()
+      expect(result.results).toBeDefined()
       expect(result.summary.cached).toBeGreaterThanOrEqual(1)
 
       // Find the result for our material
@@ -167,10 +194,12 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
 
     const result = await processBulkPredictions(materialNumbers, 'REPLENISHMENT')
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
 
-    if (result.success) {
+    {
       // Should have processed all items
+      expect(result.summary).toBeDefined()
+      expect(result.results).toBeDefined()
       expect(result.results.length).toBe(materialNumbers.length)
 
       // Should have at least 2 failures (empty strings)
@@ -224,9 +253,10 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
       'SAFETY_STOCK'
     )
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
 
-    if (result.success) {
+    {
+      expect(result.results).toBeDefined()
       const batchId = result.batchId
       expect(batchId).toBeDefined()
       expect(batchId).toContain('BATCH-')
@@ -299,10 +329,11 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
 
     const result = await processBulkPredictions(materialNumbers, 'REPLENISHMENT')
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
 
-    if (result.success) {
+    {
       // Each result should have materialNo and status
+      expect(result.results).toBeDefined()
       result.results.forEach(r => {
         expect(r).toHaveProperty('materialNo')
         expect(r).toHaveProperty('status')
@@ -345,10 +376,12 @@ describe('Bulk Prediction Processor - Unit Tests', () => {
     // Pass material number with whitespace
     const result = await processBulkPredictions([`  ${materialNo}  `], 'REPLENISHMENT')
 
-    expect(result.success).toBe(true)
+    expectBulkSuccess(result)
 
-    if (result.success) {
+    {
       // Should find the cached prediction despite whitespace
+      expect(result.summary).toBeDefined()
+      expect(result.results).toBeDefined()
       expect(result.summary.cached).toBeGreaterThanOrEqual(1)
 
       const materialResult = result.results.find(r => r.materialNo === materialNo)

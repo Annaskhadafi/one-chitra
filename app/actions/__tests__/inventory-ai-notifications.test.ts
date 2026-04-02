@@ -2,8 +2,38 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateRestockAlerts } from '../inventory-ai';
 
 // Mock query results
-let mockPredictionsResult: any[] = [];
-let mockExistingAlertsResult: any[] = [];
+type MockPredictionAlertRow = {
+    id: number;
+    productCode: string;
+    productName: string;
+    currentStock: number | null;
+    recommendedStock: number;
+};
+
+type MockExistingAlertRow = {
+    productCode: string;
+};
+
+let mockPredictionsResult: MockPredictionAlertRow[] = [];
+let mockExistingAlertsResult: MockExistingAlertRow[] = [];
+
+type SuccessfulAlertResult = {
+    success: true;
+    createdCount: number;
+    totalEvaluated: number;
+    message?: string;
+    breakdown: {
+        critical: number;
+        high: number;
+        medium: number;
+    };
+};
+
+function expectAlertSuccess(
+    result: Awaited<ReturnType<typeof generateRestockAlerts>>
+): asserts result is Awaited<ReturnType<typeof generateRestockAlerts>> & SuccessfulAlertResult {
+    expect(result.success).toBe(true);
+}
 
 // Track which query is being called
 let queryCallCount = 0;
@@ -74,7 +104,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(1);
         expect(result.breakdown.critical).toBe(1);
         expect(result.breakdown.high).toBe(0);
@@ -95,7 +125,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(1);
         expect(result.breakdown.critical).toBe(0);
         expect(result.breakdown.high).toBe(1);
@@ -116,7 +146,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(1);
         expect(result.breakdown.critical).toBe(0);
         expect(result.breakdown.high).toBe(0);
@@ -137,7 +167,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(0);
         expect(result.totalEvaluated).toBe(1);
     });
@@ -177,7 +207,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(3);
         expect(result.totalEvaluated).toBe(4);
         expect(result.breakdown.critical).toBe(1);
@@ -212,7 +242,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(1); // Only MAT002 should get a new alert
         expect(result.totalEvaluated).toBe(2);
     });
@@ -231,7 +261,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(0); // Should not create alert for zero recommended
     });
 
@@ -249,7 +279,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         // Should treat null as 0 and generate critical alert
         expect(result.createdCount).toBe(1);
         expect(result.breakdown.critical).toBe(1);
@@ -261,7 +291,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(0);
         expect(result.totalEvaluated).toBe(0);
     });
@@ -294,7 +324,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.createdCount).toBe(2);
         expect(result.breakdown.critical).toBe(0);
         expect(result.breakdown.high).toBe(1);
@@ -311,7 +341,9 @@ describe('generateRestockAlerts', () => {
         const result = await generateRestockAlerts();
 
         expect(result.success).toBe(false);
-        expect(result.error).toBe('Database connection error');
+        if (!result.success) {
+            expect(result.error).toBe('Database connection error');
+        }
     });
 
     it('should return correct message format', async () => {
@@ -328,7 +360,7 @@ describe('generateRestockAlerts', () => {
 
         const result = await generateRestockAlerts();
 
-        expect(result.success).toBe(true);
+        expectAlertSuccess(result);
         expect(result.message).toBe('Generated 1 new restock alerts');
         expect(result).toHaveProperty('createdCount');
         expect(result).toHaveProperty('totalEvaluated');

@@ -21,6 +21,11 @@ export type DeliveryCostItem = {
     totalCost: number;
 };
 
+type DeliveryCostItemInput = DeliveryCostItem & {
+    id?: number | null;
+    deliveryId?: number | null;
+};
+
 export type SavedDeliveryCostRequest = {
     id: number;
     requestDate: string;
@@ -134,7 +139,7 @@ export async function saveDeliveryCostRequest(data: {
     totalRequest: number;
     totalTransfer: number;
     totalBalance: number;
-    items: DeliveryCostItem[];
+    items: DeliveryCostItemInput[];
 }) {
     try {
         const [request] = await db.insert(deliveryCostRequests).values({
@@ -157,7 +162,7 @@ export async function saveDeliveryCostRequest(data: {
             await db.insert(deliveryCostRequestItems).values(
                 data.items.map(item => ({
                     requestId: request.id,
-                    deliveryId: (item as any).id || null, // Map deliveryId if present from unsettled
+                    deliveryId: item.id ?? null, // Map deliveryId if present from unsettled
                     noPol: item.noPol,
                     driverName: item.driverName,
                     tripDestination: item.tripDestination,
@@ -197,7 +202,7 @@ export async function updateDeliveryCostRequest(id: number, data: {
     totalRequest: number;
     totalTransfer: number;
     totalBalance: number;
-    items: DeliveryCostItem[];
+    items: DeliveryCostItemInput[];
 }) {
     try {
         await db.update(deliveryCostRequests).set({
@@ -222,7 +227,7 @@ export async function updateDeliveryCostRequest(id: number, data: {
             await db.insert(deliveryCostRequestItems).values(
                 data.items.map(item => ({
                     requestId: id,
-                    deliveryId: (item as any).deliveryId || (item as any).id || null, // Map deliveryId if present
+                    deliveryId: item.deliveryId ?? item.id ?? null, // Map deliveryId if present
                     noPol: item.noPol,
                     driverName: item.driverName,
                     tripDestination: item.tripDestination,

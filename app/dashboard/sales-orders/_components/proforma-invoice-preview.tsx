@@ -1,12 +1,20 @@
 "use client";
 
 import React from "react";
-import type { SalesOrderWithRelations } from "@/lib/types";
 import type { ProformaInvoiceOrder } from "./types";
 
 interface ProformaInvoicePreviewProps {
     order: ProformaInvoiceOrder;
     currentDate?: Date;
+}
+
+function getOptionalTextField(value: unknown, key: string): string | null {
+    if (!value || typeof value !== "object") return null;
+
+    const record = value as Record<string, unknown>;
+    const fieldValue = record[key];
+
+    return typeof fieldValue === "string" && fieldValue.trim() ? fieldValue : null;
 }
 
 function formatCurrency(value: number) {
@@ -42,6 +50,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
         order.customer?.address4,
         order.customer?.address5
     ].filter(Boolean);
+    const customerNpwp = getOptionalTextField(order.customer, "npwp");
 
     return (
         <>
@@ -72,6 +81,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                 position: "relative",
             }}>
                 {/* Background Letterhead as IMG */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                     src="/ChitraParatama_Stationery_Letterhead_jkt.jpg" 
                     alt="Letterhead"
@@ -113,7 +123,7 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                             <div>Customer ID</div>
                             <div>: {order.customer?.customerCode || "-"}</div>
                             <div>NPWP</div>
-                            <div>: {(order.customer as any)?.npwp || "-"}</div>
+                            <div>: {customerNpwp || "-"}</div>
                         </div>
                     </div>
 
@@ -162,11 +172,15 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                     </thead>
                     <tbody>
                         {order.items.map((item, index) => (
+                            (() => {
+                                const itemProductName = getOptionalTextField(item, "productName");
+
+                                return (
                             <tr key={index} style={{ verticalAlign: "top", pageBreakInside: "avoid", breakInside: "avoid" }}>
                                 <td style={{ padding: "5pt" }}>{String(index + 1).padStart(2, '0')}</td>
                                 <td style={{ padding: "5pt" }}>
                                     <div style={{ fontWeight: "bold" }}>{item.product?.materialNumber}</div>
-                                    <div>{item.product?.materialDescription || (item as any).productName}</div>
+                                    <div>{item.product?.materialDescription || itemProductName || "-"}</div>
                                 </td>
                                 <td style={{ textAlign: "right", padding: "5pt" }}>{item.quantity}</td>
                                 <td style={{ textAlign: "center", padding: "5pt" }}>PC</td>
@@ -175,6 +189,8 @@ export function ProformaInvoicePreview({ order, currentDate = new Date() }: Prof
                                     {formatCurrency(Number(item.quantity) * Number(item.unitPrice))}
                                 </td>
                             </tr>
+                                );
+                            })()
                         ))}
                     </tbody>
                     <tbody style={{ borderTop: "1px solid #000000", pageBreakInside: "avoid", breakInside: "avoid" }}>

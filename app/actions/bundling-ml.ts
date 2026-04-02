@@ -44,7 +44,7 @@ export async function getBundlingFormDependencies() {
         }
 
         return { success: true, usdRate: rate }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal memuat dependensi", usdRate: 15500 }
     }
 }
@@ -71,7 +71,7 @@ export async function autoMatchCompetitorPrice(materialDescription: string) {
         }
 
         return { success: false, price: 0, reason: "Tire size dianalisa namun kompetitor belum ada" }
-    } catch (e) {
+    } catch (_e) {
         return { success: false, price: 0 }
     }
 }
@@ -102,7 +102,7 @@ export async function getMaxHistoricalPrice(materialNo: string) {
         }
 
         return { success: true, maxPrice }
-    } catch (e) {
+    } catch (_e) {
         return { success: false, maxPrice: 0 }
     }
 }
@@ -243,8 +243,8 @@ export async function calculateBundlingOptimization(data: BundlingRequest) {
                 secondaryPriceViolations
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Bundling ML Goal-Seek Error:", error)
-        return { success: false, error: error.message || "Gagal mengkalkulasi optimasi bundling" }
+        return { success: false, error: error instanceof Error ? error.message : "Gagal mengkalkulasi optimasi bundling" }
     }
 }

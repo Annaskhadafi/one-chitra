@@ -12,8 +12,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Upload, FileUp, Download, ArrowRight, CheckCircle2 } from "lucide-react"
+import { Upload, FileUp, Download } from "lucide-react"
 import { toast } from "sonner"
 import Papa from "papaparse"
 import { importBillingRecords } from "@/app/actions/billing"
@@ -35,7 +34,6 @@ import {
 
 export function BillingImportDialog() {
     const [open, setOpen] = useState(false)
-    const [file, setFile] = useState<File | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [step, setStep] = useState<'upload' | 'map' | 'importing'>('upload')
     const [csvData, setCsvData] = useState<Record<string, unknown>[]>([])
@@ -67,7 +65,6 @@ export function BillingImportDialog() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const selectedFile = e.target.files[0]
-            setFile(selectedFile)
 
             Papa.parse(selectedFile, {
                 header: true,
@@ -159,7 +156,6 @@ export function BillingImportDialog() {
     }
 
     const resetState = () => {
-        setFile(null)
         setStep('upload')
         setCsvData([])
         setHeaders([])

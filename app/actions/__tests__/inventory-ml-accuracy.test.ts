@@ -128,7 +128,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 90, // Actual sales: 90 units
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       revenueInLocCurr: 9000,
     }).returning()
 
@@ -191,7 +191,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 150, // Actual sales: 150 units (matches prediction)
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       revenueInLocCurr: 15000,
     }).returning()
 
@@ -246,7 +246,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 300, // Actual sales: 300 units (3x the prediction)
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       revenueInLocCurr: 30000,
     }).returning()
 
@@ -308,7 +308,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 1000, // Actual sales: 1000 units (100x the prediction)
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       revenueInLocCurr: 100000,
     }).returning()
 
@@ -404,7 +404,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
       customer: 'TEST-CUST',
       customerName: 'Test Customer',
       qty: 90,
-      billingDate: salesDate,
+      billingDate: salesDate.toISOString(),
       revenueInLocCurr: 9000,
     }).returning()
 
@@ -463,7 +463,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
         customer: 'TEST-CUST-1',
         customerName: 'Test Customer 1',
         qty: 70, // First sale: 70 units
-        billingDate: salesDate1,
+        billingDate: salesDate1.toISOString(),
         revenueInLocCurr: 7000,
       },
       {
@@ -473,7 +473,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
         customer: 'TEST-CUST-2',
         customerName: 'Test Customer 2',
         qty: 80, // Second sale: 80 units
-        billingDate: salesDate2,
+        billingDate: salesDate2.toISOString(),
         revenueInLocCurr: 8000,
       },
       {
@@ -483,7 +483,7 @@ describe('Prediction Accuracy Calculation - Unit Tests', () => {
         customer: 'TEST-CUST-3',
         customerName: 'Test Customer 3',
         qty: 50, // Third sale: 50 units
-        billingDate: salesDate3,
+        billingDate: salesDate3.toISOString(),
         revenueInLocCurr: 5000,
       },
     ]).returning()

@@ -11,19 +11,20 @@ export async function POST(req: NextRequest) {
     if (!body) {
         return Response.json({ error: "Invalid JSON" }, { status: 400 })
     }
-    const { id } = body as any
-    if (!id) {
+    const { id } = body as { id?: number | string | null }
+    const numericId = typeof id === "string" ? Number(id) : id
+    if (!numericId || Number.isNaN(numericId)) {
         return Response.json({ error: "id is required" }, { status: 400 })
     }
     const [updated] = await db.update(salesOrders).set({
         status: "tervalidasi",
         updatedAt: new Date(),
-    }).where(eq(salesOrders.id, id)).returning()
+    }).where(eq(salesOrders.id, numericId)).returning()
     try {
         await db.insert(auditLogs).values({
             userId: "system",
             action: "CONFIRM_SO",
-            description: `Sales Order ${id} dikonfirmasi`,
+            description: `Sales Order ${numericId} dikonfirmasi`,
         })
     } catch {}
     return Response.json({ id: updated.id, status: updated.status })

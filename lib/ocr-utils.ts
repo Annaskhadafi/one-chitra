@@ -2,7 +2,7 @@
  * Robustly extracts a JSON object from a string that might contain 
  * markdown fences (```json ... ```), extra text before/after, or null characters.
  */
-export function extractJsonFromText(text: string | null | undefined): any | null {
+export function extractJsonFromText(text: string | null | undefined): unknown | null {
     if (!text) return null;
 
     // 1. Sanitize: remove null characters

@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
 import { db } from '@/db'
 import { stockOpnameSessions, stockOpnameSignatures, stockOpnameItems, warehouses, user, stockLevels, products } from '@/db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { createStockOpnameSession, getOpnamePdfReportData, closeStockOpnameSession } from '../stock-opname'
 import type { CreateOpnameSessionInput } from '@/lib/schemas'
 
@@ -131,6 +131,9 @@ function createValidSessionInput(overrides?: Partial<CreateOpnameSessionInput>):
     opnameDate: new Date('2024-06-15'),
     opnameTime: '14:30',
     location: 'Warehouse A - Section 1',
+    selectedCategories: [],
+    notifyRoles: [],
+    notifyUserIds: [],
     signatures: [
       { name: 'John Doe', position: 'Warehouse Manager' },
       { name: 'Jane Smith', position: 'Inventory Clerk' }

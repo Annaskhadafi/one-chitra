@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { updateBillingRecord, trackJneResi } from "@/app/actions/billing"
 import { uploadFile } from "@/app/actions/upload"
 import { toast } from "sonner"
-import { Loader2, UploadCloud } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import type { BillingRecordDisplay } from "@/lib/types"
 
 interface BillingSheetProps {
@@ -29,11 +29,29 @@ interface BillingSheetProps {
     onSuccess?: () => void
 }
 
+type BillingSheetFormData = Partial<BillingRecordDisplay> & {
+    [key: string]: unknown
+    poNo?: string
+    dateInvoice?: Date | string | null
+    noInvSap?: string | null
+    eFaktur?: string | null
+    ddpAddress?: string | null
+    paymentType?: string | null
+    custId?: string | null
+    dateSendInvoice?: Date | string | null
+    tglDoFaktur?: Date | string | null
+    nomorDoSap?: string | null
+    modeDelivery?: string | null
+    noResi?: string | null
+    statusDelivery?: string | null
+    receiverDate?: Date | string | null
+    scanInvUrl?: string | null
+}
+
 export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingSheetProps) {
     const [isLoading, setIsLoading] = useState(false)
     const [isTracking, setIsTracking] = useState(false)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [formData, setFormData] = useState<any>({})
+    const [formData, setFormData] = useState<BillingSheetFormData>({})
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
@@ -44,21 +62,21 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
 
     // Auto-track JNE resi saat noResi berubah (debounce 1.5 detik)
     useEffect(() => {
-        if (formData.modeDelivery !== 'JNE' || !formData.noResi || formData.noResi.trim().length < 10) return
+        const noResi = typeof formData.noResi === "string" ? formData.noResi.trim() : ""
+        if (formData.modeDelivery !== 'JNE' || noResi.length < 10) return
 
         if (debounceRef.current) clearTimeout(debounceRef.current)
 
         debounceRef.current = setTimeout(async () => {
             setIsTracking(true)
             try {
-                const result = await trackJneResi(formData.noResi.trim())
+                const result = await trackJneResi(noResi)
                 if (result.success && result.data) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    setFormData((prev: any) => ({
+                    setFormData((prev) => ({
                         ...prev,
-                        statusDelivery: result.data.statusAction,
+                        statusDelivery: typeof result.data.statusAction === "string" ? result.data.statusAction : prev.statusDelivery,
                         receiverDate: result.data.receiverDate || prev.receiverDate
-                    }))
+                    }) as BillingSheetFormData)
                 }
             } catch {
                 // Gagal silent — user tidak perlu tahu gagal auto-track
@@ -70,12 +88,10 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current)
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.noResi, formData.modeDelivery])
 
     const handleChange = (key: string, value: unknown) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setFormData((prev: any) => ({ ...prev, [key]: value }))
+        setFormData((prev) => ({ ...prev, [key]: value }))
     }
 
     const handleSubmit = async () => {
@@ -90,8 +106,7 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
                 "statusDelivery", "receiverDate", "scanInvUrl"
             ]
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const updatePayload: any = {}
+            const updatePayload: Record<string, unknown> = {}
             for (const key of allowedFields) {
                 if (formData[key] !== undefined) {
                     updatePayload[key] = formData[key] // Ambil nilai state terakhir
@@ -109,8 +124,8 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
             toast.success("Record updated successfully")
             onOpenChange(false)
             onSuccess?.()
-        } catch (error: any) {
-            toast.error(error.message || "Failed to update record")
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to update record")
         } finally {
             setIsLoading(false)
         }
@@ -145,7 +160,7 @@ export function BillingSheet({ open, onOpenChange, record, onSuccess }: BillingS
             } else {
                 toast.error(result.error || "Failed to upload file")
             }
-        } catch (error) {
+        } catch (_error) {
             toast.error("An error occurred while uploading")
         } finally {
             setIsLoading(false)

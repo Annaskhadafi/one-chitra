@@ -2,8 +2,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getRecentPredictions } from '../inventory-ai';
 
 // Mock query result
-let mockQueryResult: any[] = [];
-let mockCountResult: any[] = [{ count: 0 }];
+type MockPredictionRow = {
+    id: number;
+    productCode: string;
+    productName: string;
+    predictionType: string;
+    recommendedStock: number;
+    rationale: string;
+    createdAt: Date;
+    actualSales: number | null;
+    accuracyPercentage: number | null;
+    batchId: string | null;
+    currentStock: number | null;
+};
+
+type MockCountRow = { count: number };
+
+let mockQueryResult: MockPredictionRow[] = [];
+let mockCountResult: MockCountRow[] = [{ count: 0 }];
+
+function expectPredictionSuccess(
+    result: Awaited<ReturnType<typeof getRecentPredictions>>
+): asserts result is Extract<Awaited<ReturnType<typeof getRecentPredictions>>, { success: true }> {
+    expect(result.success).toBe(true);
+}
 
 // Create a proper query chain mock
 const createQueryChain = () => {
@@ -32,7 +54,7 @@ const createCountChain = () => {
 // Mock dependencies
 vi.mock('@/db', () => ({
     db: {
-        select: vi.fn((fields?: any) => {
+        select: vi.fn((fields?: { count?: unknown }) => {
             // If fields contain count, return count chain
             if (fields && fields.count) {
                 return createCountChain();
@@ -86,7 +108,7 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions();
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
         expect(result.totalCount).toBe(1);
     });
@@ -114,7 +136,7 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ dateFrom, dateTo });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
     });
 
@@ -138,9 +160,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ stockRange: 'low' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].recommendedStock).toBeLessThan(100);
+        expect(result.data[0].recommendedStock).toBeLessThan(100);
     });
 
     it('should filter by stock range - medium', async () => {
@@ -163,10 +185,10 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ stockRange: 'medium' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].recommendedStock).toBeGreaterThanOrEqual(100);
-        expect(result.data![0].recommendedStock).toBeLessThanOrEqual(500);
+        expect(result.data[0].recommendedStock).toBeGreaterThanOrEqual(100);
+        expect(result.data[0].recommendedStock).toBeLessThanOrEqual(500);
     });
 
     it('should filter by stock range - high', async () => {
@@ -189,9 +211,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ stockRange: 'high' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].recommendedStock).toBeGreaterThan(500);
+        expect(result.data[0].recommendedStock).toBeGreaterThan(500);
     });
 
     it('should filter by accuracy level - high', async () => {
@@ -214,9 +236,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ accuracyLevel: 'high' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].accuracyPercentage).toBeGreaterThan(80);
+        expect(result.data[0].accuracyPercentage).toBeGreaterThan(80);
     });
 
     it('should filter by accuracy level - medium', async () => {
@@ -239,10 +261,10 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ accuracyLevel: 'medium' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].accuracyPercentage).toBeGreaterThanOrEqual(60);
-        expect(result.data![0].accuracyPercentage).toBeLessThanOrEqual(80);
+        expect(result.data[0].accuracyPercentage).toBeGreaterThanOrEqual(60);
+        expect(result.data[0].accuracyPercentage).toBeLessThanOrEqual(80);
     });
 
     it('should filter by accuracy level - low', async () => {
@@ -265,9 +287,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ accuracyLevel: 'low' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].accuracyPercentage).toBeLessThan(60);
+        expect(result.data[0].accuracyPercentage).toBeLessThan(60);
     });
 
     it('should filter by search query - product code', async () => {
@@ -290,9 +312,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ searchQuery: 'MAT001' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].productCode).toContain('MAT001');
+        expect(result.data[0].productCode).toContain('MAT001');
     });
 
     it('should filter by search query - product name', async () => {
@@ -315,9 +337,9 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ searchQuery: 'Special' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
-        expect(result.data![0].productName).toContain('Special');
+        expect(result.data[0].productName).toContain('Special');
     });
 
     it('should handle empty search query', async () => {
@@ -340,7 +362,7 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ searchQuery: '' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
     });
 
@@ -370,7 +392,7 @@ describe('getRecentPredictions - Filter Logic', () => {
             searchQuery: 'MAT001'
         });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
     });
 
@@ -382,7 +404,7 @@ describe('getRecentPredictions - Filter Logic', () => {
             searchQuery: 'NONEXISTENT'
         });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(0);
         expect(result.totalCount).toBe(0);
     });
@@ -407,7 +429,7 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions({ materialGroup: 'GROUP001' });
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.data).toHaveLength(1);
     });
 
@@ -420,7 +442,9 @@ describe('getRecentPredictions - Filter Logic', () => {
         const result = await getRecentPredictions();
 
         expect(result.success).toBe(false);
-        expect(result.error).toBe('Failed to fetch AI predictions');
+        if (!result.success) {
+            expect(result.error).toBe('Failed to fetch AI predictions');
+        }
     });
 
     it('should return totalCount for result display', async () => {
@@ -456,7 +480,7 @@ describe('getRecentPredictions - Filter Logic', () => {
 
         const result = await getRecentPredictions();
 
-        expect(result.success).toBe(true);
+        expectPredictionSuccess(result);
         expect(result.totalCount).toBe(2);
     });
 });

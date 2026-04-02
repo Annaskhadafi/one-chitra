@@ -13,9 +13,9 @@ import {
 import { eq, inArray, sql, and } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
     const targetNumbers = ["DLV-20260312-0002", "DLV-20260312-0003"]
-    let logs: string[] = []
+    const logs: string[] = []
     const log = (msg: string) => { console.log(msg); logs.push(msg) }
 
     log(`[CLEANUP API] Persiapan menghapus Data Dummy: ${targetNumbers.join(", ")}...\n`)
@@ -108,8 +108,9 @@ export async function GET(req: Request) {
         log("\n[SUCCESS] Pembersihan Tuntas!")
         return NextResponse.json({ success: true, logs })
 
-    } catch (error: any) {
-        log(`\n[ERROR] ${error.message}`)
-        return NextResponse.json({ success: false, error: error.message, logs }, { status: 500 })
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown cleanup error"
+        log(`\n[ERROR] ${message}`)
+        return NextResponse.json({ success: false, error: message, logs }, { status: 500 })
     }
 }

@@ -1,14 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getNotificationHistory } from '../inventory-ai';
 
+const mockLimit = vi.fn();
+
 // Mock the database and auth
 vi.mock('@/db', () => ({
     db: {
-        select: vi.fn().mockReturnThis(),
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([]),
+        select: vi.fn(() => ({
+            from: vi.fn(() => ({
+                where: vi.fn(() => ({
+                    orderBy: vi.fn(() => ({
+                        limit: mockLimit,
+                    })),
+                })),
+            })),
+        })),
     }
 }));
 
@@ -63,8 +69,7 @@ describe('getNotificationHistory', () => {
             },
         ];
 
-        const { db } = await import('@/db');
-        vi.mocked(db.limit).mockResolvedValue(mockHistory);
+        mockLimit.mockResolvedValue(mockHistory);
 
         const result = await getNotificationHistory(50);
 
@@ -74,8 +79,7 @@ describe('getNotificationHistory', () => {
     });
 
     it('should return empty array when no acknowledged notifications exist', async () => {
-        const { db } = await import('@/db');
-        vi.mocked(db.limit).mockResolvedValue([]);
+        mockLimit.mockResolvedValue([]);
 
         const result = await getNotificationHistory(50);
 
@@ -98,28 +102,23 @@ describe('getNotificationHistory', () => {
             createdAt: new Date(),
         }));
 
-        const { db } = await import('@/db');
-        const limitSpy = vi.mocked(db.limit);
-        limitSpy.mockResolvedValue(mockHistory.slice(0, 20));
+        mockLimit.mockResolvedValue(mockHistory.slice(0, 20));
 
         await getNotificationHistory(20);
 
-        expect(limitSpy).toHaveBeenCalledWith(20);
+        expect(mockLimit).toHaveBeenCalledWith(20);
     });
 
     it('should use default limit of 50 when not specified', async () => {
-        const { db } = await import('@/db');
-        const limitSpy = vi.mocked(db.limit);
-        limitSpy.mockResolvedValue([]);
+        mockLimit.mockResolvedValue([]);
 
         await getNotificationHistory();
 
-        expect(limitSpy).toHaveBeenCalledWith(50);
+        expect(mockLimit).toHaveBeenCalledWith(50);
     });
 
     it('should handle database errors gracefully', async () => {
-        const { db } = await import('@/db');
-        vi.mocked(db.limit).mockRejectedValue(new Error('Database connection failed'));
+        mockLimit.mockRejectedValue(new Error('Database connection failed'));
 
         const result = await getNotificationHistory(50);
 
@@ -143,8 +142,7 @@ describe('getNotificationHistory', () => {
             },
         ];
 
-        const { db } = await import('@/db');
-        vi.mocked(db.limit).mockResolvedValue(mockHistory);
+        mockLimit.mockResolvedValue(mockHistory);
 
         const result = await getNotificationHistory(50);
 
@@ -172,8 +170,7 @@ describe('getNotificationHistory', () => {
             },
         ];
 
-        const { db } = await import('@/db');
-        vi.mocked(db.limit).mockResolvedValue(mockHistory);
+        mockLimit.mockResolvedValue(mockHistory);
 
         const result = await getNotificationHistory(50);
 

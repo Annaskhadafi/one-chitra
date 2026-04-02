@@ -13,7 +13,7 @@ import { ProformaInvoicePreview } from "./proforma-invoice-preview"
 import type { ProformaInvoiceOrder } from "./types"
 import { useState, useRef } from "react"
 import { toast } from "sonner"
-import { toPng, toJpeg } from "html-to-image"
+import { toJpeg } from "html-to-image"
 import jsPDF from "jspdf"
 import { sendProformaInvoiceEmail } from "@/app/actions/sales-order"
 
@@ -29,17 +29,6 @@ export function ProformaInvoiceDialog({ open, onOpenChange, order }: ProformaInv
     const printRef = useRef<HTMLDivElement>(null)
 
     if (!order) return null
-
-    const handlePrint = () => {
-        // Simpan data ke sessionStorage untuk halaman print
-        sessionStorage.setItem("proforma_invoice_print_data", JSON.stringify({
-            order: order,
-            currentDate: new Date().toISOString()
-        }))
-        
-        // Buka window baru untuk print
-        window.open(`/dashboard/sales-orders/${(order as any).id}/proforma-print`, "_blank")
-    }
 
     const handleDownloadPdf = async () => {
         const element = printRef.current

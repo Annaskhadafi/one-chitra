@@ -1,7 +1,6 @@
 import { getBillingRecordByPo } from "@/app/actions/billing"
 import { BillingDetailClient } from "./client-page"
 import { notFound } from "next/navigation"
-import type { BillingRecordDisplay } from "@/lib/types"
 
 interface PageProps {
     params: Promise<{
@@ -21,6 +20,7 @@ export default async function BillingDetailPage({ params }: PageProps) {
         notFound()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return <BillingDetailClient data={result.data as any} />
+    const billingData = result.data
+
+    return <BillingDetailClient data={billingData} />
 }

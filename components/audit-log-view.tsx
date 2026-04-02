@@ -21,8 +21,10 @@ interface AuditLogViewProps {
     recordId: string
 }
 
+type AuditLogEntry = Awaited<ReturnType<typeof getAuditLogs>>[number]
+
 export function AuditLogView({ tableName, recordId }: AuditLogViewProps) {
-    const [logs, setLogs] = useState<any[]>([])
+    const [logs, setLogs] = useState<AuditLogEntry[]>([])
     const [isPending, startTransition] = useTransition()
 
     useEffect(() => {

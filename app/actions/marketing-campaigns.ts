@@ -1,8 +1,8 @@
 "use server"
 
 import { db } from "@/db"
-import { marketingCampaigns, campaignRecipients, customers, emailGroups, emailContacts, emailGroupMembers, user, emailTemplates } from "@/db/schema"
-import { eq, desc, isNotNull, like, and, sql, count, or, lte, inArray } from "drizzle-orm"
+import { marketingCampaigns, campaignRecipients, customers, emailContacts, emailGroupMembers, user, emailTemplates } from "@/db/schema"
+import { eq, desc, isNotNull, like, and, sql, count, inArray } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
@@ -10,7 +10,7 @@ import { readManagedUpload } from "@/lib/upload-storage"
 import { z } from "zod"
 import { getSegmentEmailRecipients } from "./customer-segmentation"
 
-const campaignSchema = z.object({
+const _campaignSchema = z.object({
     name: z.string().min(3),
     subject: z.string().min(3),
     content: z.string().min(10),
@@ -21,6 +21,15 @@ const campaignSchema = z.object({
     attachments: z.string().optional(), // New attachments [{name, url}]
     scheduledAt: z.string().optional(), // ISO string
 })
+
+type CampaignInput = z.infer<typeof _campaignSchema>
+type CampaignRecipientLog = {
+    campaignId: number
+    customerName: string
+    email: string
+    status: "sent" | "failed"
+    errorMessage: string | null
+}
 
 async function resolveCampaignAttachments(attachmentsJson: string | null) {
     if (!attachmentsJson) return [] as Array<{
@@ -159,7 +168,7 @@ export async function previewRecipients(segmentCriteriaJson: string): Promise<{
 
 // ─── CREATE / UPDATE / DELETE ─────────────────────────────────────────────────
 
-export async function createCampaign(data: z.infer<typeof campaignSchema>) {
+export async function createCampaign(data: CampaignInput) {
     try {
         const session = await getAuthenticatedSession("marketing", "create");
 
@@ -184,7 +193,7 @@ export async function createCampaign(data: z.infer<typeof campaignSchema>) {
     }
 }
 
-export async function updateCampaign(id: number, data: z.infer<typeof campaignSchema>) {
+export async function updateCampaign(id: number, data: CampaignInput) {
     try {
         await getAuthenticatedSession("marketing", "edit");
 
@@ -231,7 +240,7 @@ export async function updateCampaign(id: number, data: z.infer<typeof campaignSc
             success: true,
             resetForResend: shouldResetForResend,
         };
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to update campaign" };
     }
 }
@@ -242,7 +251,7 @@ export async function deleteCampaign(id: number) {
         await db.delete(marketingCampaigns).where(eq(marketingCampaigns.id, id));
         revalidatePath("/dashboard/marketing/campaigns");
         return { success: true };
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to delete campaign" };
     }
 }
@@ -267,7 +276,7 @@ export async function duplicateCampaign(id: number) {
 
         revalidatePath("/dashboard/marketing/campaigns");
         return { success: true };
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to duplicate campaign" };
     }
 }
@@ -280,7 +289,7 @@ export async function updateCampaignStatus(id: number, status: string) {
             .where(eq(marketingCampaigns.id, id));
         revalidatePath("/dashboard/marketing/campaigns");
         return { success: true };
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Failed to update status" };
     }
 }
@@ -398,7 +407,7 @@ export async function sendCampaignNow(id: number) {
 
         let successCount = 0;
         let failedCount = 0;
-        const recipientLogs: any[] = [];
+        const recipientLogs: CampaignRecipientLog[] = [];
 
         // Send to each recipient
         for (const recipient of recipientList) {
@@ -426,7 +435,7 @@ export async function sendCampaignNow(id: number) {
 
                 if (result.success) successCount++;
                 else failedCount++;
-            } catch (e) {
+            } catch (_e) {
                 failedCount++;
                 recipientLogs.push({
                     campaignId: id,
