@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Printer, Download, X, ImageIcon, Loader2 } from "lucide-react"
 import type { Product, Warehouse, Customer } from "@/lib/types"
-import { toPng } from "html-to-image"
+import { toJpeg } from "html-to-image"
 import jsPDF from "jspdf"
 
 interface DeliveryPdfData {
@@ -66,6 +66,7 @@ function formatDate(date: Date | null | undefined) {
 export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPreviewProps) {
     const viewportRef = useRef<HTMLDivElement>(null)
     const printRef = useRef<HTMLDivElement>(null)
+    const pageRef = useRef<HTMLDivElement>(null)
     const [withBackground, setWithBackground] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [isMobilePreview, setIsMobilePreview] = useState(false)
@@ -73,20 +74,31 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
     const A4_PAGE_WIDTH = 794
 
     const handleDownloadPdf = async () => {
-        const element = printRef.current
+        const element = pageRef.current
         if (!element) return
+
+        const previousBoxShadow = element.style.boxShadow
+        const previousMargin = element.style.margin
 
         try {
             setIsGenerating(true)
-            
-            // Temporary hide box shadows and borders that shouldn't be in PDF
-            const originalShadow = element.style.boxShadow
-            element.style.boxShadow = 'none'
 
-            const dataUrl = await toPng(element, {
-                quality: 1,
-                pixelRatio: 2, // High quality
+            element.style.boxShadow = "none"
+            element.style.margin = "0"
+
+            const width = element.scrollWidth || A4_PAGE_WIDTH
+            const height = element.scrollHeight || Math.round((A4_PAGE_WIDTH * 297) / 210)
+
+            const dataUrl = await toJpeg(element, {
+                quality: 0.82,
+                pixelRatio: 1.5,
+                cacheBust: true,
                 skipFonts: false,
+                backgroundColor: "#ffffff",
+                canvasWidth: Math.round(width * 1.5),
+                canvasHeight: Math.round(height * 1.5),
+                width,
+                height,
             })
 
             const pdf = new jsPDF({
@@ -95,17 +107,13 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                 format: 'a4',
             })
 
-            const imgProps = pdf.getImageProperties(dataUrl)
-            const pdfWidth = pdf.internal.pageSize.getWidth()
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
-
-            pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight)
+            pdf.addImage(dataUrl, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
             pdf.save(`Delivery_Order_${delivery.deliveryNumber || 'Document'}.pdf`)
-            
-            element.style.boxShadow = originalShadow
         } catch (error) {
             console.error('Failed to generate PDF:', error)
         } finally {
+            element.style.boxShadow = previousBoxShadow
+            element.style.margin = previousMargin
             setIsGenerating(false)
         }
     }
@@ -293,6 +301,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                         }}
                     >
                     <div
+                        ref={pageRef}
                         className={`pdf-wrapper bg-white shadow-xl relative shrink-0 transition-all duration-300 ${withBackground ? 'w-[210mm] min-h-[297mm]' : 'w-[220mm] min-h-[280mm]'}`}
                         style={withBackground ? {
                             backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
