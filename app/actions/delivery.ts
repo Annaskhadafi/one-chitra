@@ -81,7 +81,23 @@ function normalizeDeliverySerialNumbers(serialNumbers: string[] | null | undefin
         .map((serialNumber) => serialNumber?.trim())
         .filter((serialNumber): serialNumber is string => Boolean(serialNumber))
 
-    return normalized.length > 0 ? normalized : null
+    if (normalized.length === 0) {
+        return null
+    }
+
+    const uniqueSerialNumbers: string[] = []
+    const seenSerialNumbers = new Set<string>()
+
+    for (const serialNumber of normalized) {
+        const normalizedKey = serialNumber.toUpperCase()
+        if (seenSerialNumbers.has(normalizedKey)) {
+            continue
+        }
+        seenSerialNumbers.add(normalizedKey)
+        uniqueSerialNumbers.push(serialNumber)
+    }
+
+    return uniqueSerialNumbers.length > 0 ? uniqueSerialNumbers : null
 }
 
 function mergeDeliveryItemsByProduct<T extends DeliveryItemLike>(items: T[]): T[] {
@@ -99,14 +115,26 @@ function mergeDeliveryItemsByProduct<T extends DeliveryItemLike>(items: T[]): T[
             continue
         }
 
+        const mergedSerialNumbers = normalizeDeliverySerialNumbers([
+            ...(existing.serialNumbers ?? []),
+            ...(item.serialNumbers ?? []),
+        ])
+        const hasTrackedSerialNumbers = Boolean(mergedSerialNumbers?.length)
+
         mergedItems.set(key, {
             ...existing,
-            orderedQuantity: Number(existing.orderedQuantity) + Number(item.orderedQuantity),
-            deliveredQuantity: Number(existing.deliveredQuantity) + Number(item.deliveredQuantity),
-            serialNumbers: normalizeDeliverySerialNumbers([
-                ...(existing.serialNumbers ?? []),
-                ...(item.serialNumbers ?? []),
-            ]),
+            // For serial-tracked items, duplicate rows should collapse into one logical line.
+            orderedQuantity: hasTrackedSerialNumbers
+                ? Math.max(Number(existing.orderedQuantity), Number(item.orderedQuantity), mergedSerialNumbers?.length ?? 0)
+                : Number(existing.orderedQuantity) + Number(item.orderedQuantity),
+            deliveredQuantity: hasTrackedSerialNumbers
+                ? Math.max(
+                    mergedSerialNumbers?.length ?? 0,
+                    Number(existing.deliveredQuantity),
+                    Number(item.deliveredQuantity),
+                )
+                : Number(existing.deliveredQuantity) + Number(item.deliveredQuantity),
+            serialNumbers: mergedSerialNumbers,
         })
     }
 

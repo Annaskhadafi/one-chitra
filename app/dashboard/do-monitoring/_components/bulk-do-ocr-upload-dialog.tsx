@@ -1,10 +1,9 @@
 "use client"
 
+import Image from "next/image"
 import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getDeliveries, updateDoMonitoringFields } from "@/app/actions/delivery"
-import { triggerDoScanOcrFast } from "@/app/actions/ocr-fast"
-import { ScanDoPreview } from "./scan-do-preview"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -22,41 +21,27 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Upload, ScanSearch, FileText, CheckCircle2, CircleAlert, Loader2, Eye, Check, ChevronsUpDown } from "lucide-react"
+import { Upload, FileText, CheckCircle2, CircleAlert, Loader2, Eye, Check, ChevronsUpDown, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isUploadImageFile, resolveUploadDocumentUrl } from "@/lib/upload-url"
 
-type UploadStatus = "pending" | "uploading" | "ocr" | "matched" | "unmatched" | "duplicate" | "failed"
-type DetectionSource = "label" | "pattern" | "none"
+type UploadStatus = "pending" | "uploading" | "matched" | "unmatched" | "duplicate" | "failed"
 
 type DeliveryOption = {
     id: number
     deliveryNumber: string
+    doSap?: string | null
     customerName: string
     invoiceNumber: string
-}
-
-type DeliveryOrderBoxFields = {
-    page?: string | null
-    deliveryNo?: string | null
-    internalNo?: string | null
-    deliveryDate?: string | null
-    customerPoNo?: string | null
-    customerPoDate?: string | null
 }
 
 type UploadItem = {
     id: string
     file: File
     fileUrl?: string
-    internalNo?: string | null
     status: UploadStatus
     message?: string
     deliveryNumber?: string
-    detectionSource?: DetectionSource
-    rawText?: string
-    fields?: DeliveryOrderBoxFields
-    ocrModel?: string
-    pagesProcessed?: number
     mappedDeliveryId?: number
     mappedDeliveryLabel?: string
     saved?: boolean
@@ -81,8 +66,6 @@ export function BulkDoOcrUploadDialog() {
     const [manualSelections, setManualSelections] = useState<Record<string, string>>({})
     const [progress, setProgress] = useState(0)
     const [summary, setSummary] = useState<SaveSummary | null>(null)
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-    const [previewLabel, setPreviewLabel] = useState<string | null>(null)
     const [previewItemId, setPreviewItemId] = useState<string | null>(null)
 
     const { data: deliveries = [] } = useQuery({
@@ -97,6 +80,7 @@ export function BulkDoOcrUploadDialog() {
             .map((delivery) => ({
                 id: delivery.id,
                 deliveryNumber: delivery.deliveryNumber || "-",
+                doSap: delivery.doSap || null,
                 customerName: delivery.salesOrder?.customer?.name || "-",
                 invoiceNumber: delivery.invoiceNumber || "-",
             }))
@@ -122,26 +106,38 @@ export function BulkDoOcrUploadDialog() {
             setManualMatchingId(null)
             setProgress(0)
             setSummary(null)
-            setPreviewUrl(null)
-            setPreviewLabel(null)
             setPreviewItemId(null)
         }
     }
 
-    function applyFiles(selectedFiles: File[]) {
+    async function applyFiles(selectedFiles: File[]) {
         const valid = selectedFiles.filter((file) => file.type === "application/pdf")
         if (valid.length !== selectedFiles.length) {
-            toast.error("Hanya file PDF yang bisa diproses untuk OCR DO")
+            toast.error("Hanya file PDF yang bisa di-upload")
         }
+
+        if (valid.length === 0) {
+            setFiles([])
+            setManualSelections({})
+            setPreviewItemId(null)
+            setProgress(0)
+            setSummary(null)
+            return
+        }
+
+        const preparedFiles = valid.map((file, index) => ({
+            id: `${file.name}-${file.size}-${index}`,
+            file,
+            status: "pending" as const,
+        }))
 
         setSummary(null)
         setProgress(0)
-        setFiles(valid.map((file, index) => ({
-            id: `${file.name}-${file.size}-${index}`,
-            file,
-            status: "pending",
-        })))
+        setFiles(preparedFiles)
         setManualSelections({})
+        setPreviewItemId(preparedFiles[0]?.id ?? null)
+
+        await processFiles(preparedFiles)
     }
 
     async function matchManual(item: UploadItem) {
@@ -177,66 +173,41 @@ export function BulkDoOcrUploadDialog() {
         }
     }
 
-    async function processFiles() {
-        if (files.length === 0 || isProcessing) return
+    async function processFiles(inputFiles?: UploadItem[]) {
+        const filesToProcess = inputFiles ?? files
+        if (filesToProcess.length === 0 || isProcessing) return
 
         setIsProcessing(true)
         setSummary(null)
 
-        const nextFiles = [...files]
+        const nextFiles = [...filesToProcess]
 
         try {
             for (let index = 0; index < nextFiles.length; index++) {
                 const current = nextFiles[index]
-                nextFiles[index] = { ...current, status: "uploading", message: "Upload & OCR cepat..." }
+                nextFiles[index] = { ...current, status: "uploading", message: "Mengunggah dokumen..." }
                 setFiles([...nextFiles])
                 setProgress(Math.round((index / nextFiles.length) * 40))
 
                 const formData = new FormData()
                 formData.append("file", current.file)
 
-                const body = await triggerDoScanOcrFast(formData) as {
+                const response = await fetch("/api/uploads", {
+                    method: "POST",
+                    body: formData,
+                })
+
+                const body = await response.json() as {
                     success?: boolean
                     error?: string
-                    fileUrl?: string
-                    internalNo?: string | null
-                    detectionSource?: DetectionSource
-                    rawText?: string
-                    fields?: DeliveryOrderBoxFields
-                    model?: string
-                    pagesProcessed?: number
+                    url?: string
                 }
 
-                if (!body.success || body?.error || !body.fileUrl) {
+                if (!response.ok || !body.success || body?.error || !body.url) {
                     nextFiles[index] = {
                         ...nextFiles[index],
                         status: "failed",
-                        message: body?.error || "OCR gagal diproses / timeout",
-                        rawText: body?.rawText,
-                        fields: body?.fields,
-                        ocrModel: body?.model,
-                        pagesProcessed: body?.pagesProcessed,
-                    }
-                    setFiles([...nextFiles])
-                    setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
-                    continue
-                }
-
-                const mappedDelivery = body?.internalNo
-                    ? findDeliveryMatch(deliveryOptions, body.internalNo)
-                    : null
-
-                if (!body?.internalNo) {
-                    nextFiles[index] = {
-                        ...nextFiles[index],
-                        fileUrl: body.fileUrl,
-                        status: "unmatched",
-                        message: "Internal No tidak ditemukan di dokumen",
-                        rawText: body?.rawText,
-                        fields: body?.fields,
-                        detectionSource: body?.detectionSource,
-                        ocrModel: body?.model,
-                        pagesProcessed: body?.pagesProcessed,
+                        message: body?.error || "Upload dokumen gagal",
                     }
                     setFiles([...nextFiles])
                     setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
@@ -245,30 +216,18 @@ export function BulkDoOcrUploadDialog() {
 
                 nextFiles[index] = {
                     ...nextFiles[index],
-                    fileUrl: body.fileUrl,
-                    internalNo: body.internalNo,
-                    status: "matched",
-                    message: mappedDelivery
-                        ? `Internal No terdeteksi: ${body.internalNo}. Match ke ${mappedDelivery.deliveryNumber}. Klik Save untuk menyimpan.`
-                        : `Internal No terdeteksi: ${body.internalNo}`,
-                    detectionSource: body?.detectionSource,
-                    rawText: body?.rawText,
-                    fields: body?.fields,
-                    ocrModel: body?.model,
-                    pagesProcessed: body?.pagesProcessed,
-                    mappedDeliveryId: mappedDelivery?.id,
-                    mappedDeliveryLabel: mappedDelivery ? formatDeliveryLabel(mappedDelivery) : undefined,
+                    fileUrl: body.url,
+                    status: "unmatched",
+                    message: "Dokumen siap dipreview. Pilih Delivery/DO No untuk manual matching.",
                     saved: false,
                 }
-                if (mappedDelivery) {
-                    setManualSelections((prev) => ({ ...prev, [current.id]: String(mappedDelivery.id) }))
-                }
                 setFiles([...nextFiles])
+                setPreviewItemId((current) => current ?? nextFiles[index].id)
                 setProgress(Math.round(((index + 1) / nextFiles.length) * 100))
             }
 
             setProgress(100)
-            toast.success("OCR selesai. Review hasil match lalu klik Save untuk menyimpan.")
+            toast.success("Upload selesai. Review preview, lakukan manual matching, lalu klik Save.")
         } finally {
             setIsProcessing(false)
         }
@@ -377,64 +336,34 @@ export function BulkDoOcrUploadDialog() {
     )
 
     function openPreview(item: UploadItem) {
-        setPreviewUrl(item.fileUrl || null)
-        setPreviewLabel(item.mappedDeliveryLabel || item.internalNo || item.file.name)
         setPreviewItemId(item.id)
     }
+
+    const previewUrl = resolveUploadDocumentUrl(previewItem?.fileUrl)
+    const previewTargetDeliveryId = previewItem ? resolveTargetDeliveryId(previewItem, manualSelections) : null
+    const previewTargetDelivery = previewTargetDeliveryId
+        ? deliveryOptions.find((delivery) => delivery.id === previewTargetDeliveryId) || null
+        : null
 
     return (
         <Dialog open={open} onOpenChange={resetState}>
             <DialogTrigger asChild>
                 <Button variant="outline">
-                    <ScanSearch className="mr-2 h-4 w-4" />
-                    Bulk OCR Upload
+                    <Upload className="mr-2 h-4 w-4" />
+                    Bulk Upload
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-4xl">
+            <DialogContent className="flex h-[92vh] w-[96vw] max-w-[96vw] flex-col overflow-hidden p-0 sm:h-[94vh] sm:w-[94vw] sm:max-w-[94vw] xl:w-[1400px] xl:max-w-[1400px]">
                 <DialogHeader>
-                    <DialogTitle>Bulk Upload Scan DO via OCR</DialogTitle>
-                    <DialogDescription>
-                        Upload banyak scan DO PDF. Sistem akan membaca <span className="font-medium">Internal No</span>, lalu otomatis mengisi file per baris delivery, set <span className="font-medium">Return Date</span> ke waktu upload, dan ubah status jadi <span className="font-medium">Returned</span>.
+                    <div className="border-b px-6 pt-6 pb-4">
+                    <DialogTitle>Bulk Upload Scan DO</DialogTitle>
+                    <DialogDescription className="mt-1">
+                        Upload banyak PDF scan DO, tampilkan preview dokumen, lalu lakukan <span className="font-medium">manual matching</span> di panel atas sebelum simpan.
                     </DialogDescription>
+                    </div>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                    <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="space-y-1">
-                            <p className="font-medium">Pilih file scan DO</p>
-                            <p className="text-sm text-muted-foreground">Format PDF, boleh banyak file sekaligus. Setiap file tetap akan dipasang ke satu baris delivery.</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <input
-                                ref={inputRef}
-                                type="file"
-                                accept="application/pdf"
-                                multiple
-                                className="hidden"
-                                onChange={(event) => applyFiles(Array.from(event.target.files || []))}
-                            />
-                            <Button type="button" variant="secondary" onClick={() => inputRef.current?.click()} disabled={isProcessing}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                Pilih PDF
-                            </Button>
-                            <Button type="button" onClick={processFiles} disabled={files.length === 0 || isProcessing}>
-                                {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}
-                                {isProcessing ? "Memproses..." : "Proses OCR"}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {(isProcessing || progress > 0) && (
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">Progress</span>
-                                <span className="font-medium">{progress}%</span>
-                            </div>
-                            <Progress value={progress} />
-                            <p className="text-xs text-muted-foreground">{readyCount} / {files.length} file selesai dibaca</p>
-                        </div>
-                    )}
-
+                <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-4">
                     {summary?.success && (
                         <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 sm:grid-cols-4">
                             <SummaryBox label="Berhasil" value={summary.updatedCount} tone="success" />
@@ -444,151 +373,187 @@ export function BulkDoOcrUploadDialog() {
                         </div>
                     )}
 
-                    <ScrollArea className="h-[320px] rounded-md border">
-                        <div className="divide-y">
-                            {files.length === 0 && (
-                                <div className="p-6 text-sm text-muted-foreground">
-                                    Belum ada file dipilih.
-                                </div>
-                            )}
-                            {files.map((item) => (
-                                <div key={item.id}>
-                                    <div className="flex items-start justify-between gap-3 p-4">
-                                        <div className="min-w-0 flex-1 space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                                <p className="truncate font-medium">{item.file.name}</p>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground">
-                                                {item.internalNo ? `Internal No: ${item.internalNo}` : "Menunggu pembacaan Internal No"}
-                                            </p>
-                                            {item.mappedDeliveryLabel && (
-                                                <p className="text-xs font-medium text-emerald-700">
-                                                    Mapping Delivery: {item.mappedDeliveryLabel}
+                    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,2.7fr)_360px]">
+                        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
+                            {previewItem && (
+                                <>
+                                    <div className="flex items-center justify-between gap-3 border-b bg-muted/10 px-4 py-2">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{previewItem.file.name}</p>
+                                            {previewTargetDelivery && (
+                                                <p className="truncate text-[11px] font-medium text-emerald-700">
+                                                    {formatDeliveryLabel(previewTargetDelivery)}
                                                 </p>
-                                            )}
-                                            {(item.ocrModel || item.pagesProcessed || item.detectionSource) && (
-                                                <p className="text-[11px] text-muted-foreground">
-                                                    {[
-                                                        item.ocrModel ? `Model: ${item.ocrModel}` : null,
-                                                        typeof item.pagesProcessed === "number" ? `Halaman: ${item.pagesProcessed}` : null,
-                                                        item.detectionSource ? `Deteksi: ${item.detectionSource}` : null,
-                                                    ].filter(Boolean).join(" • ")}
-                                                </p>
-                                            )}
-                                            {item.message && (
-                                                <p className="text-xs text-muted-foreground">{item.message}</p>
-                                            )}
-                                            {item.fields && hasAnyField(item.fields) && (
-                                                <div className="rounded-md border bg-emerald-50/50 p-2 text-[11px]">
-                                                    <p className="mb-1 font-medium text-emerald-800">Extract Delivery Order Box</p>
-                                                    <div className="grid gap-1 sm:grid-cols-2">
-                                                        {renderField("Page", item.fields.page)}
-                                                        {renderField("Delivery No", item.fields.deliveryNo)}
-                                                        {renderField("Internal No", item.fields.internalNo)}
-                                                        {renderField("Delivery Date", item.fields.deliveryDate)}
-                                                        {renderField("Customer PO No", item.fields.customerPoNo)}
-                                                        {renderField("Customer PO Date", item.fields.customerPoDate)}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {item.rawText && (
-                                                <details className="rounded-md border bg-muted/20 p-2 text-xs">
-                                                    <summary className="cursor-pointer font-medium text-foreground">
-                                                        Lihat hasil extract OCR box
-                                                    </summary>
-                                                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
-                                                        {item.rawText}
-                                                    </pre>
-                                                </details>
                                             )}
                                         </div>
-                                        <StatusBadge status={item.status} />
-                                    </div>
-                                    {item.fileUrl && (
-                                        <div className="px-4 pb-4">
-                                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        {previewUrl ? (
+                                            <div className="shrink-0">
                                                 <Button
                                                     type="button"
                                                     variant="outline"
-                                                    onClick={() => openPreview(item)}
-                                                    disabled={isProcessing && !item.fileUrl}
+                                                    size="sm"
+                                                    onClick={() => window.open(previewUrl, "_blank")}
                                                 >
-                                                    <Eye className="mr-2 h-4 w-4" />
-                                                    View
-                                                </Button>
-                                                <DeliveryMatchPicker
-                                                    value={manualSelections[item.id] ?? ""}
-                                                    options={deliveryOptions}
-                                                    onValueChange={(value) => setManualSelections((prev) => ({ ...prev, [item.id]: value }))}
-                                                    disabled={isProcessing || manualMatchingId === item.id}
-                                                    placeholder="Cari Delivery/DO No"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    onClick={() => matchManual(item)}
-                                                    disabled={isProcessing || manualMatchingId === item.id || !manualSelections[item.id]}
-                                                >
-                                                    {manualMatchingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                                    Matching Manual
+                                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                                    Buka Tab Baru
                                                 </Button>
                                             </div>
+                                        ) : null}
+                                    </div>
+                                    <div className="relative min-h-[640px] flex-1 bg-muted/20">
+                                        {previewUrl ? (
+                                            isUploadImageFile(previewUrl) || !previewUrl.toLowerCase().endsWith(".pdf") ? (
+                                                <div className="flex h-full items-center justify-center p-4">
+                                                    <Image
+                                                        src={previewUrl}
+                                                        alt={previewItem.file.name}
+                                                        width={1200}
+                                                        height={900}
+                                                        unoptimized
+                                                        className="max-h-full max-w-full rounded border bg-white object-contain shadow-sm"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <iframe
+                                                    src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+                                                    className="absolute inset-0 h-full w-full border-0"
+                                                    title={`Preview ${previewItem.file.name}`}
+                                                />
+                                            )
+                                        ) : (
+                                            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                                                <Eye className="h-8 w-8 opacity-40" />
+                                                <p className="text-sm font-medium">Dokumen belum siap dipreview</p>
+                                                <p className="text-xs">Pilih file PDF, lalu sistem akan upload dan menampilkan preview otomatis.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                            {!previewItem && (
+                                <div className="flex h-full min-h-[640px] flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                                    <Eye className="h-8 w-8 opacity-40" />
+                                    <p className="text-sm font-medium">Belum ada dokumen dipilih</p>
+                                    <p className="text-xs">Upload PDF lalu pilih dokumen dari panel kanan untuk melihat preview.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
+                            <div className="space-y-4 border-b bg-muted/10 px-4 py-4">
+                                <div className="space-y-1">
+                                    <p className="text-lg font-semibold">Upload Bulk DO</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        ref={inputRef}
+                                        type="file"
+                                        accept="application/pdf"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(event) => applyFiles(Array.from(event.target.files || []))}
+                                    />
+                                    <Button type="button" variant="secondary" onClick={() => inputRef.current?.click()} disabled={isProcessing} className="flex-1">
+                                        <Upload className="mr-2 h-4 w-4" />
+                                        Pilih PDF
+                                    </Button>
+                                    <Button type="button" onClick={saveMatches} disabled={isProcessing || pendingSaveCount === 0}>
+                                        {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Save
+                                    </Button>
+                                </div>
+                                {(isProcessing || progress > 0) && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Progress</span>
+                                            <span className="font-medium">{progress}%</span>
+                                        </div>
+                                        <Progress value={progress} />
+                                        <p className="text-xs text-muted-foreground">{readyCount} / {files.length} file selesai di-upload</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="border-b bg-muted/20 px-4 py-3">
+                                <p className="text-sm font-medium">Daftar Dokumen</p>
+                            </div>
+                            {previewItem && (
+                                <div className="space-y-3 border-b px-4 py-4">
+                                    <div className="space-y-1">
+                                        <p className="truncate text-sm font-medium">{previewItem.file.name}</p>
+                                    </div>
+                                    <DeliveryMatchPicker
+                                        value={manualSelections[previewItem.id] ?? ""}
+                                        options={deliveryOptions}
+                                        onValueChange={(value) => setManualSelections((prev) => ({ ...prev, [previewItem.id]: value }))}
+                                        disabled={isProcessing || manualMatchingId === previewItem.id}
+                                        placeholder="Cari Delivery/DO No"
+                                        triggerClassName="w-full"
+                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={() => matchManual(previewItem)}
+                                            disabled={isProcessing || manualMatchingId === previewItem.id || !manualSelections[previewItem.id]}
+                                        >
+                                            {manualMatchingId === previewItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Matching Manual
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            onClick={saveMatches}
+                                            disabled={isProcessing || pendingSaveCount === 0}
+                                        >
+                                            {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Save {pendingSaveCount > 0 ? `(${pendingSaveCount})` : ""}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                            <ScrollArea className="min-h-0 flex-1">
+                                <div className="divide-y">
+                                    {files.length === 0 && (
+                                        <div className="p-6 text-sm text-muted-foreground">
+                                            Belum ada file dipilih.
                                         </div>
                                     )}
+                                    {files.map((item) => (
+                                        <div key={item.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => openPreview(item)}
+                                                className={cn(
+                                                    "flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-muted/40",
+                                                    previewItemId === item.id ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : "bg-transparent",
+                                                )}
+                                            >
+                                                <div className="min-w-0 flex-1 space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <FileText className="h-4 w-4 text-muted-foreground" />
+                                                        <p className="truncate font-medium">{item.file.name}</p>
+                                                    </div>
+                                                    {item.mappedDeliveryLabel && (
+                                                        <p className="text-xs font-medium text-emerald-700">
+                                                            Mapping Delivery: {item.mappedDeliveryLabel}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <StatusBadge status={item.status} />
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            </ScrollArea>
                         </div>
-                    </ScrollArea>
+                    </div>
                 </div>
 
-                <DialogFooter>
-                    {pendingSaveCount > 0 && (
-                        <Button onClick={saveMatches} disabled={isProcessing}>
-                            {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Save {pendingSaveCount > 0 ? `(${pendingSaveCount})` : ""}
-                        </Button>
-                    )}
+                <DialogFooter className="border-t px-6 py-4">
                     <Button variant="outline" onClick={() => resetState(false)} disabled={isProcessing}>
                         Tutup
                     </Button>
                 </DialogFooter>
             </DialogContent>
-
-            <ScanDoPreview
-                open={Boolean(previewUrl)}
-                onOpenChange={(nextOpen) => {
-                    if (!nextOpen) {
-                        setPreviewUrl(null)
-                        setPreviewLabel(null)
-                        setPreviewItemId(null)
-                    }
-                }}
-                url={previewUrl}
-                deliveryNumber={previewLabel}
-                headerActions={previewItem?.fileUrl ? (
-                    <div className="flex items-center gap-2">
-                        <DeliveryMatchPicker
-                            value={manualSelections[previewItem.id] ?? ""}
-                            options={deliveryOptions}
-                            onValueChange={(value) => setManualSelections((prev) => ({ ...prev, [previewItem.id]: value }))}
-                            disabled={isProcessing || manualMatchingId === previewItem.id}
-                            placeholder="Cari Delivery/DO No"
-                            triggerClassName="w-[280px]"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => matchManual(previewItem)}
-                            disabled={isProcessing || manualMatchingId === previewItem.id || !manualSelections[previewItem.id]}
-                        >
-                            {manualMatchingId === previewItem.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Matching Manual
-                        </Button>
-                    </div>
-                ) : null}
-            />
         </Dialog>
     )
 }
@@ -637,7 +602,7 @@ function DeliveryMatchPicker({
                             {options.map((option) => (
                                 <CommandItem
                                     key={option.id}
-                                    value={`${option.deliveryNumber} ${option.customerName} ${option.invoiceNumber}`}
+                                    value={`${option.deliveryNumber} ${option.doSap || ""} ${option.customerName} ${option.invoiceNumber}`}
                                     onSelect={() => {
                                         onValueChange(String(option.id))
                                         setOpen(false)
@@ -647,7 +612,11 @@ function DeliveryMatchPicker({
                                     <div className="flex min-w-0 flex-col">
                                         <span className="font-medium">{option.deliveryNumber}</span>
                                         <span className="truncate text-xs text-muted-foreground">
-                                            {option.customerName}{option.invoiceNumber !== "-" ? ` • Inv ${option.invoiceNumber}` : ""}
+                                            {[
+                                                option.doSap ? `DO SAP ${option.doSap}` : null,
+                                                option.customerName,
+                                                option.invoiceNumber !== "-" ? `Inv ${option.invoiceNumber}` : null,
+                                            ].filter(Boolean).join(" • ")}
                                         </span>
                                     </div>
                                 </CommandItem>
@@ -668,43 +637,15 @@ function resolveTargetDeliveryId(item: UploadItem, manualSelections: Record<stri
     return item.mappedDeliveryId || null
 }
 
-function findDeliveryMatch(deliveryOptions: DeliveryOption[], internalNo: string) {
-    const normalizedTarget = normalizeDeliveryNumber(internalNo)
-    return deliveryOptions.find((delivery) => normalizeDeliveryNumber(delivery.deliveryNumber) === normalizedTarget) || null
-}
-
-function normalizeDeliveryNumber(value: string) {
-    return value.toUpperCase().replace(/[^A-Z0-9]/g, "")
-}
-
 function formatDeliveryLabel(delivery: DeliveryOption) {
     const parts = [
         delivery.deliveryNumber,
+        delivery.doSap ? `DO SAP ${delivery.doSap}` : null,
         delivery.customerName !== "-" ? delivery.customerName : null,
         delivery.invoiceNumber !== "-" ? `Inv ${delivery.invoiceNumber}` : null,
     ].filter(Boolean)
 
     return parts.join(" • ")
-}
-
-function hasAnyField(fields: DeliveryOrderBoxFields) {
-    return Boolean(
-        fields.page ||
-        fields.deliveryNo ||
-        fields.internalNo ||
-        fields.deliveryDate ||
-        fields.customerPoNo ||
-        fields.customerPoDate,
-    )
-}
-
-function renderField(label: string, value: string | null | undefined) {
-    return (
-        <div key={label} className="rounded border bg-white/80 px-2 py-1">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="font-mono text-[11px] text-foreground">{value || "-"}</p>
-        </div>
-    )
 }
 
 function StatusBadge({ status }: { status: UploadStatus }) {
@@ -720,7 +661,7 @@ function StatusBadge({ status }: { status: UploadStatus }) {
     if (status === "failed") {
         return <Badge variant="destructive" className="gap-1"><CircleAlert className="h-3 w-3" />Failed</Badge>
     }
-    if (status === "uploading" || status === "ocr") {
+    if (status === "uploading") {
         return <Badge variant="outline" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" />Processing</Badge>
     }
     return <Badge variant="outline">Pending</Badge>

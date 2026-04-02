@@ -9,7 +9,6 @@ import { PermissionGuard } from "@/components/permission-guard"
 import { PageHeader } from "@/components/page-header"
 import { AutoCloseSidebar } from "@/components/auto-close-sidebar"
 import { RestrictedActionButton } from "@/components/restricted-action-button"
-import { Providers } from "@/components/providers"
 
 export const dynamic = "force-dynamic"
 
@@ -59,13 +58,11 @@ export default async function DeliveriesPage() {
                 </PermissionGuard>
             </div>
 
-            <Providers>
-                <OutstandingReminder orders={outstandingOrders} />
+            <OutstandingReminder orders={outstandingOrders} />
 
-                <div className="flex-1">
-                    <DeliveryTable data={deliveriesData} itemsData={itemsData} fleetTripsData={fleetTripsData} />
-                </div>
-            </Providers>
+            <div className="flex-1">
+                <DeliveryTable data={deliveriesData} itemsData={itemsData} fleetTripsData={fleetTripsData} />
+            </div>
         </div>
     )
 }

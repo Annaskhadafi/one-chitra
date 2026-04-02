@@ -10,9 +10,17 @@ import { getAuthenticatedSession } from "@/lib/rbac"
 
 import { stockSchema } from "@/lib/schemas"
 
-export async function getStocks() {
-    // Optimized query - hanya ambil kolom yang diperlukan
-    return await db.query.stockLevels.findMany({
+type StockTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+function normalizeStockLogicalKeyPart(value: string | number | null | undefined) {
+    return String(value ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, " ")
+}
+
+async function consolidateDuplicateStocks(tx: StockTransaction) {
+    const allStocks = await tx.query.stockLevels.findMany({
         columns: {
             id: true,
             productId: true,
@@ -20,26 +28,98 @@ export async function getStocks() {
             totalStock: true,
             minStock: true,
             valuationValue: true,
+            bookedStock: true,
+            draftBookedStock: true,
+            createdAt: true,
         },
         with: {
             product: {
                 columns: {
                     materialNumber: true,
-                    materialDescription: true,
-                    plant: true,
-                    category: true,
                     oldMaterialNo: true,
-                    costSap: true,
-                }
+                },
             },
             warehouse: {
                 columns: {
                     sloc: true,
-                    description: true,
-                    type: true,
-                }
+                },
             },
         },
+    })
+
+    const groupedStocks = new Map<string, typeof allStocks>()
+
+    for (const stock of allStocks) {
+        const logicalKey = [
+            normalizeStockLogicalKeyPart(stock.product?.materialNumber || stock.product?.oldMaterialNo || stock.productId),
+            normalizeStockLogicalKeyPart(stock.warehouse?.sloc || stock.warehouseId),
+        ].join("|")
+
+        const existing = groupedStocks.get(logicalKey)
+        if (existing) {
+            existing.push(stock)
+        } else {
+            groupedStocks.set(logicalKey, [stock])
+        }
+    }
+
+    for (const group of groupedStocks.values()) {
+        if (group.length <= 1) {
+            continue
+        }
+
+        const sortedGroup = [...group].sort((left, right) => left.id - right.id)
+        const keeper = sortedGroup[0]
+        const duplicates = sortedGroup.slice(1)
+
+        await tx.update(stockLevels)
+            .set({
+                totalStock: sortedGroup.reduce((sum, item) => sum + Number(item.totalStock || 0), 0),
+                minStock: sortedGroup.reduce((max, item) => Math.max(max, Number(item.minStock || 0)), 0),
+                valuationValue: sortedGroup.reduce((sum, item) => sum + Number(item.valuationValue || 0), 0).toString(),
+                bookedStock: sortedGroup.reduce((sum, item) => sum + Number(item.bookedStock || 0), 0),
+                draftBookedStock: sortedGroup.reduce((sum, item) => sum + Number(item.draftBookedStock || 0), 0),
+                updatedAt: new Date(),
+            })
+            .where(eq(stockLevels.id, keeper.id))
+
+        await tx.delete(stockLevels).where(inArray(stockLevels.id, duplicates.map((item) => item.id)))
+    }
+}
+
+export async function getStocks() {
+    return await db.transaction(async (tx) => {
+        await consolidateDuplicateStocks(tx)
+
+        return await tx.query.stockLevels.findMany({
+            columns: {
+                id: true,
+                productId: true,
+                warehouseId: true,
+                totalStock: true,
+                minStock: true,
+                valuationValue: true,
+            },
+            with: {
+                product: {
+                    columns: {
+                        materialNumber: true,
+                        materialDescription: true,
+                        plant: true,
+                        category: true,
+                        oldMaterialNo: true,
+                        costSap: true,
+                    }
+                },
+                warehouse: {
+                    columns: {
+                        sloc: true,
+                        description: true,
+                        type: true,
+                    }
+                },
+            },
+        })
     })
 }
 
@@ -49,6 +129,8 @@ export async function upsertStock(data: z.infer<typeof stockSchema>, id?: number
         const userId = session.user.id
 
         await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
+
             let oldStock = 0
             let targetStockId: number | undefined = id
 
@@ -114,6 +196,8 @@ export async function deleteStock(id: number) {
         const userId = session.user.id
 
         return await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
+
             const existing = await tx.query.stockLevels.findFirst({
                 where: eq(stockLevels.id, id)
             })
@@ -143,7 +227,10 @@ export async function deleteStock(id: number) {
 
 export async function bulkDeleteStocks(ids: number[]) {
     try {
-        await db.delete(stockLevels).where(inArray(stockLevels.id, ids))
+        await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
+            await tx.delete(stockLevels).where(inArray(stockLevels.id, ids))
+        })
         revalidatePath("/dashboard/stocks")
         return { success: true }
     } catch (_error) {
@@ -153,9 +240,12 @@ export async function bulkDeleteStocks(ids: number[]) {
 
 export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
     try {
-        await db.update(stockLevels)
-            .set({ minStock, updatedAt: new Date() })
-            .where(inArray(stockLevels.id, ids))
+        await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
+            await tx.update(stockLevels)
+                .set({ minStock, updatedAt: new Date() })
+                .where(inArray(stockLevels.id, ids))
+        })
         revalidatePath("/dashboard/stocks")
         return { success: true }
     } catch (_error) {
@@ -165,21 +255,27 @@ export async function bulkUpdateStockMinStock(ids: number[], minStock: number) {
 
 export async function importStocks(data: (typeof stockLevels.$inferInsert)[]) {
     try {
-        for (const item of data) {
-            if (!item.productId || !item.warehouseId) continue
+        await db.transaction(async (tx) => {
+            await consolidateDuplicateStocks(tx)
 
-            await db.insert(stockLevels)
-                .values(item)
-                .onConflictDoUpdate({
-                    target: [stockLevels.productId, stockLevels.warehouseId],
-                    set: {
-                        totalStock: item.totalStock,
-                        valuationValue: item.valuationValue,
-                        minStock: item.minStock,
-                        updatedAt: new Date(),
-                    },
-                })
-        }
+            for (const item of data) {
+                if (!item.productId || !item.warehouseId) continue
+
+                await tx.insert(stockLevels)
+                    .values(item)
+                    .onConflictDoUpdate({
+                        target: [stockLevels.productId, stockLevels.warehouseId],
+                        set: {
+                            totalStock: item.totalStock,
+                            valuationValue: item.valuationValue,
+                            minStock: item.minStock,
+                            updatedAt: new Date(),
+                        },
+                    })
+            }
+
+            await consolidateDuplicateStocks(tx)
+        })
         revalidatePath("/dashboard/stocks")
         return { success: true }
     } catch (_error) {

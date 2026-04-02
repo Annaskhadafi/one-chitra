@@ -228,6 +228,10 @@ export function DeliveryPreview({ delivery, open, onOpenChange, showEditButton =
                                             <p className="text-sm font-semibold">{delivery.warehouse?.sloc} - {delivery.warehouse?.description || "N/A"}</p>
                                         </div>
                                         <div className="space-y-1">
+                                            <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">DO SAP</label>
+                                            <p className="text-sm font-mono font-semibold">{delivery.doSap || "-"}</p>
+                                        </div>
+                                        <div className="space-y-1">
                                             <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Originator</label>
                                             <p className="text-sm font-semibold">{delivery.createdByUser?.name || "System"}</p>
                                         </div>

@@ -42,6 +42,7 @@ interface Transfer {
     delivery?: {
         id: number
         deliveryNumber: string | null
+        doSap: string | null
         salesOrder: {
             invoiceNumber: string | null
             customer: {
@@ -80,6 +81,10 @@ export function TransferPreviewDialog({ transfer, open, onOpenChange }: Transfer
                         <div>
                             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Sales Order</p>
                             <p className="font-mono font-semibold">{transfer.delivery.salesOrder.invoiceNumber}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">DO SAP</p>
+                            <p className="font-mono font-semibold">{transfer.delivery.doSap || "-"}</p>
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Customer</p>

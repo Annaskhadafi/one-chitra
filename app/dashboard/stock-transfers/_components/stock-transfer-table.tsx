@@ -10,7 +10,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import {
     Select,
     SelectContent,
@@ -73,6 +72,7 @@ interface Transfer {
     delivery?: {
         id: number
         deliveryNumber: string | null
+        doSap: string | null
         salesOrder: {
             invoiceNumber: string | null
             customer: {
@@ -333,7 +333,7 @@ export function StockTransferTable({ data: initialData }: { data: Transfer[] }) 
                 )
             }
         },
-    ], [])
+    ], [updateStatusMutation])
 
     const table = useReactTable({
         data: transfers,

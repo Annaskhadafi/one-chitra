@@ -69,6 +69,7 @@ import { ProcessKanbanBoard } from "@/components/kanban/process-kanban-board"
 import { BarChart3 } from "lucide-react"
 import { ActionBlockedDialog, type ActionBlockedDetails } from "@/components/action-blocked-dialog"
 import { buildActionErrorDetails, buildPermissionBlockedDetails } from "@/lib/action-blocked"
+import { Providers } from "@/components/providers"
 
 import {
     useReactTable,
@@ -223,7 +224,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
-export function DeliveryTable({ data: initialData, itemsData = [], fleetTripsData = [] }: DeliveryTableProps) {
+function DeliveryTableContent({ data: initialData, itemsData = [], fleetTripsData = [] }: DeliveryTableProps) {
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -2725,6 +2726,14 @@ export function DeliveryTable({ data: initialData, itemsData = [], fleetTripsDat
                 onClose={() => setIsBulkPdfOpen(false)}
             />
         </div>
+    )
+}
+
+export function DeliveryTable(props: DeliveryTableProps) {
+    return (
+        <Providers>
+            <DeliveryTableContent {...props} />
+        </Providers>
     )
 }
 
