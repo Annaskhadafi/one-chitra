@@ -84,6 +84,18 @@ async function syncChatSchema() {
         ALTER TABLE IF EXISTS chat_messages
         ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP;
     `)
+
+    await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS chat_user_stickers (
+            id SERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            name VARCHAR(120) NOT NULL,
+            url TEXT NOT NULL,
+            content_type VARCHAR(120),
+            size INTEGER,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+    `)
 }
 
 export async function ensureChatSchema() {

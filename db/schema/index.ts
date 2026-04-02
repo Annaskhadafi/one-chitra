@@ -174,11 +174,14 @@ export {
     chatRooms,
     chatRoomMembers,
     chatMessages,
+    chatUserStickers,
     chatRoomsRelations,
     chatRoomMembersRelations,
     chatMessagesRelations,
+    chatUserStickersRelations,
     type ChatAttachmentRecord,
     type ChatReactionRecord,
+    type ChatSavedStickerRecord,
 } from "./chat";
 export {
     helpdeskKnowledgeSources,

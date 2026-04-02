@@ -18,6 +18,16 @@ export type ChatReactionRecord = {
     userIds: string[]
 }
 
+export type ChatSavedStickerRecord = {
+    id: number
+    userId: string
+    name: string
+    url: string
+    contentType?: string | null
+    size?: number | null
+    createdAt: Date
+}
+
 // Chat Rooms (supports both DM and Group)
 export const chatRooms = pgTable("chat_rooms", {
     id: serial("id").primaryKey(),
@@ -66,6 +76,16 @@ export const chatMessages = pgTable("chat_messages", {
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const chatUserStickers = pgTable("chat_user_stickers", {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    url: text("url").notNull(),
+    contentType: varchar("content_type", { length: 120 }),
+    size: integer("size"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const chatRoomsRelations = relations(chatRooms, ({ one, many }) => ({
     createdByUser: one(user, {
@@ -94,6 +114,13 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
     }),
     sender: one(user, {
         fields: [chatMessages.senderId],
+        references: [user.id],
+    }),
+}));
+
+export const chatUserStickersRelations = relations(chatUserStickers, ({ one }) => ({
+    user: one(user, {
+        fields: [chatUserStickers.userId],
         references: [user.id],
     }),
 }));

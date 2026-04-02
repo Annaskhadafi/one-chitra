@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Archive, ArchiveRestore, Bell, BellOff, Bot, ChevronLeft, Compass, FileImage, FileText, Loader2, MessageCircle, Mic, Paperclip, Pencil, Pin, PinOff, Plus, Reply, Search, Send, SmilePlus, Sparkles, ShoppingCart, Trash2, Truck, Users, X } from "lucide-react"
 import { toast } from "sonner"
 
-import { createGroupRoom, deleteChatRoom, deleteMessage, editMessage, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, searchDocumentsForMention, searchRoomMessages, sendMessage, toggleMessageReaction, togglePinMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta } from "@/app/actions/chat"
+import { createGroupRoom, deleteChatRoom, deleteMessage, deleteUserSticker, editMessage, generateHelpDeskReplyForRoom, getChatUsers, getOrCreateDmRoom, getRoomMessages, getUserRooms, getUserSavedStickers, saveUserSticker, searchDocumentsForMention, searchRoomMessages, sendMessage, toggleMessageReaction, togglePinMessage, updateRoomPreferences, updateTypingStatus, type ChatAttachment, type ChatMessage, type ChatRoomSnapshot, type ChatRoomWithMeta, type ChatSavedSticker } from "@/app/actions/chat"
 import { ensureHelpDeskRoom, getHelpDeskStarterPrompts } from "@/app/actions/helpdesk-ai"
 import { uploadFile } from "@/app/actions/upload"
 import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
@@ -25,6 +25,7 @@ type MentionResult = { type: "quotation" | "sales-order" | "delivery"; id: strin
 type SearchResult = { id: number; content: string; createdAt: string; senderName: string }
 type MentionableUser = { userId: string; name: string; email: string; image: string | null }
 type ComposerAttachment = ChatAttachment & { previewUrl?: string | null; isUploading?: boolean }
+type StickerAsset = { name: string; sticker?: string | null; url?: string | null; contentType?: string | null; size?: number | null }
 type HelpDeskQuickAction = { label: string; prompt: string; tone?: "context" | "explore" | "followup" }
 
 const MENTION_ICONS = { quotation: FileText, "sales-order": ShoppingCart, delivery: Truck }
@@ -207,6 +208,17 @@ function AttachmentGrid({ attachments, isOwn }: { attachments: Array<ChatAttachm
                 const attachmentUrl = getAttachmentUrl(attachment)
 
                 if (attachment.kind === "sticker") {
+                    if (attachmentUrl) {
+                        return (
+                            <div key={`${attachment.name}-${index}`} className="inline-flex max-w-[180px] flex-col gap-2 rounded-2xl border bg-background/80 p-2">
+                                <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-transparent">
+                                    <Image src={attachmentUrl} alt={attachment.name} fill unoptimized className="object-contain" />
+                                </div>
+                                <span className="truncate text-center text-xs font-medium text-muted-foreground">{attachment.name}</span>
+                            </div>
+                        )
+                    }
+
                     return (
                         <div key={`${attachment.name}-${index}`} className={cn("inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-3xl", isOwn ? "bg-primary-foreground/10" : "bg-background/80")}>
                             <span>{attachment.sticker ?? "🙂"}</span>
@@ -630,6 +642,8 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null)
     const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
     const [showStickerPicker, setShowStickerPicker] = useState(false)
+    const [savedStickers, setSavedStickers] = useState<ChatSavedSticker[]>([])
+    const [savingSticker, setSavingSticker] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [searchResults, setSearchResults] = useState<SearchResult[]>([])
     const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null)
@@ -645,6 +659,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
     const attachmentsRef = useRef<ComposerAttachment[]>([])
     const fileInputRef = useRef<HTMLInputElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
+    const stickerUploadInputRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
     const draftKey = `chat-draft-${room.id}`
     const others = room.members.filter((member) => member.userId !== currentUserId)
@@ -678,6 +693,23 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             active = false
         }
     }, [draftKey, loadSnapshot, room.id, scrollToBottom])
+    useEffect(() => {
+        let active = true
+        getUserSavedStickers()
+            .then((stickers) => {
+                if (active) {
+                    setSavedStickers(stickers)
+                }
+            })
+            .catch(() => {
+                if (active) {
+                    setSavedStickers([])
+                }
+            })
+        return () => {
+            active = false
+        }
+    }, [room.id])
     useEffect(() => {
         const latestIncoming = [...messages].reverse().find((message) => message.senderId !== currentUserId)
         lastIncomingMessageIdRef.current = latestIncoming?.id ?? null
@@ -904,7 +936,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             return next
         })
     }
-    const addSticker = (sticker: { name: string; sticker: string }) => {
+    const addSticker = (sticker: StickerAsset) => {
         if (attachments.length >= 8) {
             toast.error("Maksimal 8 lampiran per pesan")
             return
@@ -915,11 +947,67 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
             {
                 kind: "sticker",
                 name: sticker.name,
-                sticker: sticker.sticker,
-                contentType: "text/sticker",
+                sticker: sticker.sticker ?? null,
+                url: sticker.url ?? null,
+                contentType: sticker.contentType ?? (sticker.url ? "image/webp" : "text/sticker"),
+                size: sticker.size ?? null,
+                previewUrl: sticker.url ?? null,
             },
         ])
         setShowStickerPicker(false)
+    }
+    const uploadStickerFiles = async (files: FileList | null) => {
+        if (!files || files.length === 0) return
+
+        const selectedFiles = Array.from(files).filter((file) => file.type.startsWith("image/"))
+        if (selectedFiles.length === 0) {
+            toast.error("Stiker harus berupa file gambar")
+            return
+        }
+
+        setSavingSticker(true)
+        try {
+            const nextSavedStickers: ChatSavedSticker[] = []
+
+            for (const file of selectedFiles.slice(0, Math.max(0, 60 - savedStickers.length))) {
+                const formData = new FormData()
+                formData.append("file", file)
+                const uploaded = await uploadFile(formData)
+
+                if (!uploaded.success || !uploaded.url) {
+                    throw new Error(uploaded.error || `Gagal upload stiker ${file.name}`)
+                }
+
+                const savedSticker = await saveUserSticker({
+                    name: file.name.replace(/\.[^/.]+$/, "") || "Stiker",
+                    url: uploaded.url,
+                    contentType: file.type || null,
+                    size: file.size,
+                })
+                nextSavedStickers.push(savedSticker)
+            }
+
+            if (nextSavedStickers.length === 0) {
+                toast.error("Koleksi stiker sudah penuh")
+                return
+            }
+
+            setSavedStickers((current) => [...nextSavedStickers, ...current])
+            toast.success(`${nextSavedStickers.length} stiker disimpan`)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Gagal menyimpan stiker")
+        } finally {
+            setSavingSticker(false)
+        }
+    }
+    const handleDeleteSavedSticker = async (stickerId: number) => {
+        try {
+            await deleteUserSticker(stickerId)
+            setSavedStickers((current) => current.filter((sticker) => sticker.id !== stickerId))
+            toast.success("Stiker dihapus dari koleksi")
+        } catch {
+            toast.error("Stiker gagal dihapus")
+        }
     }
     const refreshMessages = useCallback(async (limit = Math.max(messages.length + 5, 30)) => {
         const snapshot = await getRoomMessages(room.id, { limit })
@@ -1138,16 +1226,47 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 {showStickerPicker ? (
                     <div className="absolute bottom-full left-0 right-0 z-40 mb-2 rounded-xl border bg-popover p-3 shadow-xl">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-muted-foreground">Pilih stiker cepat</p>
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">Stiker chat</p>
+                                <p className="text-[11px] text-muted-foreground">Upload gambar sekali, lalu pakai ulang dari akun Anda.</p>
+                            </div>
                             <button type="button" onClick={() => setShowStickerPicker(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="mb-3 flex items-center gap-2">
+                            <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => stickerUploadInputRef.current?.click()} disabled={savingSticker || savedStickers.length >= 60}>
+                                {savingSticker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                Upload Stiker
+                            </Button>
+                            <span className="text-[11px] text-muted-foreground">{savedStickers.length}/60 tersimpan</span>
+                        </div>
+                        <div className="mb-3">
+                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Cepat</p>
+                            <div className="grid grid-cols-3 gap-2">
                             {STICKER_PRESETS.map((sticker) => (
                                 <button key={sticker.name} type="button" onClick={() => addSticker(sticker)} className="rounded-xl border bg-background px-2 py-3 text-center transition hover:border-primary hover:bg-accent">
                                     <div className="text-2xl">{sticker.sticker}</div>
                                     <div className="mt-1 text-[11px] font-medium">{sticker.name}</div>
                                 </button>
                             ))}
+                            </div>
+                        </div>
+                        <div>
+                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Koleksi Saya</p>
+                            {savedStickers.length === 0 ? <div className="rounded-xl border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">Belum ada stiker tersimpan.</div> : <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto pr-1">
+                                {savedStickers.map((sticker) => (
+                                    <div key={sticker.id} className="group relative rounded-xl border bg-background p-2">
+                                        <button type="button" onClick={() => addSticker({ name: sticker.name, url: sticker.url, contentType: sticker.contentType, size: sticker.size })} className="w-full text-center">
+                                            <div className="relative mx-auto h-16 w-16 overflow-hidden rounded-xl">
+                                                <Image src={resolveUploadDocumentUrl(sticker.url) || sticker.url} alt={sticker.name} fill unoptimized className="object-contain" />
+                                            </div>
+                                            <div className="mt-1 truncate text-[11px] font-medium">{sticker.name}</div>
+                                        </button>
+                                        <button type="button" onClick={() => handleDeleteSavedSticker(sticker.id)} className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground opacity-0 shadow-sm transition group-hover:opacity-100 hover:text-destructive">
+                                            <Trash2 className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>}
                         </div>
                     </div>
                 ) : null}
@@ -1169,6 +1288,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
                 ) : null}
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => { uploadSelectedFiles(event.target.files, "file").catch(() => undefined); event.target.value = "" }} />
                 <input ref={imageInputRef} type="file" accept="image/*,.gif" multiple className="hidden" onChange={(event) => { uploadSelectedFiles(event.target.files, "image").catch(() => undefined); event.target.value = "" }} />
+                <input ref={stickerUploadInputRef} type="file" accept="image/*,.gif,.webp" multiple className="hidden" onChange={(event) => { uploadStickerFiles(event.target.files).catch(() => undefined); event.target.value = "" }} />
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={sending || attachments.length >= 8}>
                         <Paperclip className="h-3.5 w-3.5" /> File

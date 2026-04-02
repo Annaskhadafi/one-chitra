@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -64,9 +64,13 @@ function formatDate(date: Date | null | undefined) {
 }
 
 export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPreviewProps) {
+    const viewportRef = useRef<HTMLDivElement>(null)
     const printRef = useRef<HTMLDivElement>(null)
     const [withBackground, setWithBackground] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
+    const [isMobilePreview, setIsMobilePreview] = useState(false)
+    const [mobileScale, setMobileScale] = useState(1)
+    const A4_PAGE_WIDTH = 794
 
     const handleDownloadPdf = async () => {
         const element = printRef.current
@@ -200,9 +204,44 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
     const isCiptaKridatama = customer?.name?.toUpperCase()?.includes("CIPTA KRIDATAMA")
     const printableItems = delivery.items.filter((item) => Number(item.deliveredQuantity) > 0)
 
+    useEffect(() => {
+        if (!open) {
+            setIsMobilePreview(false)
+            setMobileScale(1)
+            return
+        }
+
+        const updateMobilePreview = () => {
+            const mobile = window.innerWidth < 640
+            setIsMobilePreview(mobile)
+
+            if (!mobile) {
+                setMobileScale(1)
+                return
+            }
+
+            const viewport = viewportRef.current
+            if (!viewport) return
+
+            const nextScale = Math.min(Math.max((viewport.clientWidth - 8) / A4_PAGE_WIDTH, 0.1), 1)
+            setMobileScale(nextScale)
+        }
+
+        const frame = window.requestAnimationFrame(updateMobilePreview)
+        const handleResize = () => {
+            window.requestAnimationFrame(updateMobilePreview)
+        }
+
+        window.addEventListener("resize", handleResize)
+        return () => {
+            window.cancelAnimationFrame(frame)
+            window.removeEventListener("resize", handleResize)
+        }
+    }, [open])
+
     return (
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="w-[calc(100vw-1rem)] max-h-[90vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-0 sm:w-[95vw] sm:max-w-7xl">
+            <DialogContent className="max-h-[95vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto bg-zinc-100 p-0 sm:w-[95vw] sm:max-w-7xl">
                 <DialogHeader className="sticky top-0 z-10 border-b bg-background px-4 py-4 sm:px-6">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <DialogTitle className="pr-10 text-base sm:text-lg">Delivery Order Preview — {delivery.deliveryNumber}</DialogTitle>
@@ -241,10 +280,20 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                     </div>
                 </DialogHeader>
 
-                <div className="flex min-h-full w-full justify-start overflow-x-auto bg-zinc-100 p-3 text-black dark:bg-zinc-800 sm:justify-center sm:p-8">
+                <div
+                    ref={viewportRef}
+                    className="h-[calc(100vh-10rem)] overflow-y-auto overflow-x-hidden bg-zinc-100 p-2 text-black dark:bg-zinc-800 sm:p-8"
+                >
                     <div 
-                        className={`pdf-wrapper bg-white shadow-xl relative shrink-0 transition-all duration-300 ${withBackground ? 'w-[210mm] min-h-[297mm]' : 'w-[220mm] min-h-[280mm]'}`} 
+                        className={isMobilePreview ? "origin-top mx-auto" : "mx-auto"}
                         ref={printRef}
+                        style={{
+                            transform: isMobilePreview ? `scale(${mobileScale})` : undefined,
+                            width: isMobilePreview ? `${A4_PAGE_WIDTH}px` : undefined,
+                        }}
+                    >
+                    <div
+                        className={`pdf-wrapper bg-white shadow-xl relative shrink-0 transition-all duration-300 ${withBackground ? 'w-[210mm] min-h-[297mm]' : 'w-[220mm] min-h-[280mm]'}`}
                         style={withBackground ? {
                             backgroundImage: "url('/ChitraParatama_Stationery_Letterhead_jkt.jpg')",
                             backgroundSize: "cover",
@@ -575,6 +624,7 @@ export function DeliveryPdfPreview({ delivery, open, onClose }: DeliveryPdfPrevi
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>
             </DialogContent>

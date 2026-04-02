@@ -11,7 +11,8 @@ import { HELP_DESK_CONFIG } from "@/lib/helpdesk-config"
 import { ensureChatSchema } from "@/lib/chat-schema"
 import { sendLoggedNotificationMessage } from "@/lib/email"
 import { sendPushNotificationToUsers } from "@/lib/push-notifications"
-import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord, type ChatReactionRecord } from "@/db/schema"
+import { extractUploadFilename } from "@/lib/upload-url"
+import { chatMessages, chatRoomMembers, chatRooms, chatUserStickers, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord, type ChatReactionRecord, type ChatSavedStickerRecord } from "@/db/schema"
 
 type MentionPayload = {
     type: string
@@ -21,6 +22,7 @@ type MentionPayload = {
 
 export type ChatAttachment = ChatAttachmentRecord
 export type ChatReaction = ChatReactionRecord
+export type ChatSavedSticker = Omit<ChatSavedStickerRecord, "createdAt"> & { createdAt: string }
 
 export type ChatRoomMemberMeta = {
     userId: string
@@ -90,6 +92,11 @@ export type UnreadChatReminder = {
     latestSenderName: string
     latestMessagePreview: string
     reminderCount: number
+}
+
+function normalizeStickerName(value: string | null | undefined) {
+    const cleaned = (value ?? "").trim().replace(/\s+/g, " ")
+    return cleaned.slice(0, 120)
 }
 
 async function getSessionUser() {
@@ -383,6 +390,83 @@ export async function getChatUsers() {
         })
         .from(userTable)
         .then((users) => users.filter((user) => user.id !== HELP_DESK_CONFIG.botId))
+}
+
+export async function getUserSavedStickers(): Promise<ChatSavedSticker[]> {
+    await ensureChatSchema()
+
+    const currentUserId = await getCurrentUserId()
+    const rows = await db
+        .select()
+        .from(chatUserStickers)
+        .where(eq(chatUserStickers.userId, currentUserId))
+        .orderBy(desc(chatUserStickers.createdAt), desc(chatUserStickers.id))
+
+    return rows.map((row) => ({
+        ...row,
+        createdAt: row.createdAt.toISOString(),
+    }))
+}
+
+export async function saveUserSticker(input: {
+    name: string
+    url: string
+    contentType?: string | null
+    size?: number | null
+}): Promise<ChatSavedSticker> {
+    await ensureChatSchema()
+
+    const currentUserId = await getCurrentUserId()
+    const name = normalizeStickerName(input.name)
+    const filename = extractUploadFilename(input.url)
+
+    if (!name) {
+        throw new Error("Nama stiker wajib diisi")
+    }
+
+    if (!filename) {
+        throw new Error("URL stiker tidak valid")
+    }
+
+    if (input.contentType && !input.contentType.startsWith("image/")) {
+        throw new Error("File stiker harus berupa gambar")
+    }
+
+    const existingCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(chatUserStickers)
+        .where(eq(chatUserStickers.userId, currentUserId))
+
+    if (Number(existingCount[0]?.count ?? 0) >= 60) {
+        throw new Error("Maksimal 60 stiker tersimpan per user")
+    }
+
+    const [sticker] = await db
+        .insert(chatUserStickers)
+        .values({
+            userId: currentUserId,
+            name,
+            url: input.url,
+            contentType: input.contentType?.trim() || null,
+            size: typeof input.size === "number" && Number.isFinite(input.size) ? Math.max(0, Math.round(input.size)) : null,
+        })
+        .returning()
+
+    return {
+        ...sticker,
+        createdAt: sticker.createdAt.toISOString(),
+    }
+}
+
+export async function deleteUserSticker(stickerId: number) {
+    await ensureChatSchema()
+
+    const currentUserId = await getCurrentUserId()
+    await db
+        .delete(chatUserStickers)
+        .where(and(eq(chatUserStickers.id, stickerId), eq(chatUserStickers.userId, currentUserId)))
+
+    return { success: true }
 }
 
 export async function getOrCreateDmRoom(otherUserId: string): Promise<{ roomId: number }> {
