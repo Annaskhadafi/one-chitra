@@ -321,8 +321,15 @@ export function BulkDoOcrUploadDialog() {
             })
 
             if (updatedCount > 0) {
-                resetState(false)
-                router.push("/dashboard/do-monitoring")
+                const remainingUnsaved = nextFiles.filter((entry) => entry.fileUrl && !entry.saved)
+                const nextPreviewItem =
+                    remainingUnsaved.find((entry) => entry.id === previewItemId) ||
+                    remainingUnsaved[0] ||
+                    nextFiles.find((entry) => entry.id === previewItemId) ||
+                    nextFiles[0] ||
+                    null
+
+                setPreviewItemId(nextPreviewItem?.id ?? null)
                 router.refresh()
             }
         } finally {
