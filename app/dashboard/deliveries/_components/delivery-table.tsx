@@ -499,7 +499,7 @@ export function DeliveryTable({ data: initialData, itemsData = [], fleetTripsDat
                 status: delivery.status,
                 vehicle,
                 driver: linkedTrip?.driver?.name || delivery.driverName || "-",
-                tripDestination: linkedTrip?.tripDestination || delivery.tripDestination || delivery.shippingAddress || "-",
+                tripDestination: linkedTrip?.tripDestination || delivery.tripDestination || "-",
                 sourceDelivery: delivery,
             }
         })
