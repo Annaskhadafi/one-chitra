@@ -59,6 +59,28 @@ type TrackingRow = {
     } | null
 }
 
+type TrackingDialogItem = {
+    warehouseId: number
+    productId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    sn: string
+    qty?: number
+    availableQty?: number
+    cpDo?: string | null
+    sourceType?: "receipt" | "legacy-stock"
+    product: {
+        materialDescription?: string | null
+        materialNumberCk?: string | null
+        category?: string | null
+    }
+}
+
+type MultipleTrackingItem = TrackingDialogItem & {
+    id: string
+    warehouseLabel?: string
+}
+
 export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[] }) {
     const [searchQuery, setSearchQuery] = useState("")
     const [usageDialogOpen, setUsageDialogOpen] = useState(false)
@@ -77,6 +99,37 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
     const getReceivedQty = (item: TrackingRow) => item.receivedQty ?? item.qty ?? 0
     const getAvailableQty = (item: TrackingRow) => item.availableQty ?? (!item.voucherNo ? item.qty || 0 : 0)
     const getUsedQty = (item: TrackingRow) => item.usedQty ?? (item.voucherNo ? getReceivedQty(item) : 0)
+    const toTrackingDialogItem = (item: TrackingRow): TrackingDialogItem | null => {
+        if (typeof item.warehouseId !== "number") {
+            return null
+        }
+
+        return {
+            warehouseId: item.warehouseId,
+            productId: item.productId,
+            materialNumberCp: item.materialNumberCp,
+            materialNumberCk: item.materialNumberCk,
+            sn: item.sn ?? "-",
+            qty: item.qty,
+            availableQty: item.availableQty,
+            cpDo: item.cpDo,
+            sourceType: "receipt",
+            product: item.product ?? {},
+        }
+    }
+
+    const toMultipleTrackingItem = (item: TrackingRow): MultipleTrackingItem | null => {
+        const normalized = toTrackingDialogItem(item)
+        if (!normalized) {
+            return null
+        }
+
+        return {
+            ...normalized,
+            id: item.id,
+            warehouseLabel: item.warehouse ? `${item.warehouse.sloc} - ${item.warehouse.description || ""}` : undefined,
+        }
+    }
 
     const stats = {
         total: warehouseFilteredData.reduce((acc, curr) => acc + getReceivedQty(curr), 0),
@@ -100,12 +153,22 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
     ), [trackingData, selectedItemsForBatch])
 
     const lockedWarehouseId = selectedBatchItems[0]?.warehouseId || null
+    const selectedDialogItem = selectedItem ? toTrackingDialogItem(selectedItem) : null
+    const selectedBatchDialogItems = filteredData
+        .filter(item => selectedItemsForBatch.includes(item.id.toString()) && getAvailableQty(item) > 0)
+        .map(toMultipleTrackingItem)
+        .filter((item): item is MultipleTrackingItem => item !== null)
 
     const handleSelectItem = (item: TrackingRow, checked: CheckedState) => {
         const isChecked = checked === true
 
         if (!isChecked) {
             setSelectedItemsForBatch(prev => prev.filter(i => i !== item.id))
+            return
+        }
+
+        if (typeof item.warehouseId !== "number") {
+            toast("Item ini belum punya warehouse, jadi belum bisa dibuat voucher.")
             return
         }
 
@@ -125,7 +188,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
             return
         }
 
-        const selectableItems = filteredData.filter(item => getAvailableQty(item) > 0)
+        const selectableItems = filteredData.filter(item => getAvailableQty(item) > 0 && typeof item.warehouseId === "number")
         if (selectableItems.length === 0) return
 
         const targetWarehouseId = lockedWarehouseId || selectableItems[0]?.warehouseId
@@ -284,7 +347,7 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                                         {getAvailableQty(item) > 0 && (
                                             <Checkbox
                                                 checked={selectedItemsForBatch.includes(item.id.toString())}
-                                                disabled={Boolean(lockedWarehouseId && lockedWarehouseId !== item.warehouseId && !selectedItemsForBatch.includes(item.id.toString()))}
+                                                disabled={typeof item.warehouseId !== "number" || Boolean(lockedWarehouseId && lockedWarehouseId !== item.warehouseId && !selectedItemsForBatch.includes(item.id.toString()))}
                                                 onCheckedChange={(checked) => handleSelectItem(item, checked)}
                                             />
                                         )}
@@ -322,6 +385,10 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
                                                 variant="default"
                                                 className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
                                                 onClick={() => {
+                                                    if (typeof item.warehouseId !== "number") {
+                                                        toast("Warehouse item ini belum terdeteksi, jadi usage belum bisa diinput.")
+                                                        return
+                                                    }
                                                     setSelectedItem(item)
                                                     setUsageDialogOpen(true)
                                                 }}
@@ -359,20 +426,14 @@ export function EvhsTrackingTable({ trackingData }: { trackingData: TrackingRow[
             <EvhsMultipleUsageDialog
                 open={multipleUsageDialogOpen}
                 onOpenChange={setMultipleUsageDialogOpen}
-                trackingItems={filteredData
-                    .filter(item => selectedItemsForBatch.includes(item.id.toString()) && getAvailableQty(item) > 0)
-                    .map((item) => ({
-                        ...item,
-                        warehouseLabel: item.warehouse ? `${item.warehouse.sloc} - ${item.warehouse.description || ""}` : undefined,
-                        sourceType: "receipt" as const,
-                    }))}
+                trackingItems={selectedBatchDialogItems}
                 onSuccess={() => setSelectedItemsForBatch([])}
             />
 
             <EvhsStockUsageDialog
                 open={usageDialogOpen}
                 onOpenChange={setUsageDialogOpen}
-                trackingItem={selectedItem}
+                trackingItem={selectedDialogItem}
             />
 
             <EvhsEditUsageDialog
