@@ -166,6 +166,43 @@ function isObjectStorageNotFoundError(error: unknown) {
     )
 }
 
+function isTransientObjectStorageUploadError(error: unknown) {
+    if (!error) return false
+
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+    const candidate = typeof error === "object" && error !== null
+        ? error as {
+            name?: string
+            code?: string
+            Code?: string
+            cause?: { code?: string; name?: string; message?: string }
+        }
+        : null
+
+    const namesAndCodes = [
+        candidate?.name,
+        candidate?.code,
+        candidate?.Code,
+        candidate?.cause?.code,
+        candidate?.cause?.name,
+    ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase())
+
+    return (
+        message.includes("request aborted") ||
+        message.includes("aborterror") ||
+        message.includes("aborted") ||
+        message.includes("timed out") ||
+        message.includes("timeout") ||
+        message.includes("socket hang up") ||
+        namesAndCodes.includes("aborterror") ||
+        namesAndCodes.includes("timeouterror") ||
+        namesAndCodes.includes("etimedout") ||
+        namesAndCodes.includes("econnreset")
+    )
+}
+
 function getContentTypeByExtension(filename: string) {
     const ext = filename.split(".").pop()?.toLowerCase()
 
@@ -373,43 +410,56 @@ export async function saveManagedUpload(params: {
         })
     }
 
-    try {
-        const config = requireObjectStorageConfig()
-        const client = getObjectStorageClient(config)
-        const key = buildObjectStorageKey(filename)
+    const config = requireObjectStorageConfig()
+    const client = getObjectStorageClient(config)
+    const key = buildObjectStorageKey(filename)
+    const uploadCommand = new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+        Body: params.buffer,
+        ContentType: contentType,
+    })
 
-        await sendObjectStorageCommand(
-            client,
-            new PutObjectCommand({
-                Bucket: config.bucket,
-                Key: key,
-                Body: params.buffer,
-                ContentType: contentType,
-            })
-        )
+    let lastError: unknown = null
 
-        return {
-            filename,
-            url: getManagedUploadUrl(filename),
-            source: "object-storage" as const,
-            key,
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            await sendObjectStorageCommand(client, uploadCommand)
+
+            return {
+                filename,
+                url: getManagedUploadUrl(filename),
+                source: "object-storage" as const,
+                key,
+            }
+        } catch (error) {
+            lastError = error
+            const isTransient = isTransientObjectStorageUploadError(error)
+            const canRetry = isTransient && attempt < 2
+
+            if (canRetry) {
+                console.warn(`[UploadStorage] Object storage upload attempt ${attempt} failed, retrying...`, error)
+                continue
+            }
         }
-    } catch (error) {
-        if (!shouldAllowLocalUploadFallback()) {
-            console.error("[UploadStorage] Object storage upload failed:", error)
-            throw new Error(
-                error instanceof Error
-                    ? `Object storage upload failed: ${error.message}`
-                    : "Object storage upload failed"
-            )
-        }
-
-        console.warn("[UploadStorage] Object storage upload failed, falling back to local disk:", error)
-        return await saveUploadToLocalDisk({
-            filename,
-            buffer: params.buffer,
-        })
     }
+
+    const shouldFallbackToLocal = shouldAllowLocalUploadFallback() || isTransientObjectStorageUploadError(lastError)
+
+    if (!shouldFallbackToLocal) {
+        console.error("[UploadStorage] Object storage upload failed:", lastError)
+        throw new Error(
+            lastError instanceof Error
+                ? `Object storage upload failed: ${lastError.message}`
+                : "Object storage upload failed"
+        )
+    }
+
+    console.warn("[UploadStorage] Object storage upload failed, falling back to local disk:", lastError)
+    return await saveUploadToLocalDisk({
+        filename,
+        buffer: params.buffer,
+    })
 }
 
 export async function readManagedUpload(value: string | null | undefined): Promise<ManagedUploadReadResult | null> {
