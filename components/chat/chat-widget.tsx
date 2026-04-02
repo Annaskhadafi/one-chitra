@@ -210,11 +210,10 @@ function AttachmentGrid({ attachments, isOwn }: { attachments: Array<ChatAttachm
                 if (attachment.kind === "sticker") {
                     if (attachmentUrl) {
                         return (
-                            <div key={`${attachment.name}-${index}`} className="inline-flex max-w-[180px] flex-col gap-2 rounded-2xl border bg-background/80 p-2">
-                                <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-transparent">
+                            <div key={`${attachment.name}-${index}`} className="inline-flex p-0">
+                                <div className="relative h-28 w-28 overflow-hidden bg-transparent">
                                     <Image src={attachmentUrl} alt={attachment.name} fill unoptimized className="object-contain" />
                                 </div>
-                                <span className="truncate text-center text-xs font-medium text-muted-foreground">{attachment.name}</span>
                             </div>
                         )
                     }
@@ -1120,7 +1119,7 @@ function ConversationView({ room, currentUserId, onBack, onDeleteRoom, onRoomUpd
 
             const result = await sendMessage(
                 room.id,
-                trimmed || `[Referensi: ${pendingMention?.label}]`,
+                trimmed,
                 pendingMention ? { type: pendingMention.type, id: pendingMention.id, label: pendingMention.label } : undefined,
                 replyTarget?.id ?? null,
                 mentionedUserIds,
