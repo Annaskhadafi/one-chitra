@@ -85,6 +85,8 @@ import {
 } from "@tanstack/react-table"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { getDeliveryItemsFlat } from "@/app/actions/delivery"
+import type { getFleetTrips } from "@/app/actions/fleet-trips"
+import * as XLSX from "xlsx"
 
 interface DeliveryWithRelations {
     id: number
@@ -100,6 +102,8 @@ interface DeliveryWithRelations {
     vehicleType: string | null
     warehouseId: number | null
     shippingAddress: string | null
+    tripDestination?: string | null
+    fleetTripId?: number | null
     notes: string | null
     createdAt: Date
     salesOrder: {
@@ -125,6 +129,7 @@ interface DeliveryWithRelations {
 interface DeliveryTableProps {
     data: DeliveryWithRelations[]
     itemsData?: Awaited<ReturnType<typeof getDeliveryItemsFlat>>
+    fleetTripsData?: Awaited<ReturnType<typeof getFleetTrips>>
 }
 
 const DELIVERY_TRANSITIONS = {
@@ -218,7 +223,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "hsl(346, 77%, 49%)",
 }
 
-export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTableProps) {
+export function DeliveryTable({ data: initialData, itemsData = [], fleetTripsData = [] }: DeliveryTableProps) {
     const searchParams = useSearchParams()
     const { data: session } = useSession()
     const currentUserId = session?.user?.id || "anonymous"
@@ -236,7 +241,7 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
         pageIndex: 0,
         pageSize: DEFAULT_PAGE_SIZE,
     })
-    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items" | "calendar" | "kanban">("list")
+    const [viewMode, setViewMode] = useState<"list" | "by-po" | "items" | "calendar" | "kanban" | "trip">("list")
     const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date())
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
     const [calendarStatusFilter, setCalendarStatusFilter] = useState<string>("all")
@@ -462,6 +467,43 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             return yearMatch && monthMatch && categoryMatch && warehouseMatch && createdByMatch
         })
     }, [data, selectedYear, selectedMonth, selectedCategory, selectedWarehouse, selectedCreatedBy])
+
+    const fleetTripByDeliveryId = useMemo(() => {
+        const lookup = new Map<number, Awaited<ReturnType<typeof getFleetTrips>>[number]>()
+        for (const trip of fleetTripsData) {
+            for (const delivery of trip.deliveries ?? []) {
+                lookup.set(delivery.id, trip)
+            }
+        }
+        return lookup
+    }, [fleetTripsData])
+
+    const deliveryTripRows = useMemo(() => {
+        return data.map((delivery) => {
+            const linkedTrip = fleetTripByDeliveryId.get(delivery.id)
+            const vehicle = linkedTrip?.vehicle?.policeNumber
+                ? `${linkedTrip.vehicle.policeNumber}${linkedTrip.vehicle.type ? ` (${linkedTrip.vehicle.type})` : ""}`
+                : delivery.vehicleNumber
+                    ? `${delivery.vehicleNumber}${delivery.vehicleType ? ` (${delivery.vehicleType})` : ""}`
+                    : "-"
+
+            return {
+                id: String(delivery.id),
+                tripId: linkedTrip?.id ?? null,
+                tripNumber: linkedTrip?.tripNumber ?? null,
+                deliveryId: delivery.id,
+                deliveryDate: delivery.deliveryDate || delivery.scheduledDate,
+                deliveryNumber: delivery.deliveryNumber,
+                customerPo: delivery.salesOrder?.customerPo || null,
+                deliveryName: delivery.salesOrder?.customer?.name || "-",
+                status: delivery.status,
+                vehicle,
+                driver: linkedTrip?.driver?.name || delivery.driverName || "-",
+                tripDestination: linkedTrip?.tripDestination || delivery.tripDestination || delivery.shippingAddress || "-",
+                sourceDelivery: delivery,
+            }
+        })
+    }, [data, fleetTripByDeliveryId])
 
     // Status Distribution Data (moved from page.tsx)
     const statusCounts = useMemo(() => {
@@ -1699,6 +1741,22 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
                 </button>
                 <button
                     type="button"
+                    onClick={() => setViewMode("trip")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
+                        viewMode === "trip"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <MapPin className="h-4 w-4" />
+                    Delivery Trip
+                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                        {deliveryTripRows.length}
+                    </span>
+                </button>
+                <button
+                    type="button"
                     onClick={() => setViewMode("kanban")}
                     className={cn(
                         "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap",
@@ -1716,6 +1774,18 @@ export function DeliveryTable({ data: initialData, itemsData = [] }: DeliveryTab
             {viewMode === "items" && (
                 <div className="pt-4">
                     <DeliveryItemsTable data={itemsData} />
+                </div>
+            )}
+
+            {viewMode === "trip" && (
+                <div className="pt-4">
+                    <DeliveryTripView
+                        rows={deliveryTripRows}
+                        onPreview={(d) => {
+                            setPreviewDelivery(d)
+                            setIsPreviewOpen(true)
+                        }}
+                    />
                 </div>
             )}
 
@@ -2677,6 +2747,605 @@ interface DeliveryGroupedByPOProps {
     statusLabels: Record<string, string>
     pageSizeOptions: number[]
     defaultPageSize: number
+}
+
+type DeliveryTripRow = {
+    id: string
+    tripId: number | null
+    tripNumber: string | null
+    deliveryId: number
+    deliveryDate: Date | string | null
+    deliveryNumber: string | null
+    customerPo: string | null
+    deliveryName: string
+    status: string
+    vehicle: string
+    driver: string
+    tripDestination: string
+    sourceDelivery: DeliveryWithRelations
+}
+
+function DeliveryTripView({ rows, onPreview }: { rows: DeliveryTripRow[]; onPreview: (delivery: DeliveryWithRelations) => void }) {
+    const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState("all")
+    const [driverFilter, setDriverFilter] = useState("all")
+    const [vehicleFilter, setVehicleFilter] = useState("all")
+    const [customerFilter, setCustomerFilter] = useState("all")
+    const [tripFilter, setTripFilter] = useState("all")
+    const [dateFrom, setDateFrom] = useState("")
+    const [dateTo, setDateTo] = useState("")
+
+    const statusOptions = useMemo(
+        () => Array.from(new Set(rows.map((row) => row.status).filter(Boolean))).sort(),
+        [rows],
+    )
+    const driverOptions = useMemo(
+        () => Array.from(new Set(rows.map((row) => row.driver).filter((value) => value && value !== "-"))).sort(),
+        [rows],
+    )
+    const vehicleOptions = useMemo(
+        () => Array.from(new Set(rows.map((row) => row.vehicle).filter((value) => value && value !== "-"))).sort(),
+        [rows],
+    )
+    const customerOptions = useMemo(
+        () => Array.from(new Set(rows.map((row) => row.deliveryName).filter(Boolean))).sort(),
+        [rows],
+    )
+    const tripOptions = useMemo(
+        () => Array.from(new Set(rows.map((row) => row.tripNumber).filter(Boolean) as string[])).sort(),
+        [rows],
+    )
+
+    const filteredRows = useMemo(() => {
+        const term = search.trim().toLowerCase()
+        return rows.filter((row) => {
+            const rowDateKey = toDateKey(row.deliveryDate)
+            const matchesSearch = !term || !!(
+                row.deliveryNumber?.toLowerCase().includes(term) ||
+                row.customerPo?.toLowerCase().includes(term) ||
+                row.deliveryName.toLowerCase().includes(term) ||
+                row.status.toLowerCase().includes(term) ||
+                row.vehicle.toLowerCase().includes(term) ||
+                row.driver.toLowerCase().includes(term) ||
+                row.tripDestination.toLowerCase().includes(term) ||
+                row.tripNumber?.toLowerCase().includes(term)
+            )
+            const matchesStatus = statusFilter === "all" || row.status === statusFilter
+            const matchesDriver = driverFilter === "all" || row.driver === driverFilter
+            const matchesVehicle = vehicleFilter === "all" || row.vehicle === vehicleFilter
+            const matchesCustomer = customerFilter === "all" || row.deliveryName === customerFilter
+            const matchesTrip = tripFilter === "all" || row.tripNumber === tripFilter
+            const matchesDateFrom = !dateFrom || (rowDateKey !== null && rowDateKey >= dateFrom)
+            const matchesDateTo = !dateTo || (rowDateKey !== null && rowDateKey <= dateTo)
+
+            return (
+                matchesSearch &&
+                matchesStatus &&
+                matchesDriver &&
+                matchesVehicle &&
+                matchesCustomer &&
+                matchesTrip &&
+                matchesDateFrom &&
+                matchesDateTo
+            )
+        })
+    }, [rows, search, statusFilter, driverFilter, vehicleFilter, customerFilter, tripFilter, dateFrom, dateTo])
+
+    const resetFilters = () => {
+        setSearch("")
+        setStatusFilter("all")
+        setDriverFilter("all")
+        setVehicleFilter("all")
+        setCustomerFilter("all")
+        setTripFilter("all")
+        setDateFrom("")
+        setDateTo("")
+    }
+
+    const tripSummary = useMemo(() => {
+        const byDriver = new Map<string, { uniqueTrips: Set<string>; deliveries: number; destinations: Set<string> }>()
+        const byDestination = new Map<string, { deliveries: number; uniqueTrips: Set<string>; drivers: Set<string> }>()
+        const byDriverDestination = new Map<string, { driver: string; destination: string; deliveries: number; uniqueTrips: Set<string> }>()
+
+        for (const row of filteredRows) {
+            const driverKey = row.driver || "-"
+            const destinationKey = row.tripDestination || "-"
+            const tripKey = row.tripNumber || `DELIVERY-${row.deliveryId}`
+
+            if (!byDriver.has(driverKey)) {
+                byDriver.set(driverKey, { uniqueTrips: new Set(), deliveries: 0, destinations: new Set() })
+            }
+            const driverEntry = byDriver.get(driverKey)!
+            driverEntry.uniqueTrips.add(tripKey)
+            driverEntry.deliveries += 1
+            if (destinationKey !== "-") {
+                driverEntry.destinations.add(destinationKey)
+            }
+
+            if (!byDestination.has(destinationKey)) {
+                byDestination.set(destinationKey, { deliveries: 0, uniqueTrips: new Set(), drivers: new Set() })
+            }
+            const destinationEntry = byDestination.get(destinationKey)!
+            destinationEntry.deliveries += 1
+            destinationEntry.uniqueTrips.add(tripKey)
+            if (driverKey !== "-") {
+                destinationEntry.drivers.add(driverKey)
+            }
+
+            const driverDestinationKey = `${driverKey}__${destinationKey}`
+            if (!byDriverDestination.has(driverDestinationKey)) {
+                byDriverDestination.set(driverDestinationKey, {
+                    driver: driverKey,
+                    destination: destinationKey,
+                    deliveries: 0,
+                    uniqueTrips: new Set(),
+                })
+            }
+            const driverDestinationEntry = byDriverDestination.get(driverDestinationKey)!
+            driverDestinationEntry.deliveries += 1
+            driverDestinationEntry.uniqueTrips.add(tripKey)
+        }
+
+        const topDrivers = Array.from(byDriver.entries())
+            .map(([driver, stats]) => ({
+                name: driver,
+                trips: stats.uniqueTrips.size,
+                deliveries: stats.deliveries,
+                destinations: stats.destinations.size,
+            }))
+            .sort((a, b) => b.trips - a.trips || b.deliveries - a.deliveries)
+            .slice(0, 8)
+
+        const topDestinations = Array.from(byDestination.entries())
+            .map(([destination, stats]) => ({
+                name: destination,
+                deliveries: stats.deliveries,
+                trips: stats.uniqueTrips.size,
+                drivers: stats.drivers.size,
+            }))
+            .sort((a, b) => b.deliveries - a.deliveries || b.trips - a.trips)
+            .slice(0, 8)
+
+        const driverDestinationBreakdown = Array.from(byDriverDestination.values())
+            .map((entry) => ({
+                driver: entry.driver,
+                destination: entry.destination,
+                deliveries: entry.deliveries,
+                trips: entry.uniqueTrips.size,
+            }))
+            .sort((a, b) => b.trips - a.trips || b.deliveries - a.deliveries)
+            .slice(0, 10)
+
+        const uniqueTripCount = new Set(filteredRows.map((row) => row.tripNumber || `DELIVERY-${row.deliveryId}`)).size
+        const uniqueDriverCount = new Set(filteredRows.map((row) => row.driver).filter((value) => value && value !== "-")).size
+
+        return {
+            uniqueTripCount,
+            uniqueDriverCount,
+            topDrivers,
+            topDestinations,
+            driverDestinationBreakdown,
+        }
+    }, [filteredRows])
+
+    const handleExportExcel = () => {
+        const detailRows = filteredRows.map((row) => ({
+            "Tanggal Delivery": row.deliveryDate
+                ? new Date(row.deliveryDate).toLocaleDateString("id-ID")
+                : "-",
+            "Delivery No.": row.deliveryNumber || "-",
+            "Status Delivery": statusLabels[row.status] || row.status,
+            "PO Customer": row.customerPo || "-",
+            "Nama Customer": row.deliveryName,
+            Vehicle: row.vehicle,
+            Driver: row.driver,
+            Trip: row.tripNumber || "-",
+            "Trip Destination": row.tripDestination,
+        }))
+
+        const driverRows = tripSummary.topDrivers.map((row) => ({
+            Driver: row.name,
+            "Jumlah Trip": row.trips,
+            "Jumlah Delivery": row.deliveries,
+            "Tujuan Berbeda": row.destinations,
+        }))
+
+        const destinationRows = tripSummary.topDestinations.map((row) => ({
+            "Trip Destination": row.name,
+            "Jumlah Delivery": row.deliveries,
+            "Jumlah Trip": row.trips,
+            "Jumlah Driver": row.drivers,
+        }))
+
+        const driverDestinationRows = tripSummary.driverDestinationBreakdown.map((row) => ({
+            Driver: row.driver,
+            Destination: row.destination,
+            "Jumlah Delivery": row.deliveries,
+            "Jumlah Trip": row.trips,
+        }))
+
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows), "Delivery Trip")
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(driverRows), "Summary Driver")
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(destinationRows), "Summary Destination")
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(driverDestinationRows), "Driver Destination")
+        XLSX.writeFile(workbook, `delivery-trip-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        toast.success("Export Excel delivery trip berhasil")
+    }
+
+    const destinationChartColors = [
+        "#1d4ed8",
+        "#0f766e",
+        "#d97706",
+        "#be185d",
+        "#7c3aed",
+        "#0891b2",
+        "#65a30d",
+        "#ea580c",
+    ]
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-1 flex-wrap items-center gap-2">
+                        <div className="relative min-w-[260px] flex-1 xl:max-w-sm">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search delivery, SO, customer, driver, user..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="h-9 rounded-xl pl-10"
+                            />
+                        </div>
+
+                        <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="h-9 rounded-xl">
+                            <Download className="mr-2 h-4 w-4" />
+                            Export
+                        </Button>
+
+                        <DataTableFacetedFilter
+                            title="Status"
+                            options={statusOptions.map((status) => statusLabels[status] || status)}
+                            selectedValues={statusFilter === "all" ? [] : [statusLabels[statusFilter] || statusFilter]}
+                            onFilterChange={(values) => {
+                                const selectedLabel = values[0]
+                                const selected = Object.entries(statusLabels).find(([, label]) => label === selectedLabel)
+                                setStatusFilter(selected?.[0] || "all")
+                            }}
+                        />
+
+                        <DataTableFacetedFilter
+                            title="Driver"
+                            options={driverOptions}
+                            selectedValues={driverFilter === "all" ? [] : [driverFilter]}
+                            onFilterChange={(values) => setDriverFilter(values[0] || "all")}
+                        />
+
+                        <DataTableFacetedFilter
+                            title="Vehicle"
+                            options={vehicleOptions}
+                            selectedValues={vehicleFilter === "all" ? [] : [vehicleFilter]}
+                            onFilterChange={(values) => setVehicleFilter(values[0] || "all")}
+                        />
+
+                        <DataTableFacetedFilter
+                            title="Customer"
+                            options={customerOptions}
+                            selectedValues={customerFilter === "all" ? [] : [customerFilter]}
+                            onFilterChange={(values) => setCustomerFilter(values[0] || "all")}
+                        />
+
+                        <DataTableFacetedFilter
+                            title="Trip"
+                            options={tripOptions}
+                            selectedValues={tripFilter === "all" ? [] : [tripFilter]}
+                            onFilterChange={(values) => setTripFilter(values[0] || "all")}
+                        />
+
+                        <Input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                            className="h-9 w-[150px] rounded-xl"
+                        />
+
+                        <Input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                            className="h-9 w-[150px] rounded-xl"
+                        />
+
+                        {statusFilter === "partial" && (
+                            <button
+                                type="button"
+                                onClick={() => setStatusFilter("all")}
+                                className="flex h-9 items-center gap-1.5 rounded-full border border-orange-300 bg-orange-50 px-3 text-xs font-medium text-orange-700"
+                            >
+                                <span>Partial</span>
+                                <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold">
+                                    {filteredRows.length}
+                                </span>
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end xl:self-auto">
+                        <Button type="button" variant="outline" size="icon" onClick={resetFilters} className="h-9 w-9 rounded-xl" title="Reset Filter">
+                            <RefreshCcw className="h-4 w-4" />
+                        </Button>
+                        <div className="whitespace-nowrap text-sm text-muted-foreground">
+                            Showing {filteredRows.length} of {rows.length}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">Total Delivery</div>
+                    <div className="mt-1 text-2xl font-semibold">{filteredRows.length}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">Total Trip</div>
+                    <div className="mt-1 text-2xl font-semibold">{tripSummary.uniqueTripCount}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">Driver Aktif</div>
+                    <div className="mt-1 text-2xl font-semibold">{tripSummary.uniqueDriverCount}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">Top Driver</div>
+                    <div className="mt-1 truncate text-sm font-semibold">
+                        {tripSummary.topDrivers[0]?.name || "-"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                        {tripSummary.topDrivers[0]?.trips || 0} trip
+                    </div>
+                </div>
+            </div>
+
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="trip-analytics" className="rounded-xl border bg-card px-0">
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                        <div className="flex items-center gap-3 text-left">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <BarChart3 className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <div className="font-medium">Grafik & Insight Delivery Trip</div>
+                                <div className="text-sm text-muted-foreground">
+                                    Lihat driver paling sering trip, tujuan teratas, dan ringkasan tujuan per driver.
+                                </div>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                        <div className="space-y-4">
+                            <div className="grid gap-4 xl:grid-cols-2">
+                                <Card className="border-border/70">
+                                    <CardHeader className="pb-3">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <BarChart3 className="h-4 w-4" />
+                                            Performa Driver
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Ringkasan driver yang paling sering trip dari filter aktif.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="space-y-3">
+                                            {tripSummary.topDrivers.length > 0 ? (
+                                                tripSummary.topDrivers.map((row, index) => {
+                                                    const maxTrips = tripSummary.topDrivers[0]?.trips || 1
+                                                    const width = Math.max(8, Math.round((row.trips / maxTrips) * 100))
+
+                                                    return (
+                                                        <div key={row.name} className="rounded-xl border p-3">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="flex min-w-0 flex-1 gap-3">
+                                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+                                                                        {index + 1}
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="break-words text-sm font-semibold">{row.name}</div>
+                                                                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                            <span>{row.deliveries} delivery</span>
+                                                                            <span>•</span>
+                                                                            <span>{row.destinations} tujuan</span>
+                                                                        </div>
+                                                                        <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                                                                            <div
+                                                                                className="h-1.5 rounded-full bg-blue-600"
+                                                                                style={{ width: `${width}%` }}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-lg font-semibold leading-none">{row.trips}</div>
+                                                                    <div className="text-[11px] text-muted-foreground">trip</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })
+                                            ) : (
+                                                <div className="h-24 flex items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                                                    Belum ada data driver.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="border-border/70">
+                                    <CardHeader className="pb-3">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <MapPin className="h-4 w-4" />
+                                            Tujuan Teratas
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Tujuan yang paling sering dikunjungi tanpa memotong nama lokasi.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="space-y-3">
+                                            {tripSummary.topDestinations.length > 0 ? (
+                                                tripSummary.topDestinations.map((row, index) => {
+                                                    const maxDeliveries = tripSummary.topDestinations[0]?.deliveries || 1
+                                                    const width = Math.max(8, Math.round((row.deliveries / maxDeliveries) * 100))
+                                                    const color = destinationChartColors[index % destinationChartColors.length]
+
+                                                    return (
+                                                        <div key={row.name} className="rounded-xl border p-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <span
+                                                                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                                                                    style={{ backgroundColor: color }}
+                                                                />
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className="break-words text-sm font-semibold leading-6">{row.name}</div>
+                                                                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                        <span>{row.trips} trip</span>
+                                                                        <span>•</span>
+                                                                        <span>{row.drivers} driver</span>
+                                                                    </div>
+                                                                    <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                                                                        <div
+                                                                            className="h-1.5 rounded-full"
+                                                                            style={{ width: `${width}%`, backgroundColor: color }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-lg font-semibold leading-none">{row.deliveries}</div>
+                                                                    <div className="text-[11px] text-muted-foreground">delivery</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })
+                                            ) : (
+                                                <div className="h-24 flex items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                                                    Belum ada data destination.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            <Card className="border-border/70">
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <User className="h-4 w-4" />
+                                        Driver ke Mana Saja
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Hubungan driver dan tujuan utama dalam layout yang lebih lega dan mudah dibaca.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-3">
+                                        {tripSummary.driverDestinationBreakdown.length > 0 ? (
+                                            tripSummary.driverDestinationBreakdown.map((row, index) => (
+                                                <div key={`${row.driver}-${row.destination}`} className="rounded-xl border p-3 transition-colors hover:bg-muted/20">
+                                                    <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start">
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+                                                            {index + 1}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="break-words text-sm font-semibold">{row.driver}</div>
+                                                            <div className="mt-1 break-words text-sm leading-6 text-muted-foreground">{row.destination}</div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 md:justify-end">
+                                                            <Badge variant="outline" className="text-[11px]">
+                                                                {row.trips} trip
+                                                            </Badge>
+                                                            <Badge variant="outline" className="text-[11px]">
+                                                                {row.deliveries} delivery
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="h-24 flex items-center justify-center rounded-lg border text-sm text-muted-foreground">
+                                                Belum ada data driver-destination.
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
+
+            <div className="rounded-md border">
+                <div className="w-full overflow-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/50">
+                                <TableHead>Tanggal Delivery</TableHead>
+                                <TableHead>Delivery No.</TableHead>
+                                <TableHead>Status Delivery</TableHead>
+                                <TableHead>PO Customer</TableHead>
+                                <TableHead>Nama Delivery</TableHead>
+                                <TableHead>Vehicle</TableHead>
+                                <TableHead>Driver</TableHead>
+                                <TableHead>Trip Destination</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredRows.length > 0 ? (
+                                filteredRows.map((row) => (
+                                    <TableRow key={row.id} className="hover:bg-muted/50">
+                                        <TableCell className="whitespace-nowrap">
+                                            {row.deliveryDate
+                                                ? new Date(row.deliveryDate).toLocaleDateString("id-ID", {
+                                                    day: "2-digit",
+                                                    month: "2-digit",
+                                                    year: "numeric",
+                                                })
+                                                : "-"}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                            <button
+                                                type="button"
+                                                onClick={() => onPreview(row.sourceDelivery)}
+                                                className="text-primary hover:underline"
+                                            >
+                                                {row.deliveryNumber || "-"}
+                                            </button>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={statusVariants[row.status] || "secondary"} className="uppercase text-[10px] tracking-wider">
+                                                {statusLabels[row.status] || row.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>{row.customerPo || "-"}</TableCell>
+                                        <TableCell>{row.deliveryName}</TableCell>
+                                        <TableCell>{row.vehicle}</TableCell>
+                                        <TableCell>{row.driver}</TableCell>
+                                        <TableCell>{row.tripDestination}</TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                        Tidak ada data delivery trip.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+        </div>
+    )
 }
 
 function DeliveryGroupedByPO({ data, globalFilter, setGlobalFilter, onPreview, canEdit, statusVariants, statusLabels, pageSizeOptions, defaultPageSize }: DeliveryGroupedByPOProps) {

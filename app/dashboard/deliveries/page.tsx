@@ -1,4 +1,5 @@
 import { getDeliveries, getDeliveryItemsFlat, getReadyOutstandingSalesOrders } from "@/app/actions/delivery"
+import { getFleetTrips } from "@/app/actions/fleet-trips"
 import { DeliveryTable } from "./_components/delivery-table"
 import { OutstandingReminder } from "./_components/outstanding-reminder"
 import Link from "next/link"
@@ -12,10 +13,11 @@ import { RestrictedActionButton } from "@/components/restricted-action-button"
 export const dynamic = "force-dynamic"
 
 export default async function DeliveriesPage() {
-    const [deliveriesData, itemsData, outstandingOrders] = await Promise.all([
+    const [deliveriesData, itemsData, outstandingOrders, fleetTripsData] = await Promise.all([
         getDeliveries(),
         getDeliveryItemsFlat(),
-        getReadyOutstandingSalesOrders()
+        getReadyOutstandingSalesOrders(),
+        getFleetTrips(),
     ])
 
     return (
@@ -59,7 +61,7 @@ export default async function DeliveriesPage() {
             <OutstandingReminder orders={outstandingOrders} />
 
             <div className="flex-1">
-                <DeliveryTable data={deliveriesData} itemsData={itemsData} />
+                <DeliveryTable data={deliveriesData} itemsData={itemsData} fleetTripsData={fleetTripsData} />
             </div>
         </div>
     )
