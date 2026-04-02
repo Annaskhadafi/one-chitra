@@ -689,17 +689,6 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 }),
             ])
 
-            const mergedSourceLines = mergeManualPoSourceLines([
-                ...normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem),
-                ...normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem),
-            ])
-            const latestByPoItem = new Map<number, ManualPoSourceLine>()
-            for (const row of mergedSourceLines) {
-                if (!latestByPoItem.has(row.poItem)) {
-                    latestByPoItem.set(row.poItem, row)
-                }
-            }
-
             const manualMovements = await tx.query.stockMovements.findMany({
                 where: eq(stockMovements.type, "GR_MANUAL"),
                 columns: {
@@ -715,6 +704,17 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     parsed.poItem,
                     (manualReceivedByPoItem.get(parsed.poItem) ?? 0) + Number(movement.quantity || 0)
                 )
+            }
+
+            const mergedSourceLines = mergeManualPoSourceLines([
+                ...normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem),
+                ...normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem),
+            ])
+            const latestByPoItem = new Map<number, ManualPoSourceLine>()
+            for (const row of mergedSourceLines) {
+                if (!latestByPoItem.has(row.poItem)) {
+                    latestByPoItem.set(row.poItem, row)
+                }
             }
 
             const productIds = Array.from(new Set(input.items.map((item) => item.productId)))
