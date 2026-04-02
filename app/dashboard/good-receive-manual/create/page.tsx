@@ -1,15 +1,17 @@
 import { GoodReceiveForm } from "../_components/good-receive-form";
 import { getWarehouses } from "@/app/actions/warehouse";
 import { getGoodReceiveManualNotificationTargets, getManualGoodReceiveEmailCcMap, getManualGoodReceivePoOptions } from "@/app/actions/good-receive-manual";
+import { getProducts } from "@/app/actions/product";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 
 export default async function CreateGoodReceiveManualPage() {
-    const [warehouses, poOptionsResult, notificationTargets] = await Promise.all([
+    const [warehouses, poOptionsResult, notificationTargets, products] = await Promise.all([
         getWarehouses(),
         getManualGoodReceivePoOptions(),
         getGoodReceiveManualNotificationTargets(),
+        getProducts(),
     ])
 
     const formattedWarehouses = warehouses.map(w => ({
@@ -17,25 +19,14 @@ export default async function CreateGoodReceiveManualPage() {
         sloc: w.sloc,
         description: w.description,
     }));
-    const productOptions = poOptionsResult.success
-        ? Array.from(
-            new Map(
-                poOptionsResult.data.poLineOptions
-                    .filter((line) => typeof line.productId === "number" && line.productId > 0)
-                    .map((line) => [
-                        line.productId,
-                        {
-                            id: line.productId as number,
-                            materialNumber: line.materialNumber,
-                            materialDescription: line.materialDescription,
-                            oldMaterialNo: null,
-                            materialNumberCk: null,
-                            sloc: null,
-                        },
-                    ]),
-            ).values(),
-        )
-        : []
+    const productOptions = products.map((product) => ({
+        id: product.id,
+        materialNumber: product.materialNumber,
+        materialDescription: product.materialDescription,
+        oldMaterialNo: product.oldMaterialNo,
+        materialNumberCk: product.materialNumberCk,
+        sloc: product.sloc,
+    }))
     const eprEmailCcByPo = poOptionsResult.success
         ? await getManualGoodReceiveEmailCcMap(poOptionsResult.data.poOptions.map((po) => po.poNumber))
         : {}

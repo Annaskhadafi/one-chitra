@@ -118,14 +118,32 @@ function sanitizeOpenQty(orderQty: number | null, deliveredQty: number | null) {
     return openQty > 0 ? openQty : 0
 }
 
+function resolveFallbackMaterialNumber(params: {
+    rawMaterial: string | null | undefined
+    shortText: string | null | undefined
+    poNumber: string
+    poItem: number
+}) {
+    const normalizedMaterial = params.rawMaterial?.trim() || ""
+    if (normalizedMaterial && normalizedMaterial !== "-") {
+        return normalizedMaterial
+    }
+
+    const normalizedShortText = params.shortText?.trim() || ""
+    if (normalizedShortText) {
+        return `TEXT-${params.poNumber}-${params.poItem}`
+    }
+
+    return `PO-${params.poNumber}-${params.poItem}`
+}
+
 function buildVendorFallbackMap(rows: VendorPoRow[]) {
     const latestByPoItem = new Map<string, VendorPoRow>()
 
     for (const row of rows) {
         const poNumber = row.poNo?.trim()
         const poItem = row.item
-        const materialNumber = row.material?.trim()
-        if (!poNumber || !poItem || !materialNumber || materialNumber === "-") continue
+        if (!poNumber || !poItem) continue
 
         const key = `${poNumber}-${poItem}`
         if (!latestByPoItem.has(key)) {
@@ -140,7 +158,12 @@ function normalizeMe2lSourceLines(rows: Me2lRow[], manualReceivedByPoItem: Map<s
     return Array.from(buildLatestPoItemMap(rows).values()).map<ManualPoSourceLine>((row) => {
         const poNumber = row.purchasingDoc?.trim() || ""
         const poItem = row.item || 0
-        const materialNumber = row.material?.trim() || ""
+        const materialNumber = resolveFallbackMaterialNumber({
+            rawMaterial: row.material,
+            shortText: row.shortText,
+            poNumber,
+            poItem,
+        })
         const poQty = Number(row.orderQty || 0)
         const deliveredQty = Number(row.deliveredQty || 0)
         const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
@@ -167,7 +190,12 @@ function normalizeVendorSourceLines(rows: VendorPoRow[], manualReceivedByPoItem:
     return Array.from(buildVendorFallbackMap(rows).values()).map<ManualPoSourceLine>((row) => {
         const poNumber = row.poNo?.trim() || ""
         const poItem = row.item || 0
-        const materialNumber = row.material?.trim() || ""
+        const materialNumber = resolveFallbackMaterialNumber({
+            rawMaterial: row.material,
+            shortText: row.shortText,
+            poNumber,
+            poItem,
+        })
         const poQty = Number(row.poQuantity || 0)
         const deliveredQty = Math.max(0, poQty - Number(row.outstandingQuantity ?? 0))
         const manualReceivedQty = manualReceivedByPoItem.get(`${poNumber}-${poItem}`) ?? 0
@@ -420,20 +448,14 @@ export async function getManualGoodReceivePoOptions() {
                 where: and(
                     isNull(me2lPurchDocsSap.grProcessedDate),
                     isNotNull(me2lPurchDocsSap.purchasingDoc),
-                    isNotNull(me2lPurchDocsSap.item),
-                    isNotNull(me2lPurchDocsSap.material),
-                    ne(me2lPurchDocsSap.material, ""),
-                    ne(me2lPurchDocsSap.material, "-")
+                    isNotNull(me2lPurchDocsSap.item)
                 ),
                 orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
             }),
             db.query.zvendorPoReportSap.findMany({
                 where: and(
                     isNotNull(zvendorPoReportSap.poNo),
-                    isNotNull(zvendorPoReportSap.item),
-                    isNotNull(zvendorPoReportSap.material),
-                    ne(zvendorPoReportSap.material, ""),
-                    ne(zvendorPoReportSap.material, "-")
+                    isNotNull(zvendorPoReportSap.item)
                 ),
                 orderBy: [desc(zvendorPoReportSap.extractedAt), desc(zvendorPoReportSap.poDate), desc(zvendorPoReportSap.poReportId)],
             }),
@@ -609,7 +631,9 @@ export async function getGoodReceiveManualNotificationTargets() {
 }
 
 export type CreateGoodReceiveManualInput = {
+    entryMode?: "po" | "manual"
     poNumber: string
+    supplier?: string
     warehouseId: number
     receiveDate: Date
     deliveryType: "Partial" | "Complete"
@@ -649,6 +673,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
     try {
         const session = await getAuthenticatedSession('good-receive-manual', 'create')
         const userId = session.user.id
+        const entryMode = input.entryMode === "manual" ? "manual" : "po"
         const notifyRoles = normalizeStringArray(input.notifyRoles)
         const notifyUserIds = normalizeStringArray(input.notifyUserIds)
         const emailCcRecipients = normalizeEmailListFromText(input.emailCc)
@@ -659,35 +684,16 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
             if (!input.warehouseId || input.warehouseId <= 0) {
                 throw new Error("Warehouse is required")
             }
+            const manualSupplier = input.supplier?.trim() || ""
+            if (entryMode === "manual" && !manualSupplier) {
+                throw new Error("Supplier is required for manual input")
+            }
 
             const poItems = input.items.map((item) => item.poItem)
             const duplicatePoItem = poItems.find((poItem, idx) => poItems.indexOf(poItem) !== idx)
             if (duplicatePoItem) {
                 throw new Error(`PO Item ${duplicatePoItem} selected more than once`)
             }
-
-            const [sapRows, vendorRows] = await Promise.all([
-                tx.query.me2lPurchDocsSap.findMany({
-                    where: and(
-                        eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                        inArray(me2lPurchDocsSap.item, poItems),
-                        isNotNull(me2lPurchDocsSap.material),
-                        ne(me2lPurchDocsSap.material, ""),
-                        ne(me2lPurchDocsSap.material, "-")
-                    ),
-                    orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
-                }),
-                tx.query.zvendorPoReportSap.findMany({
-                    where: and(
-                        eq(zvendorPoReportSap.poNo, poNumber),
-                        inArray(zvendorPoReportSap.item, poItems),
-                        isNotNull(zvendorPoReportSap.material),
-                        ne(zvendorPoReportSap.material, ""),
-                        ne(zvendorPoReportSap.material, "-")
-                    ),
-                    orderBy: [desc(zvendorPoReportSap.extractedAt), desc(zvendorPoReportSap.poDate), desc(zvendorPoReportSap.poReportId)],
-                }),
-            ])
 
             const manualMovements = await tx.query.stockMovements.findMany({
                 where: eq(stockMovements.type, "GR_MANUAL"),
@@ -706,14 +712,35 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 )
             }
 
-            const mergedSourceLines = mergeManualPoSourceLines([
-                ...normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem),
-                ...normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem),
-            ])
+            let sapRows: Me2lRow[] = []
             const latestByPoItem = new Map<number, ManualPoSourceLine>()
-            for (const row of mergedSourceLines) {
-                if (!latestByPoItem.has(row.poItem)) {
-                    latestByPoItem.set(row.poItem, row)
+            if (entryMode === "po") {
+                const [loadedSapRows, vendorRows] = await Promise.all([
+                    tx.query.me2lPurchDocsSap.findMany({
+                        where: and(
+                            eq(me2lPurchDocsSap.purchasingDoc, poNumber),
+                            inArray(me2lPurchDocsSap.item, poItems)
+                        ),
+                        orderBy: [desc(me2lPurchDocsSap.docDate), desc(me2lPurchDocsSap.purchDocId)],
+                    }),
+                    tx.query.zvendorPoReportSap.findMany({
+                        where: and(
+                            eq(zvendorPoReportSap.poNo, poNumber),
+                            inArray(zvendorPoReportSap.item, poItems)
+                        ),
+                        orderBy: [desc(zvendorPoReportSap.extractedAt), desc(zvendorPoReportSap.poDate), desc(zvendorPoReportSap.poReportId)],
+                    }),
+                ])
+
+                sapRows = loadedSapRows
+                const mergedSourceLines = mergeManualPoSourceLines([
+                    ...normalizeMe2lSourceLines(sapRows, manualReceivedByPoItem),
+                    ...normalizeVendorSourceLines(vendorRows, manualReceivedByPoItem),
+                ])
+                for (const row of mergedSourceLines) {
+                    if (!latestByPoItem.has(row.poItem)) {
+                        latestByPoItem.set(row.poItem, row)
+                    }
                 }
             }
 
@@ -721,10 +748,34 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
             const existingProducts = await tx.select({
                 id: products.id,
                 materialNumber: products.materialNumber,
+                materialDescription: products.materialDescription,
             }).from(products).where(inArray(products.id, productIds))
             const productById = new Map(existingProducts.map((p) => [p.id, p]))
 
             const resolvedItems = input.items.map((item) => {
+                if (item.quantity < 0) {
+                    throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
+                }
+
+                const product = productById.get(item.productId)
+                if (item.quantity > 0) {
+                    if (!product) {
+                        throw new Error(`Produk internal untuk PO Item ${item.poItem} tidak ditemukan`)
+                    }
+                }
+
+                if (entryMode === "manual") {
+                    return {
+                        ...item,
+                        poItem: item.poItem,
+                        materialNumber: product?.materialNumber ?? item.materialNumber,
+                        materialDescription: product?.materialDescription ?? "-",
+                        vendorName: manualSupplier,
+                        source: "manual" as const,
+                        originalOpenQty: item.openQty,
+                    }
+                }
+
                 const sourceLine = latestByPoItem.get(item.poItem)
                 if (!sourceLine) {
                     throw new Error(`PO Item ${item.poItem} tidak ditemukan di SAP untuk PO ${poNumber}`)
@@ -734,18 +785,8 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 }
 
                 const remainingOpenQty = Math.max(0, sourceLine.openQty)
-                if (item.quantity < 0) {
-                    throw new Error(`Qty untuk PO Item ${item.poItem} tidak boleh negatif`)
-                }
                 if (item.quantity > remainingOpenQty) {
                     throw new Error(`Qty untuk PO Item ${item.poItem} melebihi open qty (${remainingOpenQty})`)
-                }
-
-                const product = productById.get(item.productId)
-                if (item.quantity > 0) {
-                    if (!product) {
-                        throw new Error(`Produk internal untuk PO Item ${item.poItem} tidak ditemukan`)
-                    }
                 }
 
                 return {
@@ -837,22 +878,24 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     recordedBy: userId,
                 })
 
-                const sourceLine = latestByPoItem.get(item.poItem)
-                const sapOpenQty = Number(sourceLine?.openQty ?? 0)
-                const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
-                const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
+                if (entryMode === "po") {
+                    const sourceLine = latestByPoItem.get(item.poItem)
+                    const sapOpenQty = Number(sourceLine?.openQty ?? 0)
+                    const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
+                    const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
 
-                const hasMe2lRow = sapRows.some((row) => row.item === item.poItem)
-                if (remainingQtyAfterSubmit <= 0 && hasMe2lRow) {
-                    await tx.update(me2lPurchDocsSap)
-                        .set({
-                            grProcessedDate: new Date(),
-                            grWarehouseId: input.warehouseId,
-                        })
-                        .where(and(
-                            eq(me2lPurchDocsSap.purchasingDoc, poNumber),
-                            eq(me2lPurchDocsSap.item, item.poItem)
-                        ))
+                    const hasMe2lRow = sapRows.some((row) => row.item === item.poItem)
+                    if (remainingQtyAfterSubmit <= 0 && hasMe2lRow) {
+                        await tx.update(me2lPurchDocsSap)
+                            .set({
+                                grProcessedDate: new Date(),
+                                grWarehouseId: input.warehouseId,
+                            })
+                            .where(and(
+                                eq(me2lPurchDocsSap.purchasingDoc, poNumber),
+                                eq(me2lPurchDocsSap.item, item.poItem)
+                            ))
+                    }
                 }
             }
 

@@ -550,6 +550,28 @@ export function GoodReceiveForm({
                                                                     ? (
                                                                         <div className="space-y-2">
                                                                             <p>No internal product mapping</p>
+                                                                            <Select
+                                                                                onValueChange={(value) => {
+                                                                                    const productId = Number(value)
+                                                                                    const product = productMap.get(productId)
+                                                                                    form.setValue(`items.${index}.productId`, productId, { shouldDirty: true, shouldValidate: true })
+                                                                                    if (product?.materialNumber) {
+                                                                                        form.setValue(`items.${index}.materialNumber`, product.materialNumber, { shouldDirty: true, shouldValidate: true })
+                                                                                    }
+                                                                                }}
+                                                                                value={form.watch(`items.${index}.productId`) > 0 ? String(form.watch(`items.${index}.productId`)) : ""}
+                                                                            >
+                                                                                <SelectTrigger className="focus:ring-indigo-500">
+                                                                                    <SelectValue placeholder="Pilih product internal" />
+                                                                                </SelectTrigger>
+                                                                                <SelectContent>
+                                                                                    {productOptions.map((product) => (
+                                                                                        <SelectItem key={product.id} value={product.id.toString()}>
+                                                                                            {product.materialNumber} - {product.materialDescription ?? "-"}
+                                                                                        </SelectItem>
+                                                                                    ))}
+                                                                                </SelectContent>
+                                                                            </Select>
                                                                             <ProductDialog
                                                                                 initialValues={{
                                                                                     materialNumber: selectedLine.materialNumber,
@@ -678,6 +700,28 @@ export function GoodReceiveForm({
                                                                 ? (
                                                                     <div className="space-y-2">
                                                                         <p>No internal product mapping</p>
+                                                                        <Select
+                                                                            onValueChange={(value) => {
+                                                                                const productId = Number(value)
+                                                                                const product = productMap.get(productId)
+                                                                                form.setValue(`items.${index}.productId`, productId, { shouldDirty: true, shouldValidate: true })
+                                                                                if (product?.materialNumber) {
+                                                                                    form.setValue(`items.${index}.materialNumber`, product.materialNumber, { shouldDirty: true, shouldValidate: true })
+                                                                                }
+                                                                            }}
+                                                                            value={form.watch(`items.${index}.productId`) > 0 ? String(form.watch(`items.${index}.productId`)) : ""}
+                                                                        >
+                                                                            <SelectTrigger className="focus:ring-indigo-500">
+                                                                                <SelectValue placeholder="Pilih product internal" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {productOptions.map((product) => (
+                                                                                    <SelectItem key={product.id} value={product.id.toString()}>
+                                                                                        {product.materialNumber} - {product.materialDescription ?? "-"}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
                                                                         <ProductDialog
                                                                             initialValues={{
                                                                                 materialNumber: selectedLine.materialNumber,
