@@ -128,6 +128,7 @@ export function QuickAddProductDialog({ warehouses, onProductCreated }: QuickAdd
                 slocDescription: data.slocDescription ?? null,
                 typeWarehouse: data.typeWarehouse ?? null,
                 imageUrl: data.imageUrl ?? null,
+                isBundle: false,
                 isConsignment: false,
                 createdAt: new Date(),
                 updatedAt: new Date(),

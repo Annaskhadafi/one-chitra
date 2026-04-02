@@ -195,6 +195,61 @@ async function extractVendorQuotationOcr(fileBuffer: Buffer, filename: string): 
     }
 }
 
+type NormalizedQuotationItem = {
+    itemName: string
+    qty: number
+    unit: string | null
+    unitPrice: number
+    totalPrice: number
+    remark: string | null
+}
+
+type NormalizedQuotationExtraction = {
+    vendorName: string | null
+    quoteNumber: string | null
+    quoteDate: string | null
+    remark: string | null
+    items: NormalizedQuotationItem[]
+}
+
+function normalizeExtractedQuotation(
+    extracted: Awaited<ReturnType<typeof extractVendorQuotationViaOllama>> | Awaited<ReturnType<typeof extractVendorQuotationOcr>>
+): NormalizedQuotationExtraction {
+    const vendorName = "vendorName" in extracted ? extracted.vendorName : extracted.vendor_name
+    const quoteNumber = "quoteNumber" in extracted ? extracted.quoteNumber : extracted.quote_number
+    const quoteDate = "quoteDate" in extracted ? extracted.quoteDate : extracted.quote_date
+
+    const items = extracted.items.map((item) => {
+        if ("itemName" in item) {
+            return {
+                itemName: item.itemName,
+                qty: item.qty,
+                unit: item.unit,
+                unitPrice: item.unitPrice,
+                totalPrice: item.totalPrice,
+                remark: item.remark,
+            }
+        }
+
+        return {
+            itemName: item.item_name,
+            qty: item.qty,
+            unit: item.unit,
+            unitPrice: item.unit_price,
+            totalPrice: item.total_price,
+            remark: item.remark,
+        }
+    })
+
+    return {
+        vendorName,
+        quoteNumber,
+        quoteDate,
+        remark: extracted.remark,
+        items,
+    }
+}
+
 export async function POST(req: NextRequest) {
     let trackedQuotationId: number | null = null
     try {
@@ -248,7 +303,7 @@ export async function POST(req: NextRequest) {
 
         try {
             console.log(`Mulai OCR dengan Ollama untuk ${filename}...`)
-            extracted = await extractVendorQuotationViaOllama({ buffer, filename })
+            extracted = await extractVendorQuotationViaOllama({ fileBuffer: buffer, filename })
             console.log("Ollama OCR Berhasil")
         } catch (ollamaErr) {
             console.error("Ollama OCR Gagal, fallback ke Mistral:", ollamaErr)
@@ -263,6 +318,8 @@ export async function POST(req: NextRequest) {
         if (!extracted) {
             return Response.json({ error: ocrError || "Gagal mengekstrak data dari dokumen" }, { status: 500 })
         }
+
+        const normalizedExtracted = normalizeExtractedQuotation(extracted)
 
         const existingRecord = await db.query.vendorQuotations.findFirst({
             where: eq(vendorQuotations.fileUrl, sanitizedFileUrl),
@@ -279,10 +336,10 @@ export async function POST(req: NextRequest) {
                 .set({
                     eprEntryId: eprEntryId ?? null,
                     fileName: filename.slice(0, 500),
-                    vendorName: extracted.vendorName?.slice(0, 500) ?? null,
-                    quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
-                    quoteDate: extracted.quoteDate?.slice(0, 100) ?? null,
-                    remark: extracted.remark ?? null,
+                    vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
+                    quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
+                    quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
+                    remark: normalizedExtracted.remark ?? null,
                     ocrStatus: "done",
                     extractedAt: new Date(),
                     createdBy: userId ?? null,
@@ -298,10 +355,10 @@ export async function POST(req: NextRequest) {
                     eprEntryId: eprEntryId ?? null,
                     fileUrl: sanitizedFileUrl,
                     fileName: filename.slice(0, 500),
-                    vendorName: extracted.vendorName?.slice(0, 500) ?? null,
-                    quoteNumber: extracted.quoteNumber?.slice(0, 200) ?? null,
-                    quoteDate: extracted.quoteDate?.slice(0, 100) ?? null,
-                    remark: extracted.remark ?? null,
+                    vendorName: normalizedExtracted.vendorName?.slice(0, 500) ?? null,
+                    quoteNumber: normalizedExtracted.quoteNumber?.slice(0, 200) ?? null,
+                    quoteDate: normalizedExtracted.quoteDate?.slice(0, 100) ?? null,
+                    remark: normalizedExtracted.remark ?? null,
                     ocrStatus: "done",
                     extractedAt: new Date(),
                     createdBy: userId ?? null,
@@ -312,9 +369,9 @@ export async function POST(req: NextRequest) {
         }
 
         // Simpan items jika ada
-        if (extracted.items.length > 0) {
+        if (normalizedExtracted.items.length > 0) {
             await db.insert(vendorQuotationItems).values(
-                extracted.items.map((item) => ({
+                normalizedExtracted.items.map((item) => ({
                     vendorQuotationId: quotationId,
                     itemName: item.itemName,
                     qty: String(item.qty),
@@ -328,7 +385,7 @@ export async function POST(req: NextRequest) {
 
         return Response.json({
             id: quotationId,
-            data: extracted,
+            data: normalizedExtracted,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "OCR gagal"

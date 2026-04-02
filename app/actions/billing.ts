@@ -50,6 +50,20 @@ type BillingRecordUpdate = {
     scanInvUrl?: string | null;
 };
 
+type BillingMutableUpdate = Omit<BillingRecordUpdate, "poNo">;
+
+type InvoiceLookupRow = {
+    noInvSap: string | null;
+    dateInvoice: Date | string | null;
+    invoiceCount?: string | number | null;
+};
+
+type DbExecuteResultRow<T> = T[] & { rows?: T[] };
+
+function getFirstExecuteRow<T>(result: DbExecuteResultRow<T>) {
+    return result.rows?.[0] ?? result[0];
+}
+
 function normalizedSapCodeSql(value: SQLWrapper) {
     return sql<string>`
         CASE
@@ -232,8 +246,8 @@ export async function getInvoiceInfoByPoNo(
             AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
         `;
 
-        const historyResult: any = await db.execute(query);
-        const row = historyResult.rows?.[0] || historyResult[0];
+        const historyResult = await db.execute(query) as unknown as DbExecuteResultRow<InvoiceLookupRow>;
+        const row = getFirstExecuteRow(historyResult);
 
         const historyInvoiceNo = normalizeCodeValue(row?.noInvSap);
 
@@ -289,13 +303,13 @@ export async function getInvoiceInfoByDoSap(
             AND (${historyOrders.cancelled} IS NULL OR ${historyOrders.cancelled} != 'X')
         `;
 
-        const doSapResult: any = await db.execute(doSapQuery);
-        const doSapRow = doSapResult.rows?.[0] || doSapResult[0];
+        const doSapResult = await db.execute(doSapQuery) as unknown as DbExecuteResultRow<InvoiceLookupRow>;
+        const doSapRow = getFirstExecuteRow(doSapResult);
 
         const doSapInvoiceNo = normalizeCodeValue(doSapRow?.noInvSap);
 
         if (doSapInvoiceNo) {
-            const invoiceCount = parseInt(doSapRow.invoiceCount || '1', 10);
+            const invoiceCount = parseInt(String(doSapRow.invoiceCount || '1'), 10);
             return {
                 success: true,
                 data: {
@@ -321,13 +335,13 @@ export async function getInvoiceInfoByDoSap(
                 AND ABS(${historyOrders.billingDate}::date - ${deliveryDate.toISOString().slice(0, 10)}::date) <= ${windowDays}
             `;
 
-            const proximityResult: any = await db.execute(proximityQuery);
-            const proximityRow = proximityResult.rows?.[0] || proximityResult[0];
+            const proximityResult = await db.execute(proximityQuery) as unknown as DbExecuteResultRow<InvoiceLookupRow>;
+            const proximityRow = getFirstExecuteRow(proximityResult);
 
             const proximityInvoiceNo = normalizeCodeValue(proximityRow?.noInvSap);
 
             if (proximityInvoiceNo) {
-                const invoiceCount = parseInt(proximityRow.invoiceCount || '1', 10);
+                const invoiceCount = parseInt(String(proximityRow.invoiceCount || '1'), 10);
                 return {
                     success: true,
                     data: {
@@ -465,16 +479,17 @@ export async function trackJneResi(awb: string) {
                 receiverDate
             }
         };
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error("BinderByte API Error:", e);
-        return { success: false, error: e.message || "Tracking failed" };
+        return { success: false, error: e instanceof Error ? e.message : "Tracking failed" };
     }
 }
 
 export async function updateBillingRecord(data: BillingRecordUpdate) {
     try {
         await checkPermission('billing', 'edit');
-        const { poNo, ...updateData } = data;
+        const { poNo, ...rawUpdateData } = data;
+        const updateData: BillingMutableUpdate = rawUpdateData;
 
         if (!poNo) throw new Error("PO Number is required");
 
@@ -488,7 +503,15 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
             updateData.plant = normalizeCodeValue(updateData.plant);
         }
 
-        const dateFields: Array<keyof BillingRecordUpdate> = [
+        const dateFields: Array<keyof Pick<
+            BillingMutableUpdate,
+            "datePo" |
+            "dateInvoice" |
+            "tglDoFaktur" |
+            "dateSendInvoice" |
+            "receiverDate" |
+            "recvDateApproved"
+        >> = [
             'datePo',
             'dateInvoice',
             'tglDoFaktur',
@@ -501,7 +524,7 @@ export async function updateBillingRecord(data: BillingRecordUpdate) {
             const rawValue = updateData[field];
             if (rawValue === undefined) continue;
 
-            if (rawValue === null || rawValue === '') {
+            if (rawValue === null || (typeof rawValue === 'string' && rawValue === '')) {
                 updateData[field] = null;
                 continue;
             }
@@ -569,7 +592,7 @@ export async function deleteBillingRecord(poNo: string) {
 }
 
 // Bulk import function
-export async function importBillingRecords(records: Record<string, unknown>[]) {
+export async function importBillingRecords(_records: Record<string, unknown>[]) {
     try {
         await checkPermission('billing', 'create');
         // Import logic to be implemented for new structure if needed

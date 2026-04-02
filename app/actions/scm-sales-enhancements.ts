@@ -200,7 +200,9 @@ function buildOrderDocumentStatus(order: SalesOrderRecord): "Ready" | "Partial" 
   return "Missing"
 }
 
-function buildDeliveryDocumentStatus(delivery: DeliveryRecord): "Ready" | "Partial" | "Missing" {
+function buildDeliveryDocumentStatus(
+  delivery: Pick<DeliveryRecord, "doSap" | "invoiceNumber" | "scanDoDocument">
+): "Ready" | "Partial" | "Missing" {
   const signals = [delivery.doSap, delivery.invoiceNumber, delivery.scanDoDocument].filter(Boolean).length
   if (signals >= 2) return "Ready"
   if (signals === 1) return "Partial"
@@ -332,7 +334,7 @@ function toNullableIso(value: Date | string | null | undefined) {
 function buildLastActivity(values: Array<Date | string | null | undefined>) {
   const parsed = values
     .map((value) => (value ? new Date(value) : null))
-    .filter((value): value is Date => Boolean(value) && !Number.isNaN(value.getTime()))
+    .filter((value): value is Date => value !== null && !Number.isNaN(value.getTime()))
     .sort((left, right) => right.getTime() - left.getTime())
 
   return parsed[0] ? parsed[0].toISOString() : null
@@ -398,6 +400,7 @@ export async function getCustomer360Data(customerIdOrCode?: string | number | nu
               customer: true,
             },
           },
+          createdByUser: true,
           warehouse: true,
           items: {
             with: {

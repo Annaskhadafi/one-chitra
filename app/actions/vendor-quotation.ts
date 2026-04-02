@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/db"
-import { vendorQuotations } from "@/db/schema"
+import { vendorQuotationItems, vendorQuotations } from "@/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
@@ -11,7 +11,9 @@ import { VendorQuotationWithItems } from "@/types/vendor-quotation"
 const VIEW_ID = "2354";
 const ENTRIES_URL = `https://proc-share.com/wp-json/gravityview/v1/views/${VIEW_ID}/entries.json?limit=0`;
 
-type VendorQuotationRow = Awaited<ReturnType<typeof db.query.vendorQuotations.findMany>>[number]
+type VendorQuotationRow = typeof vendorQuotations.$inferSelect & {
+    items: (typeof vendorQuotationItems.$inferSelect)[]
+}
 type VendorQuotationItemRow = VendorQuotationRow["items"][number]
 type GravityViewEntry = Record<string, string | string[] | null | undefined>
 

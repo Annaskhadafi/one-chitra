@@ -351,8 +351,6 @@ function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }
                     delivery={{
                         id: transfer.delivery.id || 0,
                         deliveryNumber: transfer.delivery.deliveryNumber || null,
-                        salesOrderId: transfer.delivery.salesOrderId || transfer.delivery.salesOrder?.id || 0,
-                        warehouseId: transfer.delivery.warehouseId ?? transfer.delivery.warehouse?.id ?? null,
                         doSap: transfer.delivery.doSap || null,
                         scheduledDate: transfer.delivery.scheduledDate ? new Date(transfer.delivery.scheduledDate) : new Date(),
                         deliveryDate: transfer.delivery.deliveryDate ? new Date(transfer.delivery.deliveryDate) : null,
@@ -366,9 +364,6 @@ function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }
                         awbNumber: transfer.delivery.awbNumber || null,
                         vendorName: transfer.delivery.vendorName || null,
                         notes: transfer.delivery.notes || null,
-                        tripDestination: transfer.delivery.tripDestination || null,
-                        costGasoline: transfer.delivery.costGasoline ?? null,
-                        costToll: transfer.delivery.costToll ?? null,
                         salesOrder: {
                             id: transfer.delivery.salesOrder?.id || 0,
                             invoiceNumber: transfer.delivery.salesOrder?.invoiceNumber || null,

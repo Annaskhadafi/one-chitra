@@ -170,10 +170,11 @@ export async function importMasterPrices(prices: ImportedMasterPriceRow[]) {
 
         for (const priceData of prices) {
             let warehouseId = priceData.warehouseId
+            const sloc = priceData.sloc?.trim()
 
             // Jika ada sloc tapi tidak ada warehouseId, cari berdasarkan sloc
-            if (!warehouseId && priceData.sloc) {
-                const found = warehouses.find(h => h.sloc.toLowerCase() === priceData.sloc.toLowerCase())
+            if (!warehouseId && sloc) {
+                const found = warehouses.find(h => h.sloc.toLowerCase() === sloc.toLowerCase())
                 if (found) {
                     warehouseId = found.id
                 }

@@ -356,7 +356,7 @@ export async function exportInventoryComparisonToExcel() {
     "use server"
     
     try {
-        await getAuthenticatedSession("stocks", "read")
+        await getAuthenticatedSession("stocks", "view")
         
         // Import xlsx di server side
         const XLSX = await import("xlsx")

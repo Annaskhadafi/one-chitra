@@ -2,26 +2,33 @@
 
 import { db } from "@/db"
 import { emailGroups, emailContacts, emailGroupMembers, user, customers } from "@/db/schema"
-import { eq, desc, and, inArray, sql, count, like, or } from "drizzle-orm"
+import { eq, desc, and, inArray, sql, like, or, type SQL } from "drizzle-orm"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
-import { z } from "zod"
 
 // ─── SCHEMAS ─────────────────────────────────────────────────────────────────
 
-const groupSchema = z.object({
-    name: z.string().min(1, "Nama grup harus diisi"),
-    description: z.string().optional(),
-})
+export type EmailGroupInput = {
+    name: string
+    description?: string
+}
 
-const contactSchema = z.object({
-    name: z.string().min(1, "Nama kontak harus diisi"),
-    email: z.string().email("Email tidak valid"),
-    companyName: z.string().optional(),
-    position: z.string().optional(),
-    category: z.enum(["internal", "customer"]),
-    groupIds: z.array(z.number()).optional(),
-})
+export type EmailContactCategory = "internal" | "customer"
+
+export type EmailContactInput = {
+    name: string
+    email: string
+    companyName?: string
+    position?: string
+    category: EmailContactCategory
+    groupIds?: number[]
+}
+
+type ImportedEmailRow = Record<string, string | null | undefined>
+
+function normalizeContactCategory(value: string | null | undefined): EmailContactCategory {
+    return value?.toLowerCase() === "internal" ? "internal" : "customer"
+}
 
 // ─── GROUPS ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +45,7 @@ export async function getEmailGroups() {
     .orderBy(desc(emailGroups.createdAt))
 }
 
-export async function createEmailGroup(data: z.infer<typeof groupSchema>) {
+export async function createEmailGroup(data: EmailGroupInput) {
     try {
         const session = await getAuthenticatedSession("marketing", "create")
         await db.insert(emailGroups).values({
@@ -54,7 +61,7 @@ export async function createEmailGroup(data: z.infer<typeof groupSchema>) {
     }
 }
 
-export async function updateEmailGroup(id: number, data: z.infer<typeof groupSchema>) {
+export async function updateEmailGroup(id: number, data: EmailGroupInput) {
     try {
         await getAuthenticatedSession("marketing", "edit")
         await db.update(emailGroups)
@@ -66,7 +73,7 @@ export async function updateEmailGroup(id: number, data: z.infer<typeof groupSch
             .where(eq(emailGroups.id, id))
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal memperbarui grup" }
     }
 }
@@ -77,7 +84,7 @@ export async function deleteEmailGroup(id: number) {
         await db.delete(emailGroups).where(eq(emailGroups.id, id))
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal menghapus grup" }
     }
 }
@@ -86,16 +93,16 @@ export async function deleteEmailGroup(id: number) {
 
 export async function getEmailContacts(params?: { search?: string, category?: string, groupId?: number }) {
     await getAuthenticatedSession("marketing", "view")
-    
-    let conditions = []
+
+    const conditions: SQL<unknown>[] = []
     if (params?.search) {
         conditions.push(sql`${emailContacts.name} ILIKE ${`%${params.search}%`} OR ${emailContacts.email} ILIKE ${`%${params.search}%`} OR ${emailContacts.companyName} ILIKE ${`%${params.search}%`}`)
     }
     if (params?.category && params.category !== "all") {
-        conditions.push(eq(emailContacts.category, params.category as any))
+        conditions.push(eq(emailContacts.category, normalizeContactCategory(params.category)))
     }
-    
-    let query = db.select({
+
+    const baseQuery = db.select({
         id: emailContacts.id,
         name: emailContacts.name,
         email: emailContacts.email,
@@ -110,18 +117,22 @@ export async function getEmailContacts(params?: { search?: string, category?: st
         const memberIds = db.select({ contactId: emailGroupMembers.contactId })
             .from(emailGroupMembers)
             .where(eq(emailGroupMembers.groupId, params.groupId))
-        
-        // @ts-ignore
-        query = query.where(and(...conditions, inArray(emailContacts.id, memberIds)))
-    } else if (conditions.length > 0) {
-        // @ts-ignore
-        query = query.where(and(...conditions))
+
+        return await baseQuery
+            .where(and(...conditions, inArray(emailContacts.id, memberIds)))
+            .orderBy(desc(emailContacts.createdAt))
     }
 
-    return await query.orderBy(desc(emailContacts.createdAt))
+    if (conditions.length > 0) {
+        return await baseQuery
+            .where(and(...conditions))
+            .orderBy(desc(emailContacts.createdAt))
+    }
+
+    return await baseQuery.orderBy(desc(emailContacts.createdAt))
 }
 
-export async function createEmailContact(data: z.infer<typeof contactSchema>) {
+export async function createEmailContact(data: EmailContactInput) {
     try {
         await getAuthenticatedSession("marketing", "create")
         
@@ -144,13 +155,15 @@ export async function createEmailContact(data: z.infer<typeof contactSchema>) {
 
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true }
-    } catch (error: any) {
-        if (error.code === '23505') return { success: false, error: "Email sudah terdaftar" }
+    } catch (error: unknown) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === '23505') {
+            return { success: false, error: "Email sudah terdaftar" }
+        }
         return { success: false, error: "Gagal membuat kontak" }
     }
 }
 
-export async function updateEmailContact(id: number, data: z.infer<typeof contactSchema>) {
+export async function updateEmailContact(id: number, data: EmailContactInput) {
     try {
         await getAuthenticatedSession("marketing", "edit")
         
@@ -178,7 +191,7 @@ export async function updateEmailContact(id: number, data: z.infer<typeof contac
 
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal memperbarui kontak" }
     }
 }
@@ -189,14 +202,14 @@ export async function deleteEmailContact(id: number) {
         await db.delete(emailContacts).where(eq(emailContacts.id, id))
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal menghapus kontak" }
     }
 }
 
 // ─── IMPORT ──────────────────────────────────────────────────────────────────
 
-export async function importEmailContacts(rows: any[], targetGroupId?: number) {
+export async function importEmailContacts(rows: ImportedEmailRow[], targetGroupId?: number) {
     try {
         await getAuthenticatedSession("marketing", "create")
         
@@ -205,19 +218,27 @@ export async function importEmailContacts(rows: any[], targetGroupId?: number) {
 
         for (const row of rows) {
             try {
+                const email = row.email || row.Email
+                if (!email) {
+                    skipCount++
+                    continue
+                }
+
                 const [contact] = await db.insert(emailContacts).values({
                     name: row.name || row.Name || "No Name",
-                    email: row.email || row.Email,
+                    email,
                     companyName: row.company || row.Company || row.companyName || null,
                     position: row.position || row.Position || null,
-                    category: (row.category || row.Category || "customer").toLowerCase() as any,
+                    category: normalizeContactCategory(row.category || row.Category || "customer"),
                 }).onConflictDoUpdate({
                     target: emailContacts.email,
                     set: {
                         name: row.name || row.Name || undefined,
                         companyName: row.company || row.Company || row.companyName || undefined,
                         position: row.position || row.Position || undefined,
-                        category: (row.category || row.Category || undefined)?.toLowerCase() as any,
+                        category: row.category || row.Category
+                            ? normalizeContactCategory(row.category || row.Category)
+                            : undefined,
                         updatedAt: new Date(),
                     }
                 }).returning({ id: emailContacts.id })
@@ -237,7 +258,7 @@ export async function importEmailContacts(rows: any[], targetGroupId?: number) {
 
         revalidatePath("/dashboard/marketing/email-lists")
         return { success: true, imported: successCount, skipped: skipCount }
-    } catch (error) {
+    } catch (_error) {
         return { success: false, error: "Gagal mengimpor kontak" }
     }
 }
@@ -245,8 +266,8 @@ export async function importEmailContacts(rows: any[], targetGroupId?: number) {
 
 export async function getPlatformUsers(search?: string) {
     await getAuthenticatedSession("marketing", "view")
-    
-    let query = db.select({
+
+    const baseQuery = db.select({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -255,19 +276,19 @@ export async function getPlatformUsers(search?: string) {
     }).from(user)
 
     if (search) {
-        query = query.where(or(
+        return await baseQuery.where(or(
             like(user.name, `%${search}%`),
             like(user.email, `%${search}%`)
-        ))
+        )).limit(50)
     }
 
-    return await query.limit(50)
+    return await baseQuery.limit(50)
 }
 
 export async function getPlatformCustomers(search?: string) {
     await getAuthenticatedSession("marketing", "view")
-    
-    let query = db.select({
+
+    const baseQuery = db.select({
         id: customers.id,
         name: customers.name,
         email: customers.email,
@@ -276,12 +297,12 @@ export async function getPlatformCustomers(search?: string) {
     }).from(customers)
 
     if (search) {
-        query = query.where(or(
+        return await baseQuery.where(or(
             like(customers.name, `%${search}%`),
             like(customers.email, `%${search}%`),
             like(customers.customerCode, `%${search}%`)
-        ))
+        )).limit(50)
     }
 
-    return await query.limit(50)
+    return await baseQuery.limit(50)
 }

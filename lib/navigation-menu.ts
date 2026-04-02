@@ -359,7 +359,7 @@ const sanitizeBusinessAnalyticsConfig = (config: EditableNavSection[]): Editable
                     id: existing?.id ?? `${baseItem.id}-sub-${index}`,
                     title: existing?.title ?? subItem.title,
                     url: subItem.url,
-                    resource: subItem.resource ?? existing?.resource,
+                    resource: subItem.resource ?? existing?.resource ?? null,
                     hidden: existing?.hidden ?? false,
                     openInNewTab: existing?.openInNewTab ?? false,
                     isCustom: existing?.isCustom ?? false,

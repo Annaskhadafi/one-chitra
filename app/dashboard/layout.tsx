@@ -70,7 +70,7 @@ const normalizeBusinessNavigation = (sections: RuntimeNavSection[]): RuntimeNavS
       parentId: string,
       defaults: NonNullable<ReturnType<typeof getBusinessDefaultGroup>>["items"],
     ): RuntimeNavSubItem[] => {
-      return defaults.map((defaultItem, index) => {
+      return (defaults ?? []).map((defaultItem, index) => {
         const existing = sourceByUrl.get(defaultItem.url)
         return {
           id: existing?.id ?? `${parentId}-sub-${index}`,

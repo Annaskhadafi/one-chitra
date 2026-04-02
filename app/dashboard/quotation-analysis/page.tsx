@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { getQuotationAnalysis } from "@/app/actions/quotation-analysis"
 import { QuotationAnalysisClient } from "./_components/quotation-analysis-client"
+import type { QuotationAnalysisData } from "./_components/quotation-analysis-client"
 import { getAuthenticatedSession } from "@/lib/rbac"
 
 export const metadata = {
@@ -11,8 +12,8 @@ export const metadata = {
 export default async function QuotationAnalysisPage() {
     const session = await getAuthenticatedSession()
     const analysisResponse = await getQuotationAnalysis()
-    const initialData = analysisResponse.success
-        ? { ...analysisResponse.data, currentUserName: session.user.name ?? null }
+    const initialData: QuotationAnalysisData | null = analysisResponse.success
+        ? ({ ...analysisResponse.data, currentUserName: session.user.name ?? null } as unknown as QuotationAnalysisData)
         : null
 
     return (

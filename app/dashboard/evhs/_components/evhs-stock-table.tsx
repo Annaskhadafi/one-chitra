@@ -39,15 +39,50 @@ type StockRow = {
         materialNumber: string
         materialDescription?: string | null
         materialNumberCk?: string | null
+        category?: string | null
     }
 }
+
+type StockUsageDialogItem = {
+    warehouseId: number
+    productId: number
+    materialNumberCp: string
+    materialNumberCk?: string | null
+    sn: string
+    qty?: number
+    availableQty?: number
+    cpDo?: string | null
+    sourceType?: "receipt" | "legacy-stock"
+    product: {
+        materialDescription?: string | null
+        materialNumberCk?: string | null
+        category?: string | null
+    }
+}
+
+const toStockUsageDialogItem = (stock: StockRow): StockUsageDialogItem => ({
+    warehouseId: stock.warehouseId,
+    productId: stock.productId,
+    materialNumberCp: stock.product.materialNumber,
+    materialNumberCk: stock.product.materialNumberCk ?? null,
+    sn: "-",
+    qty: stock.totalStock,
+    availableQty: stock.totalStock,
+    cpDo: null,
+    sourceType: "legacy-stock",
+    product: {
+        materialDescription: stock.product.materialDescription ?? null,
+        materialNumberCk: stock.product.materialNumberCk ?? null,
+        category: stock.product.category ?? null,
+    },
+})
 
 export function EvhsStockTable({ warehouses }: { warehouses: WarehouseOption[] }) {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(
         warehouses.find(w => w.type === "VHS")?.id.toString() || ""
     )
     const [searchTerm, setSearchTerm] = useState("")
-    const [selectedStock, setSelectedStock] = useState<StockRow | null>(null)
+    const [selectedStock, setSelectedStock] = useState<StockUsageDialogItem | null>(null)
     const [usageDialogOpen, setUsageDialogOpen] = useState(false)
 
     // Filter VHS warehouses
@@ -147,7 +182,7 @@ export function EvhsStockTable({ warehouses }: { warehouses: WarehouseOption[] }
                                             variant="outline"
                                             className="gap-2 h-8"
                                             onClick={() => {
-                                                setSelectedStock(stock)
+                                                setSelectedStock(toStockUsageDialogItem(stock))
                                                 setUsageDialogOpen(true)
                                             }}
                                         >

@@ -28,7 +28,7 @@ export default async function AccountPage() {
                     id: user.id,
                     name: user.name,
                     email: user.email,
-                    image: dbUser?.image ?? user.image ?? null,
+                    image: dbUser?.image ?? null,
                     department: dbUser?.department ?? "",
                     jobTitle: dbUser?.jobTitle ?? "",
                 }} />

@@ -417,6 +417,7 @@ export async function getDelivery(id: number) {
                 },
             },
             warehouse: true,
+            createdByUser: true,
             items: {
                 with: {
                     product: true,

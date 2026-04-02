@@ -27,11 +27,9 @@ import {
 } from "recharts"
 import {
     TrendingUp,
-    TrendingDown,
     Package,
     ShoppingCart,
     Percent,
-    ArrowRight,
     Search,
     Filter,
     FileText,
@@ -42,7 +40,6 @@ import {
     ChevronDown
 } from "lucide-react"
 import { ScoreCard } from "@/components/score-card"
-import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { ResponsiveTableWrapper } from "@/components/ui/responsive-table-wrapper"
 import {
@@ -53,18 +50,77 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface QuotationAnalysisClientProps {
-    initialData: any
+    initialData: QuotationAnalysisData | null
 }
 
-const CHART_COLORS = [
-    "hsl(217, 91%, 60%)", // Blue
-    "hsl(270, 76%, 53%)", // Purple
-    "hsl(160, 84%, 39%)", // Emerald
-    "hsl(43, 96%, 56%)",  // Amber
-    "hsl(346, 77%, 49%)", // Rose
-    "hsl(199, 89%, 48%)", // Sky
-    "hsl(32, 95%, 44%)",  // Orange
-]
+type QuoteItem = {
+    productId: number | null
+    quantity: number
+    product: {
+        id: number
+        materialNumber: string
+        materialDescription: string | null
+        category: string | null
+    } | null
+}
+
+type QuoteSummaryItem = {
+    id: number
+    quotationDate: Date | string
+    status: string
+    salesName: string
+    items: QuoteItem[]
+}
+
+type LostRecommendation = {
+    id: number
+    materialNumber: string
+    materialDescription: string | null
+    brand: string | null
+    category: string | null
+}
+
+type LostAnalysisItem = {
+    quotationNumber: string | null
+    quotationId: number
+    customerName: string
+    salesName: string
+    productName: string
+    productId: number
+    category: string | null
+    quantity: number
+    unitPrice: string | number | null
+    status: string
+    date: Date | string
+    recommendations: LostRecommendation[]
+}
+
+type TopItem = {
+    productId: number
+    name: string
+    count: number
+}
+
+type MonthlyTrendItem = {
+    month: string
+    sent: number
+    approved: number
+    rate: number
+}
+
+export type QuotationAnalysisData = {
+    currentUserName?: string | null
+    allQuotes?: QuoteSummaryItem[]
+    summary?: {
+        totalQuotes: number
+        totalSent: number
+        totalConverted: number
+        conversionRate: number
+    }
+    topItems?: TopItem[]
+    lostAnalysis?: LostAnalysisItem[]
+    monthlyTrend?: MonthlyTrendItem[]
+}
 
 export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClientProps) {
     const [data] = useState(initialData)
@@ -74,10 +130,17 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
         return currentUserName ? [currentUserName] : []
     })
 
-    const salesNameOptions = useMemo<string[]>(
-        () => Array.from(new Set((data?.allQuotes ?? []).map((quote: any) => quote.salesName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-        [data]
-    )
+    const salesNameOptions = useMemo<string[]>(() => {
+        const salesNames: string[] = []
+
+        for (const quote of data?.allQuotes ?? []) {
+            if (typeof quote.salesName === "string" && quote.salesName.length > 0) {
+                salesNames.push(quote.salesName)
+            }
+        }
+
+        return Array.from(new Set<string>(salesNames)).sort((a, b) => a.localeCompare(b))
+    }, [data])
 
     const effectiveSalesNames = useMemo(
         () => (selectedSalesNames.length > 0 ? selectedSalesNames : salesNameOptions),
@@ -85,13 +148,13 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
     )
 
     const filteredQuotes = useMemo(
-        () => (data?.allQuotes ?? []).filter((quote: any) => effectiveSalesNames.includes(quote.salesName)),
+        () => (data?.allQuotes ?? []).filter((quote) => effectiveSalesNames.includes(quote.salesName)),
         [data, effectiveSalesNames]
     )
 
     const derivedSummary = useMemo(() => {
-        const totalSent = filteredQuotes.filter((quote: any) => quote.status !== "draft").length
-        const totalConverted = filteredQuotes.filter((quote: any) => quote.status === "approved" || quote.status === "converted").length
+        const totalSent = filteredQuotes.filter((quote) => quote.status !== "draft").length
+        const totalConverted = filteredQuotes.filter((quote) => quote.status === "approved" || quote.status === "converted").length
         const conversionRate = totalSent > 0 ? (totalConverted / totalSent) * 100 : 0
 
         return {
@@ -104,8 +167,8 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
 
     const derivedTopItems = useMemo(() => {
         const itemFrequency: Record<number, { productId: number, name: string, count: number }> = {}
-        filteredQuotes.forEach((quote: any) => {
-            quote.items.forEach((item: any) => {
+        filteredQuotes.forEach((quote) => {
+            quote.items.forEach((item) => {
                 if (!item.productId || !item.product) return
                 if (!itemFrequency[item.productId]) {
                     itemFrequency[item.productId] = {
@@ -138,7 +201,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
             }
         }
 
-        filteredQuotes.forEach((quote: any) => {
+        filteredQuotes.forEach((quote) => {
             const d = new Date(quote.quotationDate)
             const key = `${d.getFullYear()}-${d.getMonth() + 1}`
             if (!monthlyTrend[key]) return
@@ -159,18 +222,18 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
 
     const filteredLostAnalysis = useMemo(() => {
         if (!data?.lostAnalysis) return []
-        return data.lostAnalysis.filter((item: any) =>
+        return data.lostAnalysis.filter((item) =>
             effectiveSalesNames.includes(item.salesName) &&
             (
                 item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.quotationNumber.toLowerCase().includes(searchQuery.toLowerCase())
+                (item.quotationNumber ?? "").toLowerCase().includes(searchQuery.toLowerCase())
             )
         )
     }, [data, searchQuery, effectiveSalesNames])
 
     const filteredLostCount = useMemo(
-        () => (data?.lostAnalysis ?? []).filter((item: any) => effectiveSalesNames.includes(item.salesName)).length,
+        () => (data?.lostAnalysis ?? []).filter((item) => effectiveSalesNames.includes(item.salesName)).length,
         [data, effectiveSalesNames]
     )
 
@@ -305,7 +368,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                             borderRadius: "8px",
                                             boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
                                         }}
-                                        formatter={(value: any) => [`${parseFloat(value).toFixed(1)}%`, 'Conversion Rate']}
+                                        formatter={(value: number | string) => [`${parseFloat(String(value)).toFixed(1)}%`, 'Conversion Rate']}
                                     />
                                     <Area
                                         type="monotone"
@@ -351,7 +414,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                         }}
                                     />
                                     <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                                        {topItems.map((entry: any, index: number) => (
+                                        {topItems.map((entry, index: number) => (
                                             <Cell key={`cell-${index}`} fill={index < 3 ? "hsl(var(--primary))" : "hsl(var(--primary) / 0.4)"} />
                                         ))}
                                     </Bar>
@@ -392,13 +455,13 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                 <div className="text-sm text-muted-foreground text-center py-6">Tidak ada data yang ditemukan.</div>
                             ) : (
                                 <div className="space-y-3 p-3">
-                                    {filteredLostAnalysis.map((item: any, idx: number) => (
+                                    {filteredLostAnalysis.map((item, idx: number) => (
                                         <div key={`${item.quotationId}-${idx}`} className="rounded-md border p-3 bg-card">
                                             <div className="flex items-start justify-between">
                                                 <div className="text-sm">
                                                     <div className="font-semibold">{item.customerName}</div>
                                                     <Link href={`/dashboard/quotations/${item.quotationId}`} className="text-xs font-mono text-muted-foreground">
-                                                        {item.quotationNumber}
+                                                        {item.quotationNumber || `Quotation #${item.quotationId}`}
                                                     </Link>
                                                 </div>
                                                 <Badge variant="outline" className="text-[10px] uppercase">{item.status}</Badge>
@@ -416,7 +479,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                             <div className="mt-2">
                                                 {item.recommendations.length > 0 ? (
                                                     <div className="flex flex-wrap gap-2">
-                                                        {item.recommendations.slice(0, 2).map((rec: any) => (
+                                                        {item.recommendations.slice(0, 2).map((rec) => (
                                                             <div key={rec.id} className="px-2 py-1 rounded border text-[10px]">
                                                                 {rec.materialDescription}
                                                             </div>
@@ -455,7 +518,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredLostAnalysis.map((item: any, idx: number) => (
+                                filteredLostAnalysis.map((item, idx: number) => (
                                     <TableRow key={`${item.quotationId}-${idx}`} className="group hover:bg-muted/30 transition-colors">
                                         <TableCell className="pl-6 align-top py-4">
                                             <div className="flex flex-col gap-1">
@@ -464,7 +527,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                                     href={`/dashboard/quotations/${item.quotationId}`}
                                                     className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
                                                 >
-                                                    {item.quotationNumber}
+                                                    {item.quotationNumber || `Quotation #${item.quotationId}`}
                                                     <ChevronRight className="h-3 w-3" />
                                                 </Link>
                                                 <Badge variant="outline" className="w-fit text-[10px] mt-1 uppercase">
@@ -484,7 +547,7 @@ export function QuotationAnalysisClient({ initialData }: QuotationAnalysisClient
                                         <TableCell className="pr-6 align-top py-4">
                                             <div className="flex flex-wrap gap-2">
                                                 {item.recommendations.length > 0 ? (
-                                                    item.recommendations.map((rec: any) => (
+                                                    item.recommendations.map((rec) => (
                                                         <div
                                                             key={rec.id}
                                                             className="flex flex-col gap-1 p-2 rounded-lg border bg-background/30 hover:bg-background/80 hover:border-primary/50 transition-all w-[calc(50%-8px)]"

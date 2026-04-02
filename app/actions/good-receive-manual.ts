@@ -3,7 +3,7 @@
 import { db } from "@/db"
 import { goodReceiveManual, goodReceiveManualItems, stockLevels, me2lPurchDocsSap, products, warehouses, stockMovements, zvendorPoReportSap } from "@/db/schema"
 import { revalidatePath } from "next/cache"
-import { eq, and, or, desc, inArray, isNotNull, ne, isNull, sql } from "drizzle-orm"
+import { eq, and, or, desc, inArray, isNotNull, isNull, sql } from "drizzle-orm"
 import { recordStockMovement } from "./stock-movement"
 import { getAuthenticatedSession } from "@/lib/rbac"
 import { sendLoggedNotificationMessage, sendSystemTemplatedEmailByCode } from "@/lib/email"
@@ -702,13 +702,14 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                     quantity: true,
                 },
             })
-            const manualReceivedByPoItem = new Map<number, number>()
+            const manualReceivedByPoItem = new Map<string, number>()
             for (const movement of manualMovements) {
                 const parsed = parseManualGrReference(movement.referenceNumber)
                 if (!parsed || parsed.poNumber !== poNumber || !poItems.includes(parsed.poItem)) continue
+                const manualKey = `${parsed.poNumber}-${parsed.poItem}`
                 manualReceivedByPoItem.set(
-                    parsed.poItem,
-                    (manualReceivedByPoItem.get(parsed.poItem) ?? 0) + Number(movement.quantity || 0)
+                    manualKey,
+                    (manualReceivedByPoItem.get(manualKey) ?? 0) + Number(movement.quantity || 0)
                 )
             }
 
@@ -881,7 +882,7 @@ export async function createGoodReceiveManual(input: CreateGoodReceiveManualInpu
                 if (entryMode === "po") {
                     const sourceLine = latestByPoItem.get(item.poItem)
                     const sapOpenQty = Number(sourceLine?.openQty ?? 0)
-                    const previousManualQty = manualReceivedByPoItem.get(item.poItem) ?? 0
+                    const previousManualQty = manualReceivedByPoItem.get(`${poNumber}-${item.poItem}`) ?? 0
                     const remainingQtyAfterSubmit = Math.max(0, sapOpenQty - previousManualQty - item.quantity)
 
                     const hasMe2lRow = sapRows.some((row) => row.item === item.poItem)

@@ -3573,12 +3573,19 @@ export async function addWorkflowStep(
         const stepName = typeof config.stepName === "string" && config.stepName.trim()
             ? config.stepName.trim()
             : STEP_TYPE_LABELS[stepType]
+        const approverType = stepType === "approval"
+            ? config.approverType === "user"
+                ? "user"
+                : config.approverType === "role"
+                    ? "role"
+                    : undefined
+            : undefined
 
         await db.insert(approvalDefinitionSteps).values({
             definitionId,
             stepOrder: nextStepOrder,
             stepName,
-            approverType: stepType === "approval" ? (config.approverType as string) : null,
+            approverType,
             approverRole: stepType === "approval" ? ((config.approverRole as string) ?? null) : null,
             approverUserId: stepType === "approval" ? ((config.approverUserId as string) ?? null) : null,
             minApprovals: stepType === "approval" ? ((config.minApprovals as number) ?? 1) : 1,

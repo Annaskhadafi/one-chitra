@@ -61,9 +61,9 @@ type BundleProductOption = {
 type BundleDialogBundle = {
     id: number
     materialNumber: string
-    materialDescription: string
+    materialDescription: string | null
     category: string
-    bundleItems: Array<{
+    bundleItems?: Array<{
         childProductId: number
         quantity: number
     }>
@@ -115,14 +115,16 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
 
     useEffect(() => {
         if (isOpen && bundle) {
+            const normalizedItems = (bundle.bundleItems ?? []).map((bi) => ({
+                childProductId: bi.childProductId,
+                quantity: bi.quantity
+            }))
+
             form.reset({
                 materialNumber: bundle.materialNumber,
-                materialDescription: bundle.materialDescription,
+                materialDescription: bundle.materialDescription ?? "",
                 category: bundle.category,
-                items: bundle.bundleItems.map((bi) => ({
-                    childProductId: bi.childProductId,
-                    quantity: bi.quantity
-                }))
+                items: normalizedItems.length > 0 ? normalizedItems : [{ childProductId: 0, quantity: 1 }]
             })
         } else if (isOpen && !bundle) {
             form.reset({
@@ -143,7 +145,7 @@ export function BundleDialog({ bundle, allProducts, onSuccess, trigger }: Bundle
                 setIsOpen(false)
                 onSuccess?.()
             } else {
-                toast.error(res.error || "Failed to save bundle")
+                toast.error(("error" in res ? res.error : null) || "Failed to save bundle")
             }
         } catch (_error) {
             toast.error("An error occurred")

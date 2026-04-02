@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { ReadyOutstandingSalesOrder } from "@/app/actions/delivery"
-import { formatWarehouseLabel } from "@/lib/sloc"
 import {
     Carousel,
     CarouselContent,
@@ -15,6 +14,14 @@ import {
 
 export function OutstandingReminder({ orders }: { orders: ReadyOutstandingSalesOrder[] }) {
     if (!orders || orders.length === 0) return null
+
+    const getWarehouseBadgeLabel = (order: ReadyOutstandingSalesOrder) => {
+        if (order.warehouseId) {
+            return `Warehouse #${order.warehouseId}`
+        }
+
+        return "-"
+    }
 
     return (
         <div className="flex flex-col gap-2 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -41,7 +48,7 @@ export function OutstandingReminder({ orders }: { orders: ReadyOutstandingSalesO
                                         <AlertTitle className="text-xs font-bold text-amber-900 dark:text-amber-400 flex items-center justify-between gap-2 m-0 p-0">
                                             <span className="truncate">{order.invoiceNumber}</span>
                                             <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-white dark:bg-black/40 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-500 shrink-0">
-                                                {formatWarehouseLabel(order.warehouse)}
+                                                {getWarehouseBadgeLabel(order)}
                                             </Badge>
                                         </AlertTitle>
                                         <AlertDescription className="mt-1 text-xs text-amber-700 dark:text-amber-600">
