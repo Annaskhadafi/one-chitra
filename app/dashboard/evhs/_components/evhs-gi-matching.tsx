@@ -411,10 +411,11 @@ export function EvhsGiMatching({ warehouses = [] }: { warehouses?: WarehouseOpti
                     ? matchedGi?.items?.find((item) => item.materialNumber === materialCk) || matchedGi?.items?.[0] || null
                     : matchedGi?.items?.[0] || null
 
+                const voucherWarehouseId = voucher.warehouseId ?? undefined
                 const price = voucherItem?.unitPrice != null
                     ? Number(voucherItem.unitPrice)
-                    : findMasterPrice(masterPrices, materialCp, materialCk, voucher.warehouseId)
-                const ckMasterPrice = findMasterPrice(masterPrices, undefined, giItem?.materialNumber, voucher.warehouseId)
+                    : findMasterPrice(masterPrices, materialCp, materialCk, voucherWarehouseId)
+                const ckMasterPrice = findMasterPrice(masterPrices, undefined, giItem?.materialNumber, voucherWarehouseId)
                 const giLinePrice = giItem?.price != null ? Number(giItem.price) : null
                 const ckPrice = ckMasterPrice ?? giLinePrice
 

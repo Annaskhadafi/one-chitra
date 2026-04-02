@@ -91,7 +91,7 @@ export function EvhsReceiptConfirmDialog({
                     return {
                         productId: item.productId,
                         materialNumber: item.product.materialNumber,
-                        materialDescription: item.product.materialDescription,
+                        materialDescription: item.product.materialDescription ?? undefined,
                         confirmedQty: item.quantity,
                         serialNumbers: existingSn
                     }
@@ -101,6 +101,11 @@ export function EvhsReceiptConfirmDialog({
     }, [transfer, form])
 
     const onSubmit = async (values: ConfirmValues) => {
+        if (!transfer) {
+            toast.error("Data transfer tidak tersedia")
+            return
+        }
+
         setIsSubmitting(true)
         try {
             const formattedData = {

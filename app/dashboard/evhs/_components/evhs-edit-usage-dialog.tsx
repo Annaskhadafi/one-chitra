@@ -68,7 +68,9 @@ export function EvhsEditUsageDialog({
         if (trackingItem && open) {
             form.reset({
                 woNo: trackingItem.woNo || "",
-                materialNumberCk: trackingItem.materialNumberCk !== "-" ? trackingItem.materialNumberCk : "",
+                materialNumberCk: trackingItem.materialNumberCk && trackingItem.materialNumberCk !== "-"
+                    ? trackingItem.materialNumberCk
+                    : "",
                 pos: trackingItem.pos || "",
                 unitId: trackingItem.unitId || "",
             })

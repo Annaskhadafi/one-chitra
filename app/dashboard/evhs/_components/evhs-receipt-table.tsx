@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { CheckCircle2, Clock, Eye } from "lucide-react"
 import { format } from "date-fns"
 import { EvhsReceiptConfirmDialog } from "./evhs-receipt-confirm-dialog"
@@ -25,6 +24,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import type { Customer, Product, Warehouse } from "@/lib/types"
 
 interface ReceiptItem {
     id: number
@@ -40,10 +40,10 @@ interface ReceiptItem {
 interface Receipt {
     id: number
     transferId: number
-    receivedDate: string
+    receivedDate: Date | string
     doChitraNo: string | null
     notes: string | null
-    createdAt: string
+    createdAt: Date | string
     confirmedByUser: { name: string | null } | null
     transfer: {
         referenceNumber: string | null
@@ -56,7 +56,7 @@ interface Receipt {
 interface PendingTransfer {
     id: number
     referenceNumber: string | null
-    transferDate: string
+    transferDate: Date | string
     fromWarehouse: { sloc: string; description?: string | null }
     toWarehouse: { sloc: string; description?: string | null }
     delivery?: {
@@ -76,26 +76,13 @@ interface PendingTransfer {
         awbNumber?: string | null
         vendorName?: string | null
         notes?: string | null
-        warehouse?: {
-            id: number
-            sloc: string
-            description: string | null
-        } | null
+        warehouse?: Warehouse | null
         salesOrder?: {
             id: number
             invoiceNumber: string | null
             customerPo: string | null
             poReceive?: Date | string | null
-            customer: {
-                id: number
-                name: string
-                customerCode?: string | null
-                address1?: string | null
-                address2?: string | null
-                address3?: string | null
-                address4?: string | null
-                address5?: string | null
-            }
+            customer: Customer
         } | null
         createdByUser?: {
             id: string
@@ -108,26 +95,13 @@ interface PendingTransfer {
             orderedQuantity?: number
             deliveredQuantity?: number
             serialNumbers?: string[] | null
-            product?: {
-                id?: number
-                materialNumber: string
-                materialDescription: string | null
-                category?: string | null
-                oldMaterialNo?: string | null
-                brand?: string | null
-                costSap?: string | null
-                plant?: string | null
-                sloc?: string | null
-                slocDescription?: string | null
-                typeWarehouse?: string | null
-                imageUrl?: string | null
-                materialNumberCk?: string | null
-                isConsignment?: boolean
-                isBundle?: boolean
-                createdAt?: Date | string
-                updatedAt?: Date | string
-            } | null
+            product?: Product | null
         }[]
+        warehouseId?: number | null
+        salesOrderId?: number
+        tripDestination?: string | null
+        costGasoline?: string | number | null
+        costToll?: string | number | null
     } | null
     items: {
         productId: number
@@ -138,6 +112,52 @@ interface PendingTransfer {
         }
     }[]
 }
+
+const createFallbackCustomer = (): Customer => ({
+    id: 0,
+    customerCode: "-",
+    name: "-",
+    contactName: null,
+    email: null,
+    birthday: null,
+    address1: null,
+    address2: null,
+    address3: null,
+    address4: null,
+    address5: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+})
+
+const createFallbackWarehouse = (): Warehouse => ({
+    id: 0,
+    sloc: "-",
+    description: null,
+    type: null,
+    customerId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+})
+
+const createFallbackProduct = (productId: number): Product => ({
+    id: productId,
+    category: "UNKNOWN",
+    materialNumber: "-",
+    materialNumberCk: null,
+    oldMaterialNo: null,
+    materialDescription: null,
+    brand: null,
+    costSap: null,
+    plant: null,
+    sloc: null,
+    slocDescription: null,
+    typeWarehouse: null,
+    imageUrl: null,
+    isBundle: false,
+    isConsignment: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+})
 
 export function EvhsReceiptTable({
     receipts,
@@ -331,6 +351,8 @@ function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }
                     delivery={{
                         id: transfer.delivery.id || 0,
                         deliveryNumber: transfer.delivery.deliveryNumber || null,
+                        salesOrderId: transfer.delivery.salesOrderId || transfer.delivery.salesOrder?.id || 0,
+                        warehouseId: transfer.delivery.warehouseId ?? transfer.delivery.warehouse?.id ?? null,
                         doSap: transfer.delivery.doSap || null,
                         scheduledDate: transfer.delivery.scheduledDate ? new Date(transfer.delivery.scheduledDate) : new Date(),
                         deliveryDate: transfer.delivery.deliveryDate ? new Date(transfer.delivery.deliveryDate) : null,
@@ -344,25 +366,17 @@ function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }
                         awbNumber: transfer.delivery.awbNumber || null,
                         vendorName: transfer.delivery.vendorName || null,
                         notes: transfer.delivery.notes || null,
+                        tripDestination: transfer.delivery.tripDestination || null,
+                        costGasoline: transfer.delivery.costGasoline ?? null,
+                        costToll: transfer.delivery.costToll ?? null,
                         salesOrder: {
                             id: transfer.delivery.salesOrder?.id || 0,
                             invoiceNumber: transfer.delivery.salesOrder?.invoiceNumber || null,
                             customerPo: transfer.delivery.salesOrder?.customerPo || null,
                             poReceive: transfer.delivery.salesOrder?.poReceive ? new Date(transfer.delivery.salesOrder.poReceive) : null,
-                            customer: transfer.delivery.salesOrder?.customer || {
-                                id: 0,
-                                name: "-",
-                                customerCode: null,
-                                address1: null,
-                                address2: null,
-                                address3: null,
-                                address4: null,
-                                address5: null,
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                            },
+                            customer: transfer.delivery.salesOrder?.customer || createFallbackCustomer(),
                         },
-                        warehouse: transfer.delivery.warehouse || null,
+                        warehouse: transfer.delivery.warehouse || createFallbackWarehouse(),
                         createdByUser: transfer.delivery.createdByUser
                             ? {
                                 id: transfer.delivery.createdByUser.id,
@@ -376,25 +390,7 @@ function PendingTransferDetailDialog({ transfer }: { transfer: PendingTransfer }
                             orderedQuantity: item.orderedQuantity || item.deliveredQuantity || 0,
                             deliveredQuantity: item.deliveredQuantity || 0,
                             serialNumbers: item.serialNumbers || null,
-                            product: item.product || {
-                                id: item.productId,
-                                materialNumber: "-",
-                                materialDescription: null,
-                                category: null,
-                                oldMaterialNo: null,
-                                brand: null,
-                                costSap: null,
-                                plant: null,
-                                sloc: null,
-                                slocDescription: null,
-                                typeWarehouse: null,
-                                imageUrl: null,
-                                materialNumberCk: null,
-                                isConsignment: false,
-                                isBundle: false,
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                            },
+                            product: item.product || createFallbackProduct(item.productId),
                         })),
                     }}
                     open={pdfPreviewOpen}

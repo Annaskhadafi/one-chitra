@@ -43,15 +43,16 @@ export default async function RevenueForecastPage({ searchParams }: { searchPara
         ytdChart: [] as Array<{ name: string; revenue: number; forecast: number }>
     }
 
-    const data = response.success && response.data ? response.data : defaultData
-    const salesRevenueData = salesRevenueResponse.success && salesRevenueResponse.data ? salesRevenueResponse.data : []
-    const salesRevenueTotal = salesRevenueResponse.success && salesRevenueResponse.total !== undefined ? salesRevenueResponse.total : 0
-    const salesRevenueCount = salesRevenueResponse.success && salesRevenueResponse.count !== undefined ? salesRevenueResponse.count : 0
+    const data = response.success && "data" in response && response.data ? response.data : defaultData
+    const salesRevenueData = salesRevenueResponse.success && "data" in salesRevenueResponse && salesRevenueResponse.data ? salesRevenueResponse.data : []
+    const salesRevenueTotal = salesRevenueResponse.success && "total" in salesRevenueResponse && salesRevenueResponse.total !== undefined ? salesRevenueResponse.total : 0
+    const salesRevenueCount = salesRevenueResponse.success && "count" in salesRevenueResponse && salesRevenueResponse.count !== undefined ? salesRevenueResponse.count : 0
+    const inventoryData = inventoryResponse.success && "data" in inventoryResponse && inventoryResponse.data ? inventoryResponse.data : null
 
     return (
         <div className="flex-1 p-4 md:p-6 pt-4 relative flex flex-col bg-muted/20 min-h-screen">
             <div className="flex-1 min-h-0 space-y-4">
-                <RevenueClient initialData={data} selectedPeriod={period} inventoryData={inventoryResponse.success && inventoryResponse.data ? inventoryResponse.data : null} />
+                <RevenueClient initialData={data} selectedPeriod={period} inventoryData={inventoryData} />
                 <SalesRevenueTable 
                     data={salesRevenueData} 
                     total={salesRevenueTotal} 

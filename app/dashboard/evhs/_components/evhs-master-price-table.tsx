@@ -370,7 +370,7 @@ export function EvhsMasterPriceTable({ warehouses = [] }: { warehouses?: Warehou
                                         />
                                     </TableCell>
                                     <TableCell className="border-r font-bold text-blue-700">{p.warehouse?.sloc}</TableCell>
-                                    <TableCell className="border-r text-slate-600 font-medium truncate max-w-[140px]" title={p.warehouse?.description}>
+                                    <TableCell className="border-r text-slate-600 font-medium truncate max-w-[140px]" title={p.warehouse?.description || "-"}>
                                         {p.warehouse?.description || "-"}
                                     </TableCell>
                                     <TableCell className="font-mono font-medium border-r">{p.materialNumberCp}</TableCell>

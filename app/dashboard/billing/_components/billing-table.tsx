@@ -46,6 +46,40 @@ import { normalizeCodeValue } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 
 const BLANK_MODE_DELIVERY_FILTER = "(Blank)"
+const BILLING_DATE_FIELDS = new Set([
+    "datePo",
+    "dateInvoice",
+    "tglDoFaktur",
+    "dateSendInvoice",
+    "receiverDate",
+    "recvDateApproved",
+])
+
+const toOptionalDate = (value: string | Date | null | undefined) => {
+    if (value === null || value === undefined || value === "") {
+        return null
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value
+    }
+
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const normalizeBillingUpdatePayload = (
+    payload: Record<string, unknown>,
+) => {
+    const normalizedEntries = Object.entries(payload).map(([key, value]) => {
+        if (BILLING_DATE_FIELDS.has(key)) {
+            return [key, toOptionalDate(value as string | Date | null | undefined)]
+        }
+        return [key, value]
+    })
+
+    return Object.fromEntries(normalizedEntries)
+}
 
 const getBillingItemUnitPrice = (item: { qty?: unknown; totalPrice?: unknown }) => {
     const qty = Number(item.qty)
@@ -187,11 +221,11 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
             try {
                 const result = await trackJneResi(String(r.noResi).trim())
                 if (result.success && result.data) {
-                    const updates: { poNo: string; statusDelivery: string; receiverDate?: string | null } = {
+                    const updates: { poNo: string; statusDelivery: string; receiverDate?: Date | null } = {
                         poNo: r.poNo,
                         statusDelivery: result.data.statusAction,
                     }
-                    if (result.data.receiverDate) updates.receiverDate = result.data.receiverDate
+                    if (result.data.receiverDate) updates.receiverDate = toOptionalDate(result.data.receiverDate)
                     await updateBillingRecord(updates)
                     success++
                 } else {
@@ -466,10 +500,10 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
                         updates.push({ poNo, columnId, newValue: normalizedValue });
 
                         updatePromises.push(
-                            updateBillingRecord({
+                            updateBillingRecord(normalizeBillingUpdatePayload({
                                 poNo,
                                 [columnId]: normalizedValue
-                            })
+                            }))
                         );
                     }
                 }
@@ -607,10 +641,10 @@ export function BillingTable({ data: initialData }: { data: BillingRecordDisplay
         })
 
         const requests = Array.from(updatesByPoNo.entries()).map(([poNo, values]) =>
-            updateBillingRecord({
+            updateBillingRecord(normalizeBillingUpdatePayload({
                 poNo,
                 ...values,
-            })
+            }))
         )
 
         toast.promise(Promise.all(requests), {

@@ -108,6 +108,16 @@ interface DeliveryFormItem {
 
 type StockListItem = Awaited<ReturnType<typeof getStocks>>[number]
 
+const getStockBrand = (stock: StockListItem): string | null => {
+    const product = stock.product
+    if (!product || !("brand" in product)) {
+        return null
+    }
+
+    const brand = product.brand
+    return typeof brand === "string" ? brand : null
+}
+
 interface StockResult {
     productId: number
     requested: number
@@ -2455,7 +2465,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                 const keyCounts = new Map<string, number>()
                                 allStocks.forEach(s => {
                                     const key = [
-                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.plant, s.product?.category, getStockBrand(s),
                                         s.product?.materialNumber, s.product?.oldMaterialNo,
                                         s.product?.materialDescription, s.warehouse?.sloc,
                                         s.warehouse?.description
@@ -2464,7 +2474,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                 })
                                 const dupCount = allStocks.filter(s => {
                                     const key = [
-                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                        s.product?.plant, s.product?.category, getStockBrand(s),
                                         s.product?.materialNumber, s.product?.oldMaterialNo,
                                         s.product?.materialDescription, s.warehouse?.sloc,
                                         s.warehouse?.description
@@ -2556,7 +2566,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                 const dupKeyCounts = new Map<string, number>()
                                                 allStocks.forEach(s => {
                                                     const key = [
-                                                        s.product?.plant, s.product?.category, s.product?.brand,
+                                                        s.product?.plant, s.product?.category, getStockBrand(s),
                                                         s.product?.materialNumber, s.product?.oldMaterialNo,
                                                         s.product?.materialDescription, s.warehouse?.sloc,
                                                         s.warehouse?.description
@@ -2575,7 +2585,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                                 stock.warehouse?.sloc?.toLowerCase().includes(filter) ||
                                                                 stock.warehouse?.description?.toLowerCase().includes(filter) ||
                                                                 stock.product?.category?.toLowerCase().includes(filter) ||
-                                                                stock.product?.brand?.toLowerCase().includes(filter) ||
+                                                                getStockBrand(stock)?.toLowerCase().includes(filter) ||
                                                                 stock.product?.plant?.toLowerCase().includes(filter)
                                                             )
                                                             if (!matches) return false
@@ -2583,7 +2593,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                         // Duplicate filter
                                                         if (showDuplicatesOnly) {
                                                             const key = [
-                                                                stock.product?.plant, stock.product?.category, stock.product?.brand,
+                                                                stock.product?.plant, stock.product?.category, getStockBrand(stock),
                                                                 stock.product?.materialNumber, stock.product?.oldMaterialNo,
                                                                 stock.product?.materialDescription, stock.warehouse?.sloc,
                                                                 stock.warehouse?.description
@@ -2618,7 +2628,7 @@ export function DeliveryForm({ salesOrders, warehouses, initialData, defaultSale
                                                                     {stock.product?.category || "-"}
                                                                 </Badge>
                                                             </TableCell>
-                                                            <TableCell className="text-xs">{stock.product?.brand || "-"}</TableCell>
+                                                            <TableCell className="text-xs">{getStockBrand(stock) || "-"}</TableCell>
                                                             <TableCell>
                                                                 <span className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
                                                                     {stock.product?.materialNumber || "-"}
