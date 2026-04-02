@@ -12,7 +12,8 @@ import { ensureChatSchema } from "@/lib/chat-schema"
 import { sendLoggedNotificationMessage } from "@/lib/email"
 import { sendPushNotificationToUsers } from "@/lib/push-notifications"
 import { extractUploadFilename } from "@/lib/upload-url"
-import { chatMessages, chatRoomMembers, chatRooms, chatUserStickers, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord, type ChatReactionRecord, type ChatSavedStickerRecord } from "@/db/schema"
+import { chatMessages, chatRoomMembers, chatRooms, deliveries, quotations, salesOrders, user as userTable, type ChatAttachmentRecord, type ChatReactionRecord } from "@/db/schema"
+import { chatUserStickers, type ChatSavedStickerRecord } from "@/db/schema/chat"
 
 type MentionPayload = {
     type: string
